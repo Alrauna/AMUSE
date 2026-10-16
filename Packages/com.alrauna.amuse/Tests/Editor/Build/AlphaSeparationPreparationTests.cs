@@ -51,6 +51,26 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             _filteringPin.Dispose();
         }
 
+        /// <summary>
+        /// The avatar-level preparation decision carries its refusal as a
+        /// closed enum member, not a free string: the single gate that may
+        /// refuse the mutation names its refusal, and <c>None</c> is never
+        /// a refusal.
+        /// </summary>
+        [Test]
+        public void ThePreparationDecisionCarriesANamedRefusalNotAFreeString()
+        {
+            var decision = AmusePreparationDecision.Refused(
+                PreparationRefusal.StaleSamplingPolicy);
+            Assert.That(
+                decision.Refusal,
+                Is.EqualTo(PreparationRefusal.StaleSamplingPolicy));
+            Assert.That(
+                AmusePreparationDecision.Refused(PreparationRefusal.None)
+                    .IsPrepared,
+                Is.True);
+        }
+
         [Test]
         public void CandidateRendererProducesARetainedRecord()
         {
@@ -1400,7 +1420,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 // record, through the production slot-record construction
                 // the barrier itself uses, and on no sibling record.
                 var slotRecords = RuntimeStateResolution.MaterialSlotsFor(
-                    prepared.Evidence, prepared.RendererPath);
+                    prepared.Evidence, prepared.RendererPath,
+                    UnityAnimationEvidenceCapture.MaterialSlotBindingParser);
                 Assert.That(
                     slotRecords[0].CaptureRefusals, Has.Count.EqualTo(1));
                 var refusal = slotRecords[0].CaptureRefusals[0];
@@ -6858,6 +6879,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         new Dictionary<AlphaFieldKey, AlphaMipChain>()),
                     AlphaSamplingPolicy.ConservativeDesktop,
                     0,
+                    UnityAnimationEvidenceCapture.TextureScaleOffsetSuffix,
                     VerifiedLilToonTestSeams.VerifiedAlphaOnly);
 
                 Assert.That(result.IsResolved, Is.False);

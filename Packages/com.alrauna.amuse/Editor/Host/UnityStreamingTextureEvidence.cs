@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text.RegularExpressions;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Semantics;
 using UnityEditor;
@@ -43,38 +44,91 @@ namespace Alrauna.Amuse.Editor.Host
         private const string TempFolder = "Assets/Amuse.StreamingReadback";
 
         /// <summary>
+        /// The route's own clone naming shape: the source's 32-hex GUID
+        /// plus the source's extension, directly in the pinned folder.
+        /// The sweep deletes exactly this shape, so the ownership test is
+        /// the name alone and nothing else in the folder is touched.
+        /// </summary>
+        private static readonly Regex CloneName = new Regex(
+            "^[0-9a-f]{32}\\.[0-9A-Za-z]+$", RegexOptions.Compiled);
+
+        /// <summary>
+        /// The clone path for a source asset path: the pinned folder plus
+        /// the source's GUID and extension, the one shape
+        /// <see cref="CloneName"/> matches.
+        /// </summary>
+        private static string ClonePath(string sourcePath)
+        {
+            return TempFolder + "/" +
+                AssetDatabase.AssetPathToGUID(sourcePath) +
+                Path.GetExtension(sourcePath);
+        }
+
+        /// <summary>
+        /// Deletes the route's own leftovers from the pinned folder before
+        /// a new clone is made: a file shaped like the route's own clones
+        /// is the leftover of a run whose cleanup never ran. Everything
+        /// else in the folder belongs to someone else and is never
+        /// touched.
+        /// </summary>
+        private static void SweepStaleClones()
+        {
+            if (!AssetDatabase.IsValidFolder(TempFolder))
+            {
+                return;
+            }
+
+            foreach (var file in Directory.GetFiles(TempFolder))
+            {
+                var assetPath = file.Replace('\\', '/');
+                if (!CloneName.IsMatch(Path.GetFileName(assetPath)))
+                {
+                    continue;
+                }
+
+                if (AssetDatabase.DeleteAsset(assetPath))
+                {
+                    continue;
+                }
+
+                // A leftover the asset database never imported: remove the
+                // file and its meta directly so the sweep is complete.
+                if (File.Exists(assetPath))
+                {
+                    File.Delete(assetPath);
+                }
+                if (File.Exists(assetPath + ".meta"))
+                {
+                    File.Delete(assetPath + ".meta");
+                }
+            }
+        }
+
+        /// <summary>
         /// Process-local cache, keyed by source asset identity. The key
         /// is the asset GUID plus the source and .meta write times, so any
         /// re-import or settings change re-clones instead of serving stale
-        /// evidence. Editor-session scope only: nothing crosses restarts.
+        /// evidence. The cutoff rides in as the exact clamped float, not a
+        /// quantized bucket: two cutoffs inside one bucket can straddle a
+        /// texel byte and must not share a chain. The request's
+        /// disk-fallback decision rides in too, so a capture whose request
+        /// disallows the route is never served a chain that capture
+        /// captured through the route. Editor-session scope only: nothing
+        /// crosses restarts.
         /// </summary>
         private static readonly
             Dictionary<(string guid, long sourceTicks, long metaTicks,
-                    TextureChannel channel, int cutoffBits,
-                    AlphaPolicyBounds bounds), AlphaMipChain> Cache = new();
-
-        internal static bool AllowDiskFallback { get; set; } = true;
-
-        internal readonly struct DisallowDiskFallbackScope : IDisposable
-        {
-            private readonly bool _previous;
-            internal DisallowDiskFallbackScope(bool previous) => _previous = previous;
-            public void Dispose() => AllowDiskFallback = _previous;
-        }
-
-        internal static DisallowDiskFallbackScope DisallowDiskFallback()
-        {
-            var prev = AllowDiskFallback;
-            AllowDiskFallback = false;
-            return new DisallowDiskFallbackScope(prev);
-        }
+                    TextureChannel channel, float cutoff,
+                    AlphaPolicyBounds bounds, bool diskFallbackAllowed),
+                AlphaMipChain> Cache = new();
 
         internal static bool TryCapture(
             Texture2D source,
             TextureChannel channel,
             float cutoffThreshold,
             AlphaPolicyBounds bounds,
-            out AlphaMipChain chain)
+            out AlphaMipChain chain,
+            bool allowDiskFallback = true)
         {
             if (source == null)
             {
@@ -92,17 +146,20 @@ namespace Alrauna.Amuse.Editor.Host
             var guid = AssetDatabase.AssetPathToGUID(path);
             var sourceFile = new FileInfo(path);
             var metaFile = new FileInfo(path + ".meta");
-            var cutoffBits = Mathf.RoundToInt(Mathf.Clamp01(cutoffThreshold) * 10000f);
+            var cutoff = Mathf.Clamp01(cutoffThreshold);
             // The bounds ride in the key: two policies can share a cutoff
             // while building different chains, so a policy change must
             // re-capture instead of serving the other policy's evidence.
+            // allowDiskFallback is the same value the capture gate below
+            // consults, so the key names the route that built the chain.
             var key = (
                 guid,
                 sourceFile.Exists ? sourceFile.LastWriteTimeUtc.Ticks : 0L,
                 metaFile.Exists ? metaFile.LastWriteTimeUtc.Ticks : 0L,
                 channel,
-                cutoffBits,
-                bounds);
+                cutoff,
+                bounds,
+                allowDiskFallback);
             if (Cache.TryGetValue(key, out chain))
             {
                 return true;
@@ -113,10 +170,17 @@ namespace Alrauna.Amuse.Editor.Host
             if (SourceImageAlphaReader.TryReadSourceAlphaChain(
                     source, channel, cutoffThreshold, bounds, out chain))
             {
+                // The red field contract runs at fill, once per unique
+                // inert red chain; a cache hit above already passed it.
+                if (channel == TextureChannel.Red &&
+                    bounds.Equals(AlphaPolicyBounds.Inert))
+                {
+                    UnityMaterialEvidenceCapture.AssertRedFieldContract(chain);
+                }
                 Cache[key] = chain;
                 return true;
             }
-            if (!AllowDiskFallback)
+            if (!allowDiskFallback)
             {
                 return false;
             }
@@ -136,6 +200,12 @@ namespace Alrauna.Amuse.Editor.Host
                 return false;
             }
 
+            // A crashed run's cleanup never ran, so its clone can still
+            // sit in the pinned folder. The sweep runs before a new clone
+            // is made and deletes exactly the route's own naming shape,
+            // so a leftover is removed rather than accumulated.
+            SweepStaleClones();
+
             var folderCreated = !AssetDatabase.IsValidFolder(TempFolder);
             if (folderCreated)
             {
@@ -146,8 +216,7 @@ namespace Alrauna.Amuse.Editor.Host
             // The source's GUID names the clone, so one source has one clone
             // name and a leftover from a crashed capture is overwritten, not
             // duplicated.
-            var tempPath = TempFolder + "/" +
-                AssetDatabase.AssetPathToGUID(path) + extension;
+            var tempPath = ClonePath(path);
             try
             {
                 if (!AssetDatabase.CopyAsset(path, tempPath))
@@ -188,7 +257,7 @@ namespace Alrauna.Amuse.Editor.Host
                 // the bounds in the cache key, and a policy-active
                 // texture whose only route is this clone keeps a
                 // capture route.
-                var threshold = Mathf.Clamp01(cutoffThreshold);
+                var threshold = cutoff;
                 var levels = new AlphaTextureData[clone.mipmapCount];
                 for (var mip = 0; mip < levels.Length; mip++)
                 {
@@ -233,6 +302,13 @@ namespace Alrauna.Amuse.Editor.Host
                 }
 
                 chain = new AlphaMipChain(levels);
+                // The red field contract runs at fill, once per unique
+                // inert red chain; a cache hit above already passed it.
+                if (channel == TextureChannel.Red &&
+                    bounds.Equals(AlphaPolicyBounds.Inert))
+                {
+                    UnityMaterialEvidenceCapture.AssertRedFieldContract(chain);
+                }
                 Cache[key] = chain;
                 return true;
             }

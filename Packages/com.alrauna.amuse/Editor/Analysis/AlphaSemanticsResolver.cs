@@ -59,7 +59,9 @@ namespace Alrauna.Amuse.Editor.Analysis
         // resolutions store zero and ignore it: a constant alpha is not
         // texture noise, and a product's factors each carry their own.
         private readonly int _maxNoiseTexelPercent;
-        private readonly UvMapping _mapping;
+        // The mapping decoded once at construction. The per-triangle path
+        // consumes this record; it never re-decodes the mapping's constants.
+        private readonly AffineUvTransform.DecodedMapping _decodedMapping;
         private readonly AlphaResolution _firstFactor;
         private readonly AlphaResolution _secondFactor;
         private readonly bool _isProduct;
@@ -105,7 +107,7 @@ namespace Alrauna.Amuse.Editor.Analysis
             _chain = chain;
             _sampling = sampling;
             _maxNoiseTexelPercent = maxNoiseTexelPercent;
-            _mapping = mapping;
+            _decodedMapping = AffineUvTransform.Decode(mapping);
             _firstFactor = firstFactor;
             _secondFactor = secondFactor;
             _isProduct = isProduct;
@@ -416,13 +418,13 @@ namespace Alrauna.Amuse.Editor.Analysis
             // boundary.
             var transformed = triangle;
             var envelope = AlphaUvEnvelope.Zero;
-            if (_mapping.Channel != 0)
+            if (_decodedMapping.Channel != 0)
             {
                 // A layer channel mapping selects the named channel's vertex
                 // coordinates and the classifier reads them as plain uv0. A
                 // channel the mesh does not carry invalidates only this
                 // triangle's proof.
-                if (!triangle.TryGetUvSet(_mapping.Channel,
+                if (!triangle.TryGetUvSet(_decodedMapping.Channel,
                         out var channelA, out var channelB,
                         out var channelC))
                 {
@@ -434,14 +436,22 @@ namespace Alrauna.Amuse.Editor.Analysis
                     triangle.Position2, channelA, channelB, channelC);
             }
 
-            if (!_mapping.IsIdentity)
+            if (!_decodedMapping.IsIdentity)
             {
                 if (!AffineUvTransform.TryTransform(
-                        _mapping, transformed, out transformed, out envelope))
+                        _decodedMapping, transformed, out transformed, out envelope))
                 {
                     return TriangleAlphaOutcome.Unknown;
                 }
             }
+
+            // Position facts do not vary across the chain: vertex finiteness
+            // and the exact degeneracy verdict are decoded once per triangle
+            // and the record threads through every level into the classifier.
+            // The per-level UV decodes stay inside the classifier because
+            // they depend on the level's texture window.
+            var positionValidity = ExactUvGeometry.DecodePositionValidity(
+                transformed);
 
             var sawUnknown = false;
             for (var index = 0; index < _chain.Count; index++)
@@ -458,10 +468,10 @@ namespace Alrauna.Amuse.Editor.Analysis
                 var outcome = _map == null
                     ? TriangleAlphaClassifier.Classify(
                         transformed, _chain[index], _sampling, envelope,
-                        _maxNoiseTexelPercent)
+                        _maxNoiseTexelPercent, positionValidity)
                     : TriangleAlphaClassifier.ClassifyMapped(
                         transformed, _chain[index], _sampling, envelope,
-                        _map.Value);
+                        _map.Value, positionValidity);
                 if (outcome == TriangleAlphaOutcome.MustRemainTransparent)
                 {
                     return TriangleAlphaOutcome.MustRemainTransparent;

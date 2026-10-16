@@ -29,6 +29,8 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 RuntimeStateResolution.ClassifyRuntimeStates(
                     snapshot,
                     slotResults,
+                    UnityRendererAlphaAnalysis.TriangleClassifier,
+                    UnityRendererAlphaAnalysis.OutcomeIntersector,
                     cts.Token);
             });
         }
@@ -43,11 +45,15 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var defaultPlan = RuntimeStateResolution.ClassifyRuntimeStates(
                 snapshot,
                 slotResults,
+                UnityRendererAlphaAnalysis.TriangleClassifier,
+                UnityRendererAlphaAnalysis.OutcomeIntersector,
                 default);
 
             var unspecifiedPlan = RuntimeStateResolution.ClassifyRuntimeStates(
                 snapshot,
-                slotResults);
+                slotResults,
+                UnityRendererAlphaAnalysis.TriangleClassifier,
+                UnityRendererAlphaAnalysis.OutcomeIntersector);
 
             Assert.That(
                 defaultPlan.OpaqueTriangleCount,

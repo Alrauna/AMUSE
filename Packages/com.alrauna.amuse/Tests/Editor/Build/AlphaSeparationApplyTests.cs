@@ -76,13 +76,26 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             DestroyTracked();
         }
 
+        /// <summary>
+        /// The refusal boundary is the closed <see cref="PreparationRefusal"/>
+        /// enum: <c>None</c> is not a refusal, so the factory answers the
+        /// prepared no-mutation decision, and a named refusal is never
+        /// prepared.
+        /// </summary>
         [Test]
         public void PreparationRefusalRequiresAReason()
         {
-            Assert.Throws<ArgumentException>(
-                () => AmusePreparationDecision.Refused(null));
-            Assert.Throws<ArgumentException>(
-                () => AmusePreparationDecision.Refused(string.Empty));
+            var none = AmusePreparationDecision.Refused(
+                PreparationRefusal.None);
+            Assert.That(none.IsPrepared, Is.True);
+            Assert.That(none.HasMutation, Is.False);
+
+            var refused = AmusePreparationDecision.Refused(
+                PreparationRefusal.StaleSamplingPolicy);
+            Assert.That(refused.IsPrepared, Is.False);
+            Assert.That(
+                refused.Refusal,
+                Is.EqualTo(PreparationRefusal.StaleSamplingPolicy));
         }
 
         [Test]
@@ -1339,6 +1352,176 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(state);
+                DestroyTracked();
+                UnityEngine.Object.DestroyImmediate(root);
+                fixtures.BaseTearDown();
+            }
+        }
+
+        /// <summary>
+        /// The apply pass must read the build target through the shared
+        /// seam the barrier captures through, so a test-pinned target
+        /// re-selects the captured policy without ever switching the
+        /// editor's own build target. This falsifier pins the seam to
+        /// Android while the dev editor stays on Windows: the barrier
+        /// captures the pinned target, and the staleness guard must
+        /// resolve the same pinned target instead of the live editor
+        /// setting, or every prepared candidate refuses spuriously.
+        /// <para>
+        /// The fixture is the proven animated cutout shape: one fully
+        /// proven cutout slot whose swap set maps the cutout source to a
+        /// clone and the attested opaque stand-in to itself, so the
+        /// ungated apply provably writes the material assignment and
+        /// rewrites the committed curve.
+        /// </para>
+        /// </summary>
+        [Test]
+        public void TheApplyStalePolicyGuardHonorsThePinnedBuildTarget()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE pinned build target");
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            AmusePlatformFinishState state = null;
+            AnimatorController controller = null;
+            var fixtures = new LilToonCutoutConversionFixtures();
+            var original = AmusePlatformFinishPlugin.ActiveBuildTargetForTests;
+            try
+            {
+                fixtures.BaseSetUp();
+
+                // The dev editor's live target must differ from the pin,
+                // or this falsifier proves nothing: the whole point is
+                // that the guard re-selects the pinned target, not the
+                // live one.
+                Assert.That(
+                    EditorUserBuildSettings.activeBuildTarget,
+                    Is.EqualTo(BuildTarget.StandaloneWindows64),
+                    "the dev editor must hold the Windows build target " +
+                    "for this pinned-target fixture to prove anything");
+
+                AmusePlatformFinishPlugin.ActiveBuildTargetForTests =
+                    () => BuildTarget.Android;
+
+                var mipTexture = fixtures.ImportFullyOpaqueMipmap(
+                    "pinned_target");
+                var cutout = Track(NewCutoutConversionMaterial(mipTexture));
+                var swap = Track(
+                    LilToonFixtureTestBase.CreateVerifiedMaterial());
+                var mesh = Track(AlphaSeparationTestLifecycle.SingleTriangleMesh());
+                mesh.uv = new[]
+                {
+                    new Vector2(0.25f, 0.25f),
+                    new Vector2(0.75f, 0.25f),
+                    new Vector2(0.25f, 0.75f),
+                };
+                var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(root, "body", mesh, cutout);
+
+                var clip = Track(AlphaSeparationTestLifecycle.NewSwapClip(
+                    "AMUSE pinned target swap", "body", 0,
+                    (0f, cutout), (1f, swap)));
+                controller = AlphaSeparationTestLifecycle.NewController(
+                    root, "AMUSE pinned target graph", clip);
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, ApplyTestPlatform.Instance);
+                state = context.GetState<AmusePlatformFinishState>();
+
+                Assert.That(state.AnalyzedRendererCount, Is.EqualTo(1),
+                    "fixture precondition: the renderer must analyze");
+                Assert.That(state.SemanticallyRefusedRendererCount, Is.Zero,
+                    "fixture precondition: the renderer must analyze");
+                Assert.That(
+                    state.HasSamplingPolicy, Is.True,
+                    "fixture precondition: the barrier must capture a " +
+                    "sampling policy for the pinned target");
+                Assert.That(
+                    state.SamplingTarget,
+                    Is.EqualTo(BuildTarget.Android),
+                    "fixture precondition: the barrier must capture the " +
+                    "pinned target, not the editor's live target");
+                Assert.That(
+                    state.SamplingPolicy,
+                    Is.EqualTo(AlphaSamplingPolicy.AcceptedNonAnisotropic),
+                    "fixture precondition: the fixture's default " +
+                    "acceptance must capture the accepted non-anisotropic " +
+                    "mobile policy");
+                Assert.That(
+                    state.Separation, Is.Not.Null,
+                    "fixture precondition: the candidate must survive " +
+                    "preparation");
+                var slot = state.Separation.Renderers[0].CandidateSlots[0];
+                Assert.That(
+                    slot.OpaqueOfAdmitted[cutout], Is.Not.SameAs(cutout),
+                    "fixture precondition: the opaque result must be a " +
+                    "clone, or the applied swap proves nothing");
+
+                Assert.That(
+                    state.SlotRefusalCount(
+                        AlphaSeparationSlotRefusal.SamplingPolicyChanged),
+                    Is.Zero,
+                    "The pinned captured target must not read as stale: " +
+                    "the guard re-selects the captured policy through the " +
+                    "shared seam, so the differing live editor target " +
+                    "must not refuse the prepared candidate.");
+                foreach (AlphaSeparationSlotRefusal reason in Enum.GetValues(
+                             typeof(AlphaSeparationSlotRefusal)))
+                {
+                    if (reason == AlphaSeparationSlotRefusal.None)
+                    {
+                        continue;
+                    }
+
+                    Assert.That(
+                        state.SlotRefusalCount(reason), Is.Zero,
+                        "a pinned captured target must refuse through no " +
+                        "reason at all: " + reason);
+                }
+                AssertNoFeatureRefusals(state);
+
+                Assert.That(
+                    state.AppliedRendererCount, Is.EqualTo(1),
+                    "The pinned captured target must apply the prepared " +
+                    "candidate.");
+                Assert.That(
+                    renderer.sharedMaterials[0],
+                    Is.SameAs(slot.OpaqueOfAdmitted[cutout]),
+                    "The pinned captured target must replace the cutout " +
+                    "source with its opaque result.");
+
+                var committedCurve = AnimationUtility.GetObjectReferenceCurve(
+                    AlphaSeparationTestLifecycle.CommittedClipWithObjectBinding(
+                        root, "body", "m_Materials.Array.data[0]"),
+                    EditorCurveBinding.PPtrCurve(
+                        "body",
+                        typeof(SkinnedMeshRenderer),
+                        "m_Materials.Array.data[0]"));
+                Assert.That(committedCurve, Has.Length.EqualTo(2));
+                Assert.That(
+                    new[]
+                    {
+                        committedCurve[0].time.ToString("R"),
+                        committedCurve[1].time.ToString("R"),
+                    },
+                    Is.EqualTo(new[]
+                    {
+                        0f.ToString("R"),
+                        1f.ToString("R"),
+                    }),
+                    "the keyframe times must be preserved exactly");
+                Assert.That(committedCurve[0].value,
+                    Is.SameAs(slot.OpaqueOfAdmitted[cutout]),
+                    "The pinned captured target must rewrite the " +
+                    "committed curve to the opaque result.");
+                Assert.That(committedCurve[1].value, Is.SameAs(swap),
+                    "The pinned captured target must keep the attested " +
+                    "opaque stand-in unchanged.");
+            }
+            finally
+            {
+                AmusePlatformFinishPlugin.ActiveBuildTargetForTests = original;
                 AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 AlphaSeparationTestLifecycle.DestroyGenerated(state);
                 DestroyTracked();
@@ -3249,6 +3432,45 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// One private static mesh with the asked submesh count, two
+        /// triangles per submesh. The applied-write fixtures use it so a
+        /// Split write can carry its appended submesh on the write mesh.
+        /// </summary>
+        private static Mesh TwoTriangleSubmeshesMesh(int submeshCount)
+        {
+            var vertices = new Vector3[submeshCount * 6];
+            for (var submesh = 0; submesh < submeshCount; submesh++)
+            {
+                var first = submesh * 6;
+                vertices[first] = new Vector3(submesh * 3f, 0f, 0f);
+                vertices[first + 1] = new Vector3(submesh * 3f + 1f, 0f, 0f);
+                vertices[first + 2] = new Vector3(submesh * 3f, 1f, 0f);
+                vertices[first + 3] = new Vector3(submesh * 3f + 2f, 0f, 0f);
+                vertices[first + 4] = new Vector3(submesh * 3f + 3f, 0f, 0f);
+                vertices[first + 5] = new Vector3(submesh * 3f + 2f, 1f, 0f);
+            }
+
+            var mesh = new Mesh
+            {
+                vertices = vertices,
+                subMeshCount = submeshCount,
+            };
+            for (var submesh = 0; submesh < submeshCount; submesh++)
+            {
+                var first = submesh * 6;
+                mesh.SetTriangles(
+                    new[]
+                    {
+                        first, first + 1, first + 2,
+                        first + 3, first + 4, first + 5,
+                    },
+                    submesh);
+            }
+
+            return mesh;
+        }
+
+        /// <summary>
         /// A fully folded renderer swaps its material in place. The folded
         /// slot is an ordinary wholly-opaque candidate to the apply pass,
         /// so the write rewrites the swap curve onto the opaque result,
@@ -3574,6 +3796,90 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(state.AppliedOpaqueTriangleCount, Is.EqualTo(5),
                 "both folded submeshes of the changed slot must add " +
                 "their own triangles to the summary count");
+        }
+
+        /// <summary>
+        /// The applied-slot collection reads the surviving-candidate list the
+        /// preparation pass wrote before any finalization is applied. A
+        /// missing list is a state invariant defect, so the collection
+        /// throws instead of silently reading the prepared candidate slots,
+        /// which would report refused slots as applied.
+        /// </summary>
+        [Test]
+        public void AMissingSurvivingCandidateListIsAnInvariantFailureNotASilentApply()
+        {
+            var source = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+            var clone = Track(new Material(source.shader));
+            var rendererObj = Track(new GameObject(
+                "AMUSE missing survivors renderer"));
+            var renderer = rendererObj.AddComponent<SkinnedMeshRenderer>();
+            var mesh = Track(AlphaSeparationTestLifecycle.SingleTriangleMesh());
+            renderer.sharedMesh = mesh;
+            renderer.sharedMaterials = new[] { source };
+
+            var mapping = new Dictionary<Material, Material>
+            {
+                [source] = clone,
+            };
+            var plan = new MeshSeparationPlan(
+                null,
+                new[]
+                {
+                    new SubmeshSeparationPlan(
+                        0, 0,
+                        new[] { 0, 1 }, Array.Empty<int>(),
+                        SubmeshSeparationDisposition.WhollyOpaqueCandidate),
+                },
+                true, false, 2, 0);
+            var candidates = new[]
+            {
+                new PreparedSlotSeparation(
+                    plan.Submeshes[0], mapping, false, false),
+            };
+            var evidence = new CapturedAnimationEvidence(
+                new MaterialEvidenceRequest(
+                    false, false,
+                    Array.Empty<string>(),
+                    Array.Empty<string>(),
+                    Array.Empty<string>(),
+                    Array.Empty<string>(),
+                    Array.Empty<TexturePropertyEvidenceRequest>()),
+                Array.Empty<CapturedClipEvidence>(),
+                Array.Empty<Alrauna.Amuse.Editor.Semantics
+                    .CapturedAlphaMaterial>(),
+                new[] { 0 },
+                false, false);
+            var prepared = new PreparedRendererSeparation(
+                new UnityRendererMutationTarget(renderer, mesh, 1),
+                string.Empty,
+                plan,
+                evidence,
+                candidates,
+                Array.Empty<BlockStateEntry>(),
+                Array.Empty<int>());
+            var state = new AmusePlatformFinishState();
+            var separation = new PreparedAlphaSeparation();
+            separation.Add(prepared);
+            state.Separation = separation;
+
+            var write = new AlphaSeparationRendererWrite(
+                renderer,
+                null,
+                new[] { clone },
+                Array.Empty<AlphaSeparationCurveEdit>());
+            state.AppliedFinalization =
+                new AlphaSeparationFinalization(new[] { write });
+
+            // A preparation that reaches an applied finalization always
+            // writes one surviving-candidate entry per prepared renderer
+            // first, so a null list here is an invariant defect and must
+            // not fall back to the prepared candidate slots.
+            var thrown = Assert.Throws<InvalidOperationException>(
+                () => AlphaSeparationApply.CollectAppliedSlots(state));
+            Assert.That(
+                thrown.Message,
+                Does.Contain("surviving-candidate"),
+                "the throw must name the surviving-candidate invariant");
         }
 
         // --- Task 5 integration coverage: the cutout family end to end ------
@@ -5057,7 +5363,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 // record through the production slot-record construction,
                 // and its reason family resolves on the report surface.
                 var slotRecords = RuntimeStateResolution.MaterialSlotsFor(
-                    prepared.Evidence, prepared.RendererPath);
+                    prepared.Evidence, prepared.RendererPath,
+                    UnityAnimationEvidenceCapture.MaterialSlotBindingParser);
                 Assert.That(
                     slotRecords[0].CaptureRefusals, Has.Count.EqualTo(1));
                 var refusal = slotRecords[0].CaptureRefusals[0];
@@ -5191,7 +5498,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
                 var prepared = state.Separation.Renderers.Single();
                 var slotRecords = RuntimeStateResolution.MaterialSlotsFor(
-                    prepared.Evidence, prepared.RendererPath);
+                    prepared.Evidence, prepared.RendererPath,
+                    UnityAnimationEvidenceCapture.MaterialSlotBindingParser);
 
                 // Both admitted materials of slot 0 carry the same refused
                 // texture, and the slot record collapses them to one named
@@ -5788,6 +6096,331 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             Assert.That(state.PlayModeRendererRows[0].movedTriangles, Is.EqualTo(100));
             Assert.That(state.PlayModeRendererRows[1].movedTriangles, Is.EqualTo(0));
+        }
+
+        /// <summary>
+        /// A surviving slot whose already-opaque material maps to itself
+        /// keeps its material in the applied write. The record must report
+        /// zero moved triangles for that slot. Only a slot whose material
+        /// the write actually changed reports its proven count.
+        /// </summary>
+        [Test]
+        public void ASelfMappedSurvivingSlotReportsZeroMovedTriangles()
+        {
+            var source = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+            var clone = Track(new Material(source.shader));
+            var selfMapped = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+            var rendererObj = Track(new GameObject(
+                "AMUSE self-mapped slot renderer"));
+            var renderer = rendererObj.AddComponent<SkinnedMeshRenderer>();
+            var mesh = Track(AlphaSeparationTestLifecycle.SingleTriangleMesh());
+            renderer.sharedMesh = mesh;
+            renderer.sharedMaterials = new[] { source, selfMapped };
+
+            // Slot 0 converts: its opaque mapping is the clone. Slot 1 is
+            // already opaque and maps to itself, exactly as the preparation
+            // records an already-opaque source.
+            var convertingMapping = new Dictionary<Material, Material>
+            {
+                [source] = clone,
+            };
+            var selfMapping = new Dictionary<Material, Material>
+            {
+                [selfMapped] = selfMapped,
+            };
+            var plan = new MeshSeparationPlan(
+                null,
+                new[]
+                {
+                    new SubmeshSeparationPlan(
+                        0, 0,
+                        new[] { 0, 1 }, Array.Empty<int>(),
+                        SubmeshSeparationDisposition.WhollyOpaqueCandidate),
+                    new SubmeshSeparationPlan(
+                        1, 1,
+                        new[] { 0, 1 }, Array.Empty<int>(),
+                        SubmeshSeparationDisposition.WhollyOpaqueCandidate),
+                },
+                true, false, 4, 0);
+            var candidates = new[]
+            {
+                new PreparedSlotSeparation(
+                    plan.Submeshes[0], convertingMapping, false, false),
+                new PreparedSlotSeparation(
+                    plan.Submeshes[1], selfMapping, false, false),
+            };
+            var evidence = new CapturedAnimationEvidence(
+                new MaterialEvidenceRequest(
+                    false, false,
+                    Array.Empty<string>(),
+                    Array.Empty<string>(),
+                    Array.Empty<string>(),
+                    Array.Empty<string>(),
+                    Array.Empty<TexturePropertyEvidenceRequest>()),
+                Array.Empty<CapturedClipEvidence>(),
+                Array.Empty<Alrauna.Amuse.Editor.Semantics
+                    .CapturedAlphaMaterial>(),
+                new[] { 0 },
+                false, false);
+            const string rendererPath = "Avatar/SelfMappedSlotRenderer";
+            var prepared = new PreparedRendererSeparation(
+                new UnityRendererMutationTarget(renderer, mesh, 1),
+                rendererPath,
+                plan,
+                evidence,
+                candidates,
+                Array.Empty<BlockStateEntry>(),
+                Array.Empty<int>());
+            var state = new AmusePlatformFinishState();
+            var separation = new PreparedAlphaSeparation();
+            separation.Add(prepared);
+            state.Separation = separation;
+            state.SeparationSurvivingCandidates =
+                new List<List<PreparedSlotSeparation>>
+                {
+                    new List<PreparedSlotSeparation>
+                    {
+                        candidates[0],
+                        candidates[1],
+                    },
+                };
+
+            // The write swaps only the converting slot's material. The
+            // self-mapped slot keeps its own material. This is what the
+            // production finalization builds for this surviving plan.
+            var finalization = new AlphaSeparationFinalization(new[]
+            {
+                new AlphaSeparationRendererWrite(
+                    renderer,
+                    null,
+                    new[] { clone, selfMapped },
+                    Array.Empty<AlphaSeparationCurveEdit>()),
+            });
+            AlphaSeparationApply.ApplyFinalization(finalization, state);
+            state.AppliedFinalization = finalization;
+
+            state.PlayModeRendererRows.Add(new SerializedTransformationRow
+            {
+                kind = 3,
+                rendererPath = rendererPath,
+                slotIndex = 0,
+                movedTriangles = 0,
+                provenTriangles = 2,
+                totalTriangles = 2
+            });
+            state.PlayModeRendererRows.Add(new SerializedTransformationRow
+            {
+                kind = 3,
+                rendererPath = rendererPath,
+                slotIndex = 1,
+                movedTriangles = 0,
+                provenTriangles = 2,
+                totalTriangles = 2
+            });
+
+            var appliedSlots = AlphaSeparationApply.CollectAppliedSlots(state);
+            AlphaSeparationApply.UpdateAppliedMovedTriangles(state, appliedSlots);
+
+            Assert.That(
+                state.PlayModeRendererRows.Single(r => r.slotIndex == 1)
+                    .movedTriangles,
+                Is.EqualTo(0),
+                "the write kept the self-mapped slot's material, so the " +
+                "slot moved nothing");
+            Assert.That(
+                state.PlayModeRendererRows.Single(r => r.slotIndex == 0)
+                    .movedTriangles,
+                Is.EqualTo(2),
+                "the write changed the converting slot's material, so its " +
+                "proven triangles moved");
+        }
+
+        /// <summary>
+        /// One applied write carries three surviving slots: one converts in
+        /// place, one is already opaque and maps to itself, and one is a
+        /// genuine Split. A Split keeps its source material on its own
+        /// submesh and moves its opaque triangles to the appended submesh,
+        /// so its row must report its proven count even though the write
+        /// kept the slot's material.
+        /// </summary>
+        [Test]
+        public void AnAppliedSplitSlotReportsItsProvenMovedTriangles()
+        {
+            var source = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+            var clone = Track(new Material(source.shader));
+            var selfMapped = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+            var splitSource = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+            var splitOpaque = Track(new Material(splitSource.shader));
+            var rendererObj = Track(new GameObject(
+                "AMUSE applied split slot renderer"));
+            var renderer = rendererObj.AddComponent<SkinnedMeshRenderer>();
+            var sourceMesh = Track(TwoTriangleSubmeshesMesh(3));
+            // The write mesh mirrors the finalization recipe: the three
+            // source submeshes keep their layout, and the appended submesh
+            // carries exactly the Split's proven opaque triangles.
+            var writeMesh = Track(TwoTriangleSubmeshesMesh(3));
+            var appendedVertex = writeMesh.vertexCount;
+            var grown = new Vector3[appendedVertex + 3];
+            writeMesh.vertices.CopyTo(grown, 0);
+            grown[appendedVertex] = new Vector3(9f, 0f, 0f);
+            grown[appendedVertex + 1] = new Vector3(10f, 0f, 0f);
+            grown[appendedVertex + 2] = new Vector3(9f, 1f, 0f);
+            writeMesh.vertices = grown;
+            writeMesh.subMeshCount = 4;
+            writeMesh.SetTriangles(
+                new[]
+                {
+                    appendedVertex,
+                    appendedVertex + 1,
+                    appendedVertex + 2,
+                },
+                3);
+            renderer.sharedMesh = sourceMesh;
+            renderer.sharedMaterials = new[] { source, selfMapped, splitSource };
+
+            // Slot 0 converts in place. Slot 1 is already opaque and maps
+            // to itself. Slot 2 is a genuine Split: its source material
+            // stays bound to its own submesh and its opaque result lands
+            // on the appended submesh, exactly as the finalization builds
+            // a Split write.
+            var convertingMapping = new Dictionary<Material, Material>
+            {
+                [source] = clone,
+            };
+            var selfMapping = new Dictionary<Material, Material>
+            {
+                [selfMapped] = selfMapped,
+            };
+            var splitMapping = new Dictionary<Material, Material>
+            {
+                [splitSource] = splitOpaque,
+            };
+            var plan = new MeshSeparationPlan(
+                null,
+                new[]
+                {
+                    new SubmeshSeparationPlan(
+                        0, 0,
+                        new[] { 0, 1 }, Array.Empty<int>(),
+                        SubmeshSeparationDisposition.WhollyOpaqueCandidate),
+                    new SubmeshSeparationPlan(
+                        1, 1,
+                        new[] { 0, 1 }, Array.Empty<int>(),
+                        SubmeshSeparationDisposition.WhollyOpaqueCandidate),
+                    new SubmeshSeparationPlan(
+                        2, 2,
+                        new[] { 0 }, new[] { 1 },
+                        SubmeshSeparationDisposition.Split),
+                },
+                true, false, 5, 1);
+            var candidates = new[]
+            {
+                new PreparedSlotSeparation(
+                    plan.Submeshes[0], convertingMapping, false, false),
+                new PreparedSlotSeparation(
+                    plan.Submeshes[1], selfMapping, false, false),
+                new PreparedSlotSeparation(
+                    plan.Submeshes[2], splitMapping, false, false),
+            };
+            var evidence = new CapturedAnimationEvidence(
+                new MaterialEvidenceRequest(
+                    false, false,
+                    Array.Empty<string>(),
+                    Array.Empty<string>(),
+                    Array.Empty<string>(),
+                    Array.Empty<string>(),
+                    Array.Empty<TexturePropertyEvidenceRequest>()),
+                Array.Empty<CapturedClipEvidence>(),
+                Array.Empty<Alrauna.Amuse.Editor.Semantics
+                    .CapturedAlphaMaterial>(),
+                new[] { 0 },
+                false, false);
+            const string rendererPath = "Avatar/AppliedSplitSlotRenderer";
+            var prepared = new PreparedRendererSeparation(
+                new UnityRendererMutationTarget(renderer, sourceMesh, 1),
+                rendererPath,
+                plan,
+                evidence,
+                candidates,
+                Array.Empty<BlockStateEntry>(),
+                Array.Empty<int>());
+            var state = new AmusePlatformFinishState();
+            var separation = new PreparedAlphaSeparation();
+            separation.Add(prepared);
+            state.Separation = separation;
+            state.SeparationSurvivingCandidates =
+                new List<List<PreparedSlotSeparation>>
+                {
+                    new List<PreparedSlotSeparation>
+                    {
+                        candidates[0],
+                        candidates[1],
+                        candidates[2],
+                    },
+                };
+
+            var finalization = new AlphaSeparationFinalization(new[]
+            {
+                new AlphaSeparationRendererWrite(
+                    renderer,
+                    writeMesh,
+                    new[] { clone, selfMapped, splitSource, splitOpaque },
+                    Array.Empty<AlphaSeparationCurveEdit>()),
+            });
+            AlphaSeparationApply.ApplyFinalization(finalization, state);
+            state.AppliedFinalization = finalization;
+
+            state.PlayModeRendererRows.Add(new SerializedTransformationRow
+            {
+                kind = 3,
+                rendererPath = rendererPath,
+                slotIndex = 0,
+                movedTriangles = 0,
+                provenTriangles = 2,
+                totalTriangles = 2
+            });
+            state.PlayModeRendererRows.Add(new SerializedTransformationRow
+            {
+                kind = 3,
+                rendererPath = rendererPath,
+                slotIndex = 1,
+                movedTriangles = 0,
+                provenTriangles = 2,
+                totalTriangles = 2
+            });
+            state.PlayModeRendererRows.Add(new SerializedTransformationRow
+            {
+                kind = 3,
+                rendererPath = rendererPath,
+                slotIndex = 2,
+                movedTriangles = 0,
+                provenTriangles = 1,
+                totalTriangles = 2
+            });
+
+            var appliedSlots = AlphaSeparationApply.CollectAppliedSlots(state);
+            AlphaSeparationApply.UpdateAppliedMovedTriangles(state, appliedSlots);
+
+            Assert.That(
+                state.PlayModeRendererRows.Single(r => r.slotIndex == 0)
+                    .movedTriangles,
+                Is.EqualTo(2),
+                "the converting slot's proven triangles moved");
+            Assert.That(
+                state.PlayModeRendererRows.Single(r => r.slotIndex == 1)
+                    .movedTriangles,
+                Is.EqualTo(0),
+                "the self-mapped slot moved nothing");
+            Assert.That(
+                state.PlayModeRendererRows.Single(r => r.slotIndex == 2)
+                    .movedTriangles,
+                Is.EqualTo(1),
+                "the applied Split moved its opaque triangle to the " +
+                "appended submesh, so its proven count moves even " +
+                "though the write kept its material");
+            Assert.That(state.AppliedOpaqueTriangleCount, Is.EqualTo(3),
+                "the summary counts the converted slot's triangles and " +
+                "the Split's appended triangle, so the rows must agree");
         }
     }
 }

@@ -7,8 +7,65 @@ namespace Alrauna.Amuse.Editor.Analysis
 {
     internal static class AffineUvTransform
     {
+        // The mapping's per-resolution facts: the four binary32 constants
+        // decoded to exact dyadics once when the resolution is built, plus
+        // the channel and identity verdict the per-triangle path reads. A
+        // resolution decodes its mapping once and every triangle consumes
+        // this record, so the decode never repeats inside the triangle loop.
+        internal readonly struct DecodedMapping
+        {
+            internal DecodedMapping(
+                int channel,
+                bool isIdentity,
+                ExactDyadic scaleX,
+                ExactDyadic scaleY,
+                ExactDyadic offsetX,
+                ExactDyadic offsetY)
+            {
+                Channel = channel;
+                IsIdentity = isIdentity;
+                ScaleX = scaleX;
+                ScaleY = scaleY;
+                OffsetX = offsetX;
+                OffsetY = offsetY;
+            }
+
+            internal int Channel { get; }
+            internal bool IsIdentity { get; }
+            internal ExactDyadic ScaleX { get; }
+            internal ExactDyadic ScaleY { get; }
+            internal ExactDyadic OffsetX { get; }
+            internal ExactDyadic OffsetY { get; }
+        }
+
+        // Decodes the mapping's four constants. Resolution construction calls
+        // this once; the per-triangle path only consumes the record.
+        internal static DecodedMapping Decode(UvMapping mapping)
+        {
+            return new DecodedMapping(
+                mapping.Channel,
+                mapping.IsIdentity,
+                ExactUvGeometry.DecodeFloat(mapping.Scale.x),
+                ExactUvGeometry.DecodeFloat(mapping.Scale.y),
+                ExactUvGeometry.DecodeFloat(mapping.Offset.x),
+                ExactUvGeometry.DecodeFloat(mapping.Offset.y));
+        }
+
+        // Decodes and transforms in one call. A caller that classifies many
+        // triangles under one mapping decodes once and drives the record
+        // overload directly.
         internal static bool TryTransform(
             UvMapping mapping,
+            TriangleAlphaInput triangle,
+            out TriangleAlphaInput transformed,
+            out AlphaUvEnvelope envelope)
+        {
+            return TryTransform(
+                Decode(mapping), triangle, out transformed, out envelope);
+        }
+
+        internal static bool TryTransform(
+            DecodedMapping mapping,
             TriangleAlphaInput triangle,
             out TriangleAlphaInput transformed,
             out AlphaUvEnvelope envelope)
@@ -32,15 +89,15 @@ namespace Alrauna.Amuse.Editor.Analysis
                     x0,
                     x1,
                     x2,
-                    ExactUvGeometry.DecodeFloat(mapping.Scale.x),
-                    ExactUvGeometry.DecodeFloat(mapping.Offset.x),
+                    mapping.ScaleX,
+                    mapping.OffsetX,
                     out x) ||
                 !TryTransformAxis(
                     y0,
                     y1,
                     y2,
-                    ExactUvGeometry.DecodeFloat(mapping.Scale.y),
-                    ExactUvGeometry.DecodeFloat(mapping.Offset.y),
+                    mapping.ScaleY,
+                    mapping.OffsetY,
                     out y))
             {
                 transformed = triangle;

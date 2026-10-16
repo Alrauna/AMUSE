@@ -132,6 +132,32 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        // Mirrors the store's private "Amuse_PlayMode_" session prefix.
+        private static string AvatarKey() => "MatrixScene::Avatar";
+
+        private static string Fingerprint() => "fingerprint_matrix";
+
+        private static string StoreKey() => "Amuse_PlayMode_" + AvatarKey();
+
+        [Test]
+        public void CorruptStoredPayloadsReadAsNoRecordAndEraseTheKey()
+        {
+            foreach (var payload in new[] { "not json at all", "", "{\"r\":0.5", "[1,2,3]", "{\"r\":0.5}junk", "null" })
+            {
+                SessionState.SetString(StoreKey(), payload);
+                var record = PlayModeBuildStore.TryLoad(AvatarKey(), Fingerprint());
+                Assert.That(record, Is.Null, $"corrupt data is data, not a defect: '{payload}'");
+                Assert.That(SessionState.GetString(StoreKey(), null), Is.Empty, $"the corrupt payload is erased: '{payload}'");
+            }
+        }
+
+        [Test]
+        public void AWrongTypedFieldReadsAsNoRecordThroughTheFingerprintGuard()
+        {
+            SessionState.SetString(StoreKey(), "{\"policyFingerprint\":null}");
+            Assert.That(PlayModeBuildStore.TryLoad(AvatarKey(), Fingerprint()), Is.Null);
+        }
+
         [Test]
         public void TryLoadReturnsNullWhenKeyNotFound()
         {
@@ -210,7 +236,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         movedTriangles = 10,
                         provenTriangles = 10,
                         totalTriangles = 20,
-                        sentence = "Splittable: 10 of out 20 polygons may be moved"
+                        sentence = "Splittable: 10 out of 20 polygons may be moved"
                     }
                 }
             };

@@ -21,6 +21,11 @@ namespace Alrauna.Amuse.Tests.Editor.Host
     {
         private const string TempFolder = "Assets/AmuseTests_StreamingEvidence";
 
+        // The capture route's own pinned temporary folder. The stale-clone
+        // test stages fixtures inside it and must remove them again.
+        private const string StreamingTempFolder =
+            "Assets/Amuse.StreamingReadback";
+
         [SetUp]
         public void SetUp()
         {
@@ -128,6 +133,37 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             return loaded;
         }
 
+        /// <summary>
+        /// Imports a streaming-resident RGBA32 texture with a source
+        /// file, two texels: alpha byte 128 and alpha byte 0. Byte 128
+        /// decodes to 0.50196, so the cutoff pair 0.50196 and 0.50205
+        /// straddles it while both quantize into the same 1/10000
+        /// bucket the quantized key collapsed.
+        /// </summary>
+        private Texture2D ImportStreamingByte128Texture(string name)
+        {
+            const int width = 2;
+            const int height = 1;
+            var path = TempFolder + "/" + name + ".png";
+            var pixels = new Color32[width * height];
+            pixels[0] = new Color32(255, 255, 255, 128);
+            pixels[1] = new Color32(255, 255, 255, 0);
+            var loaded = TestTextureImport.WritePng(
+                path, width, height, pixels, importer =>
+                {
+                    importer.mipmapEnabled = true;
+                    importer.isReadable = true;
+                    importer.textureCompression =
+                        TextureImporterCompression.Uncompressed;
+                    importer.streamingMipmaps = true;
+                });
+            Assert.That(
+                loaded.streamingMipmaps, Is.True,
+                "fixture precondition: the imported texture must be " +
+                "streaming-resident");
+            return loaded;
+        }
+
         [Test]
         public void StreamingCache_DoesNotServeInertEvidenceUnderGateOnBounds()
         {
@@ -170,6 +206,45 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(
                 gateOnChain[0].GetAlpha(0, 0),
                 Is.EqualTo(AlphaTextureData.ErasedFlag));
+        }
+
+        /// <summary>
+        /// The streaming cache quantized the cutoff into a 1/10000
+        /// bucket, so two cutoffs inside one bucket straddling a texel
+        /// byte served one chain to both verdicts: the first capture's
+        /// verdict survived a second cutoff that must decide the other
+        /// way. The key carries the exact clamped cutoff, so each
+        /// cutoff captures its own chain.
+        /// </summary>
+        [Test]
+        public void TwoCutoffsInOneBucketStraddlingByte128CaptureSeparateChains()
+        {
+            var texture = ImportStreamingByte128Texture(
+                "streaming_cutoff_bucket_straddle");
+
+            AlphaMipChain first;
+            AlphaMipChain second;
+            UnityStreamingTextureEvidence.TryCapture(
+                texture,
+                TextureChannel.Alpha,
+                0.50196f,
+                AlphaPolicyBounds.Inert,
+                out first,
+                allowDiskFallback: false);
+            UnityStreamingTextureEvidence.TryCapture(
+                texture,
+                TextureChannel.Alpha,
+                0.50205f,
+                AlphaPolicyBounds.Inert,
+                out second,
+                allowDiskFallback: false);
+
+            // Byte 128 decodes to ~0.50196: it passes the first cutoff,
+            // fails the second.
+            Assert.That(
+                second[0].GetAlpha(0, 0),
+                Is.Not.EqualTo(first[0].GetAlpha(0, 0)),
+                "the quantized key served one chain to both cutoffs");
         }
 
         /// <summary>
@@ -309,15 +384,50 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(chain, Is.Null);
         }
 
+        /// <summary>
+        /// The disk-fallback switch rides the capture request, not
+        /// process state. One capture that allows the route caches a
+        /// clone-provenance chain; a later capture of the same texture
+        /// whose own request disallows the route is never served that
+        /// entry: the key names the route that built the chain, and the
+        /// disallowed capture refuses rather than serve it.
+        /// </summary>
         [Test]
-        public void DisallowDiskFallbackScopeRestoresStateAndBlocksClone()
+        public void ARequestDisallowingFallbackNeverReadsAFallbackCapturedChain()
         {
-            Assert.That(UnityStreamingTextureEvidence.AllowDiskFallback, Is.True);
-            using (UnityStreamingTextureEvidence.DisallowDiskFallback())
+            var texture = ImportExrStreamingBandTexture(
+                "streaming_fallback_request_strict");
+            try
             {
-                Assert.That(UnityStreamingTextureEvidence.AllowDiskFallback, Is.False);
+                var okFallback = UnityStreamingTextureEvidence.TryCapture(
+                    texture,
+                    TextureChannel.Alpha,
+                    0.25f,
+                    AlphaPolicyBounds.Inert,
+                    out var fallbackChain);
+                Assert.That(
+                    okFallback, Is.True,
+                    "fixture precondition: the allowed capture must " +
+                    "reach the clone fallback");
+                Assert.That(fallbackChain, Is.Not.Null);
+
+                var okStrict = UnityStreamingTextureEvidence.TryCapture(
+                    texture,
+                    TextureChannel.Alpha,
+                    0.25f,
+                    AlphaPolicyBounds.Inert,
+                    out var strictChain,
+                    allowDiskFallback: false);
+                Assert.That(
+                    okStrict, Is.False,
+                    "a disallowing request must never be served the " +
+                    "fallback-provenance cache entry");
+                Assert.That(strictChain, Is.Null);
             }
-            Assert.That(UnityStreamingTextureEvidence.AllowDiskFallback, Is.True);
+            finally
+            {
+                AssetDatabase.DeleteAsset(AssetDatabase.GetAssetPath(texture));
+            }
         }
 
         [Test]
@@ -326,17 +436,15 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var texture = ImportExrStreamingBandTexture("unreadable_streaming_for_guard");
             try
             {
-                using (UnityStreamingTextureEvidence.DisallowDiskFallback())
-                {
-                    var ok = UnityStreamingTextureEvidence.TryCapture(
-                        texture,
-                        TextureChannel.Alpha,
-                        1.0f,
-                        AlphaPolicyBounds.Inert,
-                        out var chain);
-                    Assert.That(ok, Is.False);
-                    Assert.That(chain, Is.Null);
-                }
+                var ok = UnityStreamingTextureEvidence.TryCapture(
+                    texture,
+                    TextureChannel.Alpha,
+                    1.0f,
+                    AlphaPolicyBounds.Inert,
+                    out var chain,
+                    allowDiskFallback: false);
+                Assert.That(ok, Is.False);
+                Assert.That(chain, Is.Null);
                 Assert.That(
                     AssetDatabase.IsValidFolder("Assets/Amuse.StreamingReadback"),
                     Is.False,
@@ -344,6 +452,90 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             }
             finally
             {
+                AssetDatabase.DeleteAsset(AssetDatabase.GetAssetPath(texture));
+            }
+        }
+
+        /// <summary>
+        /// A crashed capture's clone never reached the route's cleanup, so
+        /// a file shaped like the route's own clones sits in the pinned
+        /// folder. Before a new clone is made the route sweeps exactly
+        /// that shape and touches nothing else: the stale clone is gone
+        /// and the foreign asset in the same folder survives.
+        /// </summary>
+        [Test]
+        public void AStaleCloneFromACrashedRunIsDeletedBeforeANewCloneIsMade()
+        {
+            var texture = ImportExrStreamingBandTexture(
+                "streaming_stale_clone_sweep");
+            var sourceGuid = AssetDatabase.AssetPathToGUID(
+                AssetDatabase.GetAssetPath(texture));
+            // The stale clone carries the route's own naming pattern: the
+            // source's 32-hex GUID plus an extension, directly in the
+            // pinned folder.
+            var stalePath = StreamingTempFolder + "/" + sourceGuid + ".png";
+            var foreignPath = StreamingTempFolder + "/unrelated.png";
+            try
+            {
+                if (!AssetDatabase.IsValidFolder(StreamingTempFolder))
+                {
+                    AssetDatabase.CreateFolder(
+                        "Assets", Path.GetFileName(StreamingTempFolder));
+                }
+                TestTextureImport.WritePng(stalePath, 2, 1, new[]
+                {
+                    new Color32(255, 255, 255, 255),
+                    new Color32(0, 0, 0, 255),
+                });
+                TestTextureImport.WritePng(foreignPath, 2, 1, new[]
+                {
+                    new Color32(9, 9, 9, 255),
+                    new Color32(9, 9, 9, 255),
+                });
+                Assert.That(
+                    AssetDatabase.LoadAssetAtPath<Texture2D>(stalePath),
+                    Is.Not.Null,
+                    "fixture precondition: the stale clone must be a " +
+                    "loaded asset");
+                Assert.That(
+                    AssetDatabase.LoadAssetAtPath<Texture2D>(foreignPath),
+                    Is.Not.Null,
+                    "fixture precondition: the foreign asset must be a " +
+                    "loaded asset");
+
+                var ok = UnityStreamingTextureEvidence.TryCapture(
+                    texture,
+                    TextureChannel.Alpha,
+                    0.25f,
+                    AlphaPolicyBounds.Inert,
+                    out _);
+                Assert.That(
+                    ok, Is.True, "the clone fallback must capture");
+
+                Assert.That(
+                    AssetDatabase.LoadAssetAtPath<Texture2D>(stalePath),
+                    Is.Null,
+                    "the sweep must delete the route's own stale clone");
+                Assert.That(
+                    AssetDatabase.LoadAssetAtPath<Texture2D>(foreignPath),
+                    Is.Not.Null,
+                    "the sweep must not touch content the route does " +
+                    "not own");
+            }
+            finally
+            {
+                foreach (var leftover in new[] { stalePath, foreignPath })
+                {
+                    if (AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(
+                            leftover) != null)
+                    {
+                        AssetDatabase.DeleteAsset(leftover);
+                    }
+                }
+                if (AssetDatabase.IsValidFolder(StreamingTempFolder))
+                {
+                    AssetDatabase.DeleteAsset(StreamingTempFolder);
+                }
                 AssetDatabase.DeleteAsset(AssetDatabase.GetAssetPath(texture));
             }
         }

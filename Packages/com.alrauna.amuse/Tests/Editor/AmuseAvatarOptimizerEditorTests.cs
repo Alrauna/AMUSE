@@ -254,33 +254,6 @@ namespace Alrauna.Amuse.Tests.Editor
         }
 
         [Test]
-        public void DrawTransformationRowAcceptsAvatarRoot()
-        {
-            var method = typeof(Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor)
-                .GetMethod("DrawTransformationRow", BindingFlags.NonPublic | BindingFlags.Static);
-            Assert.That(method, Is.Not.Null, "DrawTransformationRow must exist");
-            var parameters = method.GetParameters();
-            Assert.That(parameters.Length, Is.EqualTo(2),
-                "DrawTransformationRow must accept two parameters");
-            Assert.That(parameters[0].ParameterType, Is.EqualTo(typeof(MaterialTransformationRow)));
-            Assert.That(parameters[1].ParameterType, Is.EqualTo(typeof(Transform)));
-        }
-
-        [Test]
-        public void DrawTransformationRowRendersDeferredSlotRow()
-        {
-            var row = Alrauna.Amuse.Editor.DryRun.MaterialTransformationRow.Slot(
-                "Body",
-                "UnityEngine.SkinnedMeshRenderer",
-                0,
-                0,
-                100,
-                Alrauna.Amuse.Editor.DryRun.RowText.DeferredSlotSentence(100));
-            Assert.That(row.Sentence, Does.Contain("Deferred:"));
-            Assert.That(row.Sentence, Does.Contain("100"));
-        }
-
-        [Test]
         public void LazyLoadingWithholdsRowsUntilDone()
         {
             var component = NewHiddenComponent();
@@ -396,6 +369,38 @@ namespace Alrauna.Amuse.Tests.Editor
                 Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor.OnHelpBoxDrawnForTest = null;
                 UnityEngine.Object.DestroyImmediate(editor);
             }
+        }
+
+        [Test]
+        public void TheParseCacheInvalidatesOnRecordChangeButNotOnFingerprintAlone()
+        {
+            var rawRecord = JsonUtility.ToJson(new PlayModeBuildRecord
+            {
+                avatarKey = "cache-probe",
+                policyFingerprint = "fp-one",
+                avatarRows = new[]
+                {
+                    new SerializedTransformationRow
+                    {
+                        kind = (int)MaterialTransformationRowKind.Note,
+                        sentence = "cache probe note."
+                    }
+                },
+                rendererRows = new SerializedTransformationRow[0]
+            });
+            var otherRecord = JsonUtility.ToJson(new PlayModeBuildRecord
+            {
+                avatarKey = "cache-probe",
+                policyFingerprint = "fp-two",
+                avatarRows = new SerializedTransformationRow[0],
+                rendererRows = new SerializedTransformationRow[0]
+            });
+
+            var rows1 = PlayModeBuildStore.ParseCached(rawRecord);
+            var rows2 = PlayModeBuildStore.ParseCached(rawRecord);
+            Assert.That(rows2, Is.SameAs(rows1), "the same record string reuses the parse");
+            var rows3 = PlayModeBuildStore.ParseCached(otherRecord);
+            Assert.That(rows3, Is.Not.SameAs(rows1), "a changed record string reparses");
         }
 
         [Test]

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
@@ -34,7 +35,15 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 });
 
             var resolved = RuntimeStateResolution.ResolveRuntimeStates(
-                "Body", evidence, AlphaSamplingPolicy.ConservativeDesktop);
+                "Body",
+                evidence,
+                AlphaSamplingPolicy.ConservativeDesktop,
+                EmptyAlphaFields(),
+                UnityAnimationEvidenceCapture.TextureScaleOffsetSuffix,
+                UnityRendererAlphaAnalysis.StructuralRefusal,
+                UnityAnimationEvidenceCapture.ProofRelevantResolver,
+                UnityAnimationEvidenceCapture.UnrecognizedObjectBinding,
+                UnityAnimationEvidenceCapture.MaterialSlotBindingParser);
 
             Assert.That(resolved.Refusal, Is.EqualTo(
                 RendererAnalysisRefusal.MaterialDependencyClosureFailed));
@@ -57,7 +66,15 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 false, false);
 
             var resolved = RuntimeStateResolution.ResolveRuntimeStates(
-                "Body", evidence, AlphaSamplingPolicy.ConservativeDesktop);
+                "Body",
+                evidence,
+                AlphaSamplingPolicy.ConservativeDesktop,
+                EmptyAlphaFields(),
+                UnityAnimationEvidenceCapture.TextureScaleOffsetSuffix,
+                UnityRendererAlphaAnalysis.StructuralRefusal,
+                UnityAnimationEvidenceCapture.ProofRelevantResolver,
+                UnityAnimationEvidenceCapture.UnrecognizedObjectBinding,
+                UnityAnimationEvidenceCapture.MaterialSlotBindingParser);
             Assert.That(resolved.SlotResults[0].IsResolved, Is.False);
 
             var snapshot = new UnityRendererAlphaSnapshot(
@@ -69,13 +86,22 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     0, 0, new[] { 0, 1, 2 }) },
                 Array.Empty<CapturedAlphaMaterial>());
             var plan = RuntimeStateResolution.ClassifyRuntimeStates(
-                snapshot, resolved.SlotResults);
+                snapshot,
+                resolved.SlotResults,
+                UnityRendererAlphaAnalysis.TriangleClassifier,
+                UnityRendererAlphaAnalysis.OutcomeIntersector);
 
             Assert.That(plan.OpaqueTriangleCount, Is.EqualTo(0));
             Assert.That(plan.Submeshes[0].Disposition, Is.EqualTo(
                 SubmeshSeparationDisposition.Unchanged));
             Assert.That(plan.Source.Submeshes[0].Outcomes, Has.All.EqualTo(
                 TriangleAlphaOutcome.Unknown));
+        }
+
+        private static AlphaFieldSet EmptyAlphaFields()
+        {
+            return new AlphaFieldSet(
+                new Dictionary<AlphaFieldKey, AlphaMipChain>());
         }
 
         private static MaterialEvidenceRequest EmptyRequest()

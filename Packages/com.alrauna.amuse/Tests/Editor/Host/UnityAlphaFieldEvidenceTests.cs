@@ -1561,6 +1561,124 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         /// <summary>
+        /// The raw policy mip cap truncates the captured chain at the
+        /// capture seam. Levels above the cap leave the proof's scope, so
+        /// the route never reads them back and the stored chain keeps only
+        /// the levels at or below the cap. The gather side already truncates
+        /// with <c>LimitedTo</c>, so a stored prefix composes idempotently.
+        /// </summary>
+        [Test]
+        public void LevelsAboveTheRawCapArriveAsPlaceholdersNotEvidence()
+        {
+            var texture = ImportMipmapped(
+                "raw_cap_truncation", OddBoundaryPixels(), 8, 8,
+                TextureImporterFormat.RGBA32);
+            Assert.That(
+                texture.mipmapCount, Is.GreaterThan(2),
+                "fixture precondition: the fixture must declare more levels "
+                + "than the cap covers");
+
+            Assert.That(
+                UnityAlphaFieldEvidence.TryCapture(
+                    texture, TextureChannel.Alpha, 1.0f, AlphaPolicyBounds.Inert,
+                    out _, out var chain, out _, rawMipCap: 1),
+                Is.True);
+
+            Assert.That(
+                chain.Count, Is.EqualTo(2),
+                "cap 1 keeps levels 0 and 1");
+            for (var level = 0; level < chain.Count; level++)
+            {
+                Assert.That(
+                    chain[level].Width,
+                    Is.EqualTo(Mathf.Max(1, texture.width >> level)),
+                    "kept level " + level + " keeps its declared dimensions");
+            }
+        }
+
+        /// <summary>
+        /// The GPU route's session cache serves the stored chain instance
+        /// for a repeated capture of the same texture under the same
+        /// predicate, residency state, and cap. The routes' immutable
+        /// chains make the shared instance safe: a consumer cannot mutate
+        /// a served chain into another capture's field.
+        /// </summary>
+        [Test]
+        public void ASecondCaptureOfTheSameTextureServesTheCachedChainInstance()
+        {
+            var texture = ImportMipmapped(
+                "raw_cap_cache", OddBoundaryPixels(), 8, 8,
+                TextureImporterFormat.RGBA32);
+
+            Assert.That(
+                UnityAlphaFieldEvidence.TryCapture(
+                    texture, TextureChannel.Alpha, 1.0f, AlphaPolicyBounds.Inert,
+                    out _, out var first, out _, rawMipCap: 2),
+                Is.True);
+            Assert.That(
+                UnityAlphaFieldEvidence.TryCapture(
+                    texture, TextureChannel.Alpha, 1.0f, AlphaPolicyBounds.Inert,
+                    out _, out var second, out _, rawMipCap: 2),
+                Is.True);
+
+            Assert.That(
+                second, Is.SameAs(first),
+                "the cache must serve the stored instance");
+        }
+
+        /// <summary>
+        /// The cache's correctness mechanism: Unity bumps the update counter
+        /// when capture-visible pixels change, so a texture mutated in place
+        /// re-keys instead of serving stale evidence. The update-count
+        /// element carries that correctness alone, because this route
+        /// cannot hash content without a readback (amended spec decision
+        /// 14). The fixture is a runtime-created texture asset: an in-place
+        /// mutation uploads to the GPU in the same editor step, which an
+        /// imported asset's upload pipeline does not guarantee.
+        /// </summary>
+        [Test]
+        public void AMutatedTextureBypassesTheCaptureCache()
+        {
+            var texture = new Texture2D(8, 8, TextureFormat.RGBA32, true);
+            texture.SetPixels32(UniformPixels(8, 8, 255));
+            texture.Apply(true);
+            AssetDatabase.CreateAsset(
+                texture, TempFolder + "/raw_cap_mutation.asset");
+            var asset = AssetDatabase.LoadAssetAtPath<Texture2D>(
+                TempFolder + "/raw_cap_mutation.asset");
+            Assert.That(
+                asset, Is.Not.Null,
+                "fixture precondition: the texture asset must load");
+
+            Assert.That(
+                UnityAlphaFieldEvidence.TryCapture(
+                    asset, TextureChannel.Alpha, 1.0f, AlphaPolicyBounds.Inert,
+                    out _, out var cached, out _, rawMipCap: 2),
+                Is.True);
+            Assert.That(
+                cached[0].GetAlpha(0, 0), Is.EqualTo(255),
+                "fixture precondition: the cached chain is fully opaque");
+
+            var mutated = UniformPixels(8, 8, 255);
+            mutated[0] = new Color32(64, 32, 16, 128);
+            asset.SetPixels32(mutated);
+            asset.Apply(true);
+
+            Assert.That(
+                UnityAlphaFieldEvidence.TryCapture(
+                    asset, TextureChannel.Alpha, 1.0f, AlphaPolicyBounds.Inert,
+                    out _, out var fresh, out _, rawMipCap: 2),
+                Is.True);
+
+            Assert.That(
+                fresh, Is.Not.SameAs(cached),
+                "the mutated texture must re-key, not serve the stale chain");
+            Assert.That(
+                fresh[0].GetAlpha(0, 0), Is.EqualTo(0),
+                "the fresh chain carries the mutated below-one texel");
+        }
+
+        /// <summary>
         /// The three-state verdict through the real R8 predicate route, with
         /// the opaque bound pinned. Under the gate-on bounds From(80, 2) the
         /// noise bound is byte 6 and the opaque bound is byte 204. The stray

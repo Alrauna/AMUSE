@@ -32,7 +32,8 @@ namespace Alrauna.Amuse.Editor.DryRun
     /// scene, and turns the outcome into display rows. It reads. It never
     /// writes: the capture transients it creates die inside the compute
     /// scope, and the one capture route that writes project assets stays
-    /// unreachable, because streaming capture runs under DisallowDiskFallback.
+    /// unreachable, because every capture request disallows the
+    /// disk-fallback route.
     /// <para>
     /// Begin runs the avatar facts once per open. Step computes one
     /// renderer per call, behind a probe pass and the session cache. An
@@ -440,7 +441,15 @@ namespace Alrauna.Amuse.Editor.DryRun
         {
             if (_cts != null && !_cts.IsCancellationRequested)
             {
-                _cts.Cancel();
+                try
+                {
+                    _cts.Cancel();
+                }
+                catch (ObjectDisposedException)
+                {
+                    // The completion continuation disposed the source after
+                    // the task finished but before teardown reached Cancel.
+                }
             }
 
             if (timeoutMs > 0 && _inFlightTask != null && !_inFlightTask.IsCompleted)
@@ -587,10 +596,18 @@ namespace Alrauna.Amuse.Editor.DryRun
 
                 RecordConsentFacts(evidence, admittedLive);
 
+                var alphaFields = UnityRendererAlphaAnalysis.GatherAlphaFields(
+                    evidence.AdmittedMaterials, _maxMipLevel, _minTextureSize);
                 resolved = RuntimeStateResolution.ResolveRuntimeStates(
                     rendererPath,
                     evidence,
                     _samplingPolicy,
+                    alphaFields,
+                    UnityAnimationEvidenceCapture.TextureScaleOffsetSuffix,
+                    UnityRendererAlphaAnalysis.StructuralRefusal,
+                    UnityAnimationEvidenceCapture.ProofRelevantResolver,
+                    UnityAnimationEvidenceCapture.UnrecognizedObjectBinding,
+                    UnityAnimationEvidenceCapture.MaterialSlotBindingParser,
                     UnityMaterialSemantics.AnalyzeAlphaMaterialTransferred,
                     _maxMipLevel,
                     _minTextureSize,
@@ -598,7 +615,9 @@ namespace Alrauna.Amuse.Editor.DryRun
                     blockState,
                     rendererTypeName);
                 slots = RuntimeStateResolution.MaterialSlotsFor(
-                    evidence, rendererPath, rendererTypeName);
+                    evidence, rendererPath,
+                    UnityAnimationEvidenceCapture.MaterialSlotBindingParser,
+                    rendererTypeName);
 
                 if (resolved.Refusal != RendererAnalysisRefusal.None)
                 {
@@ -653,7 +672,8 @@ namespace Alrauna.Amuse.Editor.DryRun
             }
 
             _cts = new CancellationTokenSource();
-            var token = _cts.Token;
+            var source = _cts;
+            var token = source.Token;
             var snapshot = extraction.Snapshot;
             var slotResults = resolved.SlotResults;
 
@@ -672,8 +692,22 @@ namespace Alrauna.Amuse.Editor.DryRun
 
             _inFlightTask = Task.Run(
                 () => RuntimeStateResolution.ClassifyRuntimeStates(
-                    snapshot, slotResults, token),
+                    snapshot, slotResults,
+                    UnityRendererAlphaAnalysis.TriangleClassifier,
+                    UnityRendererAlphaAnalysis.OutcomeIntersector,
+                    token),
                 token);
+            // Side continuation owning disposal: it runs exactly when the
+            // task completes, even if cancellation abandoned the task and
+            // ClearInFlight never saw a completed task to dispose for. The
+            // source is captured in a local so a later run's source can
+            // never be disposed by this continuation. ClearInFlight's
+            // completed-path dispose stays; Dispose is idempotent.
+            _inFlightTask.ContinueWith(
+                _ => source.Dispose(),
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
             _state = DryRunState.ClassifyingBackground;
 
             return true;
@@ -955,7 +989,8 @@ namespace Alrauna.Amuse.Editor.DryRun
         /// <summary>
         /// Materializes each admitted batch against property blocks.
         /// Transients die in the finally block.
-        /// Runs under DisallowDiskFallback to prevent asset creation on disk.
+        /// The capture request disallows the disk-fallback route, so no
+        /// capture creates assets on disk.
         /// </summary>
         private ClosedAlphaMaterialCapturer RealCapturer(Renderer renderer)
         {
@@ -971,11 +1006,19 @@ namespace Alrauna.Amuse.Editor.DryRun
                     .MaterializeAdmitted(renderer, materials, out var clones);
                 try
                 {
-                    using (UnityStreamingTextureEvidence.DisallowDiskFallback())
-                    {
-                        return inner(
-                            effective, families, request, bounds, out outcome);
-                    }
+                    // The no-asset-writes guarantee rides the capture
+                    // request: the request withdraws the streaming route's
+                    // disk-fallback clone, so no capture in this batch can
+                    // create assets on disk. The optimizer's raw policy mip
+                    // cap rides the same request, so the proof reads back
+                    // only its own levels.
+                    return inner(
+                        effective,
+                        families,
+                        request.DisallowingDiskFallback()
+                            .WithRawMipCap(_maxMipLevel),
+                        bounds,
+                        out outcome);
                 }
                 finally
                 {
@@ -1001,7 +1044,9 @@ namespace Alrauna.Amuse.Editor.DryRun
 
         /// <summary>
         /// Checks whether a streaming texture can decode in memory from disk.
-        /// Authoring PNG and TGA files can decode directly.
+        /// Only authoring PNG files decode directly. ImageConversion.LoadImage
+        /// decodes PNG and JPG bytes only. A TGA source rides the
+        /// readable-clone route, which this preview disallows.
         /// </summary>
         private static bool CanDecodeInMemory(Texture texture)
         {
@@ -1016,8 +1061,8 @@ namespace Alrauna.Amuse.Editor.DryRun
                 return false;
             }
 
-            var ext = Path.GetExtension(path).ToLowerInvariant();
-            if (ext != ".png" && ext != ".tga")
+            if (!SourceImageAlphaReader.AdmitsExtension(
+                    Path.GetExtension(path).ToLowerInvariant()))
             {
                 return false;
             }
@@ -1255,6 +1300,7 @@ namespace Alrauna.Amuse.Editor.DryRun
                         PoiyomiOpaqueConversion.ConversionEvidenceRequest,
                         out var derived,
                         out _,
+                        UnityAnimationEvidenceCapture.TextureScaleOffsetSuffix,
                         RuntimeStateResolution.FilterBlockEntriesForSlot(
                             blockState, slot),
                         evidence.AdmittedMaterials))

@@ -427,6 +427,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 NoAlphaFields,
                 AlphaSamplingPolicy.ConservativeDesktop,
                 0,
+                UnityAnimationEvidenceCapture.TextureScaleOffsetSuffix,
                 VerifiedAlphaOnly);
         }
         private static SlotResolutionResult ResolveSlotWithBlock(
@@ -444,6 +445,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 NoAlphaFields,
                 AlphaSamplingPolicy.ConservativeDesktop,
                 0,
+                UnityAnimationEvidenceCapture.TextureScaleOffsetSuffix,
                 VerifiedAlphaOnly,
                 blockEntries);
         }
@@ -699,6 +701,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 NoAlphaFields,
                 AlphaSamplingPolicy.ConservativeDesktop,
                 0,
+                UnityAnimationEvidenceCapture.TextureScaleOffsetSuffix,
                 VerifiedAlphaOnly));
         }
 
@@ -724,6 +727,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 NoAlphaFields,
                 AlphaSamplingPolicy.ConservativeDesktop,
                 0,
+                UnityAnimationEvidenceCapture.TextureScaleOffsetSuffix,
                 material => ReferenceEquals(material.Evidence, withProperty.Evidence)
                     ? VerifiedAlphaOnly(material)
                     : new CapturedAlphaSemantics(
@@ -777,6 +781,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 NoAlphaFields,
                 AlphaSamplingPolicy.ConservativeDesktop,
                 0,
+                UnityAnimationEvidenceCapture.TextureScaleOffsetSuffix,
                 material => ReferenceEquals(material, admitted[0])
                     ? VerifiedAlphaOnly(material)
                     : CapturedAlphaSemantics.AllUnknown());
@@ -1149,6 +1154,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     fields,
                     AlphaSamplingPolicy.ConservativeDesktop,
                     0,
+                    UnityAnimationEvidenceCapture.TextureScaleOffsetSuffix,
                     VerifiedAlphaOnly);
 
                 Assert.That(result.IsResolved, Is.True);

@@ -2458,37 +2458,195 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             }
         }
 
+        // --- Source gather memo ---------------------------------------------
+
+        /// <summary>
+        /// One gather serves every material on one unchanged shader until
+        /// the build boundary. The key is the shader asset's project-relative
+        /// path, the pass slot the profile names (null for the Multi
+        /// container gather), the shader name override, and the shader
+        /// format stamp the gather embeds, read from the captured material
+        /// and normalized to 0 when absent so the key stays equality-safe.
+        /// The guard is the UTC write times of the shader file and of every
+        /// non-meta file under the include folder. The shader file's write
+        /// time alone never guards an entry: the include tree is digested
+        /// evidence, so an include edit must invalidate too. The shape is
+        /// the corrected Poiyomi source-hash memo: identity plus write
+        /// times plus the per-build clear.
+        /// </summary>
+        private static readonly Dictionary<
+            (string ShaderAssetPath, string PassShaderName,
+                string ShaderNameOverride, bool HasVersion, float Version),
+            (string WriteTimes, LilToonSourceEvidence Evidence)>
+            GatherMemo = new();
+
+        /// <summary>
+        /// Drops every memoized gather. The per-build clear sites call this,
+        /// so the next build re-gathers after a mid-session package swap or
+        /// a source edit.
+        /// </summary>
+        internal static void ClearGatherMemo()
+        {
+            GatherMemo.Clear();
+        }
+
+        /// <summary>
+        /// The include folder beside one shader asset, in the absolute form
+        /// every System.IO call consumes. Null when the shader has no
+        /// absolute path, so callers fail closed.
+        /// </summary>
+        private static string IncludeFolderFullPath(string shaderFullPath)
+        {
+            var shaderDirectory = shaderFullPath == null
+                ? null
+                : Path.GetDirectoryName(shaderFullPath);
+            return shaderDirectory == null
+                ? null
+                : Path.Combine(shaderDirectory, IncludeFolderName);
+        }
+
+        /// <summary>
+        /// The write-time guard for one shader gather: the shader file's UTC
+        /// write time, then every non-meta file's UTC write time under the
+        /// include folder, sorted by path. A missing or unreadable folder
+        /// contributes no entries, matching the empty tree the gather builds
+        /// for it. Statting files is far cheaper than reading, hashing, and
+        /// canonicalizing them.
+        /// </summary>
+        private static string GatherWriteTimes(
+            string shaderFullPath,
+            string includeFolderFullPath)
+        {
+            var writeTimes = new StringBuilder();
+            AppendWriteTime(writeTimes, shaderFullPath);
+            try
+            {
+                if (includeFolderFullPath != null &&
+                    Directory.Exists(includeFolderFullPath))
+                {
+                    var paths = Directory.GetFiles(
+                        includeFolderFullPath,
+                        "*",
+                        SearchOption.AllDirectories);
+                    Array.Sort(paths, StringComparer.Ordinal);
+                    foreach (var path in paths)
+                    {
+                        if (path.EndsWith(".meta", StringComparison.Ordinal))
+                        {
+                            continue;
+                        }
+
+                        AppendWriteTime(writeTimes, path);
+                    }
+                }
+            }
+            catch (IOException)
+            {
+                // An unreadable folder matches the gather's empty tree.
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // An unreadable folder matches the gather's empty tree.
+            }
+
+            return writeTimes.ToString();
+        }
+
+        private static void AppendWriteTime(
+            StringBuilder writeTimes,
+            string fullPath)
+        {
+            if (fullPath == null)
+            {
+                // No absolute path: nothing to stamp. The gather for an
+                // in-memory shader bypasses the memo on identity anyway.
+                return;
+            }
+
+            writeTimes.Append(fullPath)
+                .Append('|')
+                .Append(File.GetLastWriteTimeUtc(fullPath).Ticks)
+                .Append('\n');
+        }
+
+        /// <summary>
+        /// The shader format stamp one gather embeds, read from the captured
+        /// material. Absent normalizes to 0. The tuple key compares the
+        /// float with float.Equals, where NaN does equal NaN, so the raw
+        /// stamp would still match. The normalization is canonicalization:
+        /// it keeps the special float out of the key, so the key's
+        /// matchability never depends on NaN equality semantics.
+        /// </summary>
+        private static (bool HasVersion, float Version) ShaderFormatStamp(
+            CapturedMaterialEvidence evidence)
+        {
+            return evidence.TryGetScalar(
+                ShaderFormatVersionProperty, out var version)
+                ? (true, version)
+                : (false, 0f);
+        }
+
+        private static bool TryReadGatheredEvidence(
+            (string ShaderAssetPath, string PassShaderName,
+                string ShaderNameOverride, bool HasVersion,
+                float Version) key,
+            string writeTimes,
+            out LilToonSourceEvidence evidence)
+        {
+            evidence = null;
+            if (string.IsNullOrEmpty(key.ShaderAssetPath))
+            {
+                // No asset identity: an in-memory shader has nothing to
+                // memoize against, so it gathers fresh every time.
+                return false;
+            }
+
+            if (GatherMemo.TryGetValue(key, out var cached) &&
+                cached.WriteTimes == writeTimes)
+            {
+                evidence = cached.Evidence;
+                return true;
+            }
+
+            return false;
+        }
+
+        private static void StoreGatheredEvidence(
+            (string ShaderAssetPath, string PassShaderName,
+                string ShaderNameOverride, bool HasVersion,
+                float Version) key,
+            string writeTimes,
+            LilToonSourceEvidence evidence)
+        {
+            if (string.IsNullOrEmpty(key.ShaderAssetPath))
+            {
+                return;
+            }
+
+            GatherMemo[key] = (writeTimes, evidence);
+        }
+
         /// <summary>
         /// Gathers identity evidence common to both standard and Multi container lilToon shaders.
         /// </summary>
         private static GatherFrontHalf GatherSharedFrontHalf(
             Shader shader,
-            CapturedMaterialEvidence evidence)
+            CapturedMaterialEvidence evidence,
+            (bool HasVersion, float Version) formatStamp,
+            string shaderAssetPath,
+            string projectRoot,
+            string shaderFullPath)
         {
             AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
                 shader, out var assetGuid, out long _);
 
-            var hasVersion = evidence.TryGetScalar(
-                ShaderFormatVersionProperty, out var version);
-            if (!hasVersion)
-            {
-                version = float.NaN;
-            }
-
-            // Project-relative: Unity asset APIs consume this form directly.
-            var shaderAssetPath = AssetDatabase.GetAssetPath(shader);
             var package = UnityEditor.PackageManager.PackageInfo
                 .FindForAssetPath(shaderAssetPath);
 
-            // Absolute: every System.IO call below uses this form only.
-            var projectRoot = TryGetProjectRoot();
-            var shaderFullPath = ToAbsolute(projectRoot, shaderAssetPath);
             var shaderDirectory = shaderFullPath == null
                 ? null
                 : Path.GetDirectoryName(shaderFullPath);
-            var includeFolder = shaderDirectory == null
-                ? null
-                : Path.Combine(shaderDirectory, IncludeFolderName);
+            var includeFolder = IncludeFolderFullPath(shaderFullPath);
 
             var includeTree = LilToonIncludeTree.Enumerate(
                 includeFolder, ReadTextOrNull, ComputeNormalizedSourceHash);
@@ -2508,8 +2666,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
 
             return new GatherFrontHalf(
                 assetGuid,
-                hasVersion,
-                version,
+                formatStamp.HasVersion,
+                formatStamp.Version,
                 package,
                 projectRoot,
                 includeTree,
@@ -2522,7 +2680,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// The gather, parameterized by profile: only the pass asset the
         /// profile names is resolved. Purely mechanical; every read, fallback,
         /// and omission rule is exactly the one the opaque path has always
-        /// applied.
+        /// applied. One unchanged shader gathers once per build; the memo
+        /// serves the stored evidence until the write times move.
         /// </summary>
         private static LilToonSourceEvidence Gather(
             Shader shader,
@@ -2530,7 +2689,61 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             LilToonSourceProfile profile,
             string shaderNameOverride = null)
         {
-            var frontHalf = GatherSharedFrontHalf(shader, evidence);
+            // Project-relative: Unity asset APIs consume this form directly.
+            var shaderAssetPath = AssetDatabase.GetAssetPath(shader);
+
+            // Absolute: every System.IO call below uses this form only.
+            var projectRoot = TryGetProjectRoot();
+            var shaderFullPath = ToAbsolute(projectRoot, shaderAssetPath);
+
+            var formatStamp = ShaderFormatStamp(evidence);
+            var memoKey = (shaderAssetPath, profile.PassShaderName,
+                shaderNameOverride, formatStamp.HasVersion,
+                formatStamp.Version);
+            var writeTimes = GatherWriteTimes(
+                shaderFullPath, IncludeFolderFullPath(shaderFullPath));
+            if (TryReadGatheredEvidence(memoKey, writeTimes, out var memoized))
+            {
+                return memoized;
+            }
+
+            var gathered = GatherCore(
+                shader,
+                evidence,
+                profile,
+                shaderNameOverride,
+                formatStamp,
+                shaderAssetPath,
+                projectRoot,
+                shaderFullPath);
+            StoreGatheredEvidence(memoKey, writeTimes, gathered);
+            return gathered;
+        }
+
+        /// <summary>
+        /// The uncached gather core behind the memo: reads and digests the
+        /// shader and its include tree, then resolves only the pass asset
+        /// the profile names. The fingerprint is taken before the reads, so
+        /// a file edited mid-gather carries a newer write time than the
+        /// stored guard and the next gather re-runs.
+        /// </summary>
+        private static LilToonSourceEvidence GatherCore(
+            Shader shader,
+            CapturedMaterialEvidence evidence,
+            LilToonSourceProfile profile,
+            string shaderNameOverride,
+            (bool HasVersion, float Version) formatStamp,
+            string shaderAssetPath,
+            string projectRoot,
+            string shaderFullPath)
+        {
+            var frontHalf = GatherSharedFrontHalf(
+                shader,
+                evidence,
+                formatStamp,
+                shaderAssetPath,
+                projectRoot,
+                shaderFullPath);
 
             var passShader = Shader.Find(profile.PassShaderName);
             string passGuid = null;
@@ -2592,9 +2805,34 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             Shader shader,
             CapturedMaterialEvidence evidence)
         {
-            var frontHalf = GatherSharedFrontHalf(shader, evidence);
+            // Project-relative: Unity asset APIs consume this form directly.
+            var shaderAssetPath = AssetDatabase.GetAssetPath(shader);
 
-            return new LilToonSourceEvidence(
+            // Absolute: every System.IO call below uses this form only.
+            var projectRoot = TryGetProjectRoot();
+            var shaderFullPath = ToAbsolute(projectRoot, shaderAssetPath);
+
+            // Null pass slot and null override: the Multi gather resolves no
+            // pass half and never takes a shader name override.
+            var formatStamp = ShaderFormatStamp(evidence);
+            var memoKey = (shaderAssetPath, (string)null, (string)null,
+                formatStamp.HasVersion, formatStamp.Version);
+            var writeTimes = GatherWriteTimes(
+                shaderFullPath, IncludeFolderFullPath(shaderFullPath));
+            if (TryReadGatheredEvidence(memoKey, writeTimes, out var memoized))
+            {
+                return memoized;
+            }
+
+            var frontHalf = GatherSharedFrontHalf(
+                shader,
+                evidence,
+                formatStamp,
+                shaderAssetPath,
+                projectRoot,
+                shaderFullPath);
+
+            var gathered = new LilToonSourceEvidence(
                 evidence.HasShaderName ? evidence.ShaderName : null,
                 frontHalf.AssetGuid?.ToLowerInvariant(),
                 frontHalf.HasVersion,
@@ -2611,6 +2849,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 ScanCompiledFeatures(null), // No pass text: no pass features.
                 frontHalf.ShaderAnalysis,
                 null);
+            StoreGatheredEvidence(memoKey, writeTimes, gathered);
+            return gathered;
         }
 
         /// <summary>

@@ -299,6 +299,7 @@ namespace Alrauna.Amuse.Editor.Analysis
             AlphaFieldSet alphaFields,
             AlphaSamplingPolicy samplingPolicy,
             int maxNoiseTexelPercent,
+            string scaleOffsetSuffix,
             CapturedAlphaMaterialSemanticsResolver resolveSemantics = null,
             IReadOnlyList<BlockStateEntry> slotBlockEntries = null)
         {
@@ -324,6 +325,7 @@ namespace Alrauna.Amuse.Editor.Analysis
                 if (!TryAdmitDerivedEvidence(
                         material, slotBindings, relevance,
                         out var evidence, out var refusal,
+                        scaleOffsetSuffix,
                         slotBlockEntries,
                         admittedMaterials))
                 {
@@ -453,6 +455,7 @@ namespace Alrauna.Amuse.Editor.Analysis
             MaterialEvidenceRequest relevance,
             out CapturedMaterialEvidence derived,
             out RendererAnalysisRefusal refusal,
+            string scaleOffsetSuffix,
             IReadOnlyList<BlockStateEntry> slotBlockEntries = null,
             IReadOnlyList<CapturedAlphaMaterial> allAdmittedMaterials = null)
         {
@@ -511,8 +514,11 @@ namespace Alrauna.Amuse.Editor.Analysis
             foreach (var group in GroupByProperty(bindings))
             {
                 var anyAdmittedDeclares = AnyAdmittedMaterialDeclaresProperty(
-                    allAdmittedMaterials, group.PropertyName, group.Kind, relevance);
-                refusal = Admit(group, relevance, ref derived, slotBlockEntries, anyAdmittedDeclares);
+                    allAdmittedMaterials, group.PropertyName, group.Kind,
+                    relevance, scaleOffsetSuffix);
+                refusal = Admit(
+                    group, relevance, scaleOffsetSuffix, ref derived,
+                    slotBlockEntries, anyAdmittedDeclares);
                 if (refusal != RendererAnalysisRefusal.None)
                 {
                     derived = material.Evidence;
@@ -527,7 +533,8 @@ namespace Alrauna.Amuse.Editor.Analysis
             IReadOnlyList<CapturedAlphaMaterial> admittedMaterials,
             string propertyName,
             AnimatedPropertyKind kind,
-            MaterialEvidenceRequest relevance)
+            MaterialEvidenceRequest relevance,
+            string scaleOffsetSuffix)
         {
             if (admittedMaterials == null) return false;
             for (var i = 0; i < admittedMaterials.Count; i++)
@@ -548,7 +555,8 @@ namespace Alrauna.Amuse.Editor.Analysis
                         break;
                     case AnimatedPropertyKind.TextureScaleOffsetComponent:
                     {
-                        var texture = OwningTextureProperty(relevance, propertyName);
+                        var texture = OwningTextureProperty(
+                            relevance, propertyName, scaleOffsetSuffix);
                         if (evidence.TryGetTexture(texture, out var assignment) &&
                             assignment.HasScaleOffset)
                         {
@@ -603,6 +611,7 @@ namespace Alrauna.Amuse.Editor.Analysis
         private static RendererAnalysisRefusal Admit(
             AnimatedPropertyGroup group,
             MaterialEvidenceRequest relevance,
+            string scaleOffsetSuffix,
             ref CapturedMaterialEvidence evidence,
             IReadOnlyList<BlockStateEntry> slotBlockEntries,
             bool anyAdmittedDeclares = false)
@@ -749,7 +758,7 @@ namespace Alrauna.Amuse.Editor.Analysis
                     // vector accessor for it would raise the unrequested-name
                     // defect rather than report absence.
                     var texture = OwningTextureProperty(
-                        relevance, group.PropertyName);
+                        relevance, group.PropertyName, scaleOffsetSuffix);
                     // Both halves are required by the rule, but only the
                     // first is reachable today: capture sets HasScaleOffset to
                     // `hasValue && ScaleOffset requested`, and an _ST reference
@@ -828,7 +837,8 @@ namespace Alrauna.Amuse.Editor.Analysis
         /// </exception>
         private static string OwningTextureProperty(
             MaterialEvidenceRequest relevance,
-            string derivedName)
+            string derivedName,
+            string scaleOffsetSuffix)
         {
             string owner = null;
             foreach (var request in relevance.TextureProperties)
@@ -839,9 +849,7 @@ namespace Alrauna.Amuse.Editor.Analysis
                 }
 
                 if (!string.Equals(
-                        request.PropertyName +
-                            UnityAnimationEvidenceCapture
-                                .TextureScaleOffsetSuffix,
+                        request.PropertyName + scaleOffsetSuffix,
                         derivedName,
                         StringComparison.Ordinal))
                 {

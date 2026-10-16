@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.Host;
 using nadena.dev.ndmf.animator;
 using NUnit.Framework;
@@ -94,6 +95,40 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             {
                 Object.DestroyImmediate(root);
                 DestroyController(controller);
+            }
+        }
+
+        [Test]
+        public void AControllerLayerWithoutAStateMachineRefusesByName()
+        {
+            var root = new GameObject("layer without state machine");
+            var controller = new AnimatorController();
+            try
+            {
+                controller.AddLayer("broken");
+                var layers = controller.layers;
+                layers[0].stateMachine = null;
+                controller.layers = layers;
+
+                var result = CommittedControllerGraph.Enumerate(
+                    root, new StubBindings(controller));
+
+                Assert.That(result.Refusal,
+                    Is.EqualTo(AvatarAnimationRefusal.MalformedControllerLayer));
+                Assert.That(result.Layers, Is.Empty);
+                Assert.That(
+                    AmuseReportStrings.Has(
+                        AmuseReportStrings.AvatarKey(
+                            AvatarAnimationRefusal.MalformedControllerLayer)),
+                    Is.True,
+                    "the named refusal must have its report table entry");
+            }
+            finally
+            {
+                // The broken layer has no state machine to destroy, so the
+                // shared DestroyController helper does not apply here.
+                Object.DestroyImmediate(root);
+                Object.DestroyImmediate(controller);
             }
         }
 

@@ -16,6 +16,7 @@ namespace Alrauna.Amuse.Editor.Host
         UnresolvedVirtualizedMotionContext,
         UnrecognizedStateMachineBehaviour,
         AnimationEventPresent,
+        MalformedControllerLayer,
     }
 
     // TRANSIENT HOST OBSERVATION ONLY: these layers retain live Unity clips and
@@ -84,6 +85,9 @@ namespace Alrauna.Amuse.Editor.Host
         private static readonly CommittedControllerGraphResult AnimationEventRefusal =
             Refused(AvatarAnimationRefusal.AnimationEventPresent);
 
+        private static readonly CommittedControllerGraphResult MalformedLayer =
+            Refused(AvatarAnimationRefusal.MalformedControllerLayer);
+
         internal static CommittedControllerGraphResult Enumerate(
             GameObject avatarRoot,
             IPlatformAnimatorBindings bindings)
@@ -121,6 +125,7 @@ namespace Alrauna.Amuse.Editor.Host
                     if (layer.syncedLayerIndex >= 0) return UnsupportedSyncedLayer;
                     var committedLayer =
                         EnumerateLayer(controller.name, layerIndex, layer);
+                    if (committedLayer == null) return MalformedLayer;
                     foreach (var behaviour in committedLayer.Behaviours)
                     {
                         var identity = BehaviourIdentity.Of(behaviour.GetType());
@@ -178,6 +183,11 @@ namespace Alrauna.Amuse.Editor.Host
             int layerIndex,
             AnimatorControllerLayer layer)
         {
+            // A tool on the avatar can write a controller whose layer has
+            // no state machine. Reading that layer crashes, so AMUSE
+            // refuses the layer by name instead.
+            if (layer.stateMachine == null) return null;
+
             var clips = new List<AnimationClip>();
             var clipSet = new HashSet<AnimationClip>(
                 ReferenceEqualityComparer<AnimationClip>.Instance);
@@ -186,13 +196,16 @@ namespace Alrauna.Amuse.Editor.Host
             var behaviours = new List<StateMachineBehaviour>();
             var hasUnnormalizedDirectBlendTree = false;
 
-            WalkStateMachine(
-                layer.stateMachine,
-                clips,
-                clipSet,
-                visitedMotions,
-                behaviours,
-                ref hasUnnormalizedDirectBlendTree);
+            if (WalkStateMachine(
+                    layer.stateMachine,
+                    clips,
+                    clipSet,
+                    visitedMotions,
+                    behaviours,
+                    ref hasUnnormalizedDirectBlendTree))
+            {
+                return null;
+            }
 
             return new CommittedLayer(
                 controllerName,
@@ -203,7 +216,9 @@ namespace Alrauna.Amuse.Editor.Host
                 hasUnnormalizedDirectBlendTree);
         }
 
-        private static void WalkStateMachine(
+        // Returns true when the walk met a machine slot that holds no
+        // machine. The caller turns that into the named refusal.
+        private static bool WalkStateMachine(
             AnimatorStateMachine machine,
             ICollection<AnimationClip> clips,
             ISet<AnimationClip> clipSet,
@@ -211,6 +226,8 @@ namespace Alrauna.Amuse.Editor.Host
             ICollection<StateMachineBehaviour> behaviours,
             ref bool hasUnnormalizedDirectBlendTree)
         {
+            if (machine == null) return true;
+
             foreach (var behaviour in machine.behaviours)
                 behaviours.Add(behaviour);
 
@@ -228,14 +245,19 @@ namespace Alrauna.Amuse.Editor.Host
 
             foreach (var child in machine.stateMachines)
             {
-                WalkStateMachine(
-                    child.stateMachine,
-                    clips,
-                    clipSet,
-                    visitedMotions,
-                    behaviours,
-                    ref hasUnnormalizedDirectBlendTree);
+                if (WalkStateMachine(
+                        child.stateMachine,
+                        clips,
+                        clipSet,
+                        visitedMotions,
+                        behaviours,
+                        ref hasUnnormalizedDirectBlendTree))
+                {
+                    return true;
+                }
             }
+
+            return false;
         }
 
         private static void WalkMotion(

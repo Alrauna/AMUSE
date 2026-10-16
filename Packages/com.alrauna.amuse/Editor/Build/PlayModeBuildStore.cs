@@ -78,20 +78,41 @@ namespace Alrauna.Amuse.Editor.Build
             var key = SessionPrefix + avatarKey;
             var json = SessionState.GetString(key, null);
             if (string.IsNullOrEmpty(json)) return null;
-            try
+            var record = ParseCached(json);
+            if (record == null)
             {
-                var record = JsonUtility.FromJson<PlayModeBuildRecord>(json);
-                if (record == null || record.policyFingerprint != expectedFingerprint)
-                {
-                    return null;
-                }
-                return record;
-            }
-            catch
-            {
+                // Corrupt payloads are stale data, not defects: erase and start over.
                 SessionState.EraseString(key);
                 return null;
             }
+            if (record.policyFingerprint != expectedFingerprint)
+            {
+                return null;
+            }
+            return record;
+        }
+
+        private static string cachedRawRecord;
+        private static PlayModeBuildRecord cachedParsedRecord;
+
+        // Only the JsonUtility parse is cached. The policy-fingerprint comparison
+        // in TryLoad stays live on every call so a platform switch with an
+        // unchanged record string still fails the match.
+        internal static PlayModeBuildRecord ParseCached(string rawRecord)
+        {
+            if (rawRecord == cachedRawRecord) return cachedParsedRecord;
+            PlayModeBuildRecord parsed = null;
+            try
+            {
+                parsed = JsonUtility.FromJson<PlayModeBuildRecord>(rawRecord);
+            }
+            catch (ArgumentException)
+            {
+                parsed = null;
+            }
+            cachedRawRecord = rawRecord;
+            cachedParsedRecord = parsed;
+            return parsed;
         }
 
         public static void Clear(string avatarKey)

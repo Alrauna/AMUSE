@@ -186,19 +186,19 @@ namespace Alrauna.Amuse.Editor.DryRun
 
         internal static string DeferredSlotSentence(int total)
         {
-            return "Deferred: 0 of out " +
+            return "Deferred: 0 out of " +
                 total.ToString(CultureInfo.InvariantCulture) +
                 " polygons may be moved (evaluates at build time)";
         }
 
         internal static string UntouchableSlotSentence(int total)
         {
-            return "Untouchable: 0 of out " + total + " polygons may be moved";
+            return "Untouchable: 0 out of " + total + " polygons may be moved";
         }
 
         internal static string SplittableSlotSentence(int proven, int total)
         {
-            return "Splittable: " + proven + " of out " + total + " polygons may be moved";
+            return "Splittable: " + proven + " out of " + total + " polygons may be moved";
         }
 
         internal static string ConvertableSlotSentence(int total)

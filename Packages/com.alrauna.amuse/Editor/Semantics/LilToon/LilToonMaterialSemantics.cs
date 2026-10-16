@@ -475,10 +475,22 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         // alpha-writing block (lil_pass_forward_normal.hlsl:393-396), and the
         // whole subpass alpha path is excluded by #if LIL_RENDER > 0. Only
         // mechanisms that remove fragments can still change effective coverage.
+        // The vendor IDMask block drops fragments at runtime. An enabled mask
+        // changes coverage without writing the alpha value, so every IDMask
+        // input gates the proof like _Invisible does.
         private static readonly string[] AlphaCoverageGates =
         {
             "_Invisible",
             "_UDIMDiscardCompile",
+            "_IDMask1",
+            "_IDMask2",
+            "_IDMask3",
+            "_IDMask4",
+            "_IDMask5",
+            "_IDMask6",
+            "_IDMask7",
+            "_IDMask8",
+            "_IDMaskControlsDissolve",
         };
 
         internal static MaterialEvidenceRequest AlphaEvidenceRequest { get; } =
@@ -491,6 +503,15 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     LilToonSourceAttestation.ShaderFormatVersionProperty,
                     "_Invisible",
                     "_UDIMDiscardCompile",
+                    "_IDMask1",
+                    "_IDMask2",
+                    "_IDMask3",
+                    "_IDMask4",
+                    "_IDMask5",
+                    "_IDMask6",
+                    "_IDMask7",
+                    "_IDMask8",
+                    "_IDMaskControlsDissolve",
                 },
                 colorProperties: Array.Empty<string>(),
                 vectorProperties: Array.Empty<string>(),
@@ -501,7 +522,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// Proves the normalized alpha term. The attested opaque variant forces
         /// alpha to one, so the value is independent of <c>_Color.a</c>,
         /// <c>_MainTex</c> alpha, <c>_AlphaMaskMode</c>, <c>_Cutoff</c>, and
-        /// <c>_UseDither</c>. Two coverage gates remain because they remove
+        /// <c>_UseDither</c>. Eleven coverage gates remain because they remove
         /// fragments rather than change the value.
         /// </summary>
         internal static SemanticOutput<ScalarSemanticValue> InterpretVerifiedAlpha(

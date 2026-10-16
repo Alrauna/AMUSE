@@ -489,7 +489,16 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             "\n        _UseClippingCanceller (\"ClippingCanceller\", Float) = 0" +
             "\n        _AsOverlay (\"AsOverlay\", Float) = 0" +
             "\n        _Invisible (\"Invisible\", Int) = 0" +
-            "\n        _UDIMDiscardCompile (\"UDIMDiscardCompile\", Int) = 0";
+            "\n        _UDIMDiscardCompile (\"UDIMDiscardCompile\", Int) = 0" +
+            "\n        _IDMask1 (\"IDMask1\", Int) = 0" +
+            "\n        _IDMask2 (\"IDMask2\", Int) = 0" +
+            "\n        _IDMask3 (\"IDMask3\", Int) = 0" +
+            "\n        _IDMask4 (\"IDMask4\", Int) = 0" +
+            "\n        _IDMask5 (\"IDMask5\", Int) = 0" +
+            "\n        _IDMask6 (\"IDMask6\", Int) = 0" +
+            "\n        _IDMask7 (\"IDMask7\", Int) = 0" +
+            "\n        _IDMask8 (\"IDMask8\", Int) = 0" +
+            "\n        _IDMaskControlsDissolve (\"IDMaskControlsDissolve\", Int) = 0";
 
         private Material NewMaterial(string shaderName)
         {
@@ -532,7 +541,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         /// <summary>
         /// The closed request every fixture captures under: the shader name
         /// the routing identity reads, the three Multi scalars the mode and
-        /// the gate rules read, the two opaque coverage facts the parity
+        /// the gate rules read, the eleven opaque coverage facts the parity
         /// oracle interprets, and the keyword set. Every fixture sets
         /// exactly these material properties, so no fixture depends on
         /// stand-in shader defaults.
@@ -550,6 +559,15 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                     "_AsOverlay",
                     "_Invisible",
                     "_UDIMDiscardCompile",
+                    "_IDMask1",
+                    "_IDMask2",
+                    "_IDMask3",
+                    "_IDMask4",
+                    "_IDMask5",
+                    "_IDMask6",
+                    "_IDMask7",
+                    "_IDMask8",
+                    "_IDMaskControlsDissolve",
                 },
                 colorProperties: Array.Empty<string>(),
                 vectorProperties: Array.Empty<string>(),

@@ -63,21 +63,21 @@ namespace Alrauna.Amuse.Editor.Build
         }
 
         /// <summary>
-        /// Whether any assigned material makes the unlock window eligible
-        /// on this build: a recognized locked identity whose original
-        /// shader attests. V2 and V4 passed live observation on
+        /// Whether any assigned or swap-curved material makes the unlock
+        /// window eligible on this build: a recognized locked identity
+        /// whose original shader attests. V2 and V4 passed live observation on
         /// 2026-09-21, so an eligible build grants the window without
         /// per-build consent per spec section 12. No vendor answer
         /// narrows the answer: the restore reconstructs in memory.
         /// </summary>
         internal static bool WindowEligibleForConsent(
-            IEnumerable<Material> assignedMaterials,
+            IEnumerable<Material> assignedAndSwapCurvedMaterials,
             Func<Material, bool> originalShaderAttested)
         {
             var attests = originalShaderAttested ??
                 LockedMaterialIdentity.OriginalShaderAttested;
 
-            foreach (var material in assignedMaterials)
+            foreach (var material in assignedAndSwapCurvedMaterials)
             {
                 if (material == null ||
                     !LockedMaterialIdentity.RecognizedLockedIdentity(

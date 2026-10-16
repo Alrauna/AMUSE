@@ -1237,6 +1237,29 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 () => UnityMaterialEvidenceCapture.AssertRedFieldContract(chain));
         }
 
+        [Test]
+        public void AViolatingRedChainStillThrows()
+        {
+            // Characterization, not RED: the throw-on-violation contract must
+            // survive the assertion's move to the route cache fill.
+            Assert.Throws<InvalidOperationException>(
+                () => CaptureViolatingRedChain());
+        }
+
+        /// <summary>
+        /// Stands in for the route cache fill: builds the one red chain the
+        /// real pipelines cannot produce (the inert bounds never erase, so no
+        /// captured red level carries the erased flag) and hands it to the
+        /// contract the fill enforces.
+        /// </summary>
+        private static void CaptureViolatingRedChain()
+        {
+            var level = new AlphaTextureData(
+                1, 1, new byte[] { AlphaTextureData.ErasedFlag });
+            var chain = new AlphaMipChain(new[] { level });
+            UnityMaterialEvidenceCapture.AssertRedFieldContract(chain);
+        }
+
         /// <summary>
         /// One schema-complete capture with every evidence category populated,
         /// so a substitution in one category can be shown not to disturb the

@@ -175,6 +175,30 @@ namespace Alrauna.Amuse.Editor.Analysis
         }
     }
 
+    /// <summary>
+    /// The position facts one triangle contributes to classification,
+    /// decoded once per triangle per admitted state: whether all three
+    /// vertices are finite, and the exact degeneracy verdict over the
+    /// decoded coordinates. Both facts are mip-invariant, so every level of
+    /// the mip chain consumes the same record instead of repeating the
+    /// decode. The record never throws; a non-finite vertex is recorded,
+    /// not raised, and the classifier entry keeps the malformed-geometry
+    /// contract for it.
+    /// </summary>
+    internal readonly struct TrianglePositionValidity
+    {
+        internal bool PositionsFinite { get; }
+
+        /// <summary>The verdict over the decoded positions; read only when the positions are finite.</summary>
+        internal bool IsDegenerate { get; }
+
+        internal TrianglePositionValidity(bool positionsFinite, bool isDegenerate)
+        {
+            PositionsFinite = positionsFinite;
+            IsDegenerate = isDegenerate;
+        }
+    }
+
     internal static class ExactUvGeometry
     {
         internal static ExactDyadic DecodeFloat(float value)
@@ -243,6 +267,43 @@ namespace Alrauna.Amuse.Editor.Analysis
             return ay * bz - az * by == BigInteger.Zero &&
                    az * bx - ax * bz == BigInteger.Zero &&
                    ax * by - ay * bx == BigInteger.Zero;
+        }
+
+        /// <summary>
+        /// Decodes one triangle's positions once per triangle per state and
+        /// records the mip-invariant facts: vertex finiteness and the exact
+        /// degeneracy verdict. The decode is pure, so hoisting it above a
+        /// mip loop changes no outcome and no exception timing: the record
+        /// itself never throws, and the classifier entry keeps the
+        /// malformed-geometry contract. The per-level UV decodes stay with
+        /// the per-level classification because they depend on each level's
+        /// texture window.
+        /// </summary>
+        internal static TrianglePositionValidity DecodePositionValidity(
+            TriangleAlphaInput triangle)
+        {
+            var finite =
+                IsFinite(triangle.Position0.x) &&
+                IsFinite(triangle.Position0.y) &&
+                IsFinite(triangle.Position0.z) &&
+                IsFinite(triangle.Position1.x) &&
+                IsFinite(triangle.Position1.y) &&
+                IsFinite(triangle.Position1.z) &&
+                IsFinite(triangle.Position2.x) &&
+                IsFinite(triangle.Position2.y) &&
+                IsFinite(triangle.Position2.z);
+            if (!finite)
+            {
+                return new TrianglePositionValidity(false, false);
+            }
+
+            return new TrianglePositionValidity(
+                true, IsDegenerateGeometry(triangle));
+        }
+
+        private static bool IsFinite(float value)
+        {
+            return !float.IsNaN(value) && !float.IsInfinity(value);
         }
 
         private static BigInteger[] Align(
@@ -508,37 +569,64 @@ namespace Alrauna.Amuse.Editor.Analysis
             return new ExactUvDomain(vertices, domain.TexelScale);
         }
 
+        // Per-thread scratch pair for Intersects. The clip chain refills
+        // one buffer from the other instead of allocating a list per clip
+        // stage. Threads never share the pair: the dry run classifies on a
+        // background task while the main thread keeps working, so a
+        // process-wide static would corrupt. Intersects never reenters
+        // itself, so one pair per thread is enough.
+        [ThreadStatic] private static List<ExactUvPoint> clipBufferA;
+        [ThreadStatic] private static List<ExactUvPoint> clipBufferB;
+
         internal static bool Intersects(
             ExactUvDomain domain,
             ExactInterval x,
             ExactInterval y)
         {
-            var vertices = new List<ExactUvPoint>(domain.Vertices);
+            var current = clipBufferA ??= new List<ExactUvPoint>();
+            var scratch = clipBufferB ??= new List<ExactUvPoint>();
+            current.Clear();
+            for (var index = 0; index < domain.Vertices.Count; index++)
+            {
+                current.Add(domain.Vertices[index]);
+            }
             if (x.HasLowerBound)
             {
-                vertices = Clip(vertices, true, x.LowerBound, true);
+                Clip(current, scratch, true, x.LowerBound, true);
+                var swap = current;
+                current = scratch;
+                scratch = swap;
             }
             if (x.HasUpperBound)
             {
-                vertices = Clip(vertices, true, x.UpperBound, false);
+                Clip(current, scratch, true, x.UpperBound, false);
+                var swap = current;
+                current = scratch;
+                scratch = swap;
             }
             if (y.HasLowerBound)
             {
-                vertices = Clip(vertices, false, y.LowerBound, true);
+                Clip(current, scratch, false, y.LowerBound, true);
+                var swap = current;
+                current = scratch;
+                scratch = swap;
             }
             if (y.HasUpperBound)
             {
-                vertices = Clip(vertices, false, y.UpperBound, false);
+                Clip(current, scratch, false, y.UpperBound, false);
+                var swap = current;
+                current = scratch;
+                scratch = swap;
             }
-            if (vertices.Count == 0)
+            if (current.Count == 0)
             {
                 return false;
             }
 
-            return HasOpenSideWitness(vertices, true, x, true) &&
-                   HasOpenSideWitness(vertices, true, x, false) &&
-                   HasOpenSideWitness(vertices, false, y, true) &&
-                   HasOpenSideWitness(vertices, false, y, false);
+            return HasOpenSideWitness(current, true, x, true) &&
+                   HasOpenSideWitness(current, true, x, false) &&
+                   HasOpenSideWitness(current, false, y, true) &&
+                   HasOpenSideWitness(current, false, y, false);
         }
 
         internal static ExactRational Minimum(ExactUvDomain domain, bool xAxis)
@@ -712,16 +800,17 @@ namespace Alrauna.Amuse.Editor.Analysis
             return x != 0 ? x : left.Y.CompareTo(right.Y);
         }
 
-        private static List<ExactUvPoint> Clip(
+        private static void Clip(
             IReadOnlyList<ExactUvPoint> input,
+            List<ExactUvPoint> output,
             bool xAxis,
             ExactRational boundary,
             bool keepGreater)
         {
-            var output = new List<ExactUvPoint>();
+            output.Clear();
             if (input.Count == 0)
             {
-                return output;
+                return;
             }
 
             var previous = input[input.Count - 1];
@@ -749,7 +838,6 @@ namespace Alrauna.Amuse.Editor.Analysis
             {
                 output.RemoveAt(output.Count - 1);
             }
-            return output;
         }
 
         private static bool IsInside(

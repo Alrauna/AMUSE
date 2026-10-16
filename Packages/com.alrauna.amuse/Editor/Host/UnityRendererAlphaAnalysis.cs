@@ -234,6 +234,35 @@ namespace Alrauna.Amuse.Editor.Host
     /// </summary>
     internal static class UnityRendererAlphaAnalysis
     {
+        /// <summary>
+        /// The structural refusal check as a value: the same implementation
+        /// as <see cref="StructuralRefusalFor"/>, in the delegate shape the
+        /// orchestrators inject into
+        /// <see cref="Analysis.RuntimeStateResolution.ResolveRuntimeStates"/>.
+        /// </summary>
+        internal static readonly TryStructuralRefusalFor StructuralRefusal =
+            StructuralRefusalFor;
+
+        /// <summary>
+        /// The per-resolution triangle classifier as a value: the same
+        /// implementation as <see cref="Classify"/>, in the delegate shape
+        /// the orchestrators inject into
+        /// <see cref="Analysis.RuntimeStateResolution.ClassifyRuntimeStates"/>.
+        /// The delegate instance is created once and injected; classification
+        /// never allocates it per submesh or per mip.
+        /// </summary>
+        internal static readonly ClassifyTriangleOutcomes TriangleClassifier =
+            Classify;
+
+        /// <summary>
+        /// The per-resolution outcome intersection as a value: the same
+        /// implementation as <see cref="IntersectOutcomes"/>, in the
+        /// delegate shape the orchestrators inject into
+        /// <see cref="Analysis.RuntimeStateResolution.ClassifyRuntimeStates"/>.
+        /// </summary>
+        internal static readonly IntersectTriangleOutcomes OutcomeIntersector =
+            IntersectOutcomes;
+
         internal static RendererAlphaAnalysis Analyze(Renderer renderer)
         {
             var extraction = Capture(

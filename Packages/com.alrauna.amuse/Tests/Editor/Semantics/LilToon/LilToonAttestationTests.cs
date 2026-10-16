@@ -2490,54 +2490,189 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                     LilToonSemanticDiagnosticCode.ModifiedShaderSource));
         }
 
-        [Test]
-        public void GatherCutout_MissingPassAsset_FailsClosedWithoutNameOnlyFallback()
+        /// <summary>
+        /// The stand-in asset folder the gather tests share.
+        /// </summary>
+        private const string ProbeFolder = "Assets/AmuseTests_LilToonAttestation";
+
+        private const string ProbeShaderPath =
+            ProbeFolder + "/LilToonCutoutAttestationProbe.shader";
+
+        /// <summary>
+        /// Writes the stand-in shader the gather tests share: a stand-in
+        /// carrying the pinned cutout identity, the exact shader name, the
+        /// exact pinned asset GUID (hand-written .meta), and the format
+        /// stamp. The pass asset Hidden/ltspass_cutout is deliberately never
+        /// created — this project has no resolvable cutout pass of its own,
+        /// which is the fail-closed premise the gather tests share.
+        /// </summary>
+        private static Shader WriteSyntheticCutoutProbeShader()
         {
-            const string folder = "Assets/AmuseTests_LilToonAttestation";
-            const string shaderPath =
-                folder + "/LilToonCutoutAttestationProbe.shader";
-            if (!AssetDatabase.IsValidFolder(folder))
+            if (!AssetDatabase.IsValidFolder(ProbeFolder))
             {
                 AssetDatabase.CreateFolder(
                     "Assets", "AmuseTests_LilToonAttestation");
             }
 
+            File.WriteAllText(
+                ProbeShaderPath,
+                "Shader \"Hidden/lilToonCutout\"\n" +
+                "{\n" +
+                "    Properties\n" +
+                "    {\n" +
+                "        [HideInInspector] _lilToonVersion" +
+                " (\"Version\", Int) = 45\n" +
+                "        _Invisible (\"Invisible\", Int) = 0\n" +
+                "        _UDIMDiscardCompile (\"UDIM\", Int) = 0\n" +
+                "    }\n" +
+                "    SubShader { Pass {} }\n" +
+                "}\n");
+            File.WriteAllText(
+                ProbeShaderPath + ".meta",
+                "fileFormatVersion: 2\n" +
+                "guid: 85d6126cae43b6847aff4b13f4adb8ec\n" +
+                "ShaderImporter:\n" +
+                "  externalObjects: {}\n" +
+                "  defaultTextures: []\n" +
+                "  nonModifiableTextures: []\n" +
+                "  userData: \n" +
+                "  assetBundleName: \n" +
+                "  assetBundleVariant: \n");
+            AssetDatabase.ImportAsset(
+                ProbeShaderPath, ImportAssetOptions.ForceSynchronousImport);
+            return AssetDatabase.LoadAssetAtPath<Shader>(ProbeShaderPath);
+        }
+
+        private static void DeleteSyntheticProbeFolder()
+        {
+            if (AssetDatabase.IsValidFolder(ProbeFolder))
+            {
+                AssetDatabase.DeleteAsset(ProbeFolder);
+            }
+        }
+
+        /// <summary>
+        /// The suite's synthetic-shader gather path: one fixture material,
+        /// captured through the production request and gathered through the
+        /// production entry point the suite drives.
+        /// </summary>
+        private static LilToonSourceEvidence GatherSourceEvidence(
+            Material fixtureMaterial)
+        {
+            var captured = UnityMaterialEvidenceCapture.Capture(new[]
+            {
+                new MaterialEvidenceCaptureInput(
+                    fixtureMaterial,
+                    LilToonMaterialSemantics.AlphaEvidenceRequest),
+            })[0];
+
+            return LilToonSourceAttestation.GatherCutoutSourceEvidence(
+                fixtureMaterial.shader, captured);
+        }
+
+        private static LilToonSourceEvidence GatherSourceEvidence(
+            Shader fixtureShader)
+        {
+            var material = new Material(fixtureShader);
             try
             {
-                // A stand-in carrying the pinned cutout identity: the exact
-                // shader name, the exact pinned asset GUID (hand-written
-                // .meta), and the format stamp. The pass asset
-                // Hidden/ltspass_cutout is deliberately never created — this
-                // project has no resolvable cutout pass, which is the
-                // fail-closed premise under test.
-                File.WriteAllText(
-                    shaderPath,
-                    "Shader \"Hidden/lilToonCutout\"\n" +
-                    "{\n" +
-                    "    Properties\n" +
-                    "    {\n" +
-                    "        [HideInInspector] _lilToonVersion" +
-                    " (\"Version\", Int) = 45\n" +
-                    "        _Invisible (\"Invisible\", Int) = 0\n" +
-                    "        _UDIMDiscardCompile (\"UDIM\", Int) = 0\n" +
-                    "    }\n" +
-                    "    SubShader { Pass {} }\n" +
-                    "}\n");
-                File.WriteAllText(
-                    shaderPath + ".meta",
-                    "fileFormatVersion: 2\n" +
-                    "guid: 85d6126cae43b6847aff4b13f4adb8ec\n" +
-                    "ShaderImporter:\n" +
-                    "  externalObjects: {}\n" +
-                    "  defaultTextures: []\n" +
-                    "  nonModifiableTextures: []\n" +
-                    "  userData: \n" +
-                    "  assetBundleName: \n" +
-                    "  assetBundleVariant: \n");
-                AssetDatabase.ImportAsset(
-                    shaderPath, ImportAssetOptions.ForceSynchronousImport);
-                var shader = AssetDatabase.LoadAssetAtPath<Shader>(shaderPath);
-                Assert.That(shader, Is.Not.Null, shaderPath);
+                return GatherSourceEvidence(material);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(material);
+            }
+        }
+
+        /// <summary>
+        /// One gather serves repeated materials on one shader until the
+        /// build boundary: the second gather answers with the first gather's
+        /// own evidence instance. The per-build clear sites drop the memo,
+        /// so the next build re-gathers.
+        /// </summary>
+        [Test]
+        public void AGatheredShaderSourceIsMemoizedUntilTheBuildBoundary()
+        {
+            try
+            {
+                var fixtureShader = WriteSyntheticCutoutProbeShader();
+                Assert.That(fixtureShader, Is.Not.Null, ProbeShaderPath);
+
+                var first = GatherSourceEvidence(fixtureShader);
+                var second = GatherSourceEvidence(fixtureShader);
+                Assert.That(
+                    second,
+                    Is.SameAs(first),
+                    "one gather serves repeated materials on one shader");
+            }
+            finally
+            {
+                DeleteSyntheticProbeFolder();
+            }
+        }
+
+        /// <summary>
+        /// Two materials on one shader with different serialized
+        /// _lilToonVersion stamps must each gather their own stamp. The
+        /// gather embeds the stamp it reads from the captured material, so
+        /// the memo key carries it: a key without the stamp lets the first
+        /// material's stamp serve every later material on the shader.
+        /// </summary>
+        [Test]
+        public void TwoMaterialsOnOneShaderWithDivergentStampsGatherTheirOwnEvidence()
+        {
+            try
+            {
+                var fixtureShader = WriteSyntheticCutoutProbeShader();
+                Assert.That(fixtureShader, Is.Not.Null, ProbeShaderPath);
+
+                var restamped = new Material(fixtureShader);
+                var untouched = new Material(fixtureShader);
+                try
+                {
+                    restamped.SetFloat("_lilToonVersion", 46f);
+
+                    // The restamped material gathers first. The untouched
+                    // material's serialized stamp is the shader default 45,
+                    // so first-gather-wins is observable: its 46 would
+                    // serve the untouched material too.
+                    var restampedEvidence = GatherSourceEvidence(restamped);
+                    var untouchedEvidence = GatherSourceEvidence(untouched);
+
+                    Assert.That(
+                        restampedEvidence.HasShaderFormatVersion,
+                        Is.True);
+                    Assert.That(
+                        restampedEvidence.ShaderFormatVersion,
+                        Is.EqualTo(46f));
+                    Assert.That(
+                        untouchedEvidence.HasShaderFormatVersion,
+                        Is.True);
+                    Assert.That(
+                        untouchedEvidence.ShaderFormatVersion,
+                        Is.EqualTo(45f),
+                        "the first gather's stamp was served to the " +
+                        "second material");
+                }
+                finally
+                {
+                    UnityEngine.Object.DestroyImmediate(restamped);
+                    UnityEngine.Object.DestroyImmediate(untouched);
+                }
+            }
+            finally
+            {
+                DeleteSyntheticProbeFolder();
+            }
+        }
+
+        [Test]
+        public void GatherCutout_MissingPassAsset_FailsClosedWithoutNameOnlyFallback()
+        {
+            try
+            {
+                var shader = WriteSyntheticCutoutProbeShader();
+                Assert.That(shader, Is.Not.Null, ProbeShaderPath);
 
                 var material = new Material(shader);
                 try
@@ -2602,10 +2737,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             }
             finally
             {
-                if (AssetDatabase.IsValidFolder(folder))
-                {
-                    AssetDatabase.DeleteAsset(folder);
-                }
+                DeleteSyntheticProbeFolder();
             }
         }
 

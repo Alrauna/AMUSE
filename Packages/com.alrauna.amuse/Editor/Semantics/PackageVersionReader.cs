@@ -20,14 +20,21 @@ namespace Alrauna.Amuse.Editor.Semantics
 
         internal static string ReadInstalledOrNull(string packageName)
         {
-            // Offline listing with indirect dependencies never touches
-            // the network, so blocking inside an editor build pass is
-            // safe. Unity 2022.3 has no
-            // Request.WaitForCompletion, so block on IsCompleted; the
-            // wait is bounded so an unresponsive package manager
-            // refuses rather than wedging the editor. Indirect
-            // dependencies are listed, so a producer that arrives only
-            // as a dependency of another package still admits.
+            // Offline listing with indirect dependencies never
+            // touches the network, so blocking inside an editor
+            // build pass is safe. Reflection of the loaded Unity
+            // 2022.3.22f1 assemblies on 2026-10-15 verified why the
+            // loop exists: Request exposes only Error, IsCompleted,
+            // and Status, and ListRequest adds no members. No
+            // synchronous completion call exists, so polling
+            // IsCompleted is the only way to block. The poll is
+            // capped at 30000 rounds of a 1 ms sleep. That is at
+            // least 30 seconds, because a sleep can return late.
+            // Past the cap an unresponsive package manager reads as
+            // a failed listing, so the caller refuses instead of
+            // wedging the editor. Indirect dependencies are listed,
+            // so a producer that arrives only as a dependency of
+            // another package still admits.
             var request = ListPackages(true, true);
             if (request == null)
             {

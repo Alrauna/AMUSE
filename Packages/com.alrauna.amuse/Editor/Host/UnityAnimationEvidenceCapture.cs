@@ -114,6 +114,33 @@ namespace Alrauna.Amuse.Editor.Host
         /// </summary>
         internal const string TextureScaleOffsetSuffix = "_ST";
 
+        /// <summary>
+        /// The proof-relevance resolver as a value: the same implementation
+        /// as <see cref="ResolveProofRelevant"/>, in the delegate shape the
+        /// orchestrators inject into
+        /// <see cref="Analysis.RuntimeStateResolution.ResolveRuntimeStates"/>.
+        /// </summary>
+        internal static readonly TryResolveProofRelevant ProofRelevantResolver =
+            ResolveProofRelevant;
+
+        /// <summary>
+        /// The unrecognized object-binding recognizer as a value: the same
+        /// implementation as <see cref="IsUnrecognizedObjectMaterialBinding"/>,
+        /// in the delegate shape the orchestrators inject into
+        /// <see cref="Analysis.RuntimeStateResolution.ResolveRuntimeStates"/>.
+        /// </summary>
+        internal static readonly UnrecognizedObjectMaterialBindingCheck
+            UnrecognizedObjectBinding = IsUnrecognizedObjectMaterialBinding;
+
+        /// <summary>
+        /// The material-slot binding parse as a value: the same
+        /// implementation as <see cref="TryParseMaterialSlotBindingFor"/>,
+        /// in the delegate shape the orchestrators inject into
+        /// <see cref="Analysis.RuntimeStateResolution.MaterialSlotsFor"/>.
+        /// </summary>
+        internal static readonly TryParseMaterialSlotBindingFor
+            MaterialSlotBindingParser = TryParseMaterialSlotBindingFor;
+
         private static readonly MaterialEvidenceRequest EmptyRequest =
             new MaterialEvidenceRequest(
                 false,

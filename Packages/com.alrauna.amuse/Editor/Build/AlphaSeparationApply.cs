@@ -57,7 +57,7 @@ namespace Alrauna.Amuse.Editor.Build
                     // struct would otherwise preserve the input while
                     // explaining nothing, so it is reported as the preparation
                     // defect it is.
-                    if (string.IsNullOrEmpty(decision.RefusalReason))
+                    if (decision.Refusal == PreparationRefusal.None)
                     {
                         throw new InvalidOperationException(
                             "A preparation refusal must be created through " +
@@ -147,7 +147,7 @@ namespace Alrauna.Amuse.Editor.Build
             // every prepared candidate of the whole avatar.
             var optimizer = context.AvatarRootObject
                 .GetComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
-            var liveTarget = EditorUserBuildSettings.activeBuildTarget;
+            var liveTarget = AmusePlatformFinishPlugin.ActiveBuildTarget();
             var livePolicyAdmitted = PlatformAlphaSamplingPolicy.TrySelect(
                 liveTarget,
                 optimizer != null &&
@@ -188,8 +188,7 @@ namespace Alrauna.Amuse.Editor.Build
                         .ToList());
 
                 return AmusePreparationDecision.Refused(
-                    AlphaSeparationSlotRefusal
-                        .SamplingPolicyChanged.ToString());
+                    PreparationRefusal.StaleSamplingPolicy);
             }
 
             // The reactivated extension owns the only live view of the
@@ -894,7 +893,9 @@ namespace Alrauna.Amuse.Editor.Build
         /// the appended submeshes' triangles for surviving Split slots.
         /// Every candidate whose slot matches a changed material adds, so
         /// a slot that binds several folded submeshes counts each submesh
-        /// once.
+        /// once. The changed slots are recorded on the state, so the
+        /// play-mode record keys its moved-triangle rows on this same
+        /// determination.
         /// </summary>
         private static int CountOpaqueTriangles(
             AlphaSeparationRendererWrite write,
@@ -926,6 +927,12 @@ namespace Alrauna.Amuse.Editor.Build
                 {
                     continue;
                 }
+
+                // The play-mode moved-triangle rows key on this same
+                // determination. A surviving slot whose material the write
+                // kept is a self-mapped no-op: it never enters the changed
+                // set, so its row reports zero moved triangles.
+                state.AppliedChangedMaterialSlots.Add((write.Renderer, slot));
 
                 foreach (var candidate in prepared.CandidateSlots)
                 {
@@ -1045,9 +1052,12 @@ namespace Alrauna.Amuse.Editor.Build
             }
 
             UnityGeneratedTextureEvidence.ClearCache();
+            UnityAlphaFieldEvidence.ClearCache();
             ReplacementTextureIdentity.ClearSession();
             ReplacementTextureAttestation.ClearVersionCacheForSession();
             AaoAtlasTextureAttestation.ClearVersionCacheForSession();
+            Semantics.LilToon.LilToonSourceAttestation.ClearGatherMemo();
+            Semantics.Poiyomi.PoiyomiMaterialSemantics.ClearSourceHashMemo();
         }
         internal static HashSet<(string path, int slot)> CollectAppliedSlots(
             AmusePlatformFinishState state)
@@ -1069,14 +1079,44 @@ namespace Alrauna.Amuse.Editor.Build
                         .GetReference(renderer, false)?.Path;
                     var buildPath = prepared.RendererPath;
 
-                    var survivors = state.SeparationSurvivingCandidates != null &&
-                                    rIdx < state.SeparationSurvivingCandidates.Count
-                        ? state.SeparationSurvivingCandidates[rIdx]
-                        : prepared.CandidateSlots;
+                    if (state.SeparationSurvivingCandidates == null ||
+                        rIdx >= state.SeparationSurvivingCandidates.Count)
+                    {
+                        throw new InvalidOperationException(
+                            "An applied finalization has no surviving-" +
+                            "candidate list entry for prepared renderer " +
+                            "index " + rIdx + ". The preparation pass " +
+                            "writes one entry per prepared renderer before " +
+                            "any finalization is applied, so a missing or " +
+                            "short list is a state defect. Applying the " +
+                            "prepared candidate slots would apply refused " +
+                            "slots.");
+                    }
+
+                    var survivors = state.SeparationSurvivingCandidates[rIdx];
 
                     foreach (var candidate in survivors)
                     {
                         var slotIdx = candidate.Plan.SourceMaterialBindingIndex;
+                        var isChanged = state.AppliedChangedMaterialSlots
+                            .Contains((renderer, slotIdx));
+                        if (!isChanged &&
+                            candidate.Plan.Disposition !=
+                            SubmeshSeparationDisposition.Split)
+                        {
+                            // The applied write kept this slot's material.
+                            // An already-opaque self-mapped slot survives the
+                            // plan but moved nothing, so it is not an
+                            // applied slot. A surviving Split is different:
+                            // the finalization keeps the slot's source
+                            // material on its own submesh and moves the
+                            // slot's opaque triangles to the appended
+                            // submesh, so the reference comparison never
+                            // sees it, yet the write really moved the
+                            // slot's triangles. A Split is always applied.
+                            continue;
+                        }
+
                         if (scenePath != null)
                         {
                             appliedSlots.Add((scenePath, slotIdx));
@@ -1168,15 +1208,15 @@ namespace Alrauna.Amuse.Editor.Build
                             string sentence;
                             if (total > 0 && proven == total)
                             {
-                                sentence = "Convertable: " + total + " out of " + total + " polygons may be moved";
+                                sentence = DryRun.RowText.ConvertableSlotSentence(total);
                             }
                             else if (proven > 0)
                             {
-                                sentence = "Splittable: " + proven + " of out " + total + " polygons may be moved";
+                                sentence = DryRun.RowText.SplittableSlotSentence(proven, total);
                             }
                             else
                             {
-                                sentence = "Untouchable: 0 of out " + total + " polygons may be moved";
+                                sentence = DryRun.RowText.UntouchableSlotSentence(total);
                             }
 
                             state.PlayModeRendererRows.Add(new SerializedTransformationRow

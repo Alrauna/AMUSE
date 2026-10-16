@@ -95,6 +95,25 @@ namespace Alrauna.Amuse.Editor.Host
         /// </summary>
         internal bool CaptureKeywords { get; }
 
+        /// <summary>
+        /// Whether the capture may take the streaming route's disk-fallback
+        /// clone when the direct source-image read fails. The request model
+        /// is closed: the switch rides the request, never process state, so
+        /// a disallowing capture is never served a fallback-provenance
+        /// cache entry.
+        /// </summary>
+        internal bool AllowDiskFallback { get; }
+
+        /// <summary>
+        /// The raw policy mip cap the GPU alpha route reads back through:
+        /// the highest declared level the proof may consult.
+        /// <see cref="int.MaxValue"/> keeps the uncapped full-chain
+        /// capture. The request model is closed: the cap rides the request,
+        /// never process state, so a differently capped capture is never
+        /// served another cap's cached chain.
+        /// </summary>
+        internal int RawMipCap { get; }
+
         internal MaterialEvidenceRequest(
             bool shaderName,
             bool activeColorSpace,
@@ -103,8 +122,18 @@ namespace Alrauna.Amuse.Editor.Host
             IEnumerable<string> colorProperties,
             IEnumerable<string> vectorProperties,
             IEnumerable<TexturePropertyEvidenceRequest> textureProperties,
-            bool captureKeywords = false)
+            bool captureKeywords = false,
+            bool allowDiskFallback = true,
+            int rawMipCap = int.MaxValue)
         {
+            if (rawMipCap < 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(rawMipCap),
+                    "The raw mip cap must be a level index of at least " +
+                    "zero, or int.MaxValue for no cap.");
+            }
+
             ShaderName = shaderName;
             ActiveColorSpace = activeColorSpace;
             PresenceProperties = CopyNames(
@@ -117,6 +146,8 @@ namespace Alrauna.Amuse.Editor.Host
                 vectorProperties, nameof(vectorProperties));
             TextureProperties = CopyTextures(textureProperties);
             CaptureKeywords = captureKeywords;
+            AllowDiskFallback = allowDiskFallback;
+            RawMipCap = rawMipCap;
 
             var typed = new HashSet<string>(StringComparer.Ordinal);
             AddTyped(typed, ScalarProperties);
@@ -145,6 +176,14 @@ namespace Alrauna.Amuse.Editor.Host
             var shaderName = false;
             var activeColorSpace = false;
             var captureKeywords = false;
+            // The disk-fallback switch combines under the strictest rule:
+            // one constituent request disallowing the route disallows it
+            // for the combined request.
+            var allowDiskFallback = true;
+            // The raw mip cap combines under the same strictest rule: the
+            // smallest cap reads back the fewest levels, so one capped
+            // constituent caps the combined request.
+            var rawMipCap = int.MaxValue;
             var presence = new SortedSet<string>(StringComparer.Ordinal);
             var scalars = new SortedSet<string>(StringComparer.Ordinal);
             var colors = new SortedSet<string>(StringComparer.Ordinal);
@@ -164,6 +203,8 @@ namespace Alrauna.Amuse.Editor.Host
                 shaderName |= request.ShaderName;
                 activeColorSpace |= request.ActiveColorSpace;
                 captureKeywords |= request.CaptureKeywords;
+                allowDiskFallback &= request.AllowDiskFallback;
+                rawMipCap = Math.Min(rawMipCap, request.RawMipCap);
                 presence.UnionWith(request.PresenceProperties);
                 scalars.UnionWith(request.ScalarProperties);
                 colors.UnionWith(request.ColorProperties);
@@ -210,7 +251,63 @@ namespace Alrauna.Amuse.Editor.Host
                 colors,
                 vectors,
                 textureRequests,
-                captureKeywords);
+                captureKeywords,
+                allowDiskFallback,
+                rawMipCap);
+        }
+
+        /// <summary>
+        /// The same request with the raw policy mip cap set. The orchestrator
+        /// that knows the build's optimizer policy applies it here, so the
+        /// cap rides the request into the closed capture exactly like the
+        /// disk-fallback switch. The uncapped request returns unchanged.
+        /// </summary>
+        internal MaterialEvidenceRequest WithRawMipCap(int rawMipCap)
+        {
+            if (rawMipCap < 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(rawMipCap),
+                    "The raw mip cap must be a level index of at least " +
+                    "zero, or int.MaxValue for no cap.");
+            }
+
+            if (rawMipCap == RawMipCap)
+            {
+                return this;
+            }
+
+            return new MaterialEvidenceRequest(
+                ShaderName,
+                ActiveColorSpace,
+                PresenceProperties,
+                ScalarProperties,
+                ColorProperties,
+                VectorProperties,
+                TextureProperties,
+                CaptureKeywords,
+                AllowDiskFallback,
+                rawMipCap);
+        }
+
+        /// <summary>
+        /// The same request with the disk-fallback route withdrawn. The
+        /// DryRun capture uses this so its no-asset-writes guarantee rides
+        /// the request instead of process state.
+        /// </summary>
+        internal MaterialEvidenceRequest DisallowingDiskFallback()
+        {
+            return new MaterialEvidenceRequest(
+                ShaderName,
+                ActiveColorSpace,
+                PresenceProperties,
+                ScalarProperties,
+                ColorProperties,
+                VectorProperties,
+                TextureProperties,
+                CaptureKeywords,
+                allowDiskFallback: false,
+                rawMipCap: RawMipCap);
         }
 
         private static IReadOnlyCollection<string> CopyNames(
@@ -1000,6 +1097,12 @@ namespace Alrauna.Amuse.Editor.Host
                     // share one field, whichever material was captured
                     // first.
                     shared.Evidence |= texture.RequestedEvidence;
+                    shared.AllowDiskFallback &= input.Request.AllowDiskFallback;
+                    // The strictest contributing request governs the
+                    // shared capture: the smallest cap reads back the
+                    // fewest levels for the whole bucket.
+                    shared.RawMipCap = Math.Min(
+                        shared.RawMipCap, input.Request.RawMipCap);
                     texture.Shared = shared;
                 }
             }
@@ -1014,7 +1117,9 @@ namespace Alrauna.Amuse.Editor.Host
                         shared.Source,
                         bounds,
                         shared.OriginMaterial,
-                        shared.CutoutThreshold);
+                        shared.CutoutThreshold,
+                        shared.AllowDiskFallback,
+                        shared.RawMipCap);
                 }
             }
 
@@ -1050,7 +1155,9 @@ namespace Alrauna.Amuse.Editor.Host
                                 default,
                                 bounds,
                                 material.SourceMaterial,
-                                texture.CutoutThreshold);
+                                texture.CutoutThreshold,
+                                material.AllowDiskFallback,
+                                material.RawMipCap);
                         if (!distinctTextures.Contains(capturedTexture))
                         {
                             distinctTextures.Add(capturedTexture);
@@ -1121,6 +1228,8 @@ namespace Alrauna.Amuse.Editor.Host
             var builder = new MaterialBuilder
             {
                 HasShaderName = isLive && request.ShaderName,
+                AllowDiskFallback = request.AllowDiskFallback,
+                RawMipCap = request.RawMipCap,
                 SourceMaterial = input.SourceMaterial,
                 ShaderName = isLive && request.ShaderName
                     ? material.shader.name
@@ -1358,7 +1467,9 @@ namespace Alrauna.Amuse.Editor.Host
             TextureSourceId knownSource,
             AlphaPolicyBounds bounds,
             Material originMaterial,
-            float cutoffThreshold = 1.0f)
+            float cutoffThreshold = 1.0f,
+            bool allowDiskFallback = true,
+            int rawMipCap = int.MaxValue)
         {
             var hasSource = hasKnownSource &&
                 (evidence & TextureEvidenceKinds.SourceIdentity) != 0;
@@ -1398,7 +1509,9 @@ namespace Alrauna.Amuse.Editor.Host
                     out _,
                     out alphaChannel,
                     out alphaRefusal,
-                    originMaterial: originMaterial);
+                    originMaterial: originMaterial,
+                    allowDiskFallback: allowDiskFallback,
+                    rawMipCap: rawMipCap);
             AlphaMipChain redChannel = null;
             var redRefusal = TextureCaptureRefusalReason.None;
             var hasRedChannel =
@@ -1411,11 +1524,9 @@ namespace Alrauna.Amuse.Editor.Host
                     out _,
                     out redChannel,
                     out redRefusal,
-                    originMaterial: originMaterial);
-            if (hasRedChannel)
-            {
-                AssertRedFieldContract(redChannel);
-            }
+                    originMaterial: originMaterial,
+                    allowDiskFallback: allowDiskFallback,
+                    rawMipCap: rawMipCap);
             // The alpha arm's predicate rides beside the chain: the routes
             // binarize a declared cutoff into the stored verdicts, so the
             // field's key must carry the threshold the bytes mean. Clamped
@@ -1442,12 +1553,14 @@ namespace Alrauna.Amuse.Editor.Host
         }
 
         /// <summary>
-        /// Asserts the Analysis field contract on a red chain at the capture
-        /// seam: byte 255 marks exactly the texels whose value is exactly 1
+        /// Asserts the Analysis field contract on a red chain when its route
+        /// produces and caches it, so each unique chain is checked once:
+        /// byte 255 marks exactly the texels whose value is exactly 1
         /// and every other byte marks a value strictly below 1, so an inert
         /// red chain carries only 255 and 0. The inert bounds never erase,
         /// so the erased flag byte proves a capture seam defect. A violation
-        /// throws instead of serving evidence the proof core would misread.
+        /// throws instead of caching or serving evidence the proof core
+        /// would misread.
         /// </summary>
         internal static void AssertRedFieldContract(AlphaMipChain chain)
         {
@@ -1554,6 +1667,8 @@ namespace Alrauna.Amuse.Editor.Host
         private sealed class MaterialBuilder
         {
             internal Material SourceMaterial;
+            internal bool AllowDiskFallback = true;
+            internal int RawMipCap = int.MaxValue;
             internal bool HasShaderName;
             internal string ShaderName;
             internal bool HasActiveColorSpace;
@@ -1586,6 +1701,12 @@ namespace Alrauna.Amuse.Editor.Host
             internal readonly float CutoutThreshold;
             internal readonly Material OriginMaterial;
             internal TextureEvidenceKinds Evidence;
+            // The strictest contributing request governs the shared
+            // capture: one disallowing request in the bucket withdraws
+            // the route for it, and the smallest cap in the bucket caps
+            // the readback for it.
+            internal bool AllowDiskFallback = true;
+            internal int RawMipCap = int.MaxValue;
             internal CapturedTextureEvidence Captured;
 
             internal SharedTextureBuilder(

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Semantics;
@@ -19,7 +20,11 @@ namespace Alrauna.Amuse.Editor.Host
     /// the <c>UnityEditor</c> namespace and must keep none, and outside
     /// <c>Semantics</c> because <c>Analysis</c> depends on <c>Semantics</c> and not
     /// the reverse. It reads only: it opens no <c>TextureImporter</c>, writes no
-    /// asset, and never changes an import setting.
+    /// asset, and never changes an import setting. The one sanctioned
+    /// capture-side write is the streaming-clone route
+    /// (<see cref="UnityStreamingTextureEvidence"/>): it stages a readable
+    /// clone of a streaming texture under the pinned folder, mutates only
+    /// its own clone, and deletes it.
     /// </para>
     /// <para>
     /// The evidence it produces is <em>predicate-equivalent</em> to effective shader
@@ -50,6 +55,28 @@ namespace Alrauna.Amuse.Editor.Host
     /// </summary>
     internal sealed class UnityAlphaFieldEvidence
     {
+        // The content currency rides in the key: Unity bumps the update
+        // counter when capture-visible pixels change, so an in place
+        // mutation or a recreated instance re-keys instead of serving
+        // stale evidence. The generated route adds a contents hash to the
+        // same shape; this route cannot hash without a readback, and a
+        // readback per key check would defeat the cache on every hit, so
+        // the update counter carries correctness here alone.
+        private static readonly Dictionary<
+            (int instanceId, TextureChannel channel, float threshold,
+             AlphaPolicyBounds bounds, int activeMipmapLimit,
+             uint updateCount, int rawMipCap),
+            AlphaMipChain> SessionCache = new();
+
+        /// <summary>
+        /// Clears the evidence cache.
+        /// Call this method before each build and after cleanup.
+        /// </summary>
+        internal static void ClearCache()
+        {
+            SessionCache.Clear();
+        }
+
         /// <summary>
         /// The predicate shader's project path. UPM addresses every package as
         /// <c>Packages/&lt;name&gt;/...</c> regardless of where it physically lives,
@@ -95,6 +122,22 @@ namespace Alrauna.Amuse.Editor.Host
         /// evaluated in a fixed order, so one texture always refuses with the
         /// same family.
         /// </param>
+        /// <param name="allowDiskFallback">
+        /// Whether the streaming route may clone the source into a
+        /// temporary asset when the direct source-image read fails. The
+        /// value rides the capture request, so a disallowing capture is
+        /// never served a fallback-provenance cache entry; the default allows the
+        /// route.
+        /// </param>
+        /// <param name="rawMipCap">
+        /// The raw policy mip cap: the highest declared level the proof may
+        /// consult. Levels above the cap leave the proof's scope, so they
+        /// are never read back and the stored chain is the prefix through
+        /// the cap. <see cref="int.MaxValue"/> (the default) keeps the
+        /// uncapped full-chain capture. The cap rides the capture request
+        /// and the session key, so a differently capped capture is never
+        /// served another cap's cached chain.
+        /// </param>
         internal static bool TryCapture(
             Texture texture,
             TextureChannel channel,
@@ -103,7 +146,9 @@ namespace Alrauna.Amuse.Editor.Host
             out TextureSourceId source,
             out AlphaMipChain chain,
             out TextureCaptureRefusalReason refusal,
-            Material originMaterial = null)
+            Material originMaterial = null,
+            bool allowDiskFallback = true,
+            int rawMipCap = int.MaxValue)
         {
             source = default;
             chain = null;
@@ -112,6 +157,14 @@ namespace Alrauna.Amuse.Editor.Host
             if (!Enum.IsDefined(typeof(TextureChannel), channel))
             {
                 throw new ArgumentOutOfRangeException(nameof(channel));
+            }
+
+            if (rawMipCap < 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(rawMipCap),
+                    "The raw mip cap must be a level index of at least " +
+                    "zero, or int.MaxValue for no cap.");
             }
 
             if (channel != TextureChannel.Alpha &&
@@ -215,7 +268,7 @@ namespace Alrauna.Amuse.Editor.Host
                 {
                     if (!UnityStreamingTextureEvidence.TryCapture(
                             texture2D, channel, cutoffThreshold, bounds,
-                            out chain))
+                            out chain, allowDiskFallback))
                     {
                         refusal = TextureCaptureRefusalReason.UnavailableCapture;
                         source = default;
@@ -268,6 +321,21 @@ namespace Alrauna.Amuse.Editor.Host
                     return false;
                 }
 
+                // The session cache sits behind every gate, so a refused
+                // texture never writes an entry and a cached chain is one
+                // the route would have captured. The threshold and the
+                // bounds are the requested values exactly as the routes
+                // clamp and consume them; a failed capture writes no entry,
+                // so a transient GPU failure cannot pin an empty result.
+                var cacheKey = (texture2D.GetInstanceID(), channel,
+                    Mathf.Clamp01(cutoffThreshold), bounds,
+                    texture2D.activeMipmapLimit, texture2D.updateCount,
+                    rawMipCap);
+                if (SessionCache.TryGetValue(cacheKey, out chain))
+                {
+                    return true;
+                }
+
                 // Spec section 3: a texel between the noise gate and the
                 // shader cutoff is discarded at runtime and must never read
                 // opaque, so a shader cutoff source keeps the policy inert
@@ -279,7 +347,7 @@ namespace Alrauna.Amuse.Editor.Host
                     : bounds;
                 if (!TryCaptureChain(
                         texture2D, shader, effectiveBounds,
-                        texture2D.activeMipmapLimit, out chain))
+                        texture2D.activeMipmapLimit, rawMipCap, out chain))
                 {
                     refusal = TextureCaptureRefusalReason.UnavailableCapture;
                     source = default;
@@ -287,6 +355,20 @@ namespace Alrauna.Amuse.Editor.Host
                     return false;
                 }
 
+                // The red field contract runs here, at the one point a
+                // unique chain is produced. The cache hit above skipped it,
+                // because that chain passed this check at its own fill. A
+                // violating chain throws and is never cached, so every
+                // chain this route serves passed the check exactly once.
+                // The contract binds an inert red chain only: an active
+                // policy erases noise texels on red by design.
+                if (channel == TextureChannel.Red &&
+                    bounds.Equals(AlphaPolicyBounds.Inert))
+                {
+                    UnityMaterialEvidenceCapture.AssertRedFieldContract(chain);
+                }
+
+                SessionCache.Add(cacheKey, chain);
 
                 return true;
             }
@@ -303,26 +385,34 @@ namespace Alrauna.Amuse.Editor.Host
         }
 
         /// <summary>
-        /// Captures every declared mip and constructs the chain only after
-        /// every resident level succeeded. Levels the effective mipmap limit
-        /// removes from the GPU are never blitted: a non-resident source has
-        /// no defined readback, so the level keeps a placeholder grid with
-        /// its declared dimensions and the chain flags it without evidence,
-        /// which degrades the level to Unknown at the fold. A failed level
-        /// that should have been resident still refuses the whole texture:
-        /// there is no code path on which a partially populated chain of
-        /// resident evidence exists, so none can escape. The bounds ride
-        /// along to every acquired level.
+        /// Captures every declared mip at or below the raw policy cap and
+        /// constructs the chain only after every resident level succeeded.
+        /// Levels the effective mipmap limit removes from the GPU are never
+        /// blitted: a non-resident source has no defined readback, so the
+        /// level keeps a placeholder grid with its declared dimensions and
+        /// the chain flags it without evidence, which degrades the level to
+        /// Unknown at the fold. Levels above the raw cap leave the proof's
+        /// scope entirely: they are never read back, and the stored chain is
+        /// the prefix through the cap, which the gather side's
+        /// <c>LimitedTo</c> composes idempotently. A failed level that
+        /// should have been resident still refuses the whole texture: there
+        /// is no code path on which a partially populated chain of resident
+        /// evidence exists, so none can escape. The bounds ride along to
+        /// every acquired level.
         /// </summary>
         private static bool TryCaptureChain(
             Texture2D texture,
             Shader shader,
             AlphaPolicyBounds bounds,
             int activeMipmapLimit,
+            int rawMipCap,
             out AlphaMipChain chain)
         {
             chain = null;
-            var levels = new AlphaTextureData[texture.mipmapCount];
+            var capturedLevels = rawMipCap >= texture.mipmapCount - 1
+                ? texture.mipmapCount
+                : rawMipCap + 1;
+            var levels = new AlphaTextureData[capturedLevels];
             var withoutEvidence = new bool[levels.Length];
 
             // One material per texture, not per level: Graphics.Blit sets _MainTex

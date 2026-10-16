@@ -208,6 +208,24 @@ namespace Alrauna.Amuse.Editor.Build
 
         internal List<List<PreparedSlotSeparation>> SeparationSurvivingCandidates { get; set; }
 
+        /// <summary>
+        /// The material slots the applied writes actually changed, keyed by
+        /// renderer and slot index. Apply derives this set from the same
+        /// comparison that counts the applied opaque triangles: a slot is
+        /// changed when the write's material differs from what the renderer
+        /// held. A surviving slot whose already-opaque material maps to
+        /// itself never enters the set, because its write kept the slot's
+        /// material. A surviving Split never enters it either: the
+        /// finalization keeps the Split's source material and moves its
+        /// opaque triangles to the appended submesh. The play-mode record
+        /// keys its moved-triangle rows on this set plus surviving Split
+        /// dispositions. Live transient host capability, deliberately
+        /// outside the evidence graph.
+        /// </summary>
+        internal HashSet<(Renderer renderer, int slot)>
+            AppliedChangedMaterialSlots { get; } =
+            new HashSet<(Renderer renderer, int slot)>();
+
         internal List<SerializedTransformationRow> PlayModeAvatarRows { get; } =
             new List<SerializedTransformationRow>();
 
@@ -277,19 +295,21 @@ namespace Alrauna.Amuse.Editor.Build
         }
 
         /// <summary>
-        /// Test-only override for the disclosure path's build-target
-        /// read. Null in production. The sampling disclosure is the
-        /// only consumer; the apply and editor read sites keep the
+        /// Test-only override for the shared build-target read. Null in
+        /// production. The barrier pass and the apply staleness guard
+        /// are the consumers; every other editor read site keeps the
         /// real setting.
         /// </summary>
         internal static Func<BuildTarget> ActiveBuildTargetForTests = null;
 
         /// <summary>
-        /// Resolves the target the sampling policy captures: the armed
-        /// test override when present, otherwise the real active build
-        /// target. Tests set and restore the override so EditMode runs
-        /// never switch the editor's own build target. Internal because
-        /// the barrier pass reads it across the class boundary.
+        /// Resolves the build target the sampling policy captures and
+        /// re-selects against: the armed test override when present,
+        /// otherwise the real active build target. Tests set and
+        /// restore the override so EditMode runs never switch the
+        /// editor's own build target. Internal because the barrier
+        /// pass captures through it and the apply staleness guard
+        /// re-selects through it, both across the class boundary.
         /// </summary>
         internal static BuildTarget ActiveBuildTarget()
         {
@@ -414,6 +434,23 @@ namespace Alrauna.Amuse.Editor.Build
             }
         }
 
+        /// <summary>
+        /// Matches the one signal NDMF 1.14.4 gives for an inactive
+        /// extension. A verification on 2026-10-15 read the NDMF source and
+        /// found no activity check, no optional accessor, and no dedicated
+        /// exception type. The source throws a plain
+        /// <c>System.Exception</c> from <c>BuildContext.Extension&lt;T&gt;()</c>
+        /// with the message text below
+        /// (Packages/nadena.dev.ndmf/Editor/API/BuildContext.cs). This
+        /// matcher couples to that exact message text.
+        ///
+        /// Two drift directions exist. One: NDMF rewords the text. Then no
+        /// failure matches, the exception escapes, and the build fails on
+        /// the wrong arm. Two: NDMF introduces a typed exception. Then the
+        /// plain-type check stops matching, and every build falls back to
+        /// the legacy capture arm without an error. Re-run the source
+        /// verification after each NDMF package upgrade.
+        /// </summary>
         private static bool IsInactiveExtensionSignal(Exception exception)
         {
             return exception.GetType() == typeof(Exception) &&
@@ -455,9 +492,12 @@ namespace Alrauna.Amuse.Editor.Build
             state.Lifecycle = lifecycle;
             state.HasExecuted = true;
             UnityGeneratedTextureEvidence.ClearCache();
+            UnityAlphaFieldEvidence.ClearCache();
             ReplacementTextureIdentity.ClearSession();
             ReplacementTextureAttestation.ClearVersionCacheForSession();
             AaoAtlasTextureAttestation.ClearVersionCacheForSession();
+            Semantics.LilToon.LilToonSourceAttestation.ClearGatherMemo();
+            Semantics.Poiyomi.PoiyomiMaterialSemantics.ClearSourceHashMemo();
             if (!lifecycle.MayUsePositiveMutation)
             {
                 // V7: a lifecycle refusal is never silent. One plain
@@ -584,7 +624,7 @@ namespace Alrauna.Amuse.Editor.Build
             // opens the window.
             var windowEligible =
                 TransientUnlockAvailability.WindowEligibleForConsent(
-                    AllAssignedMaterials(context),
+                    AssignedAndSwapCurvedMaterials(context, graph),
                     lockedOriginalAttestation);
 
             if (subjects.Count > 0
@@ -788,7 +828,8 @@ namespace Alrauna.Amuse.Editor.Build
                             out admittedLiveMaterials,
                             selectRequest,
                             CaptureThroughEffectiveMaterials(
-                                renderer, capturer ?? effectiveCapturer),
+                                renderer, capturer ?? effectiveCapturer,
+                                maxMipLevel),
                             ignoreOutOfRangeSlots,
                             rendererTypeName,
                             LockedMaterialIdentity.PreCheckRefusal,
@@ -805,7 +846,7 @@ namespace Alrauna.Amuse.Editor.Build
                         alphaPolicyBounds,
                         out admittedLiveMaterials,
                         CaptureThroughEffectiveMaterials(
-                            renderer, effectiveCapturer),
+                            renderer, effectiveCapturer, maxMipLevel),
                         ignoreOutOfRangeSlots,
                         rendererTypeName,
                         LockedMaterialIdentity.PreCheckRefusal,
@@ -824,7 +865,7 @@ namespace Alrauna.Amuse.Editor.Build
                             alphaPolicyBounds,
                             selectRequest,
                             CaptureThroughEffectiveMaterials(
-                                renderer, capturer),
+                                renderer, capturer, maxMipLevel),
                             out admittedLiveMaterials,
                             ignoreOutOfRangeSlots,
                             rendererTypeName,
@@ -839,14 +880,24 @@ namespace Alrauna.Amuse.Editor.Build
                         : null);
                 var blockState =
                     EffectiveMaterialMaterialization.CaptureBlockState(renderer);
+                var alphaFields = UnityRendererAlphaAnalysis.GatherAlphaFields(
+                    evidence.AdmittedMaterials, maxMipLevel, minTextureSize);
                 var resolved = RuntimeStateResolution.ResolveRuntimeStates(
                     rendererPath, evidence, samplingPolicy,
+                    alphaFields,
+                    UnityAnimationEvidenceCapture.TextureScaleOffsetSuffix,
+                    UnityRendererAlphaAnalysis.StructuralRefusal,
+                    UnityAnimationEvidenceCapture.ProofRelevantResolver,
+                    UnityAnimationEvidenceCapture.UnrecognizedObjectBinding,
+                    UnityAnimationEvidenceCapture.MaterialSlotBindingParser,
                     effectiveResolver, maxMipLevel,
                     minTextureSize, densityCapPercent, blockState,
                     rendererTypeName: rendererTypeName);
                 refusal = resolved.Refusal;
                 var slots = RuntimeStateResolution.MaterialSlotsFor(
-                    evidence, rendererPath, rendererTypeName);
+                    evidence, rendererPath,
+                    UnityAnimationEvidenceCapture.MaterialSlotBindingParser,
+                    rendererTypeName);
                 // Every refused slot reports its own exact reason, even
                 // when the renderer as a whole continues or the first
                 // refusal names the renderer: one line per slot, no
@@ -955,7 +1006,9 @@ namespace Alrauna.Amuse.Editor.Build
                     {
                         var plan = RuntimeStateResolution.ClassifyRuntimeStates(
                             extraction.Snapshot,
-                            resolved.SlotResults);
+                            resolved.SlotResults,
+                            UnityRendererAlphaAnalysis.TriangleClassifier,
+                            UnityRendererAlphaAnalysis.OutcomeIntersector);
                         opaqueCandidateTriangleCount = plan.OpaqueTriangleCount;
                         for (var slotIndex = 0;
                              slotIndex < slots.Count;
@@ -990,7 +1043,7 @@ namespace Alrauna.Amuse.Editor.Build
                             }
                         }
 
-                        RetainPreparedSeparation(
+                        var prepared = RetainPreparedSeparation(
                             state,
                             extraction.MutationTarget,
                             rendererPath,
@@ -1006,11 +1059,20 @@ namespace Alrauna.Amuse.Editor.Build
                             grantedShaderNames,
                             resolved.SlotResults);
 
-                        if (lifecycle.BuildPath == AmuseBuildPath.ApplyOnPlay && plan != null)
+                        // The apply pass executes the prepared plan, which
+                        // preparation re-cut under the preserve gate. The
+                        // play record reads that same plan, so its slot rows
+                        // name the outcome the build applies. A null result
+                        // means nothing survived preparation: no slot rows
+                        // for this renderer, and the refusal rows above
+                        // already cover refused renderers.
+                        if (lifecycle.BuildPath == AmuseBuildPath.ApplyOnPlay
+                            && prepared != null)
                         {
                             RecordPlayModeSlots(
                                 state, renderer, rendererPath, rendererTypeName,
-                                plan, resolved.SlotResults, extraction.Snapshot);
+                                prepared.Plan, resolved.SlotResults,
+                                extraction.Snapshot);
                         }
                     }
                 }
@@ -1126,13 +1188,16 @@ namespace Alrauna.Amuse.Editor.Build
         /// included. Identity flows stay on the live materials — the admitted
         /// set, the swap-value matching, and the retained live pairing keep
         /// the original references, so the write path still matches against
-        /// them. A null inner capturer keeps the production default. Every
-        /// clone dies inside the wrapper, on every exit path.
+        /// them. A null inner capturer keeps the production default. The
+        /// optimizer's raw policy mip cap rides the capture request, so the
+        /// GPU route reads back only the proof's levels. Every clone dies
+        /// inside the wrapper, on every exit path.
         /// </summary>
         private static ClosedAlphaMaterialCapturer
             CaptureThroughEffectiveMaterials(
                 Renderer renderer,
-                ClosedAlphaMaterialCapturer inner)
+                ClosedAlphaMaterialCapturer inner,
+                int rawMipCap)
         {
             if (inner == null)
             {
@@ -1159,7 +1224,8 @@ namespace Alrauna.Amuse.Editor.Build
                 try
                 {
                     return inner(
-                        effective, families, request, bounds, out transferred);
+                        effective, families, request.WithRawMipCap(rawMipCap),
+                        bounds, out transferred);
                 }
                 finally
                 {
@@ -1331,12 +1397,15 @@ namespace Alrauna.Amuse.Editor.Build
         /// validates and applies it. A renderer whose plan proves no triangle
         /// opaque has nothing to prepare and is not retained at all; neither
         /// is a renderer whose every candidate slot refused conversion.
+        /// Returns the prepared separation, or null when nothing survived
+        /// preparation. The prepared separation carries the re-cut plan the
+        /// apply pass executes, so the play record must read that plan.
         /// <para>
         /// Preparation mutates nothing but AMUSE-owned transient objects: no
         /// renderer, no clip, no source asset, and no asset saving.
         /// </para>
         /// </summary>
-        private static void RetainPreparedSeparation(
+        private static PreparedRendererSeparation RetainPreparedSeparation(
             AmusePlatformFinishState state,
             UnityRendererMutationTarget mutationTarget,
             string rendererPath,
@@ -1369,11 +1438,12 @@ namespace Alrauna.Amuse.Editor.Build
                 slotResults);
             if (prepared == null)
             {
-                return;
+                return null;
             }
 
             state.Separation ??= new PreparedAlphaSeparation();
             state.Separation.Add(prepared);
+            return prepared;
         }
 
         internal static void RecordPlayModeRendererRefusal(
@@ -1393,7 +1463,8 @@ namespace Alrauna.Amuse.Editor.Build
             var effectivePath = scenePath != null ? scenePath : rendererPath;
 
             var key = AmuseReportStrings.RendererKey(refusal);
-            var refusalSentence = AmuseReportStrings.Has(key)
+            var hasCauseSentence = AmuseReportStrings.Has(key);
+            var refusalSentence = hasCauseSentence
                 ? AmuseReportStrings.Format(
                     key,
                     AmuseReports.SlotCountPhrase(meshSubMeshCount),
@@ -1401,6 +1472,14 @@ namespace Alrauna.Amuse.Editor.Build
                     renderer != null ? renderer.gameObject.name : "",
                     string.IsNullOrEmpty(detail) ? "" : detail)
                 : refusal.ToString();
+
+            // Every slot under a refused renderer carries the same named
+            // cause. The fixed generic sentence survives only behind the
+            // corrupt-key guard, like the lifecycle and structural
+            // refusals above.
+            var slotRefusalSentence = hasCauseSentence
+                ? refusalSentence
+                : "Refused: AMUSE currently does not support this material";
 
             state.PlayModeRendererRows.Add(new SerializedTransformationRow
             {
@@ -1427,7 +1506,7 @@ namespace Alrauna.Amuse.Editor.Build
                     movedTriangles = -1,
                     provenTriangles = -1,
                     totalTriangles = -1,
-                    sentence = "Refused: AMUSE currently does not support this material"
+                    sentence = slotRefusalSentence
                 });
             }
         }
@@ -1494,6 +1573,16 @@ namespace Alrauna.Amuse.Editor.Build
                 if (slotResults != null && slotIndex < slotResults.Count && !slotResults[slotIndex].IsResolved)
                 {
                     var total = SubmeshPolygonCount(renderer, slotIndex);
+                    var slotKey = AmuseReportStrings.RendererKey(
+                        slotResults[slotIndex].Refusal);
+                    var slotSentence = AmuseReportStrings.Has(slotKey)
+                        ? AmuseReportStrings.Format(
+                            slotKey,
+                            "",
+                            "",
+                            renderer != null ? renderer.gameObject.name : "",
+                            "")
+                        : "Refused: AMUSE currently does not support this material";
                     state.PlayModeRendererRows.Add(new SerializedTransformationRow
                     {
                         kind = 3,
@@ -1504,7 +1593,7 @@ namespace Alrauna.Amuse.Editor.Build
                         movedTriangles = -1,
                         provenTriangles = -1,
                         totalTriangles = total,
-                        sentence = "Refused: AMUSE currently does not support this material"
+                        sentence = slotSentence
                     });
                     continue;
                 }
@@ -1530,20 +1619,20 @@ namespace Alrauna.Amuse.Editor.Build
                     {
                         if (total > 0 && proven == total)
                         {
-                            sentence = "Convertable: " + total + " out of " + total + " polygons may be moved";
+                            sentence = DryRun.RowText.ConvertableSlotSentence(total);
                         }
                         else if (proven > 0)
                         {
-                            sentence = "Splittable: " + proven + " of out " + total + " polygons may be moved";
+                            sentence = DryRun.RowText.SplittableSlotSentence(proven, total);
                         }
                         else
                         {
-                            sentence = "Untouchable: 0 of out " + total + " polygons may be moved";
+                            sentence = DryRun.RowText.UntouchableSlotSentence(total);
                         }
                     }
                     else
                     {
-                        sentence = "Untouchable: 0 of out " + total + " polygons may be moved";
+                        sentence = DryRun.RowText.UntouchableSlotSentence(total);
                     }
 
                     state.PlayModeRendererRows.Add(new SerializedTransformationRow

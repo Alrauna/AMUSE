@@ -1302,6 +1302,58 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             Assert.That(honored.Semantics.Alpha.IsComplete, Is.True);
         }
 
+        /// <summary>
+        /// Finding 23 falsifier: the verifyIdentity knob keeps one meaning
+        /// in every family arm — false means skip verification, never
+        /// "never attested". The transferred entry drives both shader
+        /// families through the shared parameter, so an unattested
+        /// Poiyomi-family material and an unattested lilToon-family
+        /// material must both skip the identity verify instead of
+        /// answering UnattestedShader. The stand-in sources never attest,
+        /// so both captured evidences are deliberately stale.
+        /// </summary>
+        [Test]
+        public void TransferredAnalysisSkipsVerificationForBothFamiliesWhenAsked()
+        {
+            var poiyomi = NewMaterial(
+                "transferred-skip-poiyomi.shader",
+                PoiyomiMaterialSemantics.PoiyomiToonShaderName,
+                PoiyomiProperties());
+            var lilToon = NewMaterial(
+                "transferred-skip-liltoon.shader",
+                LilToonSourceAttestation.SupportedShaderName,
+                LilToonProperties());
+
+            var poiCaptured = UnityMaterialSemantics.CaptureAlphaMaterials(
+                new[] { poiyomi });
+            var lilCaptured = UnityMaterialSemantics.CaptureAlphaMaterials(
+                new[] { lilToon });
+
+            Assert.That(
+                poiCaptured[0].Family,
+                Is.EqualTo(CapturedAlphaMaterialFamily.Poiyomi));
+            Assert.That(
+                lilCaptured[0].Family,
+                Is.EqualTo(CapturedAlphaMaterialFamily.LilToon));
+
+            var poiTransferred = UnityMaterialSemantics
+                .AnalyzeAlphaMaterialTransferred(poiCaptured[0]);
+            var lilTransferred = UnityMaterialSemantics
+                .AnalyzeAlphaMaterialTransferred(lilCaptured[0]);
+
+            Assert.That(
+                poiTransferred.AlphaUnknownReason,
+                Is.Null,
+                "false means skip verification, not never attested");
+            Assert.That(poiTransferred.Semantics.Alpha.IsComplete, Is.True);
+            Assert.That(
+                lilTransferred.AlphaUnknownReason,
+                Is.Null,
+                "the lilToon arm must skip the verify through the " +
+                "same parameter");
+            Assert.That(lilTransferred.Semantics.Alpha.IsComplete, Is.True);
+        }
+
         [Test]
         public void AnalyzeAlphaMaterialUnsupportedFamilyIsAllUnknown()
         {
@@ -1475,13 +1527,22 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             return @"
         [HideInInspector] _lilToonVersion (""Version"", Int) = 45
         _Invisible (""Invisible"", Int) = 0
-        _UDIMDiscardCompile (""UDIM"", Int) = 0";
+        _UDIMDiscardCompile (""UDIM"", Int) = 0
+        _IDMask1 (""IDMask1"", Int) = 0
+        _IDMask2 (""IDMask2"", Int) = 0
+        _IDMask3 (""IDMask3"", Int) = 0
+        _IDMask4 (""IDMask4"", Int) = 0
+        _IDMask5 (""IDMask5"", Int) = 0
+        _IDMask6 (""IDMask6"", Int) = 0
+        _IDMask7 (""IDMask7"", Int) = 0
+        _IDMask8 (""IDMask8"", Int) = 0
+        _IDMaskControlsDissolve (""IDMaskControlsDissolve"", Int) = 0";
         }
 
         /// <summary>
         /// The Multi stand-in property block: the three Multi scalars the
         /// mode read and the gate rules consume, at the all-off corpus
-        /// state, plus the two opaque coverage facts. The fixture that
+        /// state, plus the eleven opaque coverage facts. The fixture that
         /// refuses at the resolver never reads past the attestation, so the
         /// block stays minimal on purpose.
         /// </summary>
@@ -1492,7 +1553,16 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         _UseClippingCanceller (""ClippingCanceller"", Float) = 0
         _AsOverlay (""AsOverlay"", Float) = 0
         _Invisible (""Invisible"", Int) = 0
-        _UDIMDiscardCompile (""UDIMDiscardCompile"", Int) = 0";
+        _UDIMDiscardCompile (""UDIMDiscardCompile"", Int) = 0
+        _IDMask1 (""IDMask1"", Int) = 0
+        _IDMask2 (""IDMask2"", Int) = 0
+        _IDMask3 (""IDMask3"", Int) = 0
+        _IDMask4 (""IDMask4"", Int) = 0
+        _IDMask5 (""IDMask5"", Int) = 0
+        _IDMask6 (""IDMask6"", Int) = 0
+        _IDMask7 (""IDMask7"", Int) = 0
+        _IDMask8 (""IDMask8"", Int) = 0
+        _IDMaskControlsDissolve (""IDMaskControlsDissolve"", Int) = 0";
         }
 
         /// <summary>
