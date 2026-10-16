@@ -30,11 +30,11 @@
 
 **Interfaces:**
 - Consumes: nothing new.
-- Produces: `WindowEligibleForConsent(IEnumerable<Material> assignedAndSwapCurvedMaterials, Func<Material, bool> originalShaderAttested)`. The parameter name change is internal; the method stays `internal static` with one caller.
+- Produces: `WindowEligibleForConsent(IEnumerable<Material> assignedAndSwapCurvedMaterials, Func<Material, bool> originalShaderAttested)`. The parameter name change is internal; the method stays `internal static` with one caller, confirmed by grep. The caller passes positionally, so the rename compiles without touching it.
 
 - [ ] **Step 1: Confirm the one caller**
 
-Grep `WindowEligibleForConsent` under `Packages/com.alrauna.amuse/Editor`. Expected: exactly one call site, in `AmusePlatformFinishPlugin.cs`, passing `AssignedAndSwapCurvedMaterials(context, graph)`. If more callers exist, update each (the rename is compile-forced) and list them in the report.
+Grep `WindowEligibleForConsent` under `Packages/com.alrauna.amuse/Editor`. Expected: exactly one call site, in `AmusePlatformFinishPlugin.cs`, passing `AssignedAndSwapCurvedMaterials(context, graph)` positionally. Also grep for named-argument uses and for the old parameter name anywhere in the repo. Expected: none. If more callers or references exist, update each and list them in the report.
 
 - [ ] **Step 2: Rename the parameter and fix the doc**
 
@@ -121,7 +121,7 @@ Refresh Unity assets and wait for compilation. Expected: no errors.
 
 - [ ] **Step 4: Grep the site**
 
-Grep `unmatchable` in the file. Expected: 0 hits. Grep `canonicalization` in the file. Expected: 1 hit.
+Grep `unmatchable` in the file. Expected: 0 hits. Grep `canonicalization` in the file. Expected: 6 hits (5 pre-existing at lines 374, 1528, 1556, 2282, 2306, plus the new doc line).
 
 - [ ] **Step 5: Identifier sweep and commit**
 
@@ -145,7 +145,7 @@ git commit -m "docs: correct the shader-format-stamp normalization reason"
 
 - [ ] **Step 1: Extend the comment**
 
-In the comment block that ends with `// margin, so the caller skips the pre-filter and lets the exact`, insert one more sentence pair after that line's thought completes. Change the block's final lines from:
+The safety text must state the verified facts: only the four clamp-family walks route through this bound. The four repeat-family walks run the pre-filter core inline, on unwrapped boxes, with no stand-down. A false separation loses a witness, and the no-witness arm of every classify path returns `ProvenOpaque` (see `ClassifyBilinearRepeat` near line 1081), which is the least conservative answer. Change the block's final lines from:
 
 ```
         // margin, so the caller skips the pre-filter and lets the exact
@@ -159,11 +159,11 @@ to:
         // margin, so the caller skips the pre-filter and lets the exact
         // intersection test decide.
         //
-        // The repeat-scale walks reuse this helper unmodified. The margin
-        // argument depends only on the per-coordinate magnitude, never on
-        // the caller, and a short margin fails conservative: a falsely
-        // separated box only loses a witness, and a lost witness never
-        // proves opacity.
+        // The repeat-scale walks reuse this pre-filter core unmodified, but
+        // they call it directly on unwrapped boxes, so this bound never
+        // caps their magnitudes. Below the bound a separated verdict is
+        // trustworthy. Past it a false separation loses a witness, and the
+        // no-witness arm of every classify path returns ProvenOpaque.
         private const double PreFilterSafeCoordinateBound = 256;
 ```
 
@@ -173,7 +173,7 @@ Refresh Unity assets and wait for compilation. Expected: no errors.
 
 - [ ] **Step 3: Grep the site**
 
-Grep `repeat-scale walks reuse` in the file. Expected: 1 hit.
+Grep `never caps their magnitudes` in the file. Expected: 1 hit. Grep `never proves opacity` in the file. Expected: 0 hits, so the old inverted claim is gone.
 
 - [ ] **Step 4: Identifier sweep and commit**
 
@@ -211,7 +211,7 @@ to:
         /// candidates count too. Erasure substitutes when the erased
 ```
 
-The three sibling blocks (`BilinearRepeatSubstitutesErasedTexels`, the classified clamp gate, and the classified repeat gate) already read "Opaque candidates count too." Do not touch them.
+The three sibling blocks (`PointClampSubstitutesErasedTexels`, `BilinearRepeatSubstitutesErasedTexels`, and `PointRepeatSubstitutesErasedTexels`) already read "Opaque candidates count too." Do not touch them.
 
 - [ ] **Step 2: Compile**
 
@@ -219,7 +219,7 @@ Refresh Unity assets and wait for compilation. Expected: no errors.
 
 - [ ] **Step 3: Grep the site**
 
-Grep `Opaque$` in the file with a line-anchored search, or grep `Opaque\ncount` across lines. Expected: 0 hits. Grep `Opaque candidates count too`. Expected: 4 hits.
+Grep `Opaque\ncount too` across lines in the file. Expected: 0 hits. Grep `Opaque candidates count too`. Expected: 4 hits (the three siblings plus this block).
 
 - [ ] **Step 4: Identifier sweep and commit**
 
@@ -261,7 +261,7 @@ to:
             Assert.That(dryRun.IsCancelled, Is.True);
 ```
 
-Leave the rest of the test untouched: the disposed-state wait, the follow-up `Cancel` tolerance assertion, and the `IsCompleted` uses in the other two cancel tests (`CancelAfterNormalCompletionToleratesDisposedSource` polls before asserting; it does not race).
+Leave the rest of the test untouched: the disposed-state wait and the follow-up `Cancel` tolerance assertion. The other two cancel tests do not race, each for its own reason: `CancelAfterNormalCompletionToleratesDisposedSource` polls up to 5 seconds before asserting `IsCompleted`, and `Cancel_AbortsInFlightRunAndSetsIsCancelled` calls `Cancel(timeoutMs: 500)`, which waits, and uses no `IsCompleted` assertion.
 
 - [ ] **Step 2: Run the owning test class**
 
@@ -286,5 +286,5 @@ git commit -m "test: drop the racing completion assertion after abandoned cancel
 
 - [ ] **Run both touched test classes once more**: `TransientUnlockAvailabilityTests` and `AlphaSeparationDryRunTests`. Expected: all pass, counts greater than 0.
 - [ ] **Grep the five sites**: `assignedAndSwapCurvedMaterials`, `canonicalization`, `repeat-scale walks reuse`, `Opaque candidates count too`, and the absence of `must still be running when Cancel abandons`.
-- [ ] **Confirm the branch**: five new commits on top of 116403a, each touching the files its task names.
+- [ ] **Confirm the branch**: five new task commits on the branch (current head c53f551, a descendant of 116403a), each touching the files its task names.
 - [ ] **Identifier sweep**: run over every file changed by this plan.

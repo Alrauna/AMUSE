@@ -14,31 +14,31 @@ Five deferred minors from the audit round. All are comments, doc text, a signatu
 
 Finding: the doc and parameter name under-describe the input since the round widened the universe to assigned plus swap-curved materials.
 
-Site: `Editor/Build/TransientUnlockAvailability.cs` `WindowEligibleForConsent`, doc block and `assignedMaterials` parameter. Caller: `Editor/Build/AmusePlatformFinishPlugin.cs` passes `AssignedAndSwapCurvedMaterials(context, graph)`.
+Site: `Packages/com.alrauna.amuse/Editor/Build/TransientUnlockAvailability.cs`, `WindowEligibleForConsent`, doc block and `assignedMaterials` parameter. Caller: `Packages/com.alrauna.amuse/Editor/Build/AmusePlatformFinishPlugin.cs` passes `AssignedAndSwapCurvedMaterials(context, graph)`.
 
-Decision: rename the parameter to `assignedAndSwapCurvedMaterials` and update the doc sentence to name both groups. One internal caller, so the rename is compile-forced. Why: a parameter name that names a smaller set is the same defect as a wrong doc sentence, and the fix is two lines.
+Decision: rename the parameter to `assignedAndSwapCurvedMaterials` and update the doc sentence to name both groups. One internal caller, confirmed by grep, so the rename cannot miss a call site. The caller passes arguments positionally, so the rename compiles without touching it. Why: a parameter name that names a smaller set is the same defect as a wrong doc sentence, and the fix is two lines.
 
 ### D2. Correct the shader format stamp normalization reason
 
-Finding: the doc gives a wrong reason. It says NaN never equals NaN, so an unnormalized absent stamp would make the memo key unmatchable. The memo key compares the `(bool, float)` tuple with the default comparer, which uses `float.Equals`. There, NaN does equal NaN. The claimed failure mode cannot happen.
+Finding: the doc gives a wrong reason. It says NaN never equals NaN, so an unnormalized absent stamp would make the memo key unmatchable. The memo key is a five-tuple whose stamp pair is `(bool, float)`. Tuple equality uses the default comparer, so `float.Equals`, where NaN equals NaN. The claimed failure mode cannot happen.
 
-Site: `Editor/Semantics/LilToon/LilToonSourceAttestation.cs`, `ShaderFormatStamp` doc block.
+Site: `Packages/com.alrauna.amuse/Editor/Semantics/LilToon/LilToonSourceAttestation.cs`, `ShaderFormatStamp` doc block.
 
 Decision: keep the normalization code. Rewrite the reason. The normalization is canonicalization: it keeps the special float out of the key, so key matchability never depends on NaN equality semantics. Why keep the code: canonical keys are simpler to reason about, and the code is correct. Risk of the change: none, comment only. The implementer confirms the tuple key uses the default comparer before editing.
 
 ### D3. Note the shared pre-filter bound's repeat-scale reuse
 
-Finding: the rounding margin for `PreFilterSafeCoordinateBound` was derived for the clamp walk. The repeat-scale walks now reuse the helper unmodified, and nobody re-derived the margin for them.
+Finding: the rounding margin for `PreFilterSafeCoordinateBound` was derived for the clamp walks. The repeat-scale walks now run the same pre-filter core inline, and nobody re-derived the margin for them.
 
-Site: `Editor/Analysis/TriangleAlphaClassifier.cs`, the comment block above `PreFilterSafeCoordinateBound`.
+Sites: `Packages/com.alrauna.amuse/Editor/Analysis/TriangleAlphaClassifier.cs`. The bound is enforced only inside `TryExtractTexelVerticesRelativeToCandidate`. Only the four clamp-family walks call it. The four repeat-family walks run the pre-filter inline, on unwrapped box coordinates that scale with texture size, with no stand-down. Two of these walks predate this round. Finding 11 added two more.
 
-Decision: no new math. Extend the comment with the reuse fact and why it is safe: the margin argument depends only on the per-coordinate magnitude, never on the caller; and a short margin fails conservative, because a falsely separated box only loses a witness, and a lost witness never proves opacity. Why not re-derive: the stand-down past the bound already caps the harm at performance, and the full suite passed with the reuse in place.
+Decision: no new math. Extend the comment above the bound with the verified facts. Below the bound, a separated verdict is trustworthy. Past the bound, the clamp walks stand down and run the exact intersection test. The stand-down is load-bearing: a false separation loses a witness, and a lost witness can yield a false `ProvenOpaque`. That is the least conservative answer in the lattice. Why not re-derive: a margin derivation is classifier-soundness work, not a comment fix. The note records the open question instead of hiding it.
 
 ### D4. Restore the dropped word in the clamp gate comment
 
 Finding: the bilinear clamp substitution gate doc lost the word "candidates". It reads "Opaque count too." Three sibling blocks read "Opaque candidates count too."
 
-Site: `Editor/Analysis/TriangleAlphaClassifier.cs`, doc block above `BilinearClampSubstitutesErasedTexels`.
+Site: `Packages/com.alrauna.amuse/Editor/Analysis/TriangleAlphaClassifier.cs`, doc block above `BilinearClampSubstitutesErasedTexels`.
 
 Decision: insert the word. Comment only.
 
@@ -46,7 +46,7 @@ Decision: insert the word. Comment only.
 
 Finding: `CancellingWhileInFlightDisposesTheSourceWhenTheTaskCompletes` asserts the in-flight task is still running right after `Cancel(timeoutMs: 0)`. Cancel abandons without waiting, so the fixture task can complete before the assertion runs. A correct run can then fail.
 
-Site: `Tests/Editor/DryRun/AlphaSeparationDryRunTests.cs`, the `IsCompleted` assertion after `Cancel(timeoutMs: 0)`.
+Site: `Packages/com.alrauna.amuse/Tests/Editor/DryRun/AlphaSeparationDryRunTests.cs`, the `IsCompleted` assertion after `Cancel(timeoutMs: 0)`.
 
 Decision: delete the assertion and its failure message. The test's subject is disposal after an abandoned cancel, and the remaining assertions cover it: `IsCancelled` is true, the source reaches the disposed state, and a later `Cancel` tolerates the disposed source. Why delete and not rework: the deleted pin guards a future synchronous-complete `Cancel(0)` that nobody has asked for. Yagni.
 
@@ -59,7 +59,7 @@ Decision: delete the assertion and its failure message. The test's subject is di
 
 ## RED/GREEN note
 
-No task changes behavior. RED does not apply to comment and name edits. Task 5 changes a test by deleting a flaky assertion; its verification is the full test class passing after the edit, and the class still covering its subject.
+No task changes behavior. RED does not apply to comment and name edits. Task 5 changes a test by deleting a flaky assertion. Its verification is the full test class passing after the edit. The class must still cover its subject.
 
 ## Acceptance
 
