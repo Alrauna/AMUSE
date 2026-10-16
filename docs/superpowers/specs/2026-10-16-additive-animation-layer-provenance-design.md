@@ -91,7 +91,7 @@ The committed graph walk enumerates states, nested state machines, and blend tre
 The animation index only holds clips committed into those same controllers before the barrier enumerates them.
 Every index clip is therefore a duplicate of a correctly provenanced layer occurrence.
 Duplicate occurrences all survive into the record, so the additive occurrence still fires the refusal.
-This containment argument is pinned by the production-route capture test in section 6.
+This containment argument is pinned by an index-route capture test in section 6.
 A future capture route that is not derived from the committed controllers must build its own provenance.
 
 ### Invariant 3: Refusal Predicates Narrow, Values Stay
@@ -230,6 +230,10 @@ Existing tests that move with the design:
 
 New and rewritten behavior tests:
 
+0. **Index occurrences carry no provenance. Characterization guard and Falsifier 4 pin.**
+   A committed-graph Override layer animates a proof-relevant property of the fixture renderer while the animation index observes the same clip through `CaptureWithAnimationIndex`.
+   The renderer resolves with no additive refusal.
+   `--- Falsifier 4: an implementation that defaults index-sourced occurrences to true re-widens the refusal for every renderer whose clips the index observes twice. This test must fail it. ---`
 1. **Pose layer does not poison an override-animated renderer. RED.**
    A controller whose first layer is Override animates a proof-relevant material property of the fixture renderer.
    A second, additive layer carries a transform-only clip.
@@ -258,7 +262,6 @@ Falsifier hypotheses for the production change:
 
 `--- Falsifier 2: an implementation that narrows the renderer predicate but forgets the object-binding pass leaves the additive material swap admitted. Test 3 must fail it. ---`
 `--- Falsifier 3: an implementation that narrows the slot twin by renderer-scope facts alone, or that keeps reading the deleted graph-wide boolean through a leftover alias, either over-refuses (test 1) or fails to compile. ---`
-`--- Falsifier 4: an implementation that defaults index-sourced occurrences to true re-widens the refusal for every renderer whose clips the index observes twice. Test 1 must fail it. ---`
 
 Every falsifier test carries a no-op guard so a later refactor cannot silence it silently.
 
