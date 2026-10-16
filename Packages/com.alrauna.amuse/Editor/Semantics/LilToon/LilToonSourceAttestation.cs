@@ -2571,8 +2571,11 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
 
         /// <summary>
         /// The shader format stamp one gather embeds, read from the captured
-        /// material. Absent normalizes to 0: NaN never equals NaN, so an
-        /// unnormalized absent stamp would make its memo key unmatchable.
+        /// material. Absent normalizes to 0. The tuple key compares the
+        /// float with float.Equals, where NaN does equal NaN, so the raw
+        /// stamp would still match. The normalization is canonicalization:
+        /// it keeps the special float out of the key, so the key's
+        /// matchability never depends on NaN equality semantics.
         /// </summary>
         private static (bool HasVersion, float Version) ShaderFormatStamp(
             CapturedMaterialEvidence evidence)
