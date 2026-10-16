@@ -19,7 +19,7 @@ namespace Alrauna.Amuse.Editor
     public sealed class AmuseAvatarOptimizerEditor : UnityEditor.Editor
     {
         private bool _settingsOpen;
-        private bool _alphaSeparatorOpen;
+        private bool _alphaSeparatorOpen = true;
 
         /// <summary>
         /// The two foldout states live in the editor session, like
@@ -27,7 +27,7 @@ namespace Alrauna.Amuse.Editor
         /// presets, Undo, and Reset stay untouched.
         /// </summary>
         private bool _materialTransformationsOpen;
-        private bool _alphaSeparationTransformationsOpen;
+        private bool _alphaSeparationTransformationsOpen = true;
 
         /// <summary>
         /// The current dry run instance. It owns its own renderer
@@ -50,6 +50,7 @@ namespace Alrauna.Amuse.Editor
         internal static Action<UnityEngine.Object, Type, bool> OnMaterialObjectFieldDrawnForTest;
         internal static Action<string> OnButtonDrawnForTest;
         internal static Func<string, bool> ButtonClickOverrideForTest;
+        internal static Action<string> OnFoldoutHeaderDrawnForTest;
 
         private void OnEnable()
         {
@@ -181,7 +182,7 @@ namespace Alrauna.Amuse.Editor
 
         /// <summary>
         /// The Show Material Transformations foldout with the nested
-        /// Alpha Separation view. The view shows outcomes, not
+        /// Alpha Separator view. The view shows outcomes, not
         /// policy, so it sits outside the Advanced Settings reveal,
         /// like the Alpha Separator toggle, and no serialized field
         /// stores its state.
@@ -192,6 +193,7 @@ namespace Alrauna.Amuse.Editor
                 _materialTransformationsOpen,
                 "Show Material Transformations",
                 EditorStyles.foldoutHeader);
+            OnFoldoutHeaderDrawnForTest?.Invoke("Show Material Transformations");
             if (!_materialTransformationsOpen)
             {
                 return;
@@ -218,8 +220,9 @@ namespace Alrauna.Amuse.Editor
 
             _alphaSeparationTransformationsOpen = EditorGUILayout.Foldout(
                 _alphaSeparationTransformationsOpen,
-                "Alpha Separation",
+                "Alpha Separator",
                 EditorStyles.foldoutHeader);
+            OnFoldoutHeaderDrawnForTest?.Invoke("Alpha Separator");
             if (!_alphaSeparationTransformationsOpen)
             {
                 return;
@@ -303,8 +306,8 @@ namespace Alrauna.Amuse.Editor
             if (!_dryRunCompletedLatched)
             {
                 var text = _dryRun != null && _dryRun.TotalRendererCount > 0
-                    ? $"AMUSE computes material transformations: renderer {_dryRun.CurrentRendererIndex + 1} of {_dryRun.TotalRendererCount}."
-                    : "AMUSE computes material transformations.";
+                    ? $"AMUSE is computing material transformations: renderer {_dryRun.CurrentRendererIndex + 1} of {_dryRun.TotalRendererCount}."
+                    : "AMUSE is computing material transformations.";
                 EditorGUILayout.HelpBox(text, MessageType.Info);
                 OnHelpBoxDrawnForTest?.Invoke(text, MessageType.Info);
                 OnButtonDrawnForTest?.Invoke("Cancel");
@@ -674,6 +677,7 @@ namespace Alrauna.Amuse.Editor
             _alphaSeparatorOpen = EditorGUILayout.Foldout(
                 _alphaSeparatorOpen, "Alpha Separator Settings",
                 EditorStyles.foldoutHeader);
+            OnFoldoutHeaderDrawnForTest?.Invoke("Alpha Separator Settings");
             if (!_alphaSeparatorOpen)
             {
                 return;
@@ -1017,6 +1021,7 @@ namespace Alrauna.Amuse.Editor
         {
             _settingsOpen = EditorGUILayout.Foldout(
                 _settingsOpen, "Settings", EditorStyles.foldoutHeader);
+            OnFoldoutHeaderDrawnForTest?.Invoke("Settings");
             if (!_settingsOpen)
             {
                 return false;

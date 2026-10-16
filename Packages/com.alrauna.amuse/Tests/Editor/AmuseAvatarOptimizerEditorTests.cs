@@ -96,6 +96,59 @@ namespace Alrauna.Amuse.Tests.Editor
                 Is.EqualTo(100));
         }
 
+        [Test]
+        public void DefaultFoldoutStatesMatchSpecification()
+        {
+            var component = NewHiddenComponent();
+            var editor = UnityEditor.Editor.CreateEditor(component);
+            try
+            {
+                var editorType = typeof(Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor);
+                var settingsOpen = (bool)editorType.GetField("_settingsOpen", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(editor);
+                var alphaSeparatorOpen = (bool)editorType.GetField("_alphaSeparatorOpen", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(editor);
+                var materialTransformationsOpen = (bool)editorType.GetField("_materialTransformationsOpen", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(editor);
+                var alphaSeparationTransformationsOpen = (bool)editorType.GetField("_alphaSeparationTransformationsOpen", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(editor);
+
+                Assert.That(settingsOpen, Is.False, "settings foldout must not be expanded by default");
+                Assert.That(alphaSeparatorOpen, Is.True, "alpha separator settings foldout must be expanded by default");
+                Assert.That(materialTransformationsOpen, Is.False, "show material transformations foldout must not be expanded by default");
+                Assert.That(alphaSeparationTransformationsOpen, Is.True, "alpha separation dropdown under material transformations must be expanded by default");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(editor);
+            }
+        }
+
+        [Test]
+        public void MaterialTransformationsInnerFoldoutHeaderIsNamedAlphaSeparator()
+        {
+            var component = NewHiddenComponent();
+            var editor = (Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor)
+                UnityEditor.Editor.CreateEditor(component);
+            var editorType = typeof(Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor);
+            editorType.GetField("_materialTransformationsOpen", BindingFlags.NonPublic | BindingFlags.Instance)
+                ?.SetValue(editor, true);
+
+            var headersDrawn = new List<string>();
+            Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor.OnFoldoutHeaderDrawnForTest =
+                header => headersDrawn.Add(header);
+
+            try
+            {
+                RenderInHostWindow(() => editor.OnInspectorGUI());
+
+                Assert.That(headersDrawn, Contains.Item("Show Material Transformations"));
+                Assert.That(headersDrawn, Contains.Item("Alpha Separator"));
+                Assert.That(headersDrawn, Does.Not.Contain("Alpha Separation"));
+            }
+            finally
+            {
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor.OnFoldoutHeaderDrawnForTest = null;
+                UnityEngine.Object.DestroyImmediate(editor);
+            }
+        }
+
         [UnityTest]
         public IEnumerator PlainRepaintDoesNotRewriteStoredMipCap()
         {
@@ -293,7 +346,7 @@ namespace Alrauna.Amuse.Tests.Editor
                 RenderInHostWindow(() => editor.OnInspectorGUI());
 
                 Assert.That(
-                    helpBoxesDrawn.Any(msg => msg.StartsWith("AMUSE computes material transformations")),
+                    helpBoxesDrawn.Any(msg => msg.StartsWith("AMUSE is computing material transformations")),
                     Is.True,
                     "computing status box must be drawn while dry run is not complete");
                 Assert.That(

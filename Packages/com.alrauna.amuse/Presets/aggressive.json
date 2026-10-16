@@ -6,7 +6,7 @@
     "alphaSeparator": true
   },
   "settings": {
-    "preserveTransparencyMaxMipLevel": 4,
+    "preserveTransparencyMaxMipLevel": 3,
     "preserveTransparencyMinTextureSize": 128,
     "minimumOpaqueCoveragePercent": 25,
     "minimumOpaqueCoverageToPreservePercent": 10,
