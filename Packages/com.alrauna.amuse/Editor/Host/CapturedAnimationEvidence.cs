@@ -85,11 +85,13 @@ namespace Alrauna.Amuse.Editor.Host
         internal CapturedClipEvidence(
             string name,
             bool isSpecialMotion,
+            bool isFromAdditiveLayer,
             IList<CapturedFloatBinding> floatBindings,
             IList<CapturedObjectBinding> objectBindings)
         {
             Name = name;
             IsSpecialMotion = isSpecialMotion;
+            IsFromAdditiveLayer = isFromAdditiveLayer;
             FloatBindings = new ReadOnlyCollection<CapturedFloatBinding>(
                 new List<CapturedFloatBinding>(floatBindings));
             ObjectBindings = new ReadOnlyCollection<CapturedObjectBinding>(
@@ -98,6 +100,15 @@ namespace Alrauna.Amuse.Editor.Host
 
         internal string Name { get; }
         internal bool IsSpecialMotion { get; }
+
+        /// <summary>
+        /// True when this clip occurrence was observed on a layer whose
+        /// blending mode is additive. False is the conservative fact: it
+        /// means the capture proved no additive provenance for this
+        /// occurrence, so it never widens a refusal on its own. Layer
+        /// weight is not modeled.
+        /// </summary>
+        internal bool IsFromAdditiveLayer { get; }
         internal IReadOnlyList<CapturedFloatBinding> FloatBindings { get; }
         internal IReadOnlyList<CapturedObjectBinding> ObjectBindings { get; }
     }

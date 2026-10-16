@@ -104,7 +104,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 AnimationUtility.SetEditorCurve(
                     clip, FloatBinding, AnimationCurve.Constant(0f, 1f, 0.25f));
 
-                var observed = LiveAnimationObservation.ObserveClip(clip, false);
+                var observed = LiveAnimationObservation.ObserveClip(clip, false, false);
 
                 AnimationUtility.SetEditorCurve(
                     clip,
@@ -217,7 +217,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                         new ObjectReferenceKeyframe { time = 1f, value = null },
                     });
 
-                var observed = LiveAnimationObservation.ObserveClip(clip, false);
+                var observed = LiveAnimationObservation.ObserveClip(clip, false, false);
                 var values = observed.Objects.Single().Values;
                 AnimationUtility.SetObjectReferenceCurve(clip, binding, null);
 
@@ -302,6 +302,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var swapObservation = new LiveClipObservation(
                 "cross_avatar_swap",
                 false,
+                false,
                 Array.Empty<LiveFloatObservation>(),
                 new[]
                 {
@@ -366,8 +367,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 AnimationUtility.SetEditorCurve(
                     clip, FloatBinding, AnimationCurve.Constant(0f, 1f, 0.25f));
 
-                var ordinary = LiveAnimationObservation.ObserveClip(clip, false);
-                var special = LiveAnimationObservation.ObserveClip(clip, true);
+                var ordinary = LiveAnimationObservation.ObserveClip(clip, false, false);
+                var special = LiveAnimationObservation.ObserveClip(clip, true, false);
 
                 Assert.That(ordinary.IsSpecialMotion, Is.False);
                 Assert.That(special.IsSpecialMotion, Is.True);
@@ -1011,7 +1012,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                     new CommittedLayer(
                         "controller",
                         1,
-                        AnimatorLayerBlendingMode.Override,
+                        AnimatorLayerBlendingMode.Additive,
                         new[] { ordinaryClip },
                         Array.Empty<StateMachineBehaviour>(),
                         false),
@@ -1039,6 +1040,58 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(evidence.Clips[1].Name, Is.EqualTo("graph float"));
             Assert.That(evidence.Clips[1].IsSpecialMotion, Is.False);
             Assert.That(evidence.Clips[1].FloatBindings, Has.Count.EqualTo(1));
+            Assert.That(evidence.Clips[1].IsFromAdditiveLayer, Is.True);
+            Assert.That(evidence.Clips[0].IsFromAdditiveLayer, Is.False);
+        }
+
+        [Test]
+        public void IndexRouteObservationsCarryNoAdditiveProvenance()
+        {
+            // --- Falsifier 4: an implementation that defaults index-sourced occurrences to true re-widens the refusal for every renderer whose clips the index observes twice. This test must fail it. ---
+            var initial = NewPoiyomiMaterial();
+            var graphClip = Own(new AnimationClip { name = "index twin" });
+            AnimationUtility.SetEditorCurve(
+                graphClip,
+                FloatBinding,
+                AnimationCurve.Constant(0f, 1f, 0.25f));
+            var graph = new CommittedControllerGraphResult(
+                AvatarAnimationRefusal.None,
+                new[]
+                {
+                    new CommittedLayer(
+                        "controller",
+                        0,
+                        AnimatorLayerBlendingMode.Override,
+                        new[] { graphClip },
+                        Array.Empty<StateMachineBehaviour>(),
+                        false),
+                });
+
+            var cloneContext = new CloneContext(
+                GenericPlatformAnimatorBindings.Instance);
+            var indexClip = VirtualClip.Clone(cloneContext, graphClip);
+            var animationIndex = new AnimationIndex(
+                new VirtualNode[] { indexClip });
+
+            var evidence = UnityAnimationEvidenceCapture
+                .CaptureWithAnimationIndex(
+                    AnalyzedRendererPath,
+                    new[] { initial },
+                    graph,
+                    new StubBindings(),
+                    animationIndex,
+                    AlphaPolicyBounds.Inert,
+                    out _,
+                    SelectFixtureRequest,
+                    CaptureFixtureMaterials);
+
+            Assert.That(evidence.Clips, Has.Count.EqualTo(2));
+            Assert.That(evidence.Clips[0].Name, Is.EqualTo("index twin"));
+            Assert.That(
+                evidence.Clips[0].IsFromAdditiveLayer, Is.False);
+            Assert.That(evidence.Clips[1].Name, Is.EqualTo("index twin"));
+            Assert.That(
+                evidence.Clips[1].IsFromAdditiveLayer, Is.False);
         }
 
         /// <summary>
@@ -1967,7 +2020,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         public void OutOfRangeSlotBindingRecordsPerSlotFailureByDefault()
         {
             var swapMat = Own(new Material(Shader.Find("Hidden/Alrauna/AmuseTests/Opaque")));
-            var clip = new LiveClipObservation("Test", false, Array.Empty<LiveFloatObservation>(), new[]
+            var clip = new LiveClipObservation("Test", false, false, Array.Empty<LiveFloatObservation>(), new[]
             {
                 new LiveObjectObservation("Renderer", typeof(MeshRenderer).FullName, "m_Materials.Array.data[1]", new Object[] { swapMat })
             });
@@ -1997,7 +2050,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         public void OutOfRangeSlotBindingIsIgnoredWhenToleranceEnabled()
         {
             var swapMat = Own(new Material(Shader.Find("Hidden/Alrauna/AmuseTests/Opaque")));
-            var clip = new LiveClipObservation("Test", false, Array.Empty<LiveFloatObservation>(), new[]
+            var clip = new LiveClipObservation("Test", false, false, Array.Empty<LiveFloatObservation>(), new[]
             {
                 new LiveObjectObservation("Renderer", typeof(MeshRenderer).FullName, "m_Materials.Array.data[1]", new Object[] { swapMat })
             });
@@ -2024,7 +2077,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             try
             {
                 AnimationUtility.SetEditorCurve(clip, FloatBinding, curve);
-                return LiveAnimationObservation.ObserveClip(clip, false)
+                return LiveAnimationObservation.ObserveClip(clip, false, false)
                     .Floats.Single().IsFiniteExact;
             }
             finally
@@ -2234,6 +2287,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             return new LiveClipObservation(
                 "swap",
                 isSpecialMotion,
+                false,
                 Array.Empty<LiveFloatObservation>(),
                 new[]
                 {
@@ -2274,6 +2328,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             return new LiveClipObservation(
                 "floats",
                 false,
+                false,
                 new[]
                 {
                     new LiveFloatObservation(
@@ -2299,6 +2354,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         {
             return new LiveClipObservation(
                 "objects",
+                false,
                 false,
                 Array.Empty<LiveFloatObservation>(),
                 new[]

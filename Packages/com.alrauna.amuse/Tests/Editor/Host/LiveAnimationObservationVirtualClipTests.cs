@@ -57,9 +57,9 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var virtualClip = VirtualClip.Clone(cloneContext, _clip);
 
             var fromReal = LiveAnimationObservation.ObserveClip(
-                _clip, false);
+                _clip, false, false);
             var fromVirtual = LiveAnimationObservation.ObserveVirtualClip(
-                virtualClip, false);
+                virtualClip, false, false);
 
             Assert.That(fromVirtual.Name, Is.EqualTo(fromReal.Name));
             Assert.That(fromVirtual.IsSpecialMotion,
@@ -97,7 +97,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             AnimationUtility.SetEditorCurve(
                 clip, binding, new AnimationCurve(new Keyframe(0f, float.NaN)));
 
-            var observed = LiveAnimationObservation.ObserveClip(clip, false);
+            var observed = LiveAnimationObservation.ObserveClip(clip, false, false);
 
             Assert.That(observed.Floats[0].IsFiniteExact, Is.False);
         }
@@ -113,7 +113,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 new Keyframe(1f, float.PositiveInfinity));
             AnimationUtility.SetEditorCurve(clip, binding, curve);
 
-            var observed = LiveAnimationObservation.ObserveClip(clip, false);
+            var observed = LiveAnimationObservation.ObserveClip(clip, false, false);
 
             Assert.That(observed.Floats[0].IsFiniteExact, Is.False);
         }
