@@ -487,8 +487,8 @@ namespace Alrauna.Amuse.Editor.Analysis
         /// <para>
         /// This also keeps the empty-state guard in
         /// <c>IntersectOutcomes</c> intact: an unresolved slot never reaches it
-        /// with no admitted states, so intersecting nothing still means what it
-        /// means today.
+        /// with no admitted states, so intersecting nothing keeps its
+        /// established meaning.
         /// </para>
         /// </summary>
         internal static TriangleAlphaOutcome[] UnprovenOutcomes(int triangleCount)

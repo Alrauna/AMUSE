@@ -4570,12 +4570,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// <summary>
         /// Asserts the entry set of a fully resolving renderer with one
         /// texture fact: no renderer refusal entry, no slot analysis
-        /// entry, and exactly today's one texture entry of the named key.
+        /// entry, and exactly one baseline texture entry of the named key.
         /// A wrong implementation that emits the slot facts outside the
         /// renderer-refused path doubles the texture entry or adds a
         /// refusal entry, and fails here.
         /// </summary>
-        private static void AssertResolvingEntrySetsExactlyToday(
+        private static void AssertResolvingEntrySetsExactlyBaseline(
             List<ErrorContext> reports,
             string textureKey)
         {
@@ -4616,7 +4616,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(
                 textureKeys,
                 Is.EqualTo(new[] { textureKey }),
-                "a resolving renderer keeps exactly today's texture " +
+                "a resolving renderer keeps exactly the baseline texture " +
                 "entry set");
         }
 
@@ -4624,8 +4624,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
         /// <summary>
         /// Runs the capture-refusal and no-alpha fixtures through a fully
-        /// resolving renderer and asserts the entry sets are exactly
-        /// today's: the standalone capture refusal for the resolved slot,
+        /// resolving renderer and asserts the entry sets are exactly the
+        /// baseline set: the standalone capture refusal for the resolved slot,
         /// the unconditional no-alpha diagnostic, and nothing new. A wrong
         /// implementation emitting the slot facts unconditionally fails
         /// this.
@@ -4647,7 +4647,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 // The Test 1 lever on a resolving renderer: the forced
                 // opaque material keeps the slot resolved, and the
-                // standalone loop is today's only reporter.
+                // standalone loop is the only reporter.
                 resolvingFixture = AddVerifiedOpaqueRenderer(resolvingRoot);
                 refusedTexture = new Texture2D(
                     8, 8, TextureFormat.RGBA32, false);
@@ -4662,13 +4662,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(resolvingState.AnalyzedRendererCount,
                     Is.EqualTo(1),
                     "fixture precondition: the renderer must fully resolve");
-                AssertResolvingEntrySetsExactlyToday(
+                AssertResolvingEntrySetsExactlyBaseline(
                     resolvingReports,
                     "amuse.texture.UnavailableCapture");
 
                 // The Test 3 lever on a resolving renderer: the no-alpha
                 // outline texture captured cleanly, so the unconditional
-                // diagnostic is today's only texture entry.
+                // diagnostic is the only texture entry.
                 noAlphaFixture = AddVerifiedOpaqueRenderer(noAlphaRoot);
                 noAlphaTexture = ImportNoAlphaChannelTexture(
                     "resolving_noalpha_slot");
@@ -4683,7 +4683,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(noAlphaState.AnalyzedRendererCount,
                     Is.EqualTo(1),
                     "fixture precondition: the renderer must fully resolve");
-                AssertResolvingEntrySetsExactlyToday(
+                AssertResolvingEntrySetsExactlyBaseline(
                     noAlphaReports,
                     "amuse.texture.NoAlphaChannel");
             }
@@ -4815,7 +4815,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             try
             {
                 // Root A: the Override first layer animates a proof-relevant
-                // float of the fixture renderer; a second, additive layer
+                // float of the fixture renderer. A second, additive layer
                 // animates only a transform.
                 FixtureAvatarIdentity.AttachVrcDescriptor(rootA);
                 rootA.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
