@@ -20,7 +20,11 @@ namespace Alrauna.Amuse.Editor.Host
     /// the <c>UnityEditor</c> namespace and must keep none, and outside
     /// <c>Semantics</c> because <c>Analysis</c> depends on <c>Semantics</c> and not
     /// the reverse. It reads only: it opens no <c>TextureImporter</c>, writes no
-    /// asset, and never changes an import setting.
+    /// asset, and never changes an import setting. The one sanctioned
+    /// capture-side write is the streaming-clone route
+    /// (<see cref="UnityStreamingTextureEvidence"/>): it stages a readable
+    /// clone of a streaming texture under the pinned folder, mutates only
+    /// its own clone, and deletes it.
     /// </para>
     /// <para>
     /// The evidence it produces is <em>predicate-equivalent</em> to effective shader

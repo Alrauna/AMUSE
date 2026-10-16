@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text.RegularExpressions;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Semantics;
 using UnityEditor;
@@ -41,6 +42,67 @@ namespace Alrauna.Amuse.Editor.Host
         /// crashed build's leftovers are replaced, not accumulated, by the
         /// next capture.
         private const string TempFolder = "Assets/Amuse.StreamingReadback";
+
+        /// <summary>
+        /// The route's own clone naming shape: the source's 32-hex GUID
+        /// plus the source's extension, directly in the pinned folder.
+        /// The sweep deletes exactly this shape, so the ownership test is
+        /// the name alone and nothing else in the folder is touched.
+        /// </summary>
+        private static readonly Regex CloneName = new Regex(
+            "^[0-9a-f]{32}\\.[0-9A-Za-z]+$", RegexOptions.Compiled);
+
+        /// <summary>
+        /// The clone path for a source asset path: the pinned folder plus
+        /// the source's GUID and extension, the one shape
+        /// <see cref="CloneName"/> matches.
+        /// </summary>
+        private static string ClonePath(string sourcePath)
+        {
+            return TempFolder + "/" +
+                AssetDatabase.AssetPathToGUID(sourcePath) +
+                Path.GetExtension(sourcePath);
+        }
+
+        /// <summary>
+        /// Deletes the route's own leftovers from the pinned folder before
+        /// a new clone is made: a file shaped like the route's own clones
+        /// is the leftover of a run whose cleanup never ran. Everything
+        /// else in the folder belongs to someone else and is never
+        /// touched.
+        /// </summary>
+        private static void SweepStaleClones()
+        {
+            if (!AssetDatabase.IsValidFolder(TempFolder))
+            {
+                return;
+            }
+
+            foreach (var file in Directory.GetFiles(TempFolder))
+            {
+                var assetPath = file.Replace('\\', '/');
+                if (!CloneName.IsMatch(Path.GetFileName(assetPath)))
+                {
+                    continue;
+                }
+
+                if (AssetDatabase.DeleteAsset(assetPath))
+                {
+                    continue;
+                }
+
+                // A leftover the asset database never imported: remove the
+                // file and its meta directly so the sweep is complete.
+                if (File.Exists(assetPath))
+                {
+                    File.Delete(assetPath);
+                }
+                if (File.Exists(assetPath + ".meta"))
+                {
+                    File.Delete(assetPath + ".meta");
+                }
+            }
+        }
 
         /// <summary>
         /// Process-local cache, keyed by source asset identity. The key
@@ -138,6 +200,12 @@ namespace Alrauna.Amuse.Editor.Host
                 return false;
             }
 
+            // A crashed run's cleanup never ran, so its clone can still
+            // sit in the pinned folder. The sweep runs before a new clone
+            // is made and deletes exactly the route's own naming shape,
+            // so a leftover is removed rather than accumulated.
+            SweepStaleClones();
+
             var folderCreated = !AssetDatabase.IsValidFolder(TempFolder);
             if (folderCreated)
             {
@@ -148,8 +216,7 @@ namespace Alrauna.Amuse.Editor.Host
             // The source's GUID names the clone, so one source has one clone
             // name and a leftover from a crashed capture is overwritten, not
             // duplicated.
-            var tempPath = TempFolder + "/" +
-                AssetDatabase.AssetPathToGUID(path) + extension;
+            var tempPath = ClonePath(path);
             try
             {
                 if (!AssetDatabase.CopyAsset(path, tempPath))

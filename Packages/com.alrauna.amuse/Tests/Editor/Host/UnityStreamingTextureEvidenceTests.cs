@@ -21,6 +21,11 @@ namespace Alrauna.Amuse.Tests.Editor.Host
     {
         private const string TempFolder = "Assets/AmuseTests_StreamingEvidence";
 
+        // The capture route's own pinned temporary folder. The stale-clone
+        // test stages fixtures inside it and must remove them again.
+        private const string StreamingTempFolder =
+            "Assets/Amuse.StreamingReadback";
+
         [SetUp]
         public void SetUp()
         {
@@ -447,6 +452,90 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             }
             finally
             {
+                AssetDatabase.DeleteAsset(AssetDatabase.GetAssetPath(texture));
+            }
+        }
+
+        /// <summary>
+        /// A crashed capture's clone never reached the route's cleanup, so
+        /// a file shaped like the route's own clones sits in the pinned
+        /// folder. Before a new clone is made the route sweeps exactly
+        /// that shape and touches nothing else: the stale clone is gone
+        /// and the foreign asset in the same folder survives.
+        /// </summary>
+        [Test]
+        public void AStaleCloneFromACrashedRunIsDeletedBeforeANewCloneIsMade()
+        {
+            var texture = ImportExrStreamingBandTexture(
+                "streaming_stale_clone_sweep");
+            var sourceGuid = AssetDatabase.AssetPathToGUID(
+                AssetDatabase.GetAssetPath(texture));
+            // The stale clone carries the route's own naming pattern: the
+            // source's 32-hex GUID plus an extension, directly in the
+            // pinned folder.
+            var stalePath = StreamingTempFolder + "/" + sourceGuid + ".png";
+            var foreignPath = StreamingTempFolder + "/unrelated.png";
+            try
+            {
+                if (!AssetDatabase.IsValidFolder(StreamingTempFolder))
+                {
+                    AssetDatabase.CreateFolder(
+                        "Assets", Path.GetFileName(StreamingTempFolder));
+                }
+                TestTextureImport.WritePng(stalePath, 2, 1, new[]
+                {
+                    new Color32(255, 255, 255, 255),
+                    new Color32(0, 0, 0, 255),
+                });
+                TestTextureImport.WritePng(foreignPath, 2, 1, new[]
+                {
+                    new Color32(9, 9, 9, 255),
+                    new Color32(9, 9, 9, 255),
+                });
+                Assert.That(
+                    AssetDatabase.LoadAssetAtPath<Texture2D>(stalePath),
+                    Is.Not.Null,
+                    "fixture precondition: the stale clone must be a " +
+                    "loaded asset");
+                Assert.That(
+                    AssetDatabase.LoadAssetAtPath<Texture2D>(foreignPath),
+                    Is.Not.Null,
+                    "fixture precondition: the foreign asset must be a " +
+                    "loaded asset");
+
+                var ok = UnityStreamingTextureEvidence.TryCapture(
+                    texture,
+                    TextureChannel.Alpha,
+                    0.25f,
+                    AlphaPolicyBounds.Inert,
+                    out _);
+                Assert.That(
+                    ok, Is.True, "the clone fallback must capture");
+
+                Assert.That(
+                    AssetDatabase.LoadAssetAtPath<Texture2D>(stalePath),
+                    Is.Null,
+                    "the sweep must delete the route's own stale clone");
+                Assert.That(
+                    AssetDatabase.LoadAssetAtPath<Texture2D>(foreignPath),
+                    Is.Not.Null,
+                    "the sweep must not touch content the route does " +
+                    "not own");
+            }
+            finally
+            {
+                foreach (var leftover in new[] { stalePath, foreignPath })
+                {
+                    if (AssetDatabase.LoadAssetAtPath<UnityEngine.Object>(
+                            leftover) != null)
+                    {
+                        AssetDatabase.DeleteAsset(leftover);
+                    }
+                }
+                if (AssetDatabase.IsValidFolder(StreamingTempFolder))
+                {
+                    AssetDatabase.DeleteAsset(StreamingTempFolder);
+                }
                 AssetDatabase.DeleteAsset(AssetDatabase.GetAssetPath(texture));
             }
         }
