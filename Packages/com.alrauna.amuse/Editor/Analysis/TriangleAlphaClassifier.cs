@@ -297,6 +297,12 @@ namespace Alrauna.Amuse.Editor.Analysis
         // separated. Above this bound the rounding noise can exceed the
         // margin, so the caller skips the pre-filter and lets the exact
         // intersection test decide.
+        //
+        // The repeat-scale walks reuse this pre-filter core unmodified, but
+        // they call it directly on unwrapped boxes, so this bound never
+        // caps their magnitudes. Below the bound a separated verdict is
+        // trustworthy. Past it a false separation loses a witness, and the
+        // no-witness arm of every classify path returns ProvenOpaque.
         private const double PreFilterSafeCoordinateBound = 256;
 
         /// <summary>
