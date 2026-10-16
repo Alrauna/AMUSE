@@ -32,7 +32,7 @@ namespace Alrauna.Amuse.Editor.Host
         /// This renderer carries a proof-relevant float binding, or a
         /// material-slot object binding, whose clip occurrence was observed
         /// on an additive layer. The refusal follows the captured per-clip
-        /// provenance; a graph-wide additive layer alone refuses nothing.
+        /// provenance. A graph-wide additive layer alone refuses nothing.
         /// Layer weight is not modeled.
         /// </summary>
         AdditiveLayerWithProofRelevantMaterialProperty,
