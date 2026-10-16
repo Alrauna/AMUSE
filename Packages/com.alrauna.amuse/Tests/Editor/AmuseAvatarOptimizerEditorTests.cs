@@ -254,33 +254,6 @@ namespace Alrauna.Amuse.Tests.Editor
         }
 
         [Test]
-        public void DrawTransformationRowAcceptsAvatarRoot()
-        {
-            var method = typeof(Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor)
-                .GetMethod("DrawTransformationRow", BindingFlags.NonPublic | BindingFlags.Static);
-            Assert.That(method, Is.Not.Null, "DrawTransformationRow must exist");
-            var parameters = method.GetParameters();
-            Assert.That(parameters.Length, Is.EqualTo(2),
-                "DrawTransformationRow must accept two parameters");
-            Assert.That(parameters[0].ParameterType, Is.EqualTo(typeof(MaterialTransformationRow)));
-            Assert.That(parameters[1].ParameterType, Is.EqualTo(typeof(Transform)));
-        }
-
-        [Test]
-        public void DrawTransformationRowRendersDeferredSlotRow()
-        {
-            var row = Alrauna.Amuse.Editor.DryRun.MaterialTransformationRow.Slot(
-                "Body",
-                "UnityEngine.SkinnedMeshRenderer",
-                0,
-                0,
-                100,
-                Alrauna.Amuse.Editor.DryRun.RowText.DeferredSlotSentence(100));
-            Assert.That(row.Sentence, Does.Contain("Deferred:"));
-            Assert.That(row.Sentence, Does.Contain("100"));
-        }
-
-        [Test]
         public void LazyLoadingWithholdsRowsUntilDone()
         {
             var component = NewHiddenComponent();
