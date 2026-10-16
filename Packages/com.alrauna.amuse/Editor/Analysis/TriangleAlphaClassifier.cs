@@ -1549,7 +1549,7 @@ namespace Alrauna.Amuse.Editor.Analysis
         /// Decides whether the erased texels in the bilinear clamp
         /// candidate window substitute for witnesses. The gate counts every
         /// candidate whose support interval intersects the domain. Opaque
-        /// count too. Erasure substitutes when the erased
+        /// candidates count too. Erasure substitutes when the erased
         /// share of the consulted candidates stays at or under the
         /// policy. Equality moves. The collection walk runs first, so
         /// this full count runs only when the collected share exceeds
