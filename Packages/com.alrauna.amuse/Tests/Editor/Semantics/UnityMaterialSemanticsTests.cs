@@ -1542,7 +1542,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         /// <summary>
         /// The Multi stand-in property block: the three Multi scalars the
         /// mode read and the gate rules consume, at the all-off corpus
-        /// state, plus the two opaque coverage facts. The fixture that
+        /// state, plus the eleven opaque coverage facts. The fixture that
         /// refuses at the resolver never reads past the attestation, so the
         /// block stays minimal on purpose.
         /// </summary>
@@ -1553,7 +1553,16 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         _UseClippingCanceller (""ClippingCanceller"", Float) = 0
         _AsOverlay (""AsOverlay"", Float) = 0
         _Invisible (""Invisible"", Int) = 0
-        _UDIMDiscardCompile (""UDIMDiscardCompile"", Int) = 0";
+        _UDIMDiscardCompile (""UDIMDiscardCompile"", Int) = 0
+        _IDMask1 (""IDMask1"", Int) = 0
+        _IDMask2 (""IDMask2"", Int) = 0
+        _IDMask3 (""IDMask3"", Int) = 0
+        _IDMask4 (""IDMask4"", Int) = 0
+        _IDMask5 (""IDMask5"", Int) = 0
+        _IDMask6 (""IDMask6"", Int) = 0
+        _IDMask7 (""IDMask7"", Int) = 0
+        _IDMask8 (""IDMask8"", Int) = 0
+        _IDMaskControlsDissolve (""IDMaskControlsDissolve"", Int) = 0";
         }
 
         /// <summary>
