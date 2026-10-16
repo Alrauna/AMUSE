@@ -85,11 +85,13 @@ namespace Alrauna.Amuse.Editor.Host
         internal CapturedClipEvidence(
             string name,
             bool isSpecialMotion,
+            bool isFromAdditiveLayer,
             IList<CapturedFloatBinding> floatBindings,
             IList<CapturedObjectBinding> objectBindings)
         {
             Name = name;
             IsSpecialMotion = isSpecialMotion;
+            IsFromAdditiveLayer = isFromAdditiveLayer;
             FloatBindings = new ReadOnlyCollection<CapturedFloatBinding>(
                 new List<CapturedFloatBinding>(floatBindings));
             ObjectBindings = new ReadOnlyCollection<CapturedObjectBinding>(
@@ -98,6 +100,15 @@ namespace Alrauna.Amuse.Editor.Host
 
         internal string Name { get; }
         internal bool IsSpecialMotion { get; }
+
+        /// <summary>
+        /// True when this clip occurrence was observed on a layer whose
+        /// blending mode is additive. False is the conservative fact: it
+        /// means the capture proved no additive provenance for this
+        /// occurrence, so it never widens a refusal on its own. Layer
+        /// weight is not modeled.
+        /// </summary>
+        internal bool IsFromAdditiveLayer { get; }
         internal IReadOnlyList<CapturedFloatBinding> FloatBindings { get; }
         internal IReadOnlyList<CapturedObjectBinding> ObjectBindings { get; }
     }
@@ -182,7 +193,6 @@ namespace Alrauna.Amuse.Editor.Host
             IList<CapturedAlphaMaterial> admittedMaterials,
             IList<int> currentMaterialIndices,
             bool hasUnnormalizedDirectBlendTree,
-            bool hasAdditiveLayer,
             IList<int> ignoredOutOfRangeSlots = null,
             IList<SlotClosureFailure> slotClosureFailures = null)
         {
@@ -195,7 +205,6 @@ namespace Alrauna.Amuse.Editor.Host
             CurrentMaterialIndices = new ReadOnlyCollection<int>(
                 new List<int>(currentMaterialIndices));
             HasUnnormalizedDirectBlendTree = hasUnnormalizedDirectBlendTree;
-            HasAdditiveLayer = hasAdditiveLayer;
             IgnoredOutOfRangeSlots = new ReadOnlyCollection<int>(
                 new List<int>(ignoredOutOfRangeSlots ?? Array.Empty<int>()));
 
@@ -229,7 +238,6 @@ namespace Alrauna.Amuse.Editor.Host
         internal IReadOnlyList<int> CurrentMaterialIndices { get; }
 
         internal bool HasUnnormalizedDirectBlendTree { get; }
-        internal bool HasAdditiveLayer { get; }
 
         /// <summary>
         /// Material slot indices that were ignored during capture because they

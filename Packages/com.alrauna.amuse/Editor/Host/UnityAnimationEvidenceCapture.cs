@@ -325,17 +325,21 @@ namespace Alrauna.Amuse.Editor.Host
                 foreach (var clip in layer.Clips)
                 {
                     observations.Add(LiveAnimationObservation.ObserveClip(
-                        clip, bindings.IsSpecialMotion(clip)));
+                        clip,
+                        bindings.IsSpecialMotion(clip),
+                        layer.BlendingMode ==
+                        AnimatorLayerBlendingMode.Additive));
                 }
             }
 
+            // ponytail: index occurrences marked false; the committed walk is the provenance authority; build real virtual provenance if a capture route stops deriving from the committed controllers
             foreach (var virtualClipObj in animationIndex
                          .GetClipsForObjectPath(rendererPath))
             {
                 var virtualClip =
                     (nadena.dev.ndmf.animator.VirtualClip)virtualClipObj;
                 observations.Add(LiveAnimationObservation.ObserveVirtualClip(
-                    virtualClip, virtualClip.IsMarkerClip));
+                    virtualClip, virtualClip.IsMarkerClip, false));
             }
 
             ClosedAlphaMaterialCapturer effectiveCapturer = capturer ??
@@ -389,7 +393,10 @@ namespace Alrauna.Amuse.Editor.Host
                 foreach (var clip in layer.Clips)
                 {
                     observations.Add(LiveAnimationObservation.ObserveClip(
-                        clip, bindings.IsSpecialMotion(clip)));
+                        clip,
+                        bindings.IsSpecialMotion(clip),
+                        layer.BlendingMode ==
+                        AnimatorLayerBlendingMode.Additive));
                 }
             }
 
@@ -446,12 +453,9 @@ namespace Alrauna.Amuse.Editor.Host
                 throw new InvalidOperationException(
                     "Animation evidence capture requires a successful committed graph.");
 
-            var hasAdditiveLayer = false;
             var hasUnnormalizedDirectBlendTree = false;
             foreach (var layer in graph.Layers)
             {
-                hasAdditiveLayer |=
-                    layer.BlendingMode == AnimatorLayerBlendingMode.Additive;
                 hasUnnormalizedDirectBlendTree |=
                     layer.HasUnnormalizedDirectBlendTree;
             }
@@ -781,6 +785,7 @@ namespace Alrauna.Amuse.Editor.Host
                 clips.Add(new CapturedClipEvidence(
                     observation.Name,
                     observation.IsSpecialMotion,
+                    observation.IsFromAdditiveLayer,
                     floats,
                     objects));
             }
@@ -803,7 +808,6 @@ namespace Alrauna.Amuse.Editor.Host
                 capturedByIndex,
                 currentMaterialIndices,
                 hasUnnormalizedDirectBlendTree,
-                hasAdditiveLayer,
                 orderedIgnored,
                 slotClosureFailures);
         }

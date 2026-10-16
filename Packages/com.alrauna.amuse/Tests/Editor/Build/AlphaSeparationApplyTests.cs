@@ -3763,7 +3763,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Array.Empty<Alrauna.Amuse.Editor.Semantics
                     .CapturedAlphaMaterial>(),
                 new[] { 0 },
-                false, false);
+                false);
             var prepared = new PreparedRendererSeparation(
                 new UnityRendererMutationTarget(renderer, mesh, 1),
                 string.Empty,
@@ -3848,7 +3848,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Array.Empty<Alrauna.Amuse.Editor.Semantics
                     .CapturedAlphaMaterial>(),
                 new[] { 0 },
-                false, false);
+                false);
             var prepared = new PreparedRendererSeparation(
                 new UnityRendererMutationTarget(renderer, mesh, 1),
                 string.Empty,
@@ -6161,7 +6161,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Array.Empty<Alrauna.Amuse.Editor.Semantics
                     .CapturedAlphaMaterial>(),
                 new[] { 0 },
-                false, false);
+                false);
             const string rendererPath = "Avatar/SelfMappedSlotRenderer";
             var prepared = new PreparedRendererSeparation(
                 new UnityRendererMutationTarget(renderer, mesh, 1),
@@ -6334,7 +6334,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Array.Empty<Alrauna.Amuse.Editor.Semantics
                     .CapturedAlphaMaterial>(),
                 new[] { 0 },
-                false, false);
+                false);
             const string rendererPath = "Avatar/AppliedSplitSlotRenderer";
             var prepared = new PreparedRendererSeparation(
                 new UnityRendererMutationTarget(renderer, sourceMesh, 1),

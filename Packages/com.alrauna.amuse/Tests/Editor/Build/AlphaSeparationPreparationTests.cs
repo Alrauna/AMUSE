@@ -644,6 +644,141 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// Conversion-relevant animated state on an Override layer stays
+        /// provable when a separate transform-only additive layer exists.
+        /// Provenance is per clip. The additive pose clip must not refuse
+        /// the renderer. The Override conversion state still refuses
+        /// admission on its own merits.
+        /// </summary>
+        [Test]
+        public void
+            ConversionStateOnOverrideLayerBesideAdditivePoseLayer_NarrowsRefusal()
+        {
+            // --- Falsifier 3: an implementation that narrows the slot twin by renderer-scope facts alone, or that keeps reading the deleted graph-wide boolean through a leftover alias, either over-refuses this fixture or fails to compile. This test must fail it. ---
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject(
+                "AMUSE override conversion beside additive pose");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            Material material = null;
+            Mesh mesh = null;
+            AnimationClip clip = null;
+            AnimationClip poseClip = null;
+            AnimatorController controller = null;
+            AmusePlatformFinishState amuse = null;
+            try
+            {
+                material = VerifiedOpaqueZWriteDefaultMaterial();
+                var renderer =
+                    AddSingleTriangleRenderer(root, material, out mesh);
+                clip = NewFloatClip(
+                    "AMUSE zwrite on override layer", string.Empty,
+                    "material._ZWrite", 0f);
+                controller = AlphaSeparationTestLifecycle.NewController(
+                    root, "AMUSE override conversion graph", clip);
+                poseClip = new AnimationClip { name = "AMUSE additive pose" };
+                AnimationUtility.SetEditorCurve(
+                    poseClip,
+                    EditorCurveBinding.FloatCurve(
+                        string.Empty,
+                        typeof(Transform),
+                        "m_LocalPosition.x"),
+                    AnimationCurve.Constant(0f, 1f, 0f));
+                controller.AddLayer("L1");
+                var layers = controller.layers;
+                layers[1].blendingMode =
+                    AnimatorLayerBlendingMode.Additive;
+                controller.layers = layers;
+                controller.layers[1].stateMachine.AddState("S0").motion =
+                    poseClip;
+
+                // No-op guard: the fixture really carries an additive
+                // sourced clip. The narrowing assertions below prove the
+                // per-clip provenance narrowing, and this guard catches
+                // the loss of the additive pose layer.
+                var rendererPath = AnimationUtility.CalculateTransformPath(
+                    renderer.transform, root.transform);
+                var bindings = GenericPlatformAnimatorBindings.Instance;
+                var graph = CommittedControllerGraph.Enumerate(root, bindings);
+                Assert.That(graph.Refusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None),
+                    "fixture precondition: the committed graph capture " +
+                    "must succeed");
+                var evidence = UnityAnimationEvidenceCapture.Capture(
+                    rendererPath,
+                    renderer.sharedMaterials,
+                    graph,
+                    bindings,
+                    AlphaPolicyBounds.Inert,
+                    out _);
+                Assert.That(
+                    evidence.Clips.Count(clipEvidence =>
+                        clipEvidence.IsFromAdditiveLayer),
+                    Is.EqualTo(1),
+                    "no-op guard: the additive layer's clip lost its " +
+                    "provenance, so the narrowing assertions below " +
+                    "prove nothing");
+                Assert.That(
+                    evidence.Clips.Single(clipEvidence =>
+                        clipEvidence.IsFromAdditiveLayer).FloatBindings,
+                    Has.None.Property("PropertyName")
+                        .StartsWith("material."),
+                    "fixture precondition: the additive clip must stay " +
+                    "free of conversion material bindings");
+                Assert.That(
+                    evidence.Clips.Single(clipEvidence =>
+                        !clipEvidence.IsFromAdditiveLayer).FloatBindings,
+                    Has.Some.Property("PropertyName")
+                        .EqualTo("material._ZWrite"),
+                    "fixture precondition: the Override clip did not " +
+                    "carry the conversion binding");
+
+                amuse = RunBarrier(root);
+
+                Assert.That(amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None),
+                    "the conversion-only binding must stay outside the " +
+                    "alpha request");
+                Assert.That(amuse.OpaqueCandidateTriangleCount,
+                    Is.EqualTo(1),
+                    "fixture precondition: the single slot must hold " +
+                    "exactly one opaque candidate triangle");
+                Assert.That(amuse.Separation, Is.Null,
+                    "the only candidate slot was refused, so nothing is " +
+                    "retained");
+                Assert.That(
+                    amuse.SlotRefusalCount(
+                        AlphaSeparationSlotRefusal
+                            .ConversionStateUnderAdditiveLayer),
+                    Is.Zero,
+                    "a transform-only additive layer must not refuse " +
+                    "the Override conversion state");
+                Assert.That(
+                    amuse.SlotRefusalCount(
+                        AlphaSeparationSlotRefusal.ConversionStateNotAdmitted),
+                    Is.EqualTo(1),
+                    "the Override conversion state must still refuse " +
+                    "admission on its own merits");
+            }
+            finally
+            {
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
+                if (mesh != null)
+                    UnityEngine.Object.DestroyImmediate(mesh);
+                UnityEngine.Object.DestroyImmediate(root);
+                if (material != null)
+                    UnityEngine.Object.DestroyImmediate(material);
+                if (clip != null) UnityEngine.Object.DestroyImmediate(clip);
+                if (poseClip != null)
+                    UnityEngine.Object.DestroyImmediate(poseClip);
+                if (controller != null)
+                    DestroyControllerGraph(controller);
+            }
+        }
+
+        /// <summary>
         /// Conversion-relevant animated state under an unnormalized Direct
         /// blend tree invalidates every candidate slot of the renderer.
         /// The unnormalized tree alone stays outside the alpha request, so

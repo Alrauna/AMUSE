@@ -61,11 +61,13 @@ namespace Alrauna.Amuse.Editor.Host
         internal LiveClipObservation(
             string name,
             bool isSpecialMotion,
+            bool isFromAdditiveLayer,
             IList<LiveFloatObservation> floats,
             IList<LiveObjectObservation> objects)
         {
             Name = name;
             IsSpecialMotion = isSpecialMotion;
+            IsFromAdditiveLayer = isFromAdditiveLayer;
             Floats = new ReadOnlyCollection<LiveFloatObservation>(
                 new List<LiveFloatObservation>(floats));
             Objects = new ReadOnlyCollection<LiveObjectObservation>(
@@ -74,6 +76,12 @@ namespace Alrauna.Amuse.Editor.Host
 
         internal string Name { get; }
         internal bool IsSpecialMotion { get; }
+
+        /// <summary>
+        /// True when this clip occurrence was observed on a layer whose
+        /// blending mode is additive. Layer weight is not modeled.
+        /// </summary>
+        internal bool IsFromAdditiveLayer { get; }
         internal IReadOnlyList<LiveFloatObservation> Floats { get; }
         internal IReadOnlyList<LiveObjectObservation> Objects { get; }
     }
@@ -84,13 +92,15 @@ namespace Alrauna.Amuse.Editor.Host
 
         internal static LiveClipObservation ObserveClip(
             AnimationClip clip,
-            bool isSpecialMotion)
+            bool isSpecialMotion,
+            bool isFromAdditiveLayer)
         {
             if (clip == null) throw new ArgumentNullException(nameof(clip));
 
             return ObserveBindings(
                 clip.name,
                 isSpecialMotion,
+                isFromAdditiveLayer,
                 AnimationUtility.GetCurveBindings(clip),
                 binding => AnimationUtility.GetEditorCurve(clip, binding).keys,
                 AnimationUtility.GetObjectReferenceCurveBindings(clip),
@@ -107,13 +117,15 @@ namespace Alrauna.Amuse.Editor.Host
         /// </summary>
         internal static LiveClipObservation ObserveVirtualClip(
             nadena.dev.ndmf.animator.VirtualClip clip,
-            bool isSpecialMotion)
+            bool isSpecialMotion,
+            bool isFromAdditiveLayer)
         {
             if (clip == null) throw new ArgumentNullException(nameof(clip));
 
             return ObserveBindings(
                 clip.Name,
                 isSpecialMotion,
+                isFromAdditiveLayer,
                 clip.GetFloatCurveBindings(),
                 binding => clip.GetFloatCurve(binding).keys,
                 clip.GetObjectCurveBindings(),
@@ -129,6 +141,7 @@ namespace Alrauna.Amuse.Editor.Host
         private static LiveClipObservation ObserveBindings(
             string clipName,
             bool isSpecialMotion,
+            bool isFromAdditiveLayer,
             IEnumerable<EditorCurveBinding> floatBindings,
             Func<EditorCurveBinding, Keyframe[]> readFloatKeys,
             IEnumerable<EditorCurveBinding> objectBindings,
@@ -170,7 +183,8 @@ namespace Alrauna.Amuse.Editor.Host
             }
 
             return new LiveClipObservation(
-                clipName, isSpecialMotion, floats, objects);
+                clipName, isSpecialMotion, isFromAdditiveLayer,
+                floats, objects);
         }
 
         internal static bool TryParseMaterialSlotBinding(

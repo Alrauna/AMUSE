@@ -251,6 +251,7 @@ namespace Alrauna.Amuse.Editor.Build
                 var conversionBindings = new List<(
                     CapturedFloatBinding Binding,
                     AnimatedPropertyRef Reference)>();
+                var anyConversionBindingFromAdditiveLayer = false;
                 foreach (var clipEvidence in evidence.Clips)
                 {
                     foreach (var binding in clipEvidence.FloatBindings)
@@ -278,6 +279,8 @@ namespace Alrauna.Amuse.Editor.Build
                         if (resolution ==
                             ProofRelevantBindingResolution.RendererWide)
                         {
+                            anyConversionBindingFromAdditiveLayer |=
+                                clipEvidence.IsFromAdditiveLayer;
                             conversionBindings.Add((binding, reference));
                         }
                     }
@@ -289,7 +292,7 @@ namespace Alrauna.Amuse.Editor.Build
                 // invalidate every candidate slot of this renderer and
                 // nothing else: never the renderer's alpha analysis, never
                 // another renderer.
-                if (conversionBindings.Count > 0 && evidence.HasAdditiveLayer)
+                if (anyConversionBindingFromAdditiveLayer)
                 {
                     return RefuseEveryCandidateSlot(
                         target,
