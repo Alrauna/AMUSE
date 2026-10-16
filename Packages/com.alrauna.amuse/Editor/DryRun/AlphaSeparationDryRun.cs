@@ -1044,7 +1044,9 @@ namespace Alrauna.Amuse.Editor.DryRun
 
         /// <summary>
         /// Checks whether a streaming texture can decode in memory from disk.
-        /// Authoring PNG and TGA files can decode directly.
+        /// Only authoring PNG files decode directly. ImageConversion.LoadImage
+        /// decodes PNG and JPG bytes only. A TGA source rides the
+        /// readable-clone route, which this preview disallows.
         /// </summary>
         private static bool CanDecodeInMemory(Texture texture)
         {
@@ -1059,8 +1061,8 @@ namespace Alrauna.Amuse.Editor.DryRun
                 return false;
             }
 
-            var ext = Path.GetExtension(path).ToLowerInvariant();
-            if (ext != ".png" && ext != ".tga")
+            if (!SourceImageAlphaReader.AdmitsExtension(
+                    Path.GetExtension(path).ToLowerInvariant()))
             {
                 return false;
             }
