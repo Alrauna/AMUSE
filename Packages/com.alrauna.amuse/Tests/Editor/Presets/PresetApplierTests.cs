@@ -59,6 +59,39 @@ namespace Alrauna.Amuse.Tests.Editor
         }
 
         [Test]
+        public void ApplyingShippedAggressiveSetsSmallestTestedMipmapToThree()
+        {
+            var go = new GameObject("Root");
+            try
+            {
+                var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
+                var serialized = new UnityEditor.SerializedObject(optimizer);
+                serialized.FindProperty("_preserveTransparencyMaxMipLevel").intValue = 4;
+                serialized.ApplyModifiedProperties();
+
+                Assert.That(PresetFileStore.TryLoadAll(
+                        out var presets, out var failedFile,
+                        out var refusal),
+                    Is.True, failedFile + ": " + refusal);
+                var aggressive = presets.Single(
+                    preset => preset.Name == "Aggressive");
+
+                Assert.That(aggressive.PreserveTransparencyMaxMipLevel, Is.EqualTo(3));
+
+                serialized.Update();
+                PresetApplier.Apply(aggressive, serialized);
+
+                Assert.That(optimizer.PreserveTransparencyMaxMipLevel,
+                    Is.EqualTo(3),
+                    "the shipped Aggressive preset must set smallest tested mipmap to mip 3");
+            }
+            finally
+            {
+                Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
         public void ApplyWritesAllTwelveFields()
         {
             var go = new GameObject("Root");
