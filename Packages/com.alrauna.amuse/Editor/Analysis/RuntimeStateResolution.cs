@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
@@ -151,23 +152,35 @@ namespace Alrauna.Amuse.Editor.Analysis
             if (evidence == null)
                 throw new ArgumentNullException(nameof(evidence));
 
-            var floats = new List<CapturedFloatBinding>();
-            var objects = new List<CapturedObjectBinding>();
+            var floats = new List<(CapturedFloatBinding Binding,
+                bool FromAdditiveLayer)>();
+            var objects = new List<(CapturedObjectBinding Binding,
+                bool FromAdditiveLayer)>();
             foreach (var clip in evidence.Clips)
             {
-                floats.AddRange(clip.FloatBindings);
-                objects.AddRange(clip.ObjectBindings);
+                foreach (var binding in clip.FloatBindings)
+                {
+                    floats.Add((binding, clip.IsFromAdditiveLayer));
+                }
+
+                foreach (var binding in clip.ObjectBindings)
+                {
+                    objects.Add((binding, clip.IsFromAdditiveLayer));
+                }
             }
 
             var structural = structuralRefusalFor(
-                floats, objects, rendererPath, rendererTypeName);
+                floats.Select(pair => pair.Binding).ToList(),
+                objects.Select(pair => pair.Binding).ToList(),
+                rendererPath, rendererTypeName);
             if (structural != RendererAnalysisRefusal.None)
                 return Refused(structural);
 
             var relevantBindings = new List<(
                 CapturedFloatBinding Binding,
                 AnimatedPropertyRef Reference)>();
-            foreach (var binding in floats)
+            var anyRelevantFromAdditive = false;
+            foreach (var (binding, fromAdditiveLayer) in floats)
             {
                 var resolution =
                     resolveProofRelevant(
@@ -185,7 +198,10 @@ namespace Alrauna.Amuse.Editor.Analysis
                 }
 
                 if (resolution == ProofRelevantBindingResolution.RendererWide)
+                {
+                    anyRelevantFromAdditive |= fromAdditiveLayer;
                     relevantBindings.Add((binding, reference));
+                }
             }
 
             // An object-reference curve can name a proof-relevant material
@@ -193,7 +209,7 @@ namespace Alrauna.Amuse.Editor.Analysis
             // applies: recognized structural and material-slot forms are handled
             // above and below, anything else that could address a requested
             // property is unsupported syntax rather than irrelevant.
-            foreach (var binding in objects)
+            foreach (var (binding, _) in objects)
             {
                 if (unrecognizedObjectMaterialBinding(
                         binding, rendererPath, evidence.AlphaRelevanceRequest, rendererTypeName))
@@ -204,7 +220,25 @@ namespace Alrauna.Amuse.Editor.Analysis
                 }
             }
 
-            if (relevantBindings.Count > 0 && evidence.HasAdditiveLayer)
+            var anyAdditiveSourceObjectBinding = false;
+            foreach (var (binding, fromAdditiveLayer) in objects)
+            {
+                if (fromAdditiveLayer &&
+                    parseMaterialSlotBinding(
+                        binding.Path,
+                        binding.TypeName,
+                        binding.PropertyName,
+                        rendererPath,
+                        rendererTypeName,
+                        out _))
+                {
+                    anyAdditiveSourceObjectBinding = true;
+                    break;
+                }
+            }
+
+            // ponytail: weight-blind; a weight-0 additive layer refuses its own clips; model weights only if Census shows coverage loss
+            if (anyRelevantFromAdditive || anyAdditiveSourceObjectBinding)
             {
                 return Refused(
                     RendererAnalysisRefusal

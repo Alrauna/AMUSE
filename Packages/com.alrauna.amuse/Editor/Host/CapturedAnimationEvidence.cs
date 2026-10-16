@@ -193,7 +193,6 @@ namespace Alrauna.Amuse.Editor.Host
             IList<CapturedAlphaMaterial> admittedMaterials,
             IList<int> currentMaterialIndices,
             bool hasUnnormalizedDirectBlendTree,
-            bool hasAdditiveLayer,
             IList<int> ignoredOutOfRangeSlots = null,
             IList<SlotClosureFailure> slotClosureFailures = null)
         {
@@ -206,7 +205,6 @@ namespace Alrauna.Amuse.Editor.Host
             CurrentMaterialIndices = new ReadOnlyCollection<int>(
                 new List<int>(currentMaterialIndices));
             HasUnnormalizedDirectBlendTree = hasUnnormalizedDirectBlendTree;
-            HasAdditiveLayer = hasAdditiveLayer;
             IgnoredOutOfRangeSlots = new ReadOnlyCollection<int>(
                 new List<int>(ignoredOutOfRangeSlots ?? Array.Empty<int>()));
 
@@ -240,7 +238,6 @@ namespace Alrauna.Amuse.Editor.Host
         internal IReadOnlyList<int> CurrentMaterialIndices { get; }
 
         internal bool HasUnnormalizedDirectBlendTree { get; }
-        internal bool HasAdditiveLayer { get; }
 
         /// <summary>
         /// Material slot indices that were ignored during capture because they

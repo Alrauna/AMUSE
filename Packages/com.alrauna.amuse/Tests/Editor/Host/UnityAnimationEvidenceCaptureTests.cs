@@ -973,7 +973,6 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 new[] { material },
                 graph);
 
-            Assert.That(evidence.HasAdditiveLayer, Is.True);
             Assert.That(evidence.HasUnnormalizedDirectBlendTree, Is.True);
         }
 
@@ -1375,7 +1374,6 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             // the healthy sibling keeps its own slot evidence. The assigned
             // slot's material admits at index 0: the failed slot admitted
             // nothing.
-            Assert.That(evidence.HasAdditiveLayer, Is.True);
             Assert.That(evidence.HasUnnormalizedDirectBlendTree, Is.True);
             CollectionAssert.AreEqual(
                 new[] { -1, 0 }, evidence.CurrentMaterialIndices);

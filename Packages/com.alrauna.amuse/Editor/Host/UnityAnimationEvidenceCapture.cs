@@ -453,12 +453,9 @@ namespace Alrauna.Amuse.Editor.Host
                 throw new InvalidOperationException(
                     "Animation evidence capture requires a successful committed graph.");
 
-            var hasAdditiveLayer = false;
             var hasUnnormalizedDirectBlendTree = false;
             foreach (var layer in graph.Layers)
             {
-                hasAdditiveLayer |=
-                    layer.BlendingMode == AnimatorLayerBlendingMode.Additive;
                 hasUnnormalizedDirectBlendTree |=
                     layer.HasUnnormalizedDirectBlendTree;
             }
@@ -811,7 +808,6 @@ namespace Alrauna.Amuse.Editor.Host
                 capturedByIndex,
                 currentMaterialIndices,
                 hasUnnormalizedDirectBlendTree,
-                hasAdditiveLayer,
                 orderedIgnored,
                 slotClosureFailures);
         }

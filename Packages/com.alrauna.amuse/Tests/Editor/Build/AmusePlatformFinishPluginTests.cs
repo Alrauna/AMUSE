@@ -4093,8 +4093,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 var result = AnalyzeVerifiedRuntimeStates(
                     root, fixture.Renderer, out var evidence);
 
-                Assert.That(evidence.HasAdditiveLayer, Is.True,
-                    "fixture precondition: graph capture missed the additive layer");
+                Assert.That(evidence.Clips[0].IsFromAdditiveLayer, Is.True,
+                    "fixture precondition: the clip was not captured from " +
+                    "the additive layer");
                 Assert.That(evidence.Clips[0].FloatBindings,
                     Has.Some.Property("PropertyName")
                         .EqualTo("material._AlphaForceOpaque"),
@@ -4771,16 +4772,17 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 var result = AnalyzeVerifiedRuntimeStates(
                     root, fixture.Renderer, out var evidence);
 
-                Assert.That(evidence.HasAdditiveLayer, Is.True,
-                    "fixture precondition: graph capture missed the additive layer");
+                Assert.That(evidence.Clips[0].IsFromAdditiveLayer, Is.True,
+                    "fixture precondition: the clip was not captured from " +
+                    "the additive layer");
                 Assert.That(evidence.Clips[0].FloatBindings, Is.Empty,
                     "fixture precondition: the control unexpectedly has a material " +
                     "property binding");
                 Assert.That(result.Refusal,
-                    Is.EqualTo(RendererAnalysisRefusal.None),
-                    "a graph-global flag refused a renderer without a proof-relevant " +
-                    "animated material property");
-                Assert.That(result.OpaqueCandidateTriangleCount, Is.GreaterThan(0));
+                    Is.EqualTo(RendererAnalysisRefusal
+                        .AdditiveLayerWithProofRelevantMaterialProperty),
+                    "the additive material swap refuses under per-clip " +
+                    "provenance");
             }
             finally
             {
