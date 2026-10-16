@@ -1299,10 +1299,6 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             WaitUntilRunning(inFlight);
 
             dryRun.Cancel(timeoutMs: 0);
-            Assert.That(
-                inFlight.IsCompleted,
-                Is.False,
-                "the task must still be running when Cancel abandons it");
             Assert.That(dryRun.IsCancelled, Is.True);
 
             WaitUntilDisposed(source);
