@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "name": "Safe",
   "description": "Accepts desktop and mobile anisotropy differences. It does not allow slot or depth-test exceptions, and it never flattens a mixed material.",
   "features": {
@@ -13,6 +13,10 @@
     "minimumOpaqueAlphaPercent": 100,
     "polygonAlphaUpperClampPercent": 100,
     "polygonMinimumOpaqueCoveragePercent": 100,
+    "cutoutPreserveTransparencyMaxMipLevel": 4,
+    "cutoutPreserveTransparencyMinTextureSize": 128,
+    "cutoutMinimumOpaqueCoveragePercent": 25,
+    "cutoutMinimumOpaqueCoverageToPreservePercent": 0,
     "allowDepthTestChange": false,
     "ignoreOutOfRangeMaterialSlots": false,
     "acceptDesktopAnisotropyDifferences": true,

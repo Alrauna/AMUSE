@@ -92,12 +92,100 @@ namespace Alrauna.Amuse.Tests.Editor
         }
 
         [Test]
-        public void ApplyWritesAllTwelveFields()
+        public void ApplyingEachShippedPresetWritesItsCutoutValues()
+        {
+            Assert.That(PresetFileStore.TryLoadAll(
+                    out var presets, out var failedFile, out var refusal),
+                Is.True, failedFile + ": " + refusal);
+
+            var expected = new (string name, int mipCap, int size,
+                int coverage, int preserve)[]
+            {
+                ("Safe", 4, 128, 25, 0),
+                ("Normal", 4, 128, 25, 5),
+                ("Aggressive", 3, 128, 25, 10),
+            };
+
+            foreach (var row in expected)
+            {
+                var go = new GameObject("Root " + row.name);
+                try
+                {
+                    var optimizer =
+                        go.AddComponent<AmuseAvatarOptimizer>();
+
+                    // A first serialize and deserialize round trip runs
+                    // the one-time upgrade backfill and sets its marker.
+                    // Without it, every serialized apply re-runs the
+                    // backfill and overwrites a fresh cutout edit.
+                    var primed = UnityEditor.EditorJsonUtility.ToJson(
+                        optimizer);
+                    UnityEditor.EditorJsonUtility.FromJsonOverwrite(
+                        primed, optimizer);
+
+                    var serialized =
+                        new UnityEditor.SerializedObject(optimizer);
+
+                    // Push every cutout field away from the shipped
+                    // value first, so the apply must write each one.
+                    serialized.FindProperty(
+                            "_cutoutPreserveTransparencyMaxMipLevel")
+                        .intValue = 10;
+                    serialized.FindProperty(
+                            "_cutoutPreserveTransparencyMinTextureSize")
+                        .intValue = 8192;
+                    serialized.FindProperty(
+                            "_cutoutMinimumOpaqueCoveragePercent")
+                        .intValue = 100;
+                    serialized.FindProperty(
+                            "_cutoutMinimumOpaqueCoverageToPreservePercent")
+                        .intValue = 100;
+                    serialized.ApplyModifiedProperties();
+
+                    var preset = presets.Single(
+                        candidate => candidate.Name == row.name);
+                    serialized.Update();
+                    PresetApplier.Apply(preset, serialized);
+
+                    Assert.That(
+                        optimizer.CutoutPreserveTransparencyMaxMipLevel,
+                        Is.EqualTo(row.mipCap),
+                        row.name + " cutout mip cap");
+                    Assert.That(
+                        optimizer.CutoutPreserveTransparencyMinTextureSize,
+                        Is.EqualTo(row.size),
+                        row.name + " cutout texture size");
+                    Assert.That(
+                        optimizer.CutoutMinimumOpaqueCoveragePercent,
+                        Is.EqualTo(row.coverage),
+                        row.name + " cutout coverage percent");
+                    Assert.That(optimizer.
+                        CutoutMinimumOpaqueCoverageToPreservePercent,
+                        Is.EqualTo(row.preserve),
+                        row.name + " cutout preserve percent");
+                }
+                finally
+                {
+                    Object.DestroyImmediate(go);
+                }
+            }
+        }
+
+        [Test]
+        public void ApplyWritesAllSixteenFields()
         {
             var go = new GameObject("Root");
             try
             {
                 var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
+
+                // A first serialize and deserialize round trip runs the
+                // one-time upgrade backfill and sets its marker. Without
+                // it, every serialized apply re-runs the backfill and
+                // overwrites a fresh cutout edit.
+                var primed = UnityEditor.EditorJsonUtility.ToJson(optimizer);
+                UnityEditor.EditorJsonUtility.FromJsonOverwrite(
+                    primed, optimizer);
 
                 // Move every field away from the shipped values first,
                 // so the apply must write each one back.
@@ -106,13 +194,25 @@ namespace Alrauna.Amuse.Tests.Editor
                     .boolValue = false;
                 serialized.FindProperty("_preserveTransparencyMaxMipLevel")
                     .intValue = 1;
+                serialized.FindProperty(
+                        "_cutoutPreserveTransparencyMaxMipLevel")
+                    .intValue = 2;
                 serialized.FindProperty("_preserveTransparencyMinTextureSize")
                     .intValue = 256;
+                serialized.FindProperty(
+                        "_cutoutPreserveTransparencyMinTextureSize")
+                    .intValue = 512;
                 serialized.FindProperty("_minimumOpaqueCoveragePercent")
                     .intValue = 50;
                 serialized.FindProperty(
+                        "_cutoutMinimumOpaqueCoveragePercent")
+                    .intValue = 60;
+                serialized.FindProperty(
                         "_minimumOpaqueCoverageToPreservePercent")
                     .intValue = 75;
+                serialized.FindProperty(
+                        "_cutoutMinimumOpaqueCoverageToPreservePercent")
+                    .intValue = 65;
                 serialized.FindProperty("_minimumOpaqueAlphaPercent")
                     .intValue = 90;
                 serialized.FindProperty("_polygonAlphaUpperClampPercent")
@@ -139,11 +239,21 @@ namespace Alrauna.Amuse.Tests.Editor
                 Assert.That(optimizer.AlphaSeparatorEnabled, Is.True);
                 Assert.That(optimizer.PreserveTransparencyMaxMipLevel,
                     Is.EqualTo(4));
+                Assert.That(optimizer.CutoutPreserveTransparencyMaxMipLevel,
+                    Is.EqualTo(4));
                 Assert.That(optimizer.PreserveTransparencyMinTextureSize,
+                    Is.EqualTo(128));
+                Assert.That(
+                    optimizer.CutoutPreserveTransparencyMinTextureSize,
                     Is.EqualTo(128));
                 Assert.That(optimizer.MinimumOpaqueCoveragePercent,
                     Is.EqualTo(25));
+                Assert.That(optimizer.CutoutMinimumOpaqueCoveragePercent,
+                    Is.EqualTo(25));
                 Assert.That(optimizer.MinimumOpaqueCoverageToPreservePercent,
+                    Is.EqualTo(5));
+                Assert.That(
+                    optimizer.CutoutMinimumOpaqueCoverageToPreservePercent,
                     Is.EqualTo(5));
                 Assert.That(optimizer.MinimumOpaqueAlphaPercent,
                     Is.EqualTo(100));
