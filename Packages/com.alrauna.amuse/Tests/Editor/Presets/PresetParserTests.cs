@@ -18,7 +18,7 @@ namespace Alrauna.Amuse.Tests.Editor
     ""minimumOpaqueAlphaPercent"": 100,
     ""polygonAlphaUpperClampPercent"": 100,
     ""polygonMinimumOpaqueCoveragePercent"": 100,
-    ""cutoutPreserveTransparencyMaxMipLevel"": 4,
+    ""cutoutPreserveTransparencyMaxMipLevel"": 3,
     ""cutoutPreserveTransparencyMinTextureSize"": 128,
     ""cutoutMinimumOpaqueCoveragePercent"": 25,
     ""cutoutMinimumOpaqueCoverageToPreservePercent"": 0,
@@ -44,7 +44,7 @@ namespace Alrauna.Amuse.Tests.Editor
                     "    \"minimumOpaqueCoverageToPreservePercent\": 0,\n",
                     "")
                 .Replace(
-                    "    \"cutoutPreserveTransparencyMaxMipLevel\": 4,\n" +
+                    "    \"cutoutPreserveTransparencyMaxMipLevel\": 3,\n" +
                     "    \"cutoutPreserveTransparencyMinTextureSize\": 128,\n" +
                     "    \"cutoutMinimumOpaqueCoveragePercent\": 25,\n" +
                     "    \"cutoutMinimumOpaqueCoverageToPreservePercent\": 0,\n",
@@ -62,7 +62,7 @@ namespace Alrauna.Amuse.Tests.Editor
                     "    \"minimumOpaqueCoverageToPreservePercent\": 0,\n",
                     "")
                 .Replace(
-                    "    \"cutoutPreserveTransparencyMaxMipLevel\": 4,\n" +
+                    "    \"cutoutPreserveTransparencyMaxMipLevel\": 3,\n" +
                     "    \"cutoutPreserveTransparencyMinTextureSize\": 128,\n" +
                     "    \"cutoutMinimumOpaqueCoveragePercent\": 25,\n" +
                     "    \"cutoutMinimumOpaqueCoverageToPreservePercent\": 0,\n",
@@ -81,7 +81,7 @@ namespace Alrauna.Amuse.Tests.Editor
             return WithSettings(
                     "\"schemaVersion\": 4", "\"schemaVersion\": 3")
                 .Replace(
-                    "    \"cutoutPreserveTransparencyMaxMipLevel\": 4,\n" +
+                    "    \"cutoutPreserveTransparencyMaxMipLevel\": 3,\n" +
                     "    \"cutoutPreserveTransparencyMinTextureSize\": 128,\n" +
                     "    \"cutoutMinimumOpaqueCoveragePercent\": 25,\n" +
                     "    \"cutoutMinimumOpaqueCoverageToPreservePercent\": 0,\n",
@@ -106,7 +106,7 @@ namespace Alrauna.Amuse.Tests.Editor
             Assert.That(preset.AlphaSeparatorEnabled, Is.True);
             Assert.That(preset.PreserveTransparencyMaxMipLevel, Is.EqualTo(4));
             Assert.That(preset.CutoutPreserveTransparencyMaxMipLevel,
-                Is.EqualTo(4));
+                Is.EqualTo(3));
             Assert.That(preset.PreserveTransparencyMinTextureSize,
                 Is.EqualTo(128));
             Assert.That(preset.CutoutPreserveTransparencyMinTextureSize,
@@ -354,7 +354,7 @@ namespace Alrauna.Amuse.Tests.Editor
         private static string WithCutoutMipCap(int value)
         {
             return ValidJson.Replace(
-                "\"cutoutPreserveTransparencyMaxMipLevel\": 4",
+                "\"cutoutPreserveTransparencyMaxMipLevel\": 3",
                 "\"cutoutPreserveTransparencyMaxMipLevel\": " + value);
         }
 

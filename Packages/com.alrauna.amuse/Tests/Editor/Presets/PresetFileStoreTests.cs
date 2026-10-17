@@ -25,7 +25,7 @@ namespace Alrauna.Amuse.Tests.Editor
             "    \"minimumOpaqueAlphaPercent\": 100,\n" +
             "    \"polygonAlphaUpperClampPercent\": 100,\n" +
             "    \"polygonMinimumOpaqueCoveragePercent\": 100,\n" +
-            "    \"cutoutPreserveTransparencyMaxMipLevel\": 4,\n" +
+            "    \"cutoutPreserveTransparencyMaxMipLevel\": 3,\n" +
             "    \"cutoutPreserveTransparencyMinTextureSize\": 128,\n" +
             "    \"cutoutMinimumOpaqueCoveragePercent\": 25,\n" +
             "    \"cutoutMinimumOpaqueCoverageToPreservePercent\": 0,\n" +
