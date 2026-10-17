@@ -484,7 +484,7 @@ namespace Alrauna.Amuse.Tests.Editor
         }
 
         [Test]
-        public void DefaultCutoutPreserveTransparencyMaxMipLevelIs4()
+        public void DefaultCutoutPreserveTransparencyMaxMipLevelIs3()
         {
             var go = new GameObject("Root");
             try
@@ -492,11 +492,51 @@ namespace Alrauna.Amuse.Tests.Editor
                 var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
                 Assert.That(
                     optimizer.CutoutPreserveTransparencyMaxMipLevel,
-                    Is.EqualTo(4));
+                    Is.EqualTo(3));
             }
             finally
             {
                 UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        /// <summary>
+        /// --- Falsifier 1: an implementation that changes only the field
+        /// initializer to 3 without Reset. The first serialization round trip
+        /// runs the upgrade backfill and copies the transparent value over
+        /// the fresh 3, so the post-round-trip assertion fails. ---
+        /// </summary>
+        [Test]
+        public void FreshCutoutDefaultSurvivesASerializationRoundTrip()
+        {
+            var root = new GameObject("Root");
+            try
+            {
+                var fresh = root.AddComponent<AmuseAvatarOptimizer>();
+                Assert.That(fresh.CutoutPreserveTransparencyMaxMipLevel,
+                    Is.EqualTo(3), "the fresh default before the round trip");
+
+                var json = JsonUtility.ToJson(fresh);
+                var scratch = new GameObject("Scratch")
+                    .AddComponent<AmuseAvatarOptimizer>();
+                try
+                {
+                    JsonUtility.FromJsonOverwrite(json, scratch);
+                    Assert.That(scratch.CutoutPreserveTransparencyMaxMipLevel,
+                        Is.EqualTo(3), "the fresh default survives the round trip");
+                    // No-op guard: pinning the source component too, so a later
+                    // rewrite cannot silence this test by touching only one arm.
+                    Assert.That(fresh.CutoutPreserveTransparencyMaxMipLevel,
+                        Is.EqualTo(3));
+                }
+                finally
+                {
+                    UnityEngine.Object.DestroyImmediate(scratch);
+                }
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(root);
             }
         }
 
