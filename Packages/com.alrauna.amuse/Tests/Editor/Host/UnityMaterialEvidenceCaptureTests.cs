@@ -1,3 +1,4 @@
+using Alrauna.Amuse.Tests.Editor.Build;
 using Alrauna.Amuse.Tests.Editor.Shared;
 using System;
 using System.Collections;
@@ -28,6 +29,15 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             "Hidden/Alrauna/AmuseTests/LilToonSemanticTest";
         private const string LilToonCutoutConversionShader =
             "Hidden/Alrauna/AmuseTests/LilToonCutoutConversionTest";
+        private const string LilToonTransparentConversionShader =
+            "Hidden/Alrauna/AmuseTests/LilToonTransparentConversionTest";
+        private const string PoiyomiModeProperty = "_Mode";
+        private const string MultiCutoutContainerShaderPath =
+            "Packages/com.alrauna.amuse/Tests/Editor/Semantics/LilToon/" +
+            "LilToonMultiCutoutTest.shader";
+        private const string MultiTransparentContainerShaderPath =
+            "Packages/com.alrauna.amuse/Tests/Editor/Semantics/LilToon/" +
+            "LilToonMultiTransparentTest.shader";
 
         private readonly TestTransientScope _scope =
             new TestTransientScope();
@@ -901,6 +911,183 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 unrequested.Keywords,
                 Is.Empty,
                 "the request is closed: no flag, no keyword facts");
+        }
+
+        // --- Falsifier 8: A coverage selection keyed on the stored family enum routes a Poiyomi cutout preset and a plain Poiyomi sibling to the same pair. The Poiyomi sibling rows of this table assert different memberships and fail it. ---
+        [Test]
+        public void MenuMembershipRecordsPerMaterial()
+        {
+            // One closed batch covers the six menu-membership sources. Each
+            // recorded flag answers one question: does the material's own
+            // predicate request declare a cutoff property. The stored
+            // family alone cannot answer it. A Poiyomi cutout preset and a
+            // plain preset share one family and must not share one
+            // membership. A Multi container's own predicate request is the
+            // union schema, which carries every resolved mode's
+            // declaration, so the resolved mode's own family predicate
+            // decides at the one resolution point.
+            var cutoutMaterial = NewMaterial(LilToonCutoutConversionShader);
+            var transparentMaterial = NewMaterial(
+                LilToonTransparentConversionShader);
+            var multiCutoutMaterial = MultiContainerMaterial(
+                MultiCutoutContainerShaderPath, 1f, "UNITY_UI_ALPHACLIP");
+            var multiTransparentMaterial = MultiContainerMaterial(
+                MultiTransparentContainerShaderPath, 2f,
+                "UNITY_UI_CLIP_RECT");
+            var poiyomiCutoutMaterial = NewMaterial(PoiyomiFixtureShader);
+            poiyomiCutoutMaterial.SetFloat(PoiyomiModeProperty, 1f);
+            var poiyomiPlainMaterial = NewMaterial(PoiyomiFixtureShader);
+
+            var multiCutoutSelected =
+                UnityMaterialSemantics.TrySelectAlphaMaterialRequests(
+                    multiCutoutMaterial,
+                    out var multiCutoutFamily,
+                    out _,
+                    out var multiSchema);
+            Assert.That(multiCutoutSelected, Is.True);
+            Assert.That(
+                multiCutoutFamily,
+                Is.EqualTo(CapturedAlphaMaterialFamily.LilToonMulti));
+            var multiTransparentSelected =
+                UnityMaterialSemantics.TrySelectAlphaMaterialRequests(
+                    multiTransparentMaterial,
+                    out var multiTransparentFamily,
+                    out _,
+                    out _);
+            Assert.That(multiTransparentSelected, Is.True);
+            Assert.That(
+                multiTransparentFamily,
+                Is.EqualTo(CapturedAlphaMaterialFamily.LilToonMulti));
+
+            // One union request for the whole batch: each family's own
+            // capture schema, exactly as the production assembly unions
+            // the batch's selected schemas.
+            var request = MaterialEvidenceRequest.Combine(
+                MaterialEvidenceRequest.Combine(
+                    LilToonCutoutMaterialSemantics.AlphaEvidenceRequest,
+                    LilToonCutoutSourceEligibility
+                        .ConversionEvidenceRequest),
+                MaterialEvidenceRequest.Combine(
+                    LilToonTransparentMaterialSemantics
+                        .AlphaEvidenceRequest,
+                    LilToonTransparentSourceEligibility
+                        .ConversionEvidenceRequest),
+                multiSchema,
+                MaterialEvidenceRequest.Combine(
+                    PoiyomiMaterialSemantics.AlphaEvidenceRequest,
+                    PoiyomiOpaqueConversion.ConversionEvidenceRequest));
+
+            VerifiedLilToonTestSeams.CaptureVerifiedFixtureMaterials(
+                new[]
+                {
+                    cutoutMaterial,
+                    transparentMaterial,
+                    multiCutoutMaterial,
+                    multiTransparentMaterial,
+                    poiyomiCutoutMaterial,
+                    poiyomiPlainMaterial,
+                },
+                new[]
+                {
+                    CapturedAlphaMaterialFamily.LilToonCutout,
+                    CapturedAlphaMaterialFamily.LilToonTransparent,
+                    multiCutoutFamily,
+                    multiTransparentFamily,
+                    CapturedAlphaMaterialFamily.Poiyomi,
+                    CapturedAlphaMaterialFamily.Poiyomi,
+                },
+                request,
+                AlphaPolicyBounds.Inert,
+                int.MaxValue,
+                int.MaxValue,
+                out var captured);
+            Assert.That(captured.Captured, Has.Count.EqualTo(6));
+
+            Assert.That(
+                captured.Captured[0].Family,
+                Is.EqualTo(CapturedAlphaMaterialFamily.LilToonCutout));
+            Assert.That(
+                captured.Captured[0].PredicatesDeclareCutoff,
+                Is.True,
+                "the lilToon cutout family's own request declares the " +
+                "cutoff");
+            Assert.That(
+                captured.Captured[1].Family,
+                Is.EqualTo(CapturedAlphaMaterialFamily.LilToonTransparent));
+            Assert.That(
+                captured.Captured[1].PredicatesDeclareCutoff,
+                Is.False,
+                "the lilToon transparent family's own request declares " +
+                "no cutoff");
+            Assert.That(
+                captured.Captured[2].MultiResolution.IsResolved,
+                Is.True,
+                "the mode-1 container must resolve to prove the row is " +
+                "a resolved Multi record");
+            Assert.That(
+                captured.Captured[2].Family,
+                Is.EqualTo(CapturedAlphaMaterialFamily.LilToonCutout),
+                "the mode-1 container resolves to the cutout family");
+            Assert.That(
+                captured.Captured[2].PredicatesDeclareCutoff,
+                Is.True,
+                "the resolved mode-1 membership rides the cutout " +
+                "family's own declaration");
+            Assert.That(
+                captured.Captured[3].MultiResolution.IsResolved,
+                Is.True,
+                "the mode-2 container must resolve to prove the row is " +
+                "a resolved Multi record");
+            Assert.That(
+                captured.Captured[3].Family,
+                Is.EqualTo(CapturedAlphaMaterialFamily.LilToonTransparent),
+                "the mode-2 container resolves to the transparent " +
+                "family");
+            Assert.That(
+                captured.Captured[3].PredicatesDeclareCutoff,
+                Is.False,
+                "the resolved mode-2 membership rides the transparent " +
+                "family's own declaration");
+            Assert.That(
+                captured.Captured[4].Family,
+                Is.EqualTo(CapturedAlphaMaterialFamily.Poiyomi));
+            Assert.That(
+                captured.Captured[4].PredicatesDeclareCutoff,
+                Is.True,
+                "the cutout preset's own predicate declares the cutoff " +
+                "under the same stored family as row six");
+            Assert.That(
+                captured.Captured[5].Family,
+                Is.EqualTo(CapturedAlphaMaterialFamily.Poiyomi));
+            Assert.That(
+                captured.Captured[5].PredicatesDeclareCutoff,
+                Is.False,
+                "the plain preset's own predicate declares no cutoff " +
+                "under the same stored family as row five");
+        }
+
+        /// <summary>
+        /// Creates one committed Multi container stand-in material at one
+        /// mode's vendor state. The stand-in loads by asset path, because
+        /// the fixture containers share the vendor-mimic shader name. The
+        /// mode and both gate scalars are set explicitly, so the fixture
+        /// never depends on stand-in defaults.
+        /// </summary>
+        private Material MultiContainerMaterial(
+            string shaderAssetPath,
+            float transparentMode,
+            string modeKeyword)
+        {
+            var shader =
+                AssetDatabase.LoadAssetAtPath<Shader>(shaderAssetPath);
+            Assert.That(shader, Is.Not.Null, shaderAssetPath);
+            var material = new Material(shader);
+            _scope.Track(material);
+            material.SetFloat("_TransparentMode", transparentMode);
+            material.SetFloat("_UseClippingCanceller", 0f);
+            material.SetFloat("_AsOverlay", 0f);
+            material.shaderKeywords = new[] { modeKeyword };
+            return material;
         }
 
         [Test]

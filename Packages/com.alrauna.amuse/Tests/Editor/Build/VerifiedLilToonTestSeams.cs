@@ -135,16 +135,22 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             var shaders = new Shader[materials.Count];
             var inputs = new MaterialEvidenceCaptureInput[materials.Count];
+            var declaresCutoff = new bool[materials.Count];
             for (var index = 0; index < materials.Count; index++)
             {
                 shaders[index] = materials[index] == null
                     ? null
                     : materials[index].shader;
+                var predicate = UnityMaterialSemantics
+                    .AlphaPredicateRequestFor(
+                        materials[index], families[index]);
                 inputs[index] = new MaterialEvidenceCaptureInput(
                     materials[index],
                     request,
-                    UnityMaterialSemantics.AlphaPredicateRequestFor(
-                        materials[index], families[index]));
+                    predicate);
+                declaresCutoff[index] =
+                    UnityMaterialSemantics.PredicateDeclaresCutoff(
+                        predicate);
             }
 
             var evidence = UnityMaterialEvidenceCapture.Capture(
@@ -174,6 +180,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     if (multiResolution.IsResolved)
                     {
                         lilToon = multiResolution.SourceEvidence;
+                        // The same resolution-point re-derivation the
+                        // production build runs: the container's union
+                        // request declares every resolved mode's cutoff,
+                        // so the resolved family's own predicate decides.
+                        declaresCutoff[index] = UnityMaterialSemantics
+                            .PredicateDeclaresCutoff(
+                                UnityMaterialSemantics
+                                    .AlphaPredicateRequestFor(
+                                        materials[index], family));
                     }
                 }
                 else
@@ -214,6 +229,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 result[index] = new CapturedAlphaMaterial(
                     family, evidence[index], poiyomi, lilToon,
                     multiResolution: multiResolution,
+                    predicatesDeclareCutoff: declaresCutoff[index],
                     materialPath: source != null
                         ? AssetDatabase.GetAssetPath(source)
                         : null,

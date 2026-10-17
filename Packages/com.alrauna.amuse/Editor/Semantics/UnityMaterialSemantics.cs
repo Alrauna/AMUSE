@@ -80,6 +80,16 @@ namespace Alrauna.Amuse.Editor.Semantics
         internal string MaterialName { get; }
         internal string ShaderName { get; }
 
+        /// <summary>
+        /// Whether the material's own predicate request declares a cutoff
+        /// property. The stored family alone cannot answer this: a Poiyomi
+        /// cutout preset and a plain preset share one family, and a Multi
+        /// container's union request carries every resolved mode's
+        /// declaration. Later coverage selection reads this recorded fact
+        /// instead of re-deriving the predicate at the far end of capture.
+        /// </summary>
+        public bool PredicatesDeclareCutoff { get; }
+
         internal CapturedAlphaMaterial(
             CapturedAlphaMaterialFamily family,
             CapturedMaterialEvidence evidence,
@@ -90,7 +100,8 @@ namespace Alrauna.Amuse.Editor.Semantics
             string materialPath = null,
             string materialName = null,
             string shaderName = null,
-            LilToonMultiResolutionRecord multiResolution = null)
+            LilToonMultiResolutionRecord multiResolution = null,
+            bool predicatesDeclareCutoff = false)
         {
             if (!Enum.IsDefined(typeof(CapturedAlphaMaterialFamily), family))
             {
@@ -146,6 +157,7 @@ namespace Alrauna.Amuse.Editor.Semantics
             MaterialPath = materialPath;
             MaterialName = materialName;
             ShaderName = shaderName;
+            PredicatesDeclareCutoff = predicatesDeclareCutoff;
         }
     }
 
@@ -388,16 +400,24 @@ namespace Alrauna.Amuse.Editor.Semantics
         {
             var shaders = new Shader[materials.Count];
             var inputs = new MaterialEvidenceCaptureInput[materials.Count];
+            var declaresCutoff = new bool[materials.Count];
             for (var index = 0; index < materials.Count; index++)
             {
                 shaders[index] = materials[index] == null
                     ? null
                     : materials[index].shader;
+                var predicate = AlphaPredicateRequestFor(
+                    materials[index], families[index]);
                 inputs[index] = new MaterialEvidenceCaptureInput(
                     materials[index],
                     requests[index],
-                    AlphaPredicateRequestFor(
-                        materials[index], families[index]));
+                    predicate);
+                // The membership fact is evaluated once per material on the
+                // material's own predicate request. The gate mirrors
+                // DeclaresCutoffFor at the request level, so one sibling
+                // family's declaration never reads as another family's
+                // membership.
+                declaresCutoff[index] = PredicateDeclaresCutoff(predicate);
             }
 
             // The null-bounds route serves conversion eligibility and
@@ -410,7 +430,7 @@ namespace Alrauna.Amuse.Editor.Semantics
                     inputs, bounds.Value, cutoutRawMipCap, exactRawMipCap);
             return BuildCapturedAlphaMaterials(
                 materials, families, requests, shaders, evidence,
-                resolveRegisteredSource);
+                declaresCutoff, resolveRegisteredSource);
         }
 
         /// <summary>
@@ -514,6 +534,7 @@ namespace Alrauna.Amuse.Editor.Semantics
                 IReadOnlyList<MaterialEvidenceRequest> requests,
                 IReadOnlyList<Shader> shaders,
                 IReadOnlyList<CapturedMaterialEvidence> evidence,
+                bool[] declaresCutoff,
                 RegisteredSourceLookup resolveRegisteredSource = null)
         {
             var results = new CapturedAlphaMaterial[materials.Count];
@@ -540,6 +561,14 @@ namespace Alrauna.Amuse.Editor.Semantics
                     if (multiResolution.IsResolved)
                     {
                         lilToon = multiResolution.SourceEvidence;
+                        // The container's predicate request is the union
+                        // schema, which declares every resolved mode's
+                        // cutoff. The resolved family's own predicate
+                        // decides the membership, so the resolved record
+                        // re-derives it here at the one resolution point.
+                        declaresCutoff[index] = PredicateDeclaresCutoff(
+                            AlphaPredicateRequestFor(
+                                materials[index], family));
                     }
                 }
                 else if (family == CapturedAlphaMaterialFamily.Poiyomi ||
@@ -575,6 +604,7 @@ namespace Alrauna.Amuse.Editor.Semantics
                 results[index] = new CapturedAlphaMaterial(
                     family, evidence[index], poiyomi, lilToon,
                     multiResolution: multiResolution,
+                    predicatesDeclareCutoff: declaresCutoff[index],
                     materialPath: namedSource != null
                         ? AssetDatabase.GetAssetPath(namedSource)
                         : null,
@@ -845,6 +875,35 @@ namespace Alrauna.Amuse.Editor.Semantics
         }
 
         /// <summary>
+        /// Whether the predicate request declares a cutoff property. This
+        /// mirrors the per-texture gate the capture assignments run on the
+        /// input's own predicate, lifted to the whole request. A null
+        /// predicate answers false: no family predicate exists, so the
+        /// material declares nothing of its own. The capture-side gate
+        /// answers true there, because the union request's declaration is
+        /// then the caller's own, but that answer is a capture routing
+        /// rule, not a membership fact.
+        /// </summary>
+        internal static bool PredicateDeclaresCutoff(
+            MaterialEvidenceRequest predicate)
+        {
+            if (predicate == null)
+            {
+                return false;
+            }
+
+            foreach (var texture in predicate.TextureProperties)
+            {
+                if (texture.CutoffScalarProperty != null)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
         /// Poiyomi's capture schema is its alpha request plus conversion's
         /// own request, so one capture serves both readers. The cutout and
         /// transparent lilToon frontends widen their alpha requests the
@@ -996,7 +1055,9 @@ namespace Alrauna.Amuse.Editor.Semantics
                         captured.LockedIdentityRefusal,
                         captured.MaterialPath,
                         captured.MaterialName,
-                        captured.ShaderName),
+                        captured.ShaderName,
+                        predicatesDeclareCutoff:
+                            captured.PredicatesDeclareCutoff),
                     false);
             }
 
