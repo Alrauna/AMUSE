@@ -19,6 +19,8 @@ namespace Alrauna.Amuse.Tests.Editor
         private const string MinTextureSizePath =
             "_preserveTransparencyMinTextureSize";
         private const string OpaqueAlphaPath = "_minimumOpaqueAlphaPercent";
+        private const string CutoutMipCapPath =
+            "_cutoutPreserveTransparencyMaxMipLevel";
 
         private GameObject _root;
         private RepaintHostWindow _window;
@@ -150,6 +152,34 @@ namespace Alrauna.Amuse.Tests.Editor
         }
 
         [UnityTest]
+        public IEnumerator SubmenuHeadersDrawUnderTheReveal()
+        {
+            // The reveal is on, because the block stays hidden until
+            // the Advanced Settings reveal turns on. The host window
+            // opens the Settings foldout and the parent foldout.
+            var component = NewHiddenComponent();
+            var headersDrawn = new List<string>();
+            Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor.OnFoldoutHeaderDrawnForTest =
+                header => headersDrawn.Add(header);
+            try
+            {
+                yield return RepaintThroughHostWindow(component);
+            }
+            finally
+            {
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                    .OnFoldoutHeaderDrawnForTest = null;
+            }
+
+            Assert.That(headersDrawn, Contains.Item("Alpha Separator Settings"),
+                "the parent foldout header must draw under the reveal");
+            Assert.That(headersDrawn, Contains.Item("Transparent"),
+                "the transparent submenu header must draw under the reveal");
+            Assert.That(headersDrawn, Contains.Item("Cutout"),
+                "the cutout submenu header must draw under the reveal");
+        }
+
+        [UnityTest]
         public IEnumerator PlainRepaintDoesNotRewriteStoredMipCap()
         {
             // The stored mip cap sits outside the drawn band. One
@@ -178,6 +208,38 @@ namespace Alrauna.Amuse.Tests.Editor
                     .StoredValueIsOutOfBand(15, -1, 10),
                 Is.True,
                 "a stored mip cap of 15 must count as out-of-band");
+            var message = Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                .OutOfBandWarning("Smallest Tested Mipmap", 15,
+                    Mathf.Clamp(15, -1, 10));
+            Assert.That(message, Does.Contain("15"),
+                "the warning must name the stored value");
+            Assert.That(message, Does.Contain("10"),
+                "the warning must state the nearest legal value");
+            Assert.That(message, Does.Contain(
+                "only when you change this control"));
+        }
+
+        [UnityTest]
+        public IEnumerator OutOfBandCutoutMipCapStaysAndWarns()
+        {
+            var component = NewHiddenComponent();
+
+            // A first round trip runs the one-time upgrade backfill,
+            // so this serialized edit survives later applies.
+            var primed = EditorJsonUtility.ToJson(component);
+            EditorJsonUtility.FromJsonOverwrite(primed, component);
+
+            SetStored(component, CutoutMipCapPath, 15);
+            yield return RepaintThroughHostWindow(component);
+
+            Assert.That(Stored(component, CutoutMipCapPath),
+                Is.EqualTo(15),
+                "a plain repaint rewrote the stored cutout mip cap");
+            Assert.That(
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                    .StoredValueIsOutOfBand(15, -1, 10),
+                Is.True,
+                "a stored cutout mip cap of 15 must count as out-of-band");
             var message = Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
                 .OutOfBandWarning("Smallest Tested Mipmap", 15,
                     Mathf.Clamp(15, -1, 10));

@@ -22,6 +22,15 @@ namespace Alrauna.Amuse.Editor
         private bool _alphaSeparatorOpen = true;
 
         /// <summary>
+        /// The two submenu states live in the editor session, like
+        /// the foldout states above. Both submenus start open. No
+        /// serialized field stores them, so presets, Undo, and
+        /// Reset stay untouched.
+        /// </summary>
+        private bool _transparentSettingsOpen = true;
+        private bool _cutoutSettingsOpen = true;
+
+        /// <summary>
         /// The two foldout states live in the editor session, like
         /// the two states above. No serialized field stores them, so
         /// presets, Undo, and Reset stay untouched.
@@ -431,12 +440,11 @@ namespace Alrauna.Amuse.Editor
         /// <summary>
         /// The preset row. One button per shipped preset file, in the
         /// fixed order safe, normal, aggressive. A button presses only
-        /// while the component matches that preset on all twelve
-        /// fields,
-        /// so the pressed state is always honest and never stored. A
-        /// broken preset file turns the row off with a warning,
-        /// because a row over a partial preset universe could claim a
-        /// match it cannot prove.
+        /// while the component matches that preset on all sixteen
+        /// fields, so the pressed state is always honest and never
+        /// stored. A broken preset file turns the row off with a
+        /// warning, because a row over a partial preset universe could
+        /// claim a match it cannot prove.
         /// </summary>
         private void DrawPresetRow()
         {
@@ -644,11 +652,107 @@ namespace Alrauna.Amuse.Editor
                 "acceptance setting the build reads. It never " +
                 "writes a value.");
 
+        private static readonly GUIContent CutoutMipCapRowContent =
+            new GUIContent(
+                "Smallest Tested Mipmap",
+                "A mipmap is a smaller copy of a texture. Each " +
+                "copy is half the size of the copy before it. " +
+                "The GPU shows the small copies when the avatar " +
+                "is far away or small on screen. A cutout " +
+                "texture uses a hard cutoff. A texel at or above " +
+                "the cutoff is opaque. A texel below it is " +
+                "discarded. The cutout proof checks the copies " +
+                "before it moves a triangle onto an opaque " +
+                "material. One unproven texel in a checked copy " +
+                "stops the move. This setting sets the smallest " +
+                "copy the cutout proof checks. AMUSE ignores " +
+                "every smaller copy. Moving toward mip 0 can " +
+                "improve performance at the cost of quality at a " +
+                "distance. Moving away from mip 0 can improve " +
+                "quality at a distance at the cost of " +
+                "performance. Mip 0 is the full texture. A 2048 " +
+                "by 2048 texture renders at 128 by 128 at mip 4. " +
+                "The default of Mip 4 fits most viewing " +
+                "distances. Select All Mips to check every copy. " +
+                "This is the safest choice. Select a larger " +
+                "level when a cutout part looks solid at long " +
+                "distance where it should show through. Select a " +
+                "smaller level when AMUSE moves too few cutout " +
+                "triangles. This setting governs cutout sources " +
+                "only. The Transparent submenu holds the " +
+                "transparent setting.");
+
+        private static readonly GUIContent CutoutMinTextureRowContent =
+            new GUIContent(
+                "Smallest Tested Texture",
+                "This setting works like the cutout Smallest " +
+                "Tested Mipmap, but as an absolute size in " +
+                "texels instead of a mipmap number. A mipmap is " +
+                "a smaller copy of a texture. The cutout proof " +
+                "stops checking a texture when a copy is smaller " +
+                "than this size on either side. A texture smaller " +
+                "than this size on either side is never checked, " +
+                "so its triangles never move. Select All Sizes to " +
+                "check every copy of every texture. Select a " +
+                "smaller size to check more copies when a cutout " +
+                "part looks solid far away where it should show " +
+                "through. Select a larger size to check fewer " +
+                "copies when AMUSE moves too few cutout " +
+                "triangles. The default of 128 fits most viewing " +
+                "distances. This setting governs cutout sources " +
+                "only. The Transparent submenu holds the " +
+                "transparent setting.");
+
+        private static readonly GUIContent CutoutMaterialCoverageRowContent =
+            new GUIContent(
+                "Minimum Opaque Coverage to Convert (Per Material)",
+                "AMUSE moves proven opaque triangles of a mixed " +
+                "cutout material onto a separate opaque material. " +
+                "Each split adds one draw call, and draw calls " +
+                "cost CPU time. This setting sets the smallest " +
+                "share of proven opaque triangles a mixed cutout " +
+                "material needs before AMUSE does the split. The " +
+                "share counts every triangle of that material " +
+                "slot. Use 0 to always split when at least one " +
+                "triangle is proven opaque. Raise the value to " +
+                "skip splits that move too little. This setting " +
+                "governs cutout sources only. The Transparent " +
+                "submenu holds the transparent setting.");
+
+        private static readonly GUIContent CutoutPreserveCoverageRowContent =
+            new GUIContent(
+                "Minimum Opaque Coverage to Preserve (Per Material)",
+                "AMUSE splits a mixed cutout material. The proven " +
+                "opaque triangles move onto a separate opaque " +
+                "material. Each split adds one draw call. Some " +
+                "cutout materials are almost fully opaque. A " +
+                "split for such a material can cost more than it " +
+                "saves. A material whose unproven share sits " +
+                "below this value skips the split. It moves onto " +
+                "the opaque material in full. No proof is needed " +
+                "for the move. Triangles that would keep their " +
+                "transparency lose it. The share counts the " +
+                "triangles of one submesh. A material slot that " +
+                "binds several submeshes flattens only when every " +
+                "one of its submeshes sits below this value. This " +
+                "setting works together with the cutout Minimum " +
+                "Opaque Coverage to Convert (Per Material). The " +
+                "convert setting decides whether a split is big " +
+                "enough to pay for. This setting decides whether " +
+                "a material is opaque enough to skip the split. " +
+                "The value 0 never flattens a material. It is the " +
+                "Safe preset value. This setting governs cutout " +
+                "sources only. The Transparent submenu holds the " +
+                "transparent setting.");
+
         /// <summary>
         /// The Alpha Separator Settings row contents in draw order.
         /// One source of truth feeds both the draw calls and the
         /// shared label width, so a label change cannot drift away
-        /// from its measurement.
+        /// from its measurement. The Transparent submenu draws the
+        /// first seven rows. The acceptance rows sit between the
+        /// submenus and stay outside them. The Cutout submenu draws
+        /// the last four rows.
         /// </summary>
         private static readonly GUIContent[] RowContents =
         {
@@ -662,6 +766,10 @@ namespace Alrauna.Amuse.Editor
             AcceptDesktopRowContent,
             AcceptMobileRowContent,
             ActiveSamplingProofRowContent,
+            CutoutMipCapRowContent,
+            CutoutMinTextureRowContent,
+            CutoutMaterialCoverageRowContent,
+            CutoutPreserveCoverageRowContent,
         };
 
         /// <summary>
@@ -670,7 +778,8 @@ namespace Alrauna.Amuse.Editor
         /// levels the opacity proof consults, and how big a split must
         /// be before AMUSE pays a draw call for it. It stays hidden
         /// until the Advanced Settings reveal in Settings is on,
-        /// because most users never change this policy.
+        /// because most users never change this policy. The body
+        /// draws the acceptance group first. The two submenus follow.
         /// </summary>
         private void DrawAlphaSeparatorSettings()
         {
@@ -687,15 +796,68 @@ namespace Alrauna.Amuse.Editor
                 content => EditorStyles.label.CalcSize(content).x);
             var previousWidth = EditorGUIUtility.labelWidth;
             EditorGUIUtility.labelWidth = Mathf.Ceil(widest) + 2f;
-            DrawMipCapPopup();
-            DrawMinTextureSizePopup();
+            DrawAcceptanceControls();
+            DrawTransparentSubmenu();
+            DrawCutoutSubmenu();
+            EditorGUIUtility.labelWidth = previousWidth;
+            serializedObject.ApplyModifiedProperties();
+        }
+
+        /// <summary>
+        /// The Transparent submenu. It holds the seven policy rows
+        /// that moved under it. The rows draw through the existing
+        /// methods with their existing arguments. A closed submenu
+        /// draws nothing.
+        /// </summary>
+        private void DrawTransparentSubmenu()
+        {
+            _transparentSettingsOpen = EditorGUILayout.Foldout(
+                _transparentSettingsOpen, "Transparent",
+                EditorStyles.foldoutHeader);
+            OnFoldoutHeaderDrawnForTest?.Invoke("Transparent");
+            if (!_transparentSettingsOpen)
+            {
+                return;
+            }
+
+            DrawMipCapPopup(
+                "_preserveTransparencyMaxMipLevel", MipCapRowContent);
+            DrawMinTextureSizePopup(
+                "_preserveTransparencyMinTextureSize",
+                MinTextureRowContent);
             DrawCoverageSlider();
             PercentSlider("_minimumOpaqueCoverageToPreservePercent",
                 PreserveCoverageRowContent);
             DrawAlphaPolicyControls();
-            DrawAcceptanceControls();
-            EditorGUIUtility.labelWidth = previousWidth;
-            serializedObject.ApplyModifiedProperties();
+        }
+
+        /// <summary>
+        /// The Cutout submenu. It holds the four cutout rows. The
+        /// popups share the transparent draw helpers with the cutout
+        /// property paths and contents. The coverage rows call
+        /// PercentSlider directly.
+        /// </summary>
+        private void DrawCutoutSubmenu()
+        {
+            _cutoutSettingsOpen = EditorGUILayout.Foldout(
+                _cutoutSettingsOpen, "Cutout",
+                EditorStyles.foldoutHeader);
+            OnFoldoutHeaderDrawnForTest?.Invoke("Cutout");
+            if (!_cutoutSettingsOpen)
+            {
+                return;
+            }
+
+            DrawMipCapPopup(
+                "_cutoutPreserveTransparencyMaxMipLevel",
+                CutoutMipCapRowContent);
+            DrawMinTextureSizePopup(
+                "_cutoutPreserveTransparencyMinTextureSize",
+                CutoutMinTextureRowContent);
+            PercentSlider("_cutoutMinimumOpaqueCoveragePercent",
+                CutoutMaterialCoverageRowContent);
+            PercentSlider("_cutoutMinimumOpaqueCoverageToPreservePercent",
+                CutoutPreserveCoverageRowContent);
         }
 
         /// <summary>
@@ -773,10 +935,9 @@ namespace Alrauna.Amuse.Editor
             }
         }
 
-        private void DrawMipCapPopup()
+        private void DrawMipCapPopup(string propertyPath, GUIContent content)
         {
-            var property = serializedObject.FindProperty(
-                "_preserveTransparencyMaxMipLevel");
+            var property = serializedObject.FindProperty(propertyPath);
 
             // Index 0 is "All Mips" (stored -1); index i maps to level i-1.
             var options = new[]
@@ -788,7 +949,7 @@ namespace Alrauna.Amuse.Editor
             if (StoredValueIsOutOfBand(stored, LowestMipCap, HighestMipCap))
             {
                 EditorGUILayout.HelpBox(
-                    OutOfBandWarning(MipCapRowContent.text, stored,
+                    OutOfBandWarning(content.text, stored,
                         Mathf.Clamp(stored, LowestMipCap, HighestMipCap)),
                     MessageType.Warning);
             }
@@ -797,7 +958,7 @@ namespace Alrauna.Amuse.Editor
                 : Mathf.Min(stored + 1, options.Length - 1);
             EditorGUI.BeginChangeCheck();
             var selected = EditorGUILayout.Popup(
-                MipCapRowContent,
+                content,
                 index,
                 options);
             if (EditorGUI.EndChangeCheck())
@@ -806,10 +967,10 @@ namespace Alrauna.Amuse.Editor
             }
         }
 
-        private void DrawMinTextureSizePopup()
+        private void DrawMinTextureSizePopup(
+            string propertyPath, GUIContent content)
         {
-            var sizeProperty = serializedObject.FindProperty(
-                "_preserveTransparencyMinTextureSize");
+            var sizeProperty = serializedObject.FindProperty(propertyPath);
 
             // Index 0 is "All Sizes" (stored -1); index i maps to 2^i.
             var sizeOptions = new string[14];
@@ -824,7 +985,7 @@ namespace Alrauna.Amuse.Editor
             if (TextureSizeIsOutOfBand(storedSize))
             {
                 EditorGUILayout.HelpBox(
-                    OutOfBandWarning(MinTextureRowContent.text,
+                    OutOfBandWarning(content.text,
                         storedSize,
                         NearestLegalTextureSize(storedSize)),
                     MessageType.Warning);
@@ -843,7 +1004,7 @@ namespace Alrauna.Amuse.Editor
 
             EditorGUI.BeginChangeCheck();
             var selectedSize = EditorGUILayout.Popup(
-                MinTextureRowContent,
+                content,
                 sizeIndex,
                 sizeOptions);
             if (EditorGUI.EndChangeCheck())
