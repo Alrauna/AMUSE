@@ -14,6 +14,7 @@ using Alrauna.Amuse.Editor.Semantics.Poiyomi;
 using Alrauna.Amuse.Runtime;
 using Alrauna.Amuse.Tests.Editor.Build;
 using Alrauna.Amuse.Tests.Editor.Semantics.LilToon;
+using Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi;
 using Alrauna.Amuse.Tests.Editor.Shared;
 using nadena.dev.ndmf;
 using nadena.dev.ndmf.animator;
@@ -408,8 +409,19 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                     return true;
                 }
 
-                return VerifiedPoiyomiTestSeams.SelectVerifiedFixtureRequest(
-                    material, out family, out alpha, out capture);
+                if (material != null &&
+                    material.shader == Shader.Find(
+                        PoiyomiFixtureTestBase.FixtureShaderName))
+                {
+                    return VerifiedPoiyomiTestSeams
+                        .SelectVerifiedFixtureRequest(
+                            material, out family, out alpha, out capture);
+                }
+
+                family = CapturedAlphaMaterialFamily.Unsupported;
+                alpha = null;
+                capture = null;
+                return false;
             });
 
         private ClosedAlphaMaterialCapturer FixtureCapturer() =>

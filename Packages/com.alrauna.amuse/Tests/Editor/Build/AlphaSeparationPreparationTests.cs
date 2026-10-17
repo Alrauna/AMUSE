@@ -5352,17 +5352,21 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 },
                 serialized =>
                 {
+                    // The arm's material is cutout-recorded, so its proof
+                    // reads the cutout arm's own policy fields since the
+                    // arm-scoped field selection. The Task 5 follow-up the
+                    // review adjudicated writes those fields here.
                     if (maxMipLevel.HasValue)
                     {
                         serialized.FindProperty(
-                                "_preserveTransparencyMaxMipLevel")
+                                "_cutoutPreserveTransparencyMaxMipLevel")
                             .intValue = maxMipLevel.Value;
                     }
 
                     if (minTextureSize.HasValue)
                     {
                         serialized.FindProperty(
-                                "_preserveTransparencyMinTextureSize")
+                                "_cutoutPreserveTransparencyMinTextureSize")
                             .intValue = minTextureSize.Value;
                     }
                 },
