@@ -16,7 +16,7 @@ A transformation contract states required conditions and permitted changes. AMUS
 
 A policy is a set of rules for permitted changes. The long-term default is practical preservation of appearance and avatar controls. A stricter compatibility policy can preserve additional behavior that unusual effects require. An experimental policy can permit stated quality or behavior changes only through an explicit user choice. The interface must explain these differences instead of using an undefined promise such as “lossless.”
 
-Alpha controls transparency. The current product has individual controls, not these three named policies. A mip level is a smaller version of a texture. The default alpha policy limits evidence to mip level 4 and a minimum size of 128 texture pixels. Thus, the current proof does not cover every texture level that the graphics processor can sample. These are policy limits, not a measured guarantee of equal appearance at every distance, as [the component](../../Packages/com.alrauna.amuse/Runtime/AmuseAvatarOptimizer.cs) makes explicit.
+Alpha controls transparency. The current product has individual controls, not these three named policies. A mip level is a smaller version of a texture. The default alpha policy limits evidence to mip level 4, and to mip level 3 for cutout sources, with a minimum size of 128 texture pixels. Thus, the current proof does not cover every texture level that the graphics processor can sample. These are policy limits, not a measured guarantee of equal appearance at every distance, as [the component](../../Packages/com.alrauna.amuse/Runtime/AmuseAvatarOptimizer.cs) makes explicit.
 
 ## Local uncertainty and visible errors
 

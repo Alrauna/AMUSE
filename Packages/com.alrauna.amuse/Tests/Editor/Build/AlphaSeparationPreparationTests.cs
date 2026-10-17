@@ -4915,7 +4915,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// <summary>
         /// The component's "Preserve Transparency Maximum Mipmap" policy
         /// scopes the opacity proof end to end. A chain that stays opaque
-        /// through mip 4 and fades only in its 1x1 tail proves its triangle
+        /// through mip 3 and fades only in its 1x1 tail proves its triangle
         /// under the default cap. The same texture under "All Mips" does
         /// not, because the faded tail is consulted again. A fade inside
         /// the cap still stops the proof under the default cap.
