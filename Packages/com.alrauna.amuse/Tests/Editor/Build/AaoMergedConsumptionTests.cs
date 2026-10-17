@@ -191,7 +191,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 + " admittedLive=" + admittedLiveMaterials.Count);
 
             var fields = UnityRendererAlphaAnalysis.GatherAlphaFields(
-                evidence.AdmittedMaterials, 4, 128);
+                evidence.AdmittedMaterials,
+                int.MaxValue, int.MaxValue, 1, 1);
             var semantics =
                 UnityMaterialSemantics.AnalyzeAlphaMaterial(
                     evidence.AdmittedMaterials[0]);

@@ -635,8 +635,8 @@ namespace Alrauna.Amuse.Editor.Host
             }
 
             resolveSemantics ??= UnityMaterialSemantics.AnalyzeAlphaMaterial;
-            var fields =
-                GatherAlphaFields(snapshot.Materials, int.MaxValue, 1);
+            var fields = GatherAlphaFields(
+                snapshot.Materials, int.MaxValue, int.MaxValue, 1, 1);
             // The density stays zero on this path. It is the structural
             // refusal probe, so it must never convert a triangle on the
             // strength of the noise allowance.
@@ -748,13 +748,15 @@ namespace Alrauna.Amuse.Editor.Host
 
         /// <summary>
         /// Collects the alpha and red field chains of every admitted
-        /// texture, each truncated to the proof's mip cap: levels above
-        /// <paramref name="maxMipLevel"/> are the user's accepted
-        /// minification range and leave the proof's scope, so no consumer
-        /// can consult them. The stored evidence keeps its full chains;
-        /// only the handed-out proof scope is capped. The minimum
-        /// texture size drops a texture from the proof entirely when
-        /// even mip 0 is smaller than the size.
+        /// texture. Each texture takes its proof scope from its own arm:
+        /// a captured threshold below one reads the cutout pair, and the
+        /// 1.0 sentinel reads the transparent pair. Levels above the
+        /// arm's cap are the user's accepted minification range for that
+        /// arm and leave the proof's scope, so no consumer can consult
+        /// them. The stored evidence keeps its full chains. Only the
+        /// handed-out proof scope is capped. The arm's minimum texture
+        /// size drops a texture from that arm's proof entirely when even
+        /// mip 0 is smaller than the size.
         /// <para>
         /// The field key carries the capture predicate - the declared
         /// shader cutoff and the policy bounds the chain was captured
@@ -770,7 +772,9 @@ namespace Alrauna.Amuse.Editor.Host
         internal static AlphaFieldSet GatherAlphaFields(
             IReadOnlyList<CapturedAlphaMaterial> materials,
             int maxMipLevel,
-            int minTextureSize)
+            int cutoutMaxMipLevel,
+            int minTextureSize,
+            int cutoutMinTextureSize)
         {
             if (maxMipLevel < 0)
             {
@@ -778,10 +782,22 @@ namespace Alrauna.Amuse.Editor.Host
                     nameof(maxMipLevel),
                     "The mip cap must be a level index of at least zero.");
             }
+            if (cutoutMaxMipLevel < 0)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(cutoutMaxMipLevel),
+                    "The mip cap must be a level index of at least zero.");
+            }
             if (minTextureSize < 1)
             {
                 throw new ArgumentOutOfRangeException(
                     nameof(minTextureSize),
+                    "The minimum texture size must be at least one texel.");
+            }
+            if (cutoutMinTextureSize < 1)
+            {
+                throw new ArgumentOutOfRangeException(
+                    nameof(cutoutMinTextureSize),
                     "The minimum texture size must be at least one texel.");
             }
 
@@ -800,20 +816,32 @@ namespace Alrauna.Amuse.Editor.Host
                         continue;
                     }
 
+                    // The texture's own captured threshold names its arm.
+                    // Below one is the cutout arm, and the 1.0 sentinel is
+                    // the transparent arm. Both channels of one texture
+                    // share level dimensions, so the selected pair governs
+                    // both channels.
+                    var armMaxMipLevel = texture.CaptureThreshold < 1f
+                        ? cutoutMaxMipLevel
+                        : maxMipLevel;
+                    var armMinTextureSize = texture.CaptureThreshold < 1f
+                        ? cutoutMinTextureSize
+                        : minTextureSize;
+
                     // Both channels of one texture share level
                     // dimensions, so one size scope governs both.
                     var sizeScope =
-                        TextureSizeScope(texture, minTextureSize);
+                        TextureSizeScope(texture, armMinTextureSize);
                     if (sizeScope < 0)
                     {
-                        // The texture is below the user's minimum
+                        // The texture is below the arm's minimum
                         // size: no level is consulted, the field stays
                         // absent, and every triangle over it stays
                         // Unknown through MissingTextureEvidence.
                         continue;
                     }
 
-                    var cap = Math.Min(maxMipLevel, sizeScope);
+                    var cap = Math.Min(armMaxMipLevel, sizeScope);
                     if (texture.HasAlphaChannel)
                     {
                         var key = AlphaFieldKey.ForAlpha(texture);

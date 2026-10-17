@@ -611,7 +611,9 @@ namespace Alrauna.Amuse.Editor.DryRun
                 RecordConsentFacts(evidence, admittedLive);
 
                 var alphaFields = UnityRendererAlphaAnalysis.GatherAlphaFields(
-                    evidence.AdmittedMaterials, _maxMipLevel, _minTextureSize);
+                    evidence.AdmittedMaterials, _maxMipLevel,
+                    _cutoutMaxMipLevel, _minTextureSize,
+                    _cutoutMinTextureSize);
                 resolved = RuntimeStateResolution.ResolveRuntimeStates(
                     rendererPath,
                     evidence,

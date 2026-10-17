@@ -5489,7 +5489,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     evidence,
                     AlphaSamplingPolicy.ConservativeDesktop,
                     UnityRendererAlphaAnalysis.GatherAlphaFields(
-                        evidence.AdmittedMaterials, int.MaxValue, 1),
+                        evidence.AdmittedMaterials,
+                        int.MaxValue, int.MaxValue, 1, 1),
                     UnityAnimationEvidenceCapture.TextureScaleOffsetSuffix,
                     UnityRendererAlphaAnalysis.StructuralRefusal,
                     UnityAnimationEvidenceCapture.ProofRelevantResolver,
@@ -5567,7 +5568,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     evidence,
                     AlphaSamplingPolicy.ConservativeDesktop,
                     UnityRendererAlphaAnalysis.GatherAlphaFields(
-                        evidence.AdmittedMaterials, int.MaxValue, 1),
+                        evidence.AdmittedMaterials,
+                        int.MaxValue, int.MaxValue, 1, 1),
                     UnityAnimationEvidenceCapture.TextureScaleOffsetSuffix,
                     UnityRendererAlphaAnalysis.StructuralRefusal,
                     UnityAnimationEvidenceCapture.ProofRelevantResolver,
@@ -7918,7 +7920,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 evidence,
                 AlphaSamplingPolicy.ConservativeDesktop,
                 UnityRendererAlphaAnalysis.GatherAlphaFields(
-                    evidence.AdmittedMaterials, int.MaxValue, 1),
+                    evidence.AdmittedMaterials,
+                    int.MaxValue, int.MaxValue, 1, 1),
                 UnityAnimationEvidenceCapture.TextureScaleOffsetSuffix,
                 UnityRendererAlphaAnalysis.StructuralRefusal,
                 UnityAnimationEvidenceCapture.ProofRelevantResolver,

@@ -903,7 +903,8 @@ namespace Alrauna.Amuse.Editor.Build
                 var blockState =
                     EffectiveMaterialMaterialization.CaptureBlockState(renderer);
                 var alphaFields = UnityRendererAlphaAnalysis.GatherAlphaFields(
-                    evidence.AdmittedMaterials, maxMipLevel, minTextureSize);
+                    evidence.AdmittedMaterials, maxMipLevel,
+                    cutoutMaxMipLevel, minTextureSize, cutoutMinTextureSize);
                 var resolved = RuntimeStateResolution.ResolveRuntimeStates(
                     rendererPath, evidence, samplingPolicy,
                     alphaFields,
