@@ -74,11 +74,11 @@ The three shipped files at `Packages/com.alrauna.amuse/Presets/` change in place
 
 ## Inspector
 
-`DrawAlphaSeparatorSettings` keeps its header, test hook, and `ApplyModifiedProperties` placement. Its body becomes three groups in this order:
+`DrawAlphaSeparatorSettings` keeps its header, test hook, and `ApplyModifiedProperties` placement. Its body becomes three groups in this order, owner-directed on 2026-10-17:
 
-1. `DrawAcceptanceControls()`, unchanged.
-2. A `Transparent` foldout that draws the existing seven rows through the existing draw methods.
-3. A `Cutout` foldout that draws the four new rows.
+1. A `Transparent` foldout that draws the existing seven rows through the existing draw methods.
+2. A `Cutout` foldout that draws the four new rows.
+3. `DrawAcceptanceControls()`, unchanged, below the two submenus.
 
 Both submenus use `EditorGUILayout.Foldout` with `EditorStyles.foldoutHeader` and private session bools `_transparentSettingsOpen` and `_cutoutSettingsOpen`, both initialized true. Each fires `OnFoldoutHeaderDrawnForTest` with its header text before the closed early return, mirroring the parent foldout.
 

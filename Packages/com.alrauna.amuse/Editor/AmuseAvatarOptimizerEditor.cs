@@ -779,7 +779,8 @@ namespace Alrauna.Amuse.Editor
         /// be before AMUSE pays a draw call for it. It stays hidden
         /// until the Advanced Settings reveal in Settings is on,
         /// because most users never change this policy. The body
-        /// draws the acceptance group first. The two submenus follow.
+        /// draws the two submenus first. The acceptance group
+        /// follows.
         /// </summary>
         private void DrawAlphaSeparatorSettings()
         {
@@ -796,9 +797,9 @@ namespace Alrauna.Amuse.Editor
                 content => EditorStyles.label.CalcSize(content).x);
             var previousWidth = EditorGUIUtility.labelWidth;
             EditorGUIUtility.labelWidth = Mathf.Ceil(widest) + 2f;
-            DrawAcceptanceControls();
             DrawTransparentSubmenu();
             DrawCutoutSubmenu();
+            DrawAcceptanceControls();
             EditorGUIUtility.labelWidth = previousWidth;
             serializedObject.ApplyModifiedProperties();
         }
