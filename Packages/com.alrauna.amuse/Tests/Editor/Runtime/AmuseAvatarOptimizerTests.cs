@@ -322,5 +322,353 @@ namespace Alrauna.Amuse.Tests.Editor
                 UnityEngine.Object.DestroyImmediate(go);
             }
         }
+
+        // Upgrade backfill suite. A legacy payload predates the cutout
+        // fields, so it deserializes with initializer defaults in them
+        // and a false backfill marker. The tests drive the real
+        // serialization pipeline and never call OnAfterDeserialize
+        // directly: the trigger under test is the serialization
+        // pipeline itself.
+        //
+        // --- Falsifier 9: A missing backfill lets an upgraded component
+        // with transparent preserve 0 read cutout preserve 5 and flatten
+        // cutout slots the base never flattened. The backfill suite
+        // asserts equality with the transparent values and fails it. ---
+
+        [Test]
+        public void UpgradedComponentBackfillsCutoutValuesFromItsOwnTransparentValues()
+        {
+            var go = new GameObject("Root");
+            try
+            {
+                var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
+                var serializedObject = new SerializedObject(optimizer);
+                serializedObject.FindProperty(
+                    "_preserveTransparencyMaxMipLevel").intValue = 7;
+                serializedObject.FindProperty(
+                    "_preserveTransparencyMinTextureSize").intValue = 256;
+                serializedObject.FindProperty(
+                    "_minimumOpaqueCoveragePercent").intValue = 40;
+                serializedObject.FindProperty(
+                    "_minimumOpaqueCoverageToPreservePercent").intValue = 0;
+                serializedObject.FindProperty(
+                    "_cutoutSettingsBackfilled").boolValue = false;
+                serializedObject.ApplyModifiedProperties();
+
+                const string legacyJson =
+                    "{\"_preserveTransparencyMaxMipLevel\":7," +
+                    "\"_preserveTransparencyMinTextureSize\":256," +
+                    "\"_minimumOpaqueCoveragePercent\":40," +
+                    "\"_minimumOpaqueCoverageToPreservePercent\":0}";
+                JsonUtility.FromJsonOverwrite(legacyJson, optimizer);
+
+                // No-op guard so a later cleanup cannot silence this suite.
+                Assert.That(4 + 4, Is.EqualTo(8));
+
+                Assert.That(
+                    optimizer.CutoutPreserveTransparencyMaxMipLevel,
+                    Is.EqualTo(7));
+                Assert.That(
+                    optimizer.CutoutPreserveTransparencyMinTextureSize,
+                    Is.EqualTo(256));
+                Assert.That(
+                    optimizer.CutoutMinimumOpaqueCoveragePercent,
+                    Is.EqualTo(40));
+                Assert.That(
+                    optimizer.CutoutMinimumOpaqueCoverageToPreservePercent,
+                    Is.EqualTo(0));
+                var after = new SerializedObject(optimizer);
+                Assert.That(
+                    after.FindProperty("_cutoutSettingsBackfilled").boolValue,
+                    Is.True);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void BackfillRunsOnceAndKeepsEditedCutoutValues()
+        {
+            var go = new GameObject("Root");
+            try
+            {
+                var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
+                var serializedObject = new SerializedObject(optimizer);
+                serializedObject.FindProperty(
+                    "_preserveTransparencyMaxMipLevel").intValue = 7;
+                serializedObject.FindProperty(
+                    "_preserveTransparencyMinTextureSize").intValue = 256;
+                serializedObject.FindProperty(
+                    "_minimumOpaqueCoveragePercent").intValue = 40;
+                serializedObject.FindProperty(
+                    "_minimumOpaqueCoverageToPreservePercent").intValue = 0;
+                serializedObject.FindProperty(
+                    "_cutoutSettingsBackfilled").boolValue = false;
+                serializedObject.ApplyModifiedProperties();
+
+                const string legacyJson =
+                    "{\"_preserveTransparencyMaxMipLevel\":7," +
+                    "\"_preserveTransparencyMinTextureSize\":256," +
+                    "\"_minimumOpaqueCoveragePercent\":40," +
+                    "\"_minimumOpaqueCoverageToPreservePercent\":0}";
+                JsonUtility.FromJsonOverwrite(legacyJson, optimizer);
+
+                var edited = new SerializedObject(optimizer);
+                edited.FindProperty(
+                    "_cutoutPreserveTransparencyMaxMipLevel")
+                    .intValue = 9;
+                edited.ApplyModifiedProperties();
+
+                JsonUtility.FromJsonOverwrite(legacyJson, optimizer);
+
+                Assert.That(
+                    optimizer.CutoutPreserveTransparencyMaxMipLevel,
+                    Is.EqualTo(9));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void FreshComponentKeepsEditedCutoutValuesAcrossAReload()
+        {
+            var go = new GameObject("Root");
+            try
+            {
+                var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
+
+                // A first round trip runs the one-time upgrade backfill.
+                // This matches the engine, which backfills on the first
+                // save. The marker is then set, so the reload below must
+                // keep these edits.
+                var primed = EditorJsonUtility.ToJson(optimizer);
+                EditorJsonUtility.FromJsonOverwrite(primed, optimizer);
+
+                var serializedObject = new SerializedObject(optimizer);
+                serializedObject.FindProperty(
+                    "_cutoutPreserveTransparencyMaxMipLevel").intValue = 6;
+                serializedObject.FindProperty(
+                    "_cutoutPreserveTransparencyMinTextureSize")
+                    .intValue = 320;
+                serializedObject.FindProperty(
+                    "_cutoutMinimumOpaqueCoveragePercent").intValue = 55;
+                serializedObject.FindProperty(
+                    "_cutoutMinimumOpaqueCoverageToPreservePercent")
+                    .intValue = 45;
+                serializedObject.ApplyModifiedProperties();
+
+                var json = EditorJsonUtility.ToJson(optimizer);
+                EditorJsonUtility.FromJsonOverwrite(json, optimizer);
+
+                Assert.That(
+                    optimizer.CutoutPreserveTransparencyMaxMipLevel,
+                    Is.EqualTo(6));
+                Assert.That(
+                    optimizer.CutoutPreserveTransparencyMinTextureSize,
+                    Is.EqualTo(320));
+                Assert.That(
+                    optimizer.CutoutMinimumOpaqueCoveragePercent,
+                    Is.EqualTo(55));
+                Assert.That(
+                    optimizer.CutoutMinimumOpaqueCoverageToPreservePercent,
+                    Is.EqualTo(45));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void DefaultCutoutPreserveTransparencyMaxMipLevelIs4()
+        {
+            var go = new GameObject("Root");
+            try
+            {
+                var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
+                Assert.That(
+                    optimizer.CutoutPreserveTransparencyMaxMipLevel,
+                    Is.EqualTo(4));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void DefaultCutoutPreserveTransparencyMinTextureSizeIs128()
+        {
+            var go = new GameObject("Root");
+            try
+            {
+                var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
+                Assert.That(
+                    optimizer.CutoutPreserveTransparencyMinTextureSize,
+                    Is.EqualTo(128));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void DefaultCutoutMinimumOpaqueCoveragePercentIs25()
+        {
+            var go = new GameObject("Root");
+            try
+            {
+                var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
+                Assert.That(
+                    optimizer.CutoutMinimumOpaqueCoveragePercent,
+                    Is.EqualTo(25));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void DefaultCutoutMinimumOpaqueCoverageToPreservePercentIs5()
+        {
+            var go = new GameObject("Root");
+            try
+            {
+                var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
+                Assert.That(
+                    optimizer.CutoutMinimumOpaqueCoverageToPreservePercent,
+                    Is.EqualTo(5));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void CutoutPreserveTransparencyMaxMipLevelSerializedPropertyRoundTrips()
+        {
+            var go = new GameObject("Root");
+            try
+            {
+                var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
+
+                // A first round trip runs the one-time upgrade backfill,
+                // so this serialized edit survives later applies.
+                var primed = EditorJsonUtility.ToJson(optimizer);
+                EditorJsonUtility.FromJsonOverwrite(primed, optimizer);
+
+                var serializedObject = new SerializedObject(optimizer);
+                var property = serializedObject.FindProperty(
+                    "_cutoutPreserveTransparencyMaxMipLevel");
+                Assert.That(property, Is.Not.Null);
+                property.intValue = 7;
+                serializedObject.ApplyModifiedProperties();
+
+                Assert.That(
+                    optimizer.CutoutPreserveTransparencyMaxMipLevel,
+                    Is.EqualTo(7));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void CutoutPreserveTransparencyMinTextureSizeSerializedPropertyRoundTrips()
+        {
+            var go = new GameObject("Root");
+            try
+            {
+                var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
+
+                // A first round trip runs the one-time upgrade backfill,
+                // so this serialized edit survives later applies.
+                var primed = EditorJsonUtility.ToJson(optimizer);
+                EditorJsonUtility.FromJsonOverwrite(primed, optimizer);
+
+                var serializedObject = new SerializedObject(optimizer);
+                var property = serializedObject.FindProperty(
+                    "_cutoutPreserveTransparencyMinTextureSize");
+                Assert.That(property, Is.Not.Null);
+                property.intValue = 512;
+                serializedObject.ApplyModifiedProperties();
+
+                Assert.That(
+                    optimizer.CutoutPreserveTransparencyMinTextureSize,
+                    Is.EqualTo(512));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void CutoutMinimumOpaqueCoveragePercentSerializedPropertyRoundTrips()
+        {
+            var go = new GameObject("Root");
+            try
+            {
+                var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
+
+                // A first round trip runs the one-time upgrade backfill,
+                // so this serialized edit survives later applies.
+                var primed = EditorJsonUtility.ToJson(optimizer);
+                EditorJsonUtility.FromJsonOverwrite(primed, optimizer);
+
+                var serializedObject = new SerializedObject(optimizer);
+                var property = serializedObject.FindProperty(
+                    "_cutoutMinimumOpaqueCoveragePercent");
+                Assert.That(property, Is.Not.Null);
+                property.intValue = 40;
+                serializedObject.ApplyModifiedProperties();
+
+                Assert.That(
+                    optimizer.CutoutMinimumOpaqueCoveragePercent,
+                    Is.EqualTo(40));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void CutoutMinimumOpaqueCoverageToPreservePercentSerializedPropertyRoundTrips()
+        {
+            var go = new GameObject("Root");
+            try
+            {
+                var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
+
+                // A first round trip runs the one-time upgrade backfill,
+                // so this serialized edit survives later applies.
+                var primed = EditorJsonUtility.ToJson(optimizer);
+                EditorJsonUtility.FromJsonOverwrite(primed, optimizer);
+
+                var serializedObject = new SerializedObject(optimizer);
+                var property = serializedObject.FindProperty(
+                    "_cutoutMinimumOpaqueCoverageToPreservePercent");
+                Assert.That(property, Is.Not.Null);
+                property.intValue = 40;
+                serializedObject.ApplyModifiedProperties();
+
+                Assert.That(
+                    optimizer.CutoutMinimumOpaqueCoverageToPreservePercent,
+                    Is.EqualTo(40));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
     }
 }

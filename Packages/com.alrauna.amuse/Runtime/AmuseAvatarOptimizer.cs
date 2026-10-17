@@ -13,7 +13,8 @@ namespace Alrauna.Amuse.Runtime
     [AddComponentMenu("AMUSE/AMUSE Avatar Optimizer")]
     [DisallowMultipleComponent]
     [HelpURL("https://github.com/Alrauna/AMUSE")]
-    public sealed class AmuseAvatarOptimizer : MonoBehaviour, INDMFEditorOnly
+    public sealed class AmuseAvatarOptimizer : MonoBehaviour,
+        INDMFEditorOnly, ISerializationCallbackReceiver
     {
         [ToggleLeft]
         [SerializeField] private bool _amuseDisabled;
@@ -118,6 +119,60 @@ namespace Alrauna.Amuse.Runtime
         [Range(0, 100)]
         private int _polygonMinimumOpaqueCoveragePercent = 100;
 
+        /// <summary>
+        /// True after the upgrade backfill copies the transparent values
+        /// into the cutout fields. A legacy payload predates the cutout
+        /// fields, so it deserializes with this marker false. The marker
+        /// is serialized so the copy runs once. Without it, the marker
+        /// would reset on every load and the copy would overwrite the
+        /// stored cutout values each session.
+        /// </summary>
+        [SerializeField] private bool _cutoutSettingsBackfilled;
+
+        /// <summary>
+        /// The largest mip level the opacity proof consults for cutout
+        /// sources. The value -1 means every level. The default of 4
+        /// matches the transparent setting. The inspector shows it as
+        /// "Smallest Tested Mipmap". This setting governs cutout sources
+        /// only.
+        /// </summary>
+        [SerializeField]
+        private int _cutoutPreserveTransparencyMaxMipLevel = 4;
+
+        /// <summary>
+        /// The smallest texture size the opacity proof consults for
+        /// cutout sources, in texels. The value -1 means every size. A
+        /// texture already smaller than this size has no consulted
+        /// levels and never converts. The default of 128 matches the
+        /// transparent setting. The inspector shows it as "Smallest
+        /// Tested Texture". This setting governs cutout sources only.
+        /// </summary>
+        [SerializeField]
+        private int _cutoutPreserveTransparencyMinTextureSize = 128;
+
+        /// <summary>
+        /// The smallest share of proven-opaque triangles a cutout source
+        /// needs before AMUSE converts it. The value 0 always converts
+        /// when at least one triangle is proven opaque. The default of
+        /// 25 matches the transparent setting. The inspector shows it
+        /// as "Minimum Opaque Coverage to Convert (Per Material)". This
+        /// setting governs cutout sources only.
+        /// </summary>
+        [SerializeField]
+        [Range(0, 100)]
+        private int _cutoutMinimumOpaqueCoveragePercent = 25;
+
+        /// <summary>
+        /// The largest unproven share, in percent, a cutout source can
+        /// hold and still skip the conversion. The default of 5 matches
+        /// the transparent setting. The inspector shows it as "Minimum
+        /// Opaque Coverage to Preserve (Per Material)". This setting
+        /// governs cutout sources only.
+        /// </summary>
+        [SerializeField]
+        [Range(0, 100)]
+        private int _cutoutMinimumOpaqueCoverageToPreservePercent = 5;
+
         [ToggleLeft]
         [SerializeField]
         private bool _allowDepthTestChange = true;
@@ -204,6 +259,38 @@ namespace Alrauna.Amuse.Runtime
             _minimumOpaqueCoverageToPreservePercent;
 
         /// <summary>
+        /// The cutout mip cap as stored: -1 for every level, else the
+        /// largest consulted level index. The build maps negative values
+        /// to "no cap". It governs cutout sources only.
+        /// </summary>
+        public int CutoutPreserveTransparencyMaxMipLevel =>
+            _cutoutPreserveTransparencyMaxMipLevel;
+
+        /// <summary>
+        /// The cutout minimum texture size as stored: -1 for every size,
+        /// else the smallest consulted size in texels. It governs cutout
+        /// sources only.
+        /// </summary>
+        public int CutoutPreserveTransparencyMinTextureSize =>
+            _cutoutPreserveTransparencyMinTextureSize;
+
+        /// <summary>
+        /// The smallest proven-opaque triangle share, in percent, a
+        /// cutout source needs before AMUSE converts it. It governs
+        /// cutout sources only.
+        /// </summary>
+        public int CutoutMinimumOpaqueCoveragePercent =>
+            _cutoutMinimumOpaqueCoveragePercent;
+
+        /// <summary>
+        /// The largest unproven triangle share, in percent, a cutout
+        /// source can hold and still skip the conversion. It governs
+        /// cutout sources only.
+        /// </summary>
+        public int CutoutMinimumOpaqueCoverageToPreservePercent =>
+            _cutoutMinimumOpaqueCoverageToPreservePercent;
+
+        /// <summary>
         /// The smallest alpha percentage that counts as opaque evidence
         /// for materials without a shader cutoff.
         /// </summary>
@@ -258,5 +345,39 @@ namespace Alrauna.Amuse.Runtime
         /// </summary>
         public bool AcceptMobileAnisotropyDifferences =>
             _acceptMobileAnisotropyDifferences;
+
+        /// <summary>
+        /// An upgraded component must keep proofing every source with the
+        /// values its owner set. A legacy payload predates the cutout
+        /// fields, so Unity fills them from the initializers on load.
+        /// This one-time copy moves the transparent values into the
+        /// cutout fields. The copy keeps the upgrade verdict-identical:
+        /// the component proofs cutout sources with the same thresholds
+        /// it used before the upgrade. Unity raises these callbacks
+        /// around every serialize and deserialize. The serialized marker
+        /// makes the copy run once. Without it, the marker would reset
+        /// on every load and the copy would overwrite stored cutout
+        /// values each session.
+        /// </summary>
+        public void OnBeforeSerialize()
+        {
+        }
+
+        public void OnAfterDeserialize()
+        {
+            if (_cutoutSettingsBackfilled)
+            {
+                return;
+            }
+            _cutoutSettingsBackfilled = true;
+            _cutoutPreserveTransparencyMaxMipLevel =
+                _preserveTransparencyMaxMipLevel;
+            _cutoutPreserveTransparencyMinTextureSize =
+                _preserveTransparencyMinTextureSize;
+            _cutoutMinimumOpaqueCoveragePercent =
+                _minimumOpaqueCoveragePercent;
+            _cutoutMinimumOpaqueCoverageToPreservePercent =
+                _minimumOpaqueCoverageToPreservePercent;
+        }
     }
 }
