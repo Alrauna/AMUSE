@@ -929,6 +929,41 @@ namespace Alrauna.Amuse.Tests.Editor
         }
 
         /// <summary>
+        /// --- Falsifier 3: an implementation of AlphaSeparatorLabelWidth
+        /// that ignores EditorGUI.indentLevel and always returns
+        /// ceil(widest) + 2. The depth-3 assertion fails. ---
+        /// </summary>
+        [Test]
+        public void AlphaSeparatorLabelWidthSubtractsTheRowIndent()
+        {
+            var original = EditorGUI.indentLevel;
+            try
+            {
+                EditorGUI.indentLevel = 0;
+                Assert.That(
+                    Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                        .AlphaSeparatorLabelWidth(200f),
+                    Is.EqualTo(202f));
+                EditorGUI.indentLevel = 3;
+                Assert.That(
+                    Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                        .AlphaSeparatorLabelWidth(200f),
+                    Is.EqualTo(157f));
+                // No-op guard: the depth-1 case pins the per-level constant,
+                // so a rewrite cannot silently redefine the helper.
+                EditorGUI.indentLevel = 1;
+                Assert.That(
+                    Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                        .AlphaSeparatorLabelWidth(50f),
+                    Is.EqualTo(37f));
+            }
+            finally
+            {
+                EditorGUI.indentLevel = original;
+            }
+        }
+
+        /// <summary>
         /// A hidden GameObject holds the component, so the fixture
         /// never touches the scene the user keeps open. The fixture
         /// reveals the advanced settings, because the alpha policy
