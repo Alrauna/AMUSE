@@ -6456,11 +6456,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     IReadOnlyList<CapturedAlphaMaterialFamily> families,
                     MaterialEvidenceRequest request,
                     AlphaPolicyBounds bounds,
+                    int cutoutRawMipCap,
+                    int exactRawMipCap,
                     out ClosedAlphaCaptureOutcome captured)
                 {
                     batches.Add(materials.ToArray());
                     return CaptureVerifiedFixtureMaterials(
-                        materials, families, request, bounds, out captured);
+                        materials, families, request, bounds,
+                        cutoutRawMipCap, exactRawMipCap, out captured);
                 }
 
                 var context = AvatarProcessor.ProcessAvatar(
@@ -7355,6 +7358,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             IReadOnlyList<CapturedAlphaMaterialFamily> families,
             MaterialEvidenceRequest request,
             AlphaPolicyBounds bounds,
+            int cutoutRawMipCap,
+            int exactRawMipCap,
             out ClosedAlphaCaptureOutcome captured)
         {
             var ordinals = System.Linq.Enumerable.Range(0, materials.Count).ToArray();
@@ -8004,10 +8009,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             IReadOnlyList<CapturedAlphaMaterialFamily> families,
             MaterialEvidenceRequest request,
             AlphaPolicyBounds bounds,
+            int cutoutRawMipCap,
+            int exactRawMipCap,
             out ClosedAlphaCaptureOutcome captured)
         {
             return VerifiedPoiyomiTestSeams.CaptureVerifiedFixtureMaterials(
-                materials, families, request, bounds, out captured);
+                materials, families, request, bounds,
+                cutoutRawMipCap, exactRawMipCap, out captured);
         }
 
         private static CapturedAlphaSemantics VerifiedAlphaOnly(

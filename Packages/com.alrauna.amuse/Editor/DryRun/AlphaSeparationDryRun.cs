@@ -895,7 +895,9 @@ namespace Alrauna.Amuse.Editor.DryRun
                     rendererTypeName,
                     LockedMaterialIdentity.PreCheckRefusal,
                     null,
-                    null);
+                    null,
+                    cutoutRawMipCap: _cutoutMaxMipLevel,
+                    exactRawMipCap: _maxMipLevel);
             }
 
             return UnityAnimationEvidenceCapture.CaptureGraphThroughSeams(
@@ -912,7 +914,9 @@ namespace Alrauna.Amuse.Editor.DryRun
                 rendererTypeName,
                 LockedMaterialIdentity.PreCheckRefusal,
                 null,
-                null);
+                null,
+                cutoutRawMipCap: _cutoutMaxMipLevel,
+                exactRawMipCap: _maxMipLevel);
         }
 
         /// <summary>
@@ -987,6 +991,8 @@ namespace Alrauna.Amuse.Editor.DryRun
                 IReadOnlyList<CapturedAlphaMaterialFamily> families,
                 MaterialEvidenceRequest request,
                 AlphaPolicyBounds bounds,
+                int cutoutRawMipCap,
+                int exactRawMipCap,
                 out ClosedAlphaCaptureOutcome outcome) =>
             {
                 var ordinals = new List<int>(materials.Count);
@@ -1014,6 +1020,8 @@ namespace Alrauna.Amuse.Editor.DryRun
                 IReadOnlyList<CapturedAlphaMaterialFamily> families,
                 MaterialEvidenceRequest request,
                 AlphaPolicyBounds bounds,
+                int chainCutoutRawMipCap,
+                int chainExactRawMipCap,
                 out ClosedAlphaCaptureOutcome outcome) =>
             {
                 var effective = EffectiveMaterialMaterialization
@@ -1024,14 +1032,19 @@ namespace Alrauna.Amuse.Editor.DryRun
                     // request: the request withdraws the streaming route's
                     // disk-fallback clone, so no capture in this batch can
                     // create assets on disk. The optimizer's raw policy mip
-                    // cap rides the same request, so the proof reads back
-                    // only its own levels.
+                    // caps ride the same request: the request carries the
+                    // wider of the two arms, so the unshared fallback
+                    // over-captures, and the two arm values ride beside it
+                    // so the closed capture can pin each bucket to its arm.
                     return inner(
                         effective,
                         families,
                         request.DisallowingDiskFallback()
-                            .WithRawMipCap(_maxMipLevel),
+                            .WithRawMipCap(Math.Max(
+                                _cutoutMaxMipLevel, _maxMipLevel)),
                         bounds,
+                        chainCutoutRawMipCap,
+                        chainExactRawMipCap,
                         out outcome);
                 }
                 finally
@@ -1051,9 +1064,12 @@ namespace Alrauna.Amuse.Editor.DryRun
                 IReadOnlyList<CapturedAlphaMaterialFamily> families,
                 MaterialEvidenceRequest request,
                 AlphaPolicyBounds bounds,
+                int cutoutRawMipCap,
+                int exactRawMipCap,
                 out ClosedAlphaCaptureOutcome outcome) =>
                 UnityMaterialSemantics.TryCaptureClosedAlphaMaterials(
-                    materials, families, request, bounds, out outcome, null);
+                    materials, families, request, bounds, out outcome, null,
+                    cutoutRawMipCap, exactRawMipCap);
         }
 
         /// <summary>

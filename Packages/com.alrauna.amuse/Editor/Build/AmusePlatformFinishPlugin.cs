@@ -810,6 +810,8 @@ namespace Alrauna.Amuse.Editor.Build
                         IReadOnlyList<CapturedAlphaMaterialFamily> families,
                         MaterialEvidenceRequest request,
                         AlphaPolicyBounds bounds,
+                        int cutoutRawMipCap,
+                        int exactRawMipCap,
                         out ClosedAlphaCaptureOutcome transferred) =>
                         UnityMaterialSemantics
                             .TryCaptureClosedAlphaMaterialsTransferred(
@@ -819,7 +821,9 @@ namespace Alrauna.Amuse.Editor.Build
                                 bounds,
                                 granted,
                                 out transferred,
-                                RegisteredSourceIdentity.Resolve);
+                                RegisteredSourceIdentity.Resolve,
+                                cutoutRawMipCap,
+                                exactRawMipCap);
                 }
 
                 var hasIndex = TryGetAnimationIndex(
@@ -839,12 +843,14 @@ namespace Alrauna.Amuse.Editor.Build
                             selectRequest,
                             CaptureThroughEffectiveMaterials(
                                 renderer, capturer ?? effectiveCapturer,
-                                maxMipLevel),
+                                cutoutMaxMipLevel, maxMipLevel),
                             ignoreOutOfRangeSlots,
                             rendererTypeName,
                             LockedMaterialIdentity.PreCheckRefusal,
                             swappedView,
-                            RegisteredSourceIdentity.Resolve);
+                            RegisteredSourceIdentity.Resolve,
+                            cutoutRawMipCap: cutoutMaxMipLevel,
+                            exactRawMipCap: maxMipLevel);
                 }
                 else if (selectRequest == null)
                 {
@@ -856,12 +862,15 @@ namespace Alrauna.Amuse.Editor.Build
                         alphaPolicyBounds,
                         out admittedLiveMaterials,
                         CaptureThroughEffectiveMaterials(
-                            renderer, effectiveCapturer, maxMipLevel),
+                            renderer, effectiveCapturer,
+                            cutoutMaxMipLevel, maxMipLevel),
                         ignoreOutOfRangeSlots,
                         rendererTypeName,
                         LockedMaterialIdentity.PreCheckRefusal,
                         swappedView,
-                        RegisteredSourceIdentity.Resolve);
+                        RegisteredSourceIdentity.Resolve,
+                        cutoutRawMipCap: cutoutMaxMipLevel,
+                        exactRawMipCap: maxMipLevel);
                 }
                 else
                 {
@@ -875,13 +884,16 @@ namespace Alrauna.Amuse.Editor.Build
                             alphaPolicyBounds,
                             selectRequest,
                             CaptureThroughEffectiveMaterials(
-                                renderer, capturer, maxMipLevel),
+                                renderer, capturer,
+                                cutoutMaxMipLevel, maxMipLevel),
                             out admittedLiveMaterials,
                             ignoreOutOfRangeSlots,
                             rendererTypeName,
                             LockedMaterialIdentity.PreCheckRefusal,
                             swappedView,
-                            RegisteredSourceIdentity.Resolve);
+                            RegisteredSourceIdentity.Resolve,
+                            cutoutRawMipCap: cutoutMaxMipLevel,
+                            exactRawMipCap: maxMipLevel);
                 }
                 var effectiveResolver = resolveSemantics
                     ?? (transferShaders
@@ -1199,15 +1211,18 @@ namespace Alrauna.Amuse.Editor.Build
         /// set, the swap-value matching, and the retained live pairing keep
         /// the original references, so the write path still matches against
         /// them. A null inner capturer keeps the production default. The
-        /// optimizer's raw policy mip cap rides the capture request, so the
-        /// GPU route reads back only the proof's levels. Every clone dies
-        /// inside the wrapper, on every exit path.
+        /// optimizer's raw policy mip caps ride the capture request: the
+        /// request carries the wider of the two arms, so the unshared
+        /// fallback over-captures, and the two arm values ride beside it so
+        /// the closed capture can pin each bucket to its own arm. Every
+        /// clone dies inside the wrapper, on every exit path.
         /// </summary>
         private static ClosedAlphaMaterialCapturer
             CaptureThroughEffectiveMaterials(
                 Renderer renderer,
                 ClosedAlphaMaterialCapturer inner,
-                int rawMipCap)
+                int cutoutRawMipCap,
+                int exactRawMipCap)
         {
             if (inner == null)
             {
@@ -1216,17 +1231,22 @@ namespace Alrauna.Amuse.Editor.Build
                     IReadOnlyList<CapturedAlphaMaterialFamily> batchFamilies,
                     MaterialEvidenceRequest batchRequest,
                     AlphaPolicyBounds batchBounds,
+                    int batchCutoutRawMipCap,
+                    int batchExactRawMipCap,
                     out ClosedAlphaCaptureOutcome batchOutcome) =>
                     UnityMaterialSemantics.TryCaptureClosedAlphaMaterials(
                         batchMaterials, batchFamilies, batchRequest,
                         batchBounds, out batchOutcome,
-                        RegisteredSourceIdentity.Resolve);
+                        RegisteredSourceIdentity.Resolve,
+                        batchCutoutRawMipCap, batchExactRawMipCap);
             }
             return (
                 IReadOnlyList<Material> materials,
                 IReadOnlyList<CapturedAlphaMaterialFamily> families,
                 MaterialEvidenceRequest request,
                 AlphaPolicyBounds bounds,
+                int chainCutoutRawMipCap,
+                int chainExactRawMipCap,
                 out ClosedAlphaCaptureOutcome transferred) =>
             {
                 var effective = EffectiveMaterialMaterialization
@@ -1234,8 +1254,13 @@ namespace Alrauna.Amuse.Editor.Build
                 try
                 {
                     return inner(
-                        effective, families, request.WithRawMipCap(rawMipCap),
-                        bounds, out transferred);
+                        effective, families,
+                        request.WithRawMipCap(
+                            Math.Max(cutoutRawMipCap, exactRawMipCap)),
+                        bounds,
+                        chainCutoutRawMipCap,
+                        chainExactRawMipCap,
+                        out transferred);
                 }
                 finally
                 {

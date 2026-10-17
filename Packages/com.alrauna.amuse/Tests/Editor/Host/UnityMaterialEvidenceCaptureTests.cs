@@ -130,6 +130,133 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
         }
 
+        // --- Falsifier 2: A batch-uniform capture cap, stamped once per
+        // batch as at base, gives both arms one cap. The mixed-batch
+        // shared-texture fixture asserts each arm's chain level count and
+        // fails it. ---
+        [Test]
+        public void MixedBatchCapturesEachArmAtItsOwnCap()
+        {
+            // The RED form of this test captured against the one-cap
+            // signature. The batch request carried the exact cap 4 alone,
+            // and the cutout arm read five levels instead of one: one
+            // request carried one cap. The two-cap form pins each bucket
+            // to its own arm, so the ideal per-arm outcome holds in code.
+            var captured = CaptureMixedBatchAtArms(0, 4);
+            Assert.That(
+                captured[0].TryGetTexture("_MainTex", out var cutoutAssignment),
+                Is.True);
+            Assert.That(
+                captured[1].TryGetTexture("_MainTex", out var exactAssignment),
+                Is.True);
+            Assert.That(cutoutAssignment.Texture.AlphaChannel.Count,
+                Is.EqualTo(1),
+                "the cutout arm's chain holds the cutout cap's one level");
+            Assert.That(exactAssignment.Texture.AlphaChannel.Count,
+                Is.EqualTo(5),
+                "the exact arm's chain holds the exact cap's five levels");
+        }
+
+        // --- Falsifier 3: A bucket cap keyed on the predicate declaration
+        // instead of the captured threshold lets a cutoff-1.0 cutout
+        // material stamp the cutout cap into the 1.0 bucket. The exact
+        // arm's chain level count assertion fails it. ---
+        [Test]
+        public void CutoutMaterialsAtCutoffOneCaptureAtTheTransparentCap()
+        {
+            var captured = CaptureMixedBatchAtArms(0, 4, cutoutCutoff: 1f);
+            Assert.That(
+                captured[0].TryGetTexture("_MainTex", out var cutoutAssignment),
+                Is.True);
+            Assert.That(
+                captured[1].TryGetTexture("_MainTex", out var exactAssignment),
+                Is.True);
+            Assert.That(
+                ReferenceEquals(
+                    cutoutAssignment.Texture, exactAssignment.Texture),
+                Is.True,
+                "the cutoff-one bucket and the exact bucket are one " +
+                "shared capture");
+            Assert.That(cutoutAssignment.Texture.AlphaChannel.Count,
+                Is.EqualTo(5),
+                "the cutoff-one cutout material captures at the exact " +
+                "arm's cap");
+            Assert.That(exactAssignment.Texture.AlphaChannel.Count,
+                Is.EqualTo(5),
+                "the exact arm's chain holds the exact cap's five levels");
+        }
+
+        // --- Falsifier 4: A cross-family leak lets a cutout value move a
+        // transparent verdict, or the reverse. The isolation assertions
+        // fail it. The two tests below carry them: the mixed-batch test
+        // pins each arm's chain to its own cap, and this test pins the
+        // exact arm's count and verdict against a changed cutout cap. ---
+        [Test]
+        public void ChangingTheCutoutCapLeavesTheExactArmsChainUnchanged()
+        {
+            var captured = CaptureMixedBatchAtArms(3, 4);
+            Assert.That(
+                captured[0].TryGetTexture("_MainTex", out var cutoutAssignment),
+                Is.True);
+            Assert.That(
+                captured[1].TryGetTexture("_MainTex", out var exactAssignment),
+                Is.True);
+            Assert.That(cutoutAssignment.Texture.AlphaChannel.Count,
+                Is.EqualTo(4),
+                "the cutout arm's chain moved with the cutout cap 3");
+            Assert.That(exactAssignment.Texture.AlphaChannel.Count,
+                Is.EqualTo(5),
+                "the exact arm's chain still holds the exact cap's five " +
+                "levels");
+            Assert.That(ClassifyIsolationRegion(captured[1], 0.4f),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent),
+                "the transparent verdict stays under the changed cutout " +
+                "cap");
+            Assert.That(ClassifyIsolationRegion(captured[1], 0.75f),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque),
+                "the transparent verdict stays under the changed cutout " +
+                "cap");
+        }
+
+        /// <summary>
+        /// Builds the closed mixed batch the production assembly builds:
+        /// one union request for the whole batch, each material's own
+        /// family request as its predicate, and the wrapper's wider-cap
+        /// stamp on the request. The two arm caps pin each bucket's chain
+        /// through the closed capture.
+        /// </summary>
+        private CapturedMaterialEvidence[] CaptureMixedBatchAtArms(
+            int cutoutRawMipCap,
+            int exactRawMipCap,
+            float cutoutCutoff = 0.25f)
+        {
+            var texture = CreateArmCapTexture();
+            var transparent = NewMaterial(
+                "Hidden/Alrauna/AmuseTests/LilToonTransparentConversionTest");
+            var cutout = NewMaterial(
+                "Hidden/Alrauna/AmuseTests/LilToonCutoutConversionTest");
+            transparent.SetTexture("_MainTex", texture);
+            cutout.SetTexture("_MainTex", texture);
+            cutout.SetFloat("_Cutoff", cutoutCutoff);
+            var request = MaterialEvidenceRequest.Combine(
+                LilToonCutoutMaterialSemantics.AlphaEvidenceRequest,
+                LilToonTransparentMaterialSemantics.AlphaEvidenceRequest)
+                .WithRawMipCap(Math.Max(cutoutRawMipCap, exactRawMipCap));
+            var inputs = new[]
+            {
+                new MaterialEvidenceCaptureInput(
+                    cutout, request,
+                    LilToonCutoutMaterialSemantics.AlphaEvidenceRequest),
+                new MaterialEvidenceCaptureInput(
+                    transparent, request,
+                    LilToonTransparentMaterialSemantics.AlphaEvidenceRequest),
+            };
+
+            return UnityMaterialEvidenceCapture.Capture(
+                inputs, AlphaPolicyBounds.Inert,
+                cutoutRawMipCap, exactRawMipCap).ToArray();
+        }
+
         [Test]
         public void RegisteredCloneOverAdmittedAtlas_ProvesOpaqueAtItsOwnCutoff()
         {
@@ -260,6 +387,39 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 GeneratedTextureAttestation.TryIdentifyProducer(texture),
                 Is.True,
                 "The fixture must enter the generated capture route.");
+            return texture;
+        }
+
+        /// <summary>
+        /// The arm-cap fixture: a real imported PNG of the isolation
+        /// columns with the importer's mip chain. The asset declares
+        /// eight levels, so the cap semantics are observable on the
+        /// imported GPU route: cap 0 keeps one level, cap 3 keeps four,
+        /// and cap 4 keeps five. The generated route reads the live
+        /// object and never applies the raw mip cap, so a generated
+        /// fixture cannot express these counts.
+        /// </summary>
+        private static Texture2D CreateArmCapTexture()
+        {
+            var path = TempFolder + "/arm-cap-isolation.png";
+            var pixels = new Color32[128 * 128];
+            for (var y = 0; y < 128; y++)
+            for (var x = 0; x < 128; x++)
+            {
+                var alpha = (byte)(x < 42 ? 0 : x < 84 ? 128 : 255);
+                pixels[y * 128 + x] = new Color32(255, 255, 255, alpha);
+            }
+            var texture = TestTextureImport.WritePng(
+                path, 128, 128, pixels, importer =>
+                {
+                    importer.isReadable = true;
+                    importer.textureCompression =
+                        TextureImporterCompression.Uncompressed;
+                    importer.filterMode = FilterMode.Point;
+                    importer.wrapMode = UnityEngine.TextureWrapMode.Clamp;
+                });
+            Assert.That(texture.mipmapCount, Is.EqualTo(8),
+                "The arm-cap fixture must declare the full mip chain.");
             return texture;
         }
 

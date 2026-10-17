@@ -1035,6 +1035,38 @@ namespace Alrauna.Amuse.Editor.Host
             IReadOnlyList<MaterialEvidenceCaptureInput> inputs,
             AlphaPolicyBounds bounds)
         {
+            // The family-schema routes keep the smallest-cap bucket merge:
+            // conversion eligibility, attestation, and opaque-target reads
+            // never carry the build's arm values.
+            return CaptureCore(inputs, bounds, null, null);
+        }
+
+        /// <summary>
+        /// The closed-batch capture with one cap per proof arm. Each shared
+        /// bucket keys on the captured alpha threshold, so a bucket whose
+        /// threshold sits below one reads the cutout arm's cap and a bucket
+        /// at the exact threshold reads the exact arm's cap. A cutoff
+        /// declared exactly one therefore captures with the exact arm, the
+        /// way the exact-255 proof reads it. The unshared fallback keeps
+        /// the request cap, which the caller stamps with the wider of the
+        /// two arms, so the fallback over-captures and never under-captures.
+        /// </summary>
+        internal static IReadOnlyList<CapturedMaterialEvidence> Capture(
+            IReadOnlyList<MaterialEvidenceCaptureInput> inputs,
+            AlphaPolicyBounds bounds,
+            int cutoutRawMipCap,
+            int exactRawMipCap)
+        {
+            return CaptureCore(
+                inputs, bounds, cutoutRawMipCap, exactRawMipCap);
+        }
+
+        private static IReadOnlyList<CapturedMaterialEvidence> CaptureCore(
+            IReadOnlyList<MaterialEvidenceCaptureInput> inputs,
+            AlphaPolicyBounds bounds,
+            int? cutoutRawMipCap,
+            int? exactRawMipCap)
+        {
             if (inputs == null)
             {
                 throw new ArgumentNullException(nameof(inputs));
@@ -1098,11 +1130,26 @@ namespace Alrauna.Amuse.Editor.Host
                     // first.
                     shared.Evidence |= texture.RequestedEvidence;
                     shared.AllowDiskFallback &= input.Request.AllowDiskFallback;
-                    // The strictest contributing request governs the
-                    // shared capture: the smallest cap reads back the
-                    // fewest levels for the whole bucket.
-                    shared.RawMipCap = Math.Min(
-                        shared.RawMipCap, input.Request.RawMipCap);
+                    if (cutoutRawMipCap == null)
+                    {
+                        // The strictest contributing request governs the
+                        // shared capture: the smallest cap reads back the
+                        // fewest levels for the whole bucket.
+                        shared.RawMipCap = Math.Min(
+                            shared.RawMipCap, input.Request.RawMipCap);
+                    }
+                    else
+                    {
+                        // The closed batch pins the bucket to its arm's
+                        // cap. The bucket threshold is the key, so every
+                        // contributing input computes the same cap and
+                        // the merge lands on it exactly.
+                        var bucketCap = texture.CutoutThreshold < 1f
+                            ? cutoutRawMipCap.Value
+                            : exactRawMipCap.Value;
+                        shared.RawMipCap = Math.Min(
+                            shared.RawMipCap, bucketCap);
+                    }
                     texture.Shared = shared;
                 }
             }

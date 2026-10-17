@@ -339,6 +339,8 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 IReadOnlyList<CapturedAlphaMaterialFamily> families,
                 MaterialEvidenceRequest request,
                 AlphaPolicyBounds bounds,
+                int cutoutRawMipCap,
+                int exactRawMipCap,
                 out ClosedAlphaCaptureOutcome outcome) =>
             {
                 var inputs = new MaterialEvidenceCaptureInput[materials.Count];
@@ -356,7 +358,9 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 }
 
                 var evidence =
-                    UnityMaterialEvidenceCapture.Capture(inputs, bounds);
+                    UnityMaterialEvidenceCapture.Capture(
+                        inputs, bounds,
+                        cutoutRawMipCap, exactRawMipCap);
                 var captured = new CapturedAlphaMaterial[materials.Count];
                 for (var index = 0; index < captured.Length; index++)
                 {
@@ -421,12 +425,15 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 IReadOnlyList<CapturedAlphaMaterialFamily> families,
                 MaterialEvidenceRequest request,
                 AlphaPolicyBounds bounds,
+                int cutoutRawMipCap,
+                int exactRawMipCap,
                 out ClosedAlphaCaptureOutcome outcome) =>
             {
                 _captureCalls++;
                 _seenRequests.Add(request);
                 return inner(
-                    materials, families, request, bounds, out outcome);
+                    materials, families, request, bounds,
+                    cutoutRawMipCap, exactRawMipCap, out outcome);
             };
         }
 

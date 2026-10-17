@@ -3303,6 +3303,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     new[] { family },
                     captureSchema,
                     AlphaPolicyBounds.Inert,
+                    int.MaxValue,
+                    int.MaxValue,
                     out var captured);
                 Assert.That(captured.Captured.Count, Is.EqualTo(1));
                 Assert.That(
@@ -7001,6 +7003,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     new[] { family },
                     captureSchema,
                     AlphaPolicyBounds.Inert,
+                    int.MaxValue,
+                    int.MaxValue,
                     out var captured);
                 Assert.That(captured.Captured.Count, Is.EqualTo(1));
 

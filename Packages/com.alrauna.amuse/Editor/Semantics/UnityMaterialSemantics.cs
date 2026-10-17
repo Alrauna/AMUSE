@@ -212,7 +212,8 @@ namespace Alrauna.Amuse.Editor.Semantics
             }
 
             return CaptureBatch(
-                materials, families, requests, null, resolveRegisteredSource);
+                materials, families, requests, null, resolveRegisteredSource,
+                int.MaxValue, int.MaxValue);
         }
 
         /// <summary>
@@ -278,7 +279,9 @@ namespace Alrauna.Amuse.Editor.Semantics
             MaterialEvidenceRequest request,
             AlphaPolicyBounds bounds,
             out ClosedAlphaCaptureOutcome outcome,
-            RegisteredSourceLookup resolveRegisteredSource)
+            RegisteredSourceLookup resolveRegisteredSource,
+            int cutoutRawMipCap = int.MaxValue,
+            int exactRawMipCap = int.MaxValue)
         {
             return TryCaptureClosedAlphaMaterialsTransferred(
                 materials,
@@ -287,7 +290,9 @@ namespace Alrauna.Amuse.Editor.Semantics
                 bounds,
                 System.Array.Empty<string>(),
                 out outcome,
-                resolveRegisteredSource);
+                resolveRegisteredSource,
+                cutoutRawMipCap,
+                exactRawMipCap);
         }
 
         /// <summary>
@@ -300,7 +305,11 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// by batch position in the outcome's failing ordinals, and only its
         /// own slots refuse.
         /// <paramref name="resolveRegisteredSource"/> carries registered-source
-        /// naming the same way the plain overload does.
+        /// naming the same way the plain overload does. The two arm caps pin
+        /// each shared capture bucket to its proof arm's readback: the
+        /// default pair keeps the uncapped request merge, so attestation
+        /// callers that carry family-schema caps never see the build's arm
+        /// values.
         /// </summary>
         internal static bool TryCaptureClosedAlphaMaterialsTransferred(
             IReadOnlyList<Material> materials,
@@ -309,7 +318,9 @@ namespace Alrauna.Amuse.Editor.Semantics
             AlphaPolicyBounds bounds,
             IReadOnlyCollection<string> grantedShaderNames,
             out ClosedAlphaCaptureOutcome outcome,
-            RegisteredSourceLookup resolveRegisteredSource)
+            RegisteredSourceLookup resolveRegisteredSource,
+            int cutoutRawMipCap = int.MaxValue,
+            int exactRawMipCap = int.MaxValue)
         {
             if (materials == null) throw new ArgumentNullException(nameof(materials));
             if (families == null) throw new ArgumentNullException(nameof(families));
@@ -328,7 +339,8 @@ namespace Alrauna.Amuse.Editor.Semantics
 
             var result = CaptureBatch(
                 materials, families, requests, bounds,
-                resolveRegisteredSource);
+                resolveRegisteredSource,
+                cutoutRawMipCap, exactRawMipCap);
             var captured = new List<CapturedAlphaMaterial>();
             var failed = new List<int>();
             for (var index = 0; index < result.Count; index++)
@@ -370,7 +382,9 @@ namespace Alrauna.Amuse.Editor.Semantics
             IReadOnlyList<CapturedAlphaMaterialFamily> families,
             IReadOnlyList<MaterialEvidenceRequest> requests,
             AlphaPolicyBounds? bounds,
-            RegisteredSourceLookup resolveRegisteredSource)
+            RegisteredSourceLookup resolveRegisteredSource,
+            int cutoutRawMipCap,
+            int exactRawMipCap)
         {
             var shaders = new Shader[materials.Count];
             var inputs = new MaterialEvidenceCaptureInput[materials.Count];
@@ -386,10 +400,14 @@ namespace Alrauna.Amuse.Editor.Semantics
                         materials[index], families[index]));
             }
 
+            // The null-bounds route serves conversion eligibility and
+            // opaque-target reads, so it keeps the smallest-cap merge and
+            // never sees the arm caps. The closed batch hands the arm caps
+            // to the capture, which pins each shared bucket to its arm.
             var evidence = bounds == null
                 ? UnityMaterialEvidenceCapture.Capture(inputs)
                 : UnityMaterialEvidenceCapture.Capture(
-                    inputs, bounds.Value);
+                    inputs, bounds.Value, cutoutRawMipCap, exactRawMipCap);
             return BuildCapturedAlphaMaterials(
                 materials, families, requests, shaders, evidence,
                 resolveRegisteredSource);
