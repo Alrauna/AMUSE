@@ -155,6 +155,17 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(exactAssignment.Texture.AlphaChannel.Count,
                 Is.EqualTo(5),
                 "the exact arm's chain holds the exact cap's five levels");
+            // The intersect pin: a request cap narrower than its arm cap
+            // yields the narrower chain.
+            var narrowed = CaptureMixedBatchAtArms(0, 4, requestRawMipCap: 2);
+            Assert.That(
+                narrowed[1].TryGetTexture(
+                    "_MainTex", out var narrowedAssignment),
+                Is.True);
+            Assert.That(narrowedAssignment.Texture.AlphaChannel.Count,
+                Is.EqualTo(3),
+                "the request cap narrower than the exact arm's cap " +
+                "narrows the chain");
         }
 
         // --- Falsifier 3: A bucket cap keyed on the predicate declaration
@@ -188,9 +199,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
 
         // --- Falsifier 4: A cross-family leak lets a cutout value move a
         // transparent verdict, or the reverse. The isolation assertions
-        // fail it. The two tests below carry them: the mixed-batch test
-        // pins each arm's chain to its own cap, and this test pins the
-        // exact arm's count and verdict against a changed cutout cap. ---
+        // fail it. ---
         [Test]
         public void ChangingTheCutoutCapLeavesTheExactArmsChainUnchanged()
         {
@@ -223,12 +232,15 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         /// one union request for the whole batch, each material's own
         /// family request as its predicate, and the wrapper's wider-cap
         /// stamp on the request. The two arm caps pin each bucket's chain
-        /// through the closed capture.
+        /// through the closed capture. The optional request cap overrides
+        /// the wider stamp, so a test can supply a request narrower than
+        /// an arm cap.
         /// </summary>
         private CapturedMaterialEvidence[] CaptureMixedBatchAtArms(
             int cutoutRawMipCap,
             int exactRawMipCap,
-            float cutoutCutoff = 0.25f)
+            float cutoutCutoff = 0.25f,
+            int? requestRawMipCap = null)
         {
             var texture = CreateArmCapTexture();
             var transparent = NewMaterial(
@@ -241,7 +253,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var request = MaterialEvidenceRequest.Combine(
                 LilToonCutoutMaterialSemantics.AlphaEvidenceRequest,
                 LilToonTransparentMaterialSemantics.AlphaEvidenceRequest)
-                .WithRawMipCap(Math.Max(cutoutRawMipCap, exactRawMipCap));
+                .WithRawMipCap(requestRawMipCap
+                    ?? Math.Max(cutoutRawMipCap, exactRawMipCap));
             var inputs = new[]
             {
                 new MaterialEvidenceCaptureInput(

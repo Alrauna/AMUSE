@@ -2254,7 +2254,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             {
                 CaptureFixtureMaterials(
                     materials, families, request, bounds,
-                    cutoutRawMipCap, exactRawMipCap, out var batch);
+                    int.MaxValue, int.MaxValue, out var batch);
                 var failedSet = new HashSet<int>(failedOrdinals);
                 var survivors = batch.Captured
                     .Where((_, index) => !failedSet.Contains(index))

@@ -1045,11 +1045,12 @@ namespace Alrauna.Amuse.Editor.Host
         /// The closed-batch capture with one cap per proof arm. Each shared
         /// bucket keys on the captured alpha threshold, so a bucket whose
         /// threshold sits below one reads the cutout arm's cap and a bucket
-        /// at the exact threshold reads the exact arm's cap. A cutoff
-        /// declared exactly one therefore captures with the exact arm, the
-        /// way the exact-255 proof reads it. The unshared fallback keeps
-        /// the request cap, which the caller stamps with the wider of the
-        /// two arms, so the fallback over-captures and never under-captures.
+        /// at the exact threshold reads the exact arm's cap, in each case
+        /// intersected with the request's own cap. A cutoff declared
+        /// exactly one therefore captures with the exact arm, the way the
+        /// exact-255 proof reads it. The unshared fallback keeps the
+        /// request cap, which the caller stamps with the wider of the two
+        /// arms, so the fallback over-captures and never under-captures.
         /// </summary>
         internal static IReadOnlyList<CapturedMaterialEvidence> Capture(
             IReadOnlyList<MaterialEvidenceCaptureInput> inputs,
@@ -1141,12 +1142,15 @@ namespace Alrauna.Amuse.Editor.Host
                     else
                     {
                         // The closed batch pins the bucket to its arm's
-                        // cap. The bucket threshold is the key, so every
-                        // contributing input computes the same cap and
-                        // the merge lands on it exactly.
-                        var bucketCap = texture.CutoutThreshold < 1f
-                            ? cutoutRawMipCap.Value
-                            : exactRawMipCap.Value;
+                        // cap, intersected with the request's own cap.
+                        // The bucket threshold is the key, so every
+                        // contributing input computes the same arm cap,
+                        // and the narrower of the two caps governs.
+                        var bucketCap = Math.Min(
+                            texture.CutoutThreshold < 1f
+                                ? cutoutRawMipCap.Value
+                                : exactRawMipCap.Value,
+                            input.Request.RawMipCap);
                         shared.RawMipCap = Math.Min(
                             shared.RawMipCap, bucketCap);
                     }
