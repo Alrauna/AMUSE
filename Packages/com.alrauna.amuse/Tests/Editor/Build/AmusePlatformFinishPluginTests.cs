@@ -1470,6 +1470,97 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Throws.InvalidOperationException);
         }
 
+        /// <summary>
+        /// The four alpha mappers fan out to the transparent arm. A
+        /// missing component maps as the inert contract, an
+        /// out-of-band stored value clamps defensively, and an
+        /// in-band stored value maps unchanged.
+        /// </summary>
+        [Test]
+        public void TransparentArmStoredValuesMapThroughTheSharedMappers()
+        {
+            // Inert without a component: the mapping block falls back
+            // to the uncapped proof contract when the avatar carries
+            // no optimizer.
+            Alrauna.Amuse.Runtime.AmuseAvatarOptimizer missing = null;
+            Assert.That(
+                RuntimeStateResolution.ProofMipCapFrom(
+                    missing?.PreserveTransparencyMaxMipLevel ?? -1),
+                Is.EqualTo(int.MaxValue));
+            Assert.That(
+                RuntimeStateResolution.MinTextureSizeFrom(
+                    missing?.PreserveTransparencyMinTextureSize ?? -1),
+                Is.EqualTo(1));
+            Assert.That(
+                RuntimeStateResolution.MinimumCoverageFrom(
+                    missing?.MinimumOpaqueCoveragePercent ?? 0),
+                Is.EqualTo(0));
+            Assert.That(
+                RuntimeStateResolution.MinimumPreserveCoverageFrom(
+                    missing?.MinimumOpaqueCoverageToPreservePercent ?? 0),
+                Is.EqualTo(0));
+
+            // A stored value outside the component contract is
+            // tampering. The mappers clamp it instead of classifying
+            // with a policy no inspector could have saved.
+            var clamped = MapSerializedTransparentPolicy(-5, 0, -5, -5);
+            Assert.That(clamped.mipCap, Is.EqualTo(int.MaxValue));
+            Assert.That(clamped.minTextureSize, Is.EqualTo(1));
+            Assert.That(clamped.coverage, Is.EqualTo(0));
+            Assert.That(clamped.preserve, Is.EqualTo(0));
+
+            // An in-band stored value maps unchanged.
+            var exact = MapSerializedTransparentPolicy(5, 256, 40, 15);
+            Assert.That(exact.mipCap, Is.EqualTo(5));
+            Assert.That(exact.minTextureSize, Is.EqualTo(256));
+            Assert.That(exact.coverage, Is.EqualTo(40));
+            Assert.That(exact.preserve, Is.EqualTo(15));
+        }
+
+        /// <summary>
+        /// The same four alpha mappers fan out to the cutout arm. The
+        /// cutout stored values ride the identical inert, defensive,
+        /// and in-band contract as the transparent stored values.
+        /// </summary>
+        [Test]
+        public void CutoutArmStoredValuesMapThroughTheSharedMappers()
+        {
+            // Inert without a component: the cutout reads use the same
+            // null-component fallbacks as the transparent reads.
+            Alrauna.Amuse.Runtime.AmuseAvatarOptimizer missing = null;
+            Assert.That(
+                RuntimeStateResolution.ProofMipCapFrom(
+                    missing?.CutoutPreserveTransparencyMaxMipLevel ?? -1),
+                Is.EqualTo(int.MaxValue));
+            Assert.That(
+                RuntimeStateResolution.MinTextureSizeFrom(
+                    missing?.CutoutPreserveTransparencyMinTextureSize ?? -1),
+                Is.EqualTo(1));
+            Assert.That(
+                RuntimeStateResolution.MinimumCoverageFrom(
+                    missing?.CutoutMinimumOpaqueCoveragePercent ?? 0),
+                Is.EqualTo(0));
+            Assert.That(
+                RuntimeStateResolution.MinimumPreserveCoverageFrom(
+                    missing?.CutoutMinimumOpaqueCoverageToPreservePercent ?? 0),
+                Is.EqualTo(0));
+
+            // An out-of-band cutout stored value clamps through the
+            // same banding as the transparent arm.
+            var clamped = MapSerializedCutoutPolicy(-5, 0, -5, -5);
+            Assert.That(clamped.mipCap, Is.EqualTo(int.MaxValue));
+            Assert.That(clamped.minTextureSize, Is.EqualTo(1));
+            Assert.That(clamped.coverage, Is.EqualTo(0));
+            Assert.That(clamped.preserve, Is.EqualTo(0));
+
+            // An in-band cutout stored value maps unchanged.
+            var exact = MapSerializedCutoutPolicy(6, 320, 55, 45);
+            Assert.That(exact.mipCap, Is.EqualTo(6));
+            Assert.That(exact.minTextureSize, Is.EqualTo(320));
+            Assert.That(exact.coverage, Is.EqualTo(55));
+            Assert.That(exact.preserve, Is.EqualTo(45));
+        }
+
         private static int InvokePolicyMapper(
             string mapperName,
             Alrauna.Amuse.Runtime.AmuseAvatarOptimizer optimizer)
@@ -1519,6 +1610,111 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 serialized.ApplyModifiedPropertiesWithoutUndo();
 
                 return InvokePolicyMapper(mapperName, component);
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
+        /// Sets the four transparent policy fields to the given stored
+        /// values and maps each one through the shared mappers exactly
+        /// as the barrier's mapping block does.
+        /// </summary>
+        private static (
+            int mipCap,
+            int minTextureSize,
+            int coverage,
+            int preserve) MapSerializedTransparentPolicy(
+                int mipCap,
+                int minTextureSize,
+                int coverage,
+                int preserve)
+        {
+            var root = new GameObject("AMUSE transparent policy fan-out");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            try
+            {
+                var component =
+                    root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                var serialized = new SerializedObject(component);
+                serialized.FindProperty("_preserveTransparencyMaxMipLevel")
+                    .intValue = mipCap;
+                serialized.FindProperty("_preserveTransparencyMinTextureSize")
+                    .intValue = minTextureSize;
+                serialized.FindProperty("_minimumOpaqueCoveragePercent")
+                    .intValue = coverage;
+                serialized.FindProperty("_minimumOpaqueCoverageToPreservePercent")
+                    .intValue = preserve;
+                serialized.ApplyModifiedPropertiesWithoutUndo();
+
+                return (
+                    RuntimeStateResolution.ProofMipCapFrom(
+                        component.PreserveTransparencyMaxMipLevel),
+                    RuntimeStateResolution.MinTextureSizeFrom(
+                        component.PreserveTransparencyMinTextureSize),
+                    RuntimeStateResolution.MinimumCoverageFrom(
+                        component.MinimumOpaqueCoveragePercent),
+                    RuntimeStateResolution.MinimumPreserveCoverageFrom(
+                        component.MinimumOpaqueCoverageToPreservePercent));
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
+        /// Sets the four cutout policy fields to the given stored
+        /// values and maps each one through the same shared mappers,
+        /// so the cutout arm cannot drift from the transparent
+        /// contract.
+        /// </summary>
+        private static (
+            int mipCap,
+            int minTextureSize,
+            int coverage,
+            int preserve) MapSerializedCutoutPolicy(
+                int mipCap,
+                int minTextureSize,
+                int coverage,
+                int preserve)
+        {
+            var root = new GameObject("AMUSE cutout policy fan-out");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            try
+            {
+                var component =
+                    root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+
+                // A first serialization round trip runs the one-time
+                // upgrade backfill. The marker is then set, so the
+                // cutout edits below keep their stored values.
+                var primed = EditorJsonUtility.ToJson(component);
+                EditorJsonUtility.FromJsonOverwrite(primed, component);
+
+                var serialized = new SerializedObject(component);
+                serialized.FindProperty("_cutoutPreserveTransparencyMaxMipLevel")
+                    .intValue = mipCap;
+                serialized.FindProperty("_cutoutPreserveTransparencyMinTextureSize")
+                    .intValue = minTextureSize;
+                serialized.FindProperty("_cutoutMinimumOpaqueCoveragePercent")
+                    .intValue = coverage;
+                serialized.FindProperty(
+                        "_cutoutMinimumOpaqueCoverageToPreservePercent")
+                    .intValue = preserve;
+                serialized.ApplyModifiedPropertiesWithoutUndo();
+
+                return (
+                    RuntimeStateResolution.ProofMipCapFrom(
+                        component.CutoutPreserveTransparencyMaxMipLevel),
+                    RuntimeStateResolution.MinTextureSizeFrom(
+                        component.CutoutPreserveTransparencyMinTextureSize),
+                    RuntimeStateResolution.MinimumCoverageFrom(
+                        component.CutoutMinimumOpaqueCoveragePercent),
+                    RuntimeStateResolution.MinimumPreserveCoverageFrom(
+                        component.CutoutMinimumOpaqueCoverageToPreservePercent));
             }
             finally
             {

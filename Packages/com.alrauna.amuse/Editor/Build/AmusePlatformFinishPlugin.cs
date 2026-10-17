@@ -703,6 +703,16 @@ namespace Alrauna.Amuse.Editor.Build
             var minimumOpaqueCoverageToPreservePercent =
                 RuntimeStateResolution.MinimumPreserveCoverageFrom(
                     optimizer?.MinimumOpaqueCoverageToPreservePercent ?? 0);
+            var cutoutMaxMipLevel = RuntimeStateResolution.ProofMipCapFrom(
+                optimizer?.CutoutPreserveTransparencyMaxMipLevel ?? -1);
+            var cutoutMinTextureSize = RuntimeStateResolution.MinTextureSizeFrom(
+                optimizer?.CutoutPreserveTransparencyMinTextureSize ?? -1);
+            var cutoutMinimumCoverage =
+                RuntimeStateResolution.MinimumCoverageFrom(
+                    optimizer?.CutoutMinimumOpaqueCoveragePercent ?? 0);
+            var cutoutPreserveCoverage =
+                RuntimeStateResolution.MinimumPreserveCoverageFrom(
+                    optimizer?.CutoutMinimumOpaqueCoverageToPreservePercent ?? 0);
             var opaqueAlphaPercent = OpaquePercentFrom(optimizer);
             var polygonClampPercent = PolygonClampPercentFrom(optimizer);
             var densityCapPercent =

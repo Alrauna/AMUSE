@@ -93,6 +93,10 @@ namespace Alrauna.Amuse.Editor.DryRun
         private int _densityCapPercent;
         private int _minimumOpaqueCoveragePercent;
         private int _minimumOpaqueCoverageToPreservePercent;
+        private int _cutoutMaxMipLevel;
+        private int _cutoutMinTextureSize;
+        private int _cutoutMinimumCoverage;
+        private int _cutoutPreserveCoverage;
         private bool _allowDepthTestChange;
 
         private int _rendererIndex;
@@ -362,6 +366,16 @@ namespace Alrauna.Amuse.Editor.DryRun
             _minimumOpaqueCoverageToPreservePercent =
                 RuntimeStateResolution.MinimumPreserveCoverageFrom(
                     _component.MinimumOpaqueCoverageToPreservePercent);
+            _cutoutMaxMipLevel = RuntimeStateResolution.ProofMipCapFrom(
+                _component.CutoutPreserveTransparencyMaxMipLevel);
+            _cutoutMinTextureSize = RuntimeStateResolution.MinTextureSizeFrom(
+                _component.CutoutPreserveTransparencyMinTextureSize);
+            _cutoutMinimumCoverage =
+                RuntimeStateResolution.MinimumCoverageFrom(
+                    _component.CutoutMinimumOpaqueCoveragePercent);
+            _cutoutPreserveCoverage =
+                RuntimeStateResolution.MinimumPreserveCoverageFrom(
+                    _component.CutoutMinimumOpaqueCoverageToPreservePercent);
             _allowDepthTestChange = _component.AllowDepthTestChange;
             _bounds = AlphaPolicyBounds.From(
                 RuntimeStateResolution.OpaquePercentFrom(
@@ -1531,6 +1545,10 @@ namespace Alrauna.Amuse.Editor.DryRun
                 _component.PreserveTransparencyMinTextureSize,
                 _component.MinimumOpaqueCoveragePercent,
                 _component.MinimumOpaqueCoverageToPreservePercent,
+                _component.CutoutPreserveTransparencyMaxMipLevel,
+                _component.CutoutPreserveTransparencyMinTextureSize,
+                _component.CutoutMinimumOpaqueCoveragePercent,
+                _component.CutoutMinimumOpaqueCoverageToPreservePercent,
                 _component.MinimumOpaqueAlphaPercent,
                 _component.PolygonAlphaUpperClampPercent,
                 _component.PolygonMinimumOpaqueCoveragePercent,
