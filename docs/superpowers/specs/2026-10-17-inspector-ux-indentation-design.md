@@ -8,12 +8,14 @@ Investigation: `docs/superpowers/investigations/2026-10-17-inspector-ux-indentat
 
 Revision note: 2026-10-17, after a five-lens parallel adversarial review (accuracy against the investigation, safety and security, architectural purity, ponytail adherence, latent bugs). Incorporated: sentence-scoped documentation replacements, a full-field `Reset()` that preserves the context-menu Reset contract, an explicit field-initializer decision, the backfill-marker doc comment update, mixed-value restore hardened with try/finally, the four-needle count, the corrected decision mapping, the recorded existing-avatar consequence, label-width tests pinned to the existing editor test class, and the recorded ruling that the Alpha Separator view stays flat at depth 1.
 
+Second revision note, 2026-10-17, from the implementation plan's execution-lens review: the drawn value equals the stored value. "Ignore" and "Allow" name the same disposition, so the relabel is a pure label and tooltip change through the existing `PropertyField` path. The earlier display-inversion mechanics (the hand-drawn `ToggleLeft`, the explicit mixed-value handling, and the negation) are removed, and Falsifier 2 now targets the inversion itself. This corrects the investigation's §5.2 conclusion sentence; the investigation is a dated record and stays as written.
+
 ## Overview
 
 The owner asked on 2026-10-17 for three inspector changes: small indentations for every child set of menu items, a relabel of the out-of-range slots toggle to the Allow voice, and new cutout mip cap defaults. The change has three parts:
 
 1. Indent four child regions of `AmuseAvatarOptimizerEditor` with Unity's built-in `EditorGUI.IndentLevelScope`, and make the Alpha Separator Settings label width indent-aware.
-2. Redraw the `_ignoreOutOfRangeMaterialSlots` toggle in the Allow voice, inverting the drawn value over the unchanged stored bool.
+2. Relabel the `_ignoreOutOfRangeMaterialSlots` toggle to the Allow voice. The drawn value equals the stored value; only the label and tooltip text change.
 3. Move the fresh-component cutout mip cap default from 4 to 3 through the field initializer plus a `Reset()` implementation, move the three shipped preset cutout values to 3, 3, and 2, and update every sentence and test that pins the old values.
 
 No build pipeline, analysis, host, semantics, or report code changes. No serialized field name, type, or stored meaning changes.
@@ -22,7 +24,7 @@ No build pipeline, analysis, host, semantics, or report code changes. No seriali
 
 The plan must not conflate these pairs.
 
-1. Drawn value versus stored value. The toggle's stored bool means "ignore" (true ignores out-of-range slot animations). The new label "Allow Out-of-Range Material Slots" states the same behavior from the opposite side, so the drawn value is the negation of the stored value. Stored values never change shape or meaning. An implementation that renames or re-semants the stored field is wrong (Falsifier 2).
+1. Drawn value versus stored value. The stored bool means "ignore" (true ignores out-of-range slot animations). "Allow" names the same disposition: a checked checkbox means the avatar tolerates out-of-range slot animations, which is exactly stored true. The drawn value therefore equals the stored value, and the relabel changes only the label and tooltip text. Stored values never change shape or meaning. Two named wrong implementations: renaming or re-semanting the stored field, and inverting the drawn value so the checkbox shows unchecked while the avatar tolerates the slots (Falsifier 2).
 2. Fresh component versus legacy payload. The legacy backfill copies stored opacity values into the cutout fields whenever `_cutoutSettingsBackfilled` deserializes false. Fresh components also deserialize the marker as false, so the backfill cannot distinguish them and would overwrite a plain initializer change. The fresh default therefore ships through `Reset()`, which Unity calls only in the editor when the component is first added or the user presses Reset. Legacy upgrade behavior stays byte-identical (Falsifier 1).
 
 ## Decisions
@@ -37,7 +39,7 @@ Decisions 1, 2, 3, 4, 8, 9, 10, and 11 close the investigation's open points 1 t
    - Add `private void Reset()` to `AmuseAvatarOptimizer`. It assigns every serialized field its declared default, with the cutout mip cap at its new default 3, and it sets `_cutoutSettingsBackfilled = true`. The full-field scope preserves the context-menu Reset contract exactly: today, with no `Reset()` defined, Unity's Reset command restores every field to its fresh default, and this method keeps that meaning while adding the marker set. The marker set prevents the first round trip from copying the opacity arm over the fresh 3.
    The backfill body itself does not change. Legacy payloads (payloads without the cutout fields) keep inheriting their stored opacity values once, exactly as today. Existing saved components keep their stored values, because their marker is already true. The marker's doc comment at `Runtime/AmuseAvatarOptimizer.cs:122-131` is updated to name both meanings: true after the upgrade backfill copies the transparent values into the cutout fields, or after Reset establishes the factory defaults. The runtime field doc comment sentence "The default of 4 matches the transparent setting." becomes "The default is 3. The transparent setting defaults to 4." (closes open point 9 together with decision 8).
 5. Preset values (part of the owner request). `Presets/safe.json` cutout 4 becomes 3. `Presets/normal.json` cutout 4 becomes 3. `Presets/aggressive.json` cutout 3 becomes 2. `schemaVersion` stays 4. The parser range -1 and 0 through 10 already admits the new values, so parsing and refusals do not change. Components saved before this change keep their stored cutout 4 and no longer show the Normal preset pressed, because `Matches` compares stored values. This is accepted owner-requested behavior, recorded as the investigation assigned.
-6. Toggle relabel mechanics. `DrawSettings` replaces the `EditorGUILayout.PropertyField` call for `_ignoreOutOfRangeMaterialSlots` with a hand-drawn control that keeps every affordance `PropertyField` plus `ToggleLeftDrawer` provide today: `EditorGUI.BeginProperty` around `EditorGUI.ToggleLeft`, drawn value `!property.boolValue`, write-back `property.boolValue = !allow` on `EditorGUI.EndChangeCheck`, and explicit `EditorGUI.showMixedValue = property.hasMultipleDifferentValues` set and restored around the call so multi-object selection keeps its mixed dash.
+6. Toggle relabel mechanics. `DrawSettings` keeps `EditorGUILayout.PropertyField` for `_ignoreOutOfRangeMaterialSlots`, so the existing `[ToggleLeft]` drawer keeps the left-aligned checkbox, the prefab-override menu, and the mixed-value dash with no new drawing code. Only the `GUIContent` changes, to the new label and the Allow-voice tooltip. The drawn value stays the stored value; there is no negation anywhere.
 7. New test seam for the drawn value. Add `internal static Action<bool> OnOutOfRangeToggleDrawnForTest` to the editor, fired with the drawn Allow value right after the toggle draws. This mirrors the existing `OnFoldoutHeaderDrawnForTest` house pattern and is the only new production member besides `Reset()` and the label-width helper.
 8. Cutout tooltip sentence (closes open points 6 and 9). The cutout tooltip sentence "The default of Mip 4 fits most viewing distances." becomes "The default of Mip 3 fits most viewing distances." The opacity tooltip keeps Mip 4. The Allow-voice tooltip for the relabeled toggle is exactly:
 
@@ -85,38 +87,21 @@ The top-level "Alpha Separator" toggle, the header, the preset row, and the Help
 In `DrawSettings`, inside the advanced block, the relabeled control draws exactly:
 
 ```csharp
-var outOfRange = serializedObject.FindProperty(
-    "_ignoreOutOfRangeMaterialSlots");
-var rowRect = EditorGUILayout.GetControlRect();
-var allowContent = new GUIContent(
-    "Allow Out-of-Range Material Slots",
-    "Some animation files animate material slots that do not " +
-    "exist on this mesh. When this setting is on, AMUSE ignores " +
-    "these extra slot animations and optimizes the valid slots. " +
-    "Turn this setting off to refuse meshes with extra slot " +
-    "animations.");
-EditorGUI.BeginProperty(rowRect, allowContent, outOfRange);
-var previousMixed = EditorGUI.showMixedValue;
-EditorGUI.showMixedValue = outOfRange.hasMultipleDifferentValues;
-try
-{
-    EditorGUI.BeginChangeCheck();
-    var allow = EditorGUI.ToggleLeft(rowRect, allowContent,
-        !outOfRange.boolValue);
-    OnOutOfRangeToggleDrawnForTest?.Invoke(allow);
-    if (EditorGUI.EndChangeCheck())
-    {
-        outOfRange.boolValue = !allow;
-    }
-}
-finally
-{
-    EditorGUI.showMixedValue = previousMixed;
-}
-EditorGUI.EndProperty();
+EditorGUILayout.PropertyField(
+    serializedObject.FindProperty("_ignoreOutOfRangeMaterialSlots"),
+    new GUIContent(
+        "Allow Out-of-Range Material Slots",
+        "Some animation files animate material slots that do not " +
+        "exist on this mesh. When this setting is on, AMUSE ignores " +
+        "these extra slot animations and optimizes the valid slots. " +
+        "Turn this setting off to refuse meshes with extra slot " +
+        "animations."));
+OnOutOfRangeToggleDrawnForTest?.Invoke(
+    serializedObject.FindProperty("_ignoreOutOfRangeMaterialSlots")
+        .boolValue);
 ```
 
-The stored name, the stored meaning, the preset keys, the runtime accessor, and every build-path consumer stay untouched. A plain repaint writes nothing.
+The stored name, the stored meaning, the preset keys, the runtime accessor, and every build-path consumer stay untouched. A plain repaint writes nothing, exactly as the PropertyField path always did. The new `OnOutOfRangeToggleDrawnForTest` delegate fires with the drawn value, which is the stored value, right after the control draws.
 
 ## Parsing and refusals
 
@@ -155,13 +140,13 @@ Per class:
 - `Tests/Editor/Presets/PresetApplierTests.cs`. Expected table rows become `("Safe", 3, 128, 25, 0)`, `("Normal", 3, 128, 25, 5)`, `("Aggressive", 2, 128, 25, 10)`. `ApplyWritesAllSixteenFields` asserts 3. `ApplyingShippedAggressiveSetsSmallestTestedMipmapToThree` stays green untouched (opacity arm).
 - `Tests/Editor/Presets/PresetParserTests.cs`. `ValidJson` cutout 4 becomes 3, asserted value becomes 3, and all four `string.Replace` needles move with it: `WithCutoutMipCap` and the three legacy-body builders (`LegacyVersionTwoBody`, `LegacyVersionOneBody`, `LegacyVersionThreeBody`).
 - `Tests/Editor/Presets/PresetFileStoreTests.cs`. `ValidBody` cutout becomes 3.
-- `Tests/Editor/AmuseAvatarOptimizerEditorTests.cs`. New `OutOfRangeToggleDrawsTheInvertedValueAndWritesNothingOnRepaint`: stored true draws Allow checked, stored false draws it unchecked, and a plain repaint changes neither stored value. New label-width `[Test]` methods live directly in this class (the house mirror rule has one test class per production type, so no sibling test class is created): at indent 0 the helper returns `ceil(widest) + 2`, and each indent level subtracts 15. Existing header, out-of-band, repaint, and dry-run tests must stay green untouched; they are the smoke validation for the indentation.
+- `Tests/Editor/AmuseAvatarOptimizerEditorTests.cs`. New `OutOfRangeToggleDrawsTheStoredValueInTheAllowVoice`: stored true draws the Allow checkbox checked, stored false draws it unchecked (the drawn value equals the stored value), and a plain repaint changes neither stored value. New label-width `[Test]` methods live directly in this class (the house mirror rule has one test class per production type, so no sibling test class is created): at indent 0 the helper returns `ceil(widest) + 2`, and each indent level subtracts 15. Existing header, out-of-band, repaint, and dry-run tests must stay green untouched; they are the smoke validation for the indentation.
 - `Tests/Editor/Build/AlphaSeparationPreparationTests.cs`. `PreserveTransparencyMipPolicyScopesTheProofEndToEnd` must stay green (it tolerates cap 3). Its doc-comment prose at `:4917-4919` syncs from "through mip 4" to the cap-3 wording.
 
 Falsifiers, numbered:
 
 - --- Falsifier 1: an implementation that changes only the field initializer to 3 without `Reset()`. `FreshCutoutDefaultSurvivesASerializationRoundTrip` fails on its post-round-trip assertion, because the first round trip runs the backfill and copies the opacity 4 over the fresh 3. ---
-- --- Falsifier 2: an implementation that renames or inverts the stored field instead of inverting the drawn value. `OutOfRangeToggleDrawsTheInvertedValueAndWritesNothingOnRepaint` fails on the stored-value assertion, and `DefaultIgnoreOutOfRangeMaterialSlotsIsTrue` plus the preset Matches semantics fail with it. ---
+- --- Falsifier 2: an implementation that inverts the drawn value (draws the negation of the stored bool) or renames the stored field. The drawn-value assertions fail against the inversion, because stored true must draw checked. A rename fails the drawn test's property lookup outright, and `DefaultIgnoreOutOfRangeMaterialSlotsIsTrue` plus the preset Matches semantics fail with it. ---
 - --- Falsifier 3: an implementation of `AlphaSeparatorLabelWidth` that ignores `EditorGUI.indentLevel` (returns `ceil(widest) + 2` always). The indent-3 case of the helper test fails. ---
 - --- Falsifier 4: an implementation that updates the preset JSONs but not the runtime default, or the reverse. `DefaultComponentMatchesTheShippedNormalPreset` fails, because a fresh component and `normal.json` then disagree on the cutout cap. ---
 
