@@ -91,6 +91,15 @@ namespace Alrauna.Amuse.Editor.Build
         /// for its earlier admitted materials are destroyed immediately —
         /// they are AMUSE-owned transients from this same call.
         /// </para>
+        /// <para>
+        /// The two percent vectors carry one pair per slot ordinal, selected
+        /// from the slot's own recorded proof arm. Both gates read the slot's
+        /// own pair, so a mixed renderer never folds or refuses one slot by
+        /// another arm's value. The membership vector records which arm each
+        /// slot selected and is kept for the fold cause the report pass
+        /// names. All three vectors cover the largest binding index plus
+        /// one.
+        /// </para>
         /// </summary>
         internal static PreparedRendererSeparation Prepare(
             AmusePlatformFinishState state,
@@ -103,6 +112,9 @@ namespace Alrauna.Amuse.Editor.Build
             VerifiedLilToonConversion lilToonConversion,
             int minimumOpaqueCoveragePercent,
             int minimumOpaqueCoverageToPreservePercent = 0,
+            IReadOnlyList<int> coveragePercentsBySlot = null,
+            IReadOnlyList<int> preservePercentsBySlot = null,
+            IReadOnlyList<bool> cutoutMembershipBySlot = null,
             string rendererTypeName = null,
             bool allowDepthTestChange = false,
             IReadOnlyCollection<string> grantedShaderNames = null,
@@ -116,15 +128,30 @@ namespace Alrauna.Amuse.Editor.Build
             if (evidence == null) throw new ArgumentNullException(nameof(evidence));
             if (admittedLiveMaterials == null)
                 throw new ArgumentNullException(nameof(admittedLiveMaterials));
+            if (coveragePercentsBySlot == null)
+            {
+                throw new ArgumentNullException(nameof(coveragePercentsBySlot));
+            }
+
+            if (preservePercentsBySlot == null)
+            {
+                throw new ArgumentNullException(nameof(preservePercentsBySlot));
+            }
+
+            if (cutoutMembershipBySlot == null)
+            {
+                throw new ArgumentNullException(
+                    nameof(cutoutMembershipBySlot));
+            }
 
             // The preserve gate folds whole material slots whose every
-            // submesh holds a strictly smaller unproven share than the
-            // stored preserve value. A folded entry is an ordinary
-            // wholly-opaque candidate for every later consumer here, so
-            // no candidate-loop gate changes. The unproven count per
-            // folded submesh feeds the forced report event of the later
-            // report pass. A preserve value of 0 qualifies nothing, so
-            // the original plan object flows through unchanged.
+            // submesh holds a strictly smaller unproven share than that
+            // slot's own stored preserve value. A folded entry is an
+            // ordinary wholly-opaque candidate for every later consumer
+            // here, so no candidate-loop gate changes. The unproven count
+            // per folded submesh feeds the forced report event of the
+            // later report pass. A preserve value of 0 qualifies nothing,
+            // so the original plan object flows through unchanged.
             var unprovenCountByFoldedSubmesh = new Dictionary<int, int>();
             var entriesByBindingIndex =
                 new Dictionary<int, List<SubmeshSeparationPlan>>();
@@ -143,15 +170,16 @@ namespace Alrauna.Amuse.Editor.Build
             }
 
             var foldedEntries = new List<SubmeshSeparationPlan>();
-            foreach (var slotEntries in entriesByBindingIndex.Values)
+            foreach (var slotGroup in entriesByBindingIndex)
             {
                 if (!SlotTransformDecision.PreserveSlotQualifies(
-                        slotEntries, minimumOpaqueCoverageToPreservePercent))
+                        slotGroup.Value,
+                        preservePercentsBySlot[slotGroup.Key]))
                 {
                     continue;
                 }
 
-                foreach (var entry in slotEntries)
+                foreach (var entry in slotGroup.Value)
                 {
                     var folded = MeshSeparationPlanner.Folded(entry);
                     unprovenCountByFoldedSubmesh.Add(
@@ -362,7 +390,9 @@ namespace Alrauna.Amuse.Editor.Build
                 if (submesh.Disposition ==
                         SubmeshSeparationDisposition.Split &&
                     SlotTransformDecision.OpaqueCoverageBelow(
-                        minimumOpaqueCoveragePercent, submesh))
+                        coveragePercentsBySlot[
+                            submesh.SourceMaterialBindingIndex],
+                        submesh))
                 {
                     var coverageSlotIndex =
                         submesh.SourceMaterialBindingIndex;

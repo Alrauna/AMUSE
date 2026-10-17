@@ -12,7 +12,12 @@ using Alrauna.Amuse.Editor.Semantics;
 using Alrauna.Amuse.Editor.Semantics.LilToon;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
 using Alrauna.Amuse.Runtime;
+using Alrauna.Amuse.Tests.Editor.Build;
+using Alrauna.Amuse.Tests.Editor.Semantics.LilToon;
 using Alrauna.Amuse.Tests.Editor.Shared;
+using nadena.dev.ndmf;
+using nadena.dev.ndmf.animator;
+using nadena.dev.ndmf.platform;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEditor.Animations;
@@ -39,7 +44,6 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             "Hidden/Alrauna/AmuseTests/LilToonSemanticTest";
         private const string ReadbackFolder = "Assets/Amuse.StreamingReadback";
         private const int TextureSize = 8;
-
         private TestTransientScope _scope;
         private AnisotropicFilteringPin _filteringPin;
 
@@ -256,6 +260,67 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             return material;
         }
 
+        private Material NewTransparentMaterial(Texture2D mainTex)
+        {
+            var shader = Shader.Find(
+                LilToonFixtureTestBase.TransparentConversionShaderName);
+            Assert.That(
+                shader,
+                Is.Not.Null,
+                LilToonFixtureTestBase.TransparentConversionShaderName +
+                " must import.");
+            var material = _scope.Track(new Material(shader));
+            material.SetTexture("_MainTex", mainTex);
+            material.SetTextureScale("_MainTex", Vector2.one);
+            material.SetTextureOffset("_MainTex", Vector2.zero);
+            material.SetColor("_Color", new Color(1f, 1f, 1f, 1f));
+            return material;
+        }
+
+        /// <summary>
+        /// Two submeshes, each one left-half triangle plus one
+        /// right-half triangle, so each slot splits one proven triangle
+        /// against one unproven triangle.
+        /// </summary>
+        private Mesh MixedTwoSlotMesh()
+        {
+            var mesh = _scope.Track(new Mesh());
+            mesh.vertices = new[]
+            {
+                new Vector3(0f, 0f, 0f),
+                new Vector3(1f, 0f, 0f),
+                new Vector3(0f, 1f, 0f),
+                new Vector3(3f, 0f, 0f),
+                new Vector3(4f, 0f, 0f),
+                new Vector3(3f, 1f, 0f),
+                new Vector3(6f, 0f, 0f),
+                new Vector3(7f, 0f, 0f),
+                new Vector3(6f, 1f, 0f),
+                new Vector3(9f, 0f, 0f),
+                new Vector3(10f, 0f, 0f),
+                new Vector3(9f, 1f, 0f),
+            };
+            mesh.uv = new[]
+            {
+                new Vector2(0.05f, 0.05f),
+                new Vector2(0.45f, 0.05f),
+                new Vector2(0.05f, 0.45f),
+                new Vector2(0.55f, 0.55f),
+                new Vector2(0.95f, 0.55f),
+                new Vector2(0.55f, 0.95f),
+                new Vector2(0.05f, 0.05f),
+                new Vector2(0.45f, 0.05f),
+                new Vector2(0.05f, 0.45f),
+                new Vector2(0.55f, 0.55f),
+                new Vector2(0.95f, 0.55f),
+                new Vector2(0.55f, 0.95f),
+            };
+            mesh.subMeshCount = 2;
+            mesh.SetTriangles(new[] { 0, 1, 2, 3, 4, 5 }, 0);
+            mesh.SetTriangles(new[] { 6, 7, 8, 9, 10, 11 }, 1);
+            return mesh;
+        }
+
         private SkinnedMeshRenderer AddSkinnedRenderer(
             GameObject owner, Mesh mesh, params Material[] slots)
         {
@@ -327,10 +392,24 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                     return true;
                 }
 
-                family = CapturedAlphaMaterialFamily.Unsupported;
-                alpha = null;
-                capture = null;
-                return false;
+                if (material != null &&
+                    material.shader == Shader.Find(
+                        LilToonFixtureTestBase
+                            .TransparentConversionShaderName))
+                {
+                    family = CapturedAlphaMaterialFamily.LilToonTransparent;
+                    alpha =
+                        LilToonTransparentMaterialSemantics
+                            .AlphaEvidenceRequest;
+                    capture = MaterialEvidenceRequest.Combine(
+                        alpha,
+                        LilToonTransparentSourceEligibility
+                            .ConversionEvidenceRequest);
+                    return true;
+                }
+
+                return VerifiedPoiyomiTestSeams.SelectVerifiedFixtureRequest(
+                    material, out family, out alpha, out capture);
             });
 
         private ClosedAlphaMaterialCapturer FixtureCapturer() =>
@@ -345,16 +424,22 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             {
                 var inputs = new MaterialEvidenceCaptureInput[materials.Count];
                 var shaders = new Shader[materials.Count];
+                var declaresCutoff = new bool[materials.Count];
                 for (var index = 0; index < materials.Count; index++)
                 {
                     shaders[index] = materials[index] == null
                         ? null
                         : materials[index].shader;
+                    var predicate = UnityMaterialSemantics
+                        .AlphaPredicateRequestFor(
+                            materials[index], families[index]);
                     inputs[index] = new MaterialEvidenceCaptureInput(
                         materials[index],
                         request,
-                        UnityMaterialSemantics.AlphaPredicateRequestFor(
-                            materials[index], families[index]));
+                        predicate);
+                    declaresCutoff[index] =
+                        UnityMaterialSemantics.PredicateDeclaresCutoff(
+                            predicate);
                 }
 
                 var evidence =
@@ -365,7 +450,9 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 for (var index = 0; index < captured.Length; index++)
                 {
                     var family = families[index];
-                    LilToonSourceEvidence lilToon;
+                    LilToonSourceEvidence lilToon = null;
+                    PoiyomiSourceEvidence poiyomi =
+                        default(PoiyomiSourceEvidence);
                     if (family == CapturedAlphaMaterialFamily.LilToonCutout)
                     {
                         lilToon = LilToonSourceAttestation
@@ -378,17 +465,28 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                             .GatherSourceEvidence(
                                 shaders[index], evidence[index]);
                     }
-                    else
+                    else if (family ==
+                        CapturedAlphaMaterialFamily.LilToonTransparent)
                     {
-                        lilToon = null;
+                        lilToon = LilToonSourceAttestation
+                            .GatherTransparentSourceEvidence(
+                                shaders[index], evidence[index]);
+                    }
+                    else if (family ==
+                        CapturedAlphaMaterialFamily.Poiyomi)
+                    {
+                        poiyomi = PoiyomiMaterialSemantics
+                            .GatherAlphaSourceEvidence(
+                                shaders[index], evidence[index]);
                     }
 
                     var source = materials[index];
                     captured[index] = new CapturedAlphaMaterial(
                         family,
                         evidence[index],
-                        default(PoiyomiSourceEvidence),
+                        poiyomi,
                         lilToon,
+                        predicatesDeclareCutoff: declaresCutoff[index],
                         materialPath: source != null
                             ? AssetDatabase.GetAssetPath(source)
                             : null,
@@ -552,9 +650,12 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
         public void FoldSlotProducesConvertableSentence()
         {
             var fixture = NewComputeFixture(255, 0.5f);
+
+            // The fixture's slot records the cutout arm, so the fold
+            // reads the cutout preserve value, not the transparent one.
             SetInt(
                 fixture.Optimizer,
-                "_minimumOpaqueCoverageToPreservePercent",
+                "_cutoutMinimumOpaqueCoverageToPreservePercent",
                 60);
             var dryRun = NewDryRun(
                 fixture, null, FixtureSelector(), FixtureCapturer());
@@ -565,6 +666,81 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             Assert.That(
                 rows[0].Sentence,
                 Is.EqualTo("Convertable: 2 out of 2 polygons may be moved"));
+            Assert.That(
+                dryRun.RendererRows.Any(
+                    item => item.Kind == MaterialTransformationRowKind.Renderer),
+                Is.False);
+        }
+
+        /// <summary>
+        /// The mixed renderer of the pair-selection suite runs through
+        /// the dry run and produces the verdicts the build prepares for
+        /// the same shape: the cutout preset slot reads Convertable
+        /// under the cutout pair's own preserve value, with the
+        /// unproven triangle still out of the proven count, and the
+        /// plain preset slot reads Splittable under its own inert pair.
+        /// The build-side outcomes for this renderer shape are pinned
+        /// end to end by the pair-selection suite and the sibling pins.
+        /// A dry run that keeps one coverage pair shows a different row
+        /// for one slot.
+        /// </summary>
+        [Test]
+        public void DryRunVerdictsMatchTheBuildOnAMixedRenderer()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var texture = ImportHalfTexture("mixed_paths_halves", 255);
+
+            // The dry run path. The slot pair is the proven Poiyomi
+            // sibling recipe: a cutout preset slot and a plain preset
+            // slot, so one slot reads the cutout pair and one reads the
+            // transparent pair.
+            var dryRunRoot = _scope.Track(NewAvatarRoot("amuse-dry-run-mixed"));
+            var dryRunOptimizer = AddOptimizer(dryRunRoot);
+            SetInt(
+                dryRunOptimizer,
+                "_minimumOpaqueCoverageToPreservePercent",
+                0);
+            SetInt(
+                dryRunOptimizer,
+                "_cutoutMinimumOpaqueCoverageToPreservePercent",
+                60);
+            var dryRunCutout =
+                AlphaSeparationSplitTests.SplitAlphaMaterial(texture);
+            dryRunCutout.SetFloat("_Mode", 1f);
+            var dryRunTransparent =
+                AlphaSeparationSplitTests.SplitAlphaMaterial(texture);
+            AddSkinnedRenderer(
+                dryRunRoot,
+                MixedTwoSlotMesh(),
+                dryRunCutout,
+                dryRunTransparent);
+            var dryRun = NewDryRun(
+                new Fixture
+                {
+                    Root = dryRunRoot,
+                    Optimizer = dryRunOptimizer,
+                    Renderer = null
+                },
+                null, FixtureSelector(), FixtureCapturer());
+            Run(dryRun);
+
+            var rows = SlotRows(dryRun);
+            Assert.That(rows, Has.Count.EqualTo(2));
+            Assert.That(rows[0].SlotIndex, Is.EqualTo(0));
+            Assert.That(
+                rows[0].Sentence,
+                Is.EqualTo("Convertable: 2 out of 2 polygons may be moved"),
+                "the cutout slot folds under the cutout pair's own " +
+                "preserve value");
+            Assert.That(
+                rows[0].ProvenTriangles, Is.EqualTo(1),
+                "the fold verdict keeps the unproven triangle out of " +
+                "the proven count");
+            Assert.That(rows[1].SlotIndex, Is.EqualTo(1));
+            Assert.That(
+                rows[1].Sentence,
+                Is.EqualTo("Splittable: 1 out of 2 polygons may be moved"),
+                "the transparent slot splits under its own inert pair");
             Assert.That(
                 dryRun.RendererRows.Any(
                     item => item.Kind == MaterialTransformationRowKind.Renderer),

@@ -785,12 +785,24 @@ namespace Alrauna.Amuse.Editor.DryRun
                     _inFlightRendererPath,
                     _inFlightRendererTypeName,
                     _allowDepthTestChange);
+
+                // One coverage pair per slot, selected by the slot's own
+                // recorded proof arm through the same builder the build
+                // path reads, so the dry run can never show a verdict the
+                // build would not prepare.
+                var coverageVectors =
+                    SlotTransformDecision.CoverageVectorsBySlot(
+                        _inFlightResolved.CurrentMaterials,
+                        _minimumOpaqueCoveragePercent,
+                        _minimumOpaqueCoverageToPreservePercent,
+                        _cutoutMinimumCoverage,
+                        _cutoutPreserveCoverage);
                 var verdicts = SlotTransformDecision.Decide(
                     plan,
                     _inFlightResolved.SlotResults,
                     alreadyOpaqueBySlot,
-                    _minimumOpaqueCoveragePercent,
-                    _minimumOpaqueCoverageToPreservePercent);
+                    coverageVectors.CoveragePercentsBySlot,
+                    coverageVectors.PreservePercentsBySlot);
                 var rows = BuildRows(
                     _inFlightRenderer,
                     _inFlightRendererPath,

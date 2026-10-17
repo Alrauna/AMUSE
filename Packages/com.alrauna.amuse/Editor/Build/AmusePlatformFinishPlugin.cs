@@ -1066,6 +1066,17 @@ namespace Alrauna.Amuse.Editor.Build
                             }
                         }
 
+                        // One coverage pair per slot, selected by the
+                        // slot's own recorded proof arm. The membership
+                        // rides to preparation, which keeps it for the
+                        // fold cause the report pass names.
+                        var coverageVectors =
+                            SlotTransformDecision.CoverageVectorsBySlot(
+                                resolved.CurrentMaterials,
+                                minimumOpaqueCoveragePercent,
+                                minimumOpaqueCoverageToPreservePercent,
+                                cutoutMinimumCoverage,
+                                cutoutPreserveCoverage);
                         var prepared = RetainPreparedSeparation(
                             state,
                             extraction.MutationTarget,
@@ -1077,6 +1088,9 @@ namespace Alrauna.Amuse.Editor.Build
                             lilToonConversion,
                             minimumOpaqueCoveragePercent,
                             minimumOpaqueCoverageToPreservePercent,
+                            coverageVectors.CoveragePercentsBySlot,
+                            coverageVectors.PreservePercentsBySlot,
+                            coverageVectors.CutoutMembershipBySlot,
                             rendererTypeName,
                             allowDepthTestChange,
                             grantedShaderNames,
@@ -1452,6 +1466,9 @@ namespace Alrauna.Amuse.Editor.Build
             VerifiedLilToonConversion lilToonConversion,
             int minimumOpaqueCoveragePercent,
             int minimumOpaqueCoverageToPreservePercent,
+            IReadOnlyList<int> coveragePercentsBySlot,
+            IReadOnlyList<int> preservePercentsBySlot,
+            IReadOnlyList<bool> cutoutMembershipBySlot,
             string rendererTypeName = null,
             bool allowDepthTestChange = false,
             IReadOnlyCollection<string> grantedShaderNames = null,
@@ -1468,6 +1485,9 @@ namespace Alrauna.Amuse.Editor.Build
                 lilToonConversion,
                 minimumOpaqueCoveragePercent,
                 minimumOpaqueCoverageToPreservePercent,
+                coveragePercentsBySlot,
+                preservePercentsBySlot,
+                cutoutMembershipBySlot,
                 rendererTypeName,
                 allowDepthTestChange,
                 grantedShaderNames,

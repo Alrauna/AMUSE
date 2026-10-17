@@ -9,6 +9,7 @@ using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
 using Alrauna.Amuse.Editor.Semantics.LilToon;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
+using Alrauna.Amuse.Tests.Editor.Semantics.LilToon;
 using Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi;
 using nadena.dev.ndmf;
 using nadena.dev.ndmf.animator;
@@ -7680,6 +7681,415 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     AssetDatabase.DeleteAsset(SamplingPolicyTempFolder);
                 }
             }
+        }
+
+        /// <summary>
+        /// A cutout slot and a transparent slot on one renderer, run
+        /// through the full barrier with the arms' stored values set
+        /// apart: the cutout coverage pair at 40 and 60 against the
+        /// inert transparent pair, plus different stored cap and size
+        /// values the proof arms scope by. The cutout slot folds only
+        /// under the cutout pair's own preserve value. The transparent
+        /// slot's opaque share sits below the cutout coverage minimum,
+        /// so a renderer-wide cutout pair refuses it. Only the per-slot
+        /// arm split passes the pin. The cap and size scoping itself is
+        /// pinned at the gather by the arm-scoping suite.
+        /// </summary>
+        [Test]
+        public void MixedRendererHonorsEachArmsValuesEndToEnd()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE mixed arms end to end");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            var optimizer = root.AddComponent<
+                Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
+
+            // A first serialization round trip runs the one-time upgrade
+            // backfill. The marker is then set, so the cutout edits below
+            // keep their stored values.
+            var primed = EditorJsonUtility.ToJson(optimizer);
+            EditorJsonUtility.FromJsonOverwrite(primed, optimizer);
+
+            var serialized = new SerializedObject(optimizer);
+            serialized.FindProperty("_minimumOpaqueCoveragePercent")
+                .intValue = 0;
+            serialized.FindProperty("_minimumOpaqueCoverageToPreservePercent")
+                .intValue = 0;
+            serialized.FindProperty("_preserveTransparencyMinTextureSize")
+                .intValue = 2;
+            serialized.FindProperty("_cutoutMinimumOpaqueCoveragePercent")
+                .intValue = 40;
+            serialized.FindProperty(
+                    "_cutoutMinimumOpaqueCoverageToPreservePercent")
+                .intValue = 60;
+            serialized.FindProperty("_cutoutPreserveTransparencyMinTextureSize")
+                .intValue = FixtureProofScope.AllSizes;
+            serialized.FindProperty("_cutoutPreserveTransparencyMaxMipLevel")
+                .intValue = 0;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+
+            Mesh mesh = null;
+            Material cutoutMaterial = null;
+            Material transparentMaterial = null;
+
+            try
+            {
+                EnsureSamplingPolicyFolder();
+                var cutoutTexture = ImportMixedHalfTexture(
+                    "mixed_arms_cutout",
+                    MixedHalfAlphaPixels());
+                var transparentTexture = ImportMixedHalfTexture(
+                    "mixed_arms_transparent",
+                    MixedHalfAlphaPixels());
+                cutoutMaterial =
+                    AlphaSeparationSplitTests.SplitAlphaMaterial(
+                        cutoutTexture);
+                cutoutMaterial.SetFloat("_Mode", 1f);
+                transparentMaterial =
+                    AlphaSeparationSplitTests.SplitAlphaMaterial(
+                        transparentTexture);
+                mesh = MixedArmsMesh();
+                var renderer = root.AddComponent<SkinnedMeshRenderer>();
+                renderer.sharedMesh = mesh;
+                renderer.sharedMaterials = new[]
+                {
+                    cutoutMaterial, transparentMaterial,
+                };
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                var state = context.GetState<AmusePlatformFinishState>();
+                state.AnimatorBindings =
+                    GenericPlatformAnimatorBindings.Instance;
+                AmuseStructuralGraphCheck.Execute(context);
+                AmusePlatformFinishPass.Execute(
+                    context,
+                    SupportedFacts(),
+                    SelectVerifiedFixtureRequest,
+                    CaptureVerifiedFixtureMaterials,
+                    VerifiedAlphaOnly,
+                    VerifiedPoiyomiTestSeams.VerifiedConversion,
+                    VerifiedLilToonTestSeams.VerifiedConversion);
+                var amuse = context.GetState<AmusePlatformFinishState>();
+
+                Assert.That(amuse.AnalyzedRendererCount, Is.EqualTo(1));
+                Assert.That(
+                    amuse.SemanticallyRefusedRendererCount, Is.Zero,
+                    "fixture precondition: the renderer must be " +
+                    "analyzable");
+                Assert.That(
+                    amuse.SlotRefusalCount(
+                        AlphaSeparationSlotRefusal
+                            .OpaqueCoverageBelowMinimum),
+                    Is.Zero,
+                    "the transparent slot splits under its own inert " +
+                    "pair, not under the cutout pair's 40 percent");
+                Assert.That(
+                    amuse.SlotRefusalCount(
+                        AlphaSeparationSlotRefusal.OpaqueConversionRefused),
+                    Is.Zero,
+                    "fixture precondition: every surviving candidate " +
+                    "converts");
+                Assert.That(
+                    amuse.OpaqueCandidateTriangleCount, Is.EqualTo(2),
+                    "fixture precondition: one proven opaque triangle " +
+                    "per slot before the fold re-cut");
+                Assert.That(amuse.Separation, Is.Not.Null);
+                var plan = amuse.Separation.Renderers[0].Plan;
+                Assert.That(plan.Submeshes, Has.Count.EqualTo(2));
+                var cutoutSlot = plan.Submeshes.Single(
+                    entry => entry.SourceMaterialBindingIndex == 0);
+                var transparentSlot = plan.Submeshes.Single(
+                    entry => entry.SourceMaterialBindingIndex == 1);
+                Assert.That(
+                    cutoutSlot.Disposition,
+                    Is.EqualTo(
+                        SubmeshSeparationDisposition.WhollyOpaqueCandidate),
+                    "the cutout slot folds under the cutout pair's own " +
+                    "60 percent preserve value");
+                Assert.That(
+                    cutoutSlot.OpaqueTriangleOrdinals, Has.Count.EqualTo(2));
+                Assert.That(cutoutSlot.TransparentTriangleOrdinals, Is.Empty);
+                Assert.That(
+                    transparentSlot.Disposition,
+                    Is.EqualTo(SubmeshSeparationDisposition.Split),
+                    "the transparent slot splits under its own inert " +
+                    "pair");
+                Assert.That(
+                    transparentSlot.OpaqueTriangleOrdinals,
+                    Has.Count.EqualTo(1));
+                Assert.That(
+                    transparentSlot.TransparentTriangleOrdinals,
+                    Has.Count.EqualTo(3));
+            }
+            finally
+            {
+                AlphaSeparationTestLifecycle
+                    .DestroyCommittedCloneRecursive(root, null);
+                Object.DestroyImmediate(root);
+                if (mesh != null) Object.DestroyImmediate(mesh);
+                if (cutoutMaterial != null)
+                {
+                    Object.DestroyImmediate(cutoutMaterial);
+                }
+
+                if (transparentMaterial != null)
+                {
+                    Object.DestroyImmediate(transparentMaterial);
+                }
+
+                if (AssetDatabase.IsValidFolder(SamplingPolicyTempFolder))
+                {
+                    AssetDatabase.DeleteAsset(SamplingPolicyTempFolder);
+                }
+            }
+        }
+
+        /// <summary>
+        /// One cutout-preset Poiyomi slot and one plain Poiyomi slot on
+        /// one renderer share the stored family and differ only in the
+        /// recorded membership. The cutout pair's 60 percent preserve
+        /// value folds the preset slot while the inert transparent pair
+        /// keeps the plain slot a split, so only the recorded proof arm
+        /// can select the pairs.
+        /// </summary>
+        [Test]
+        public void PoiyomiSiblingsProveUnderDifferentPairs()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE poiyomi sibling pins");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            var optimizer = root.AddComponent<
+                Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
+
+            // A first serialization round trip runs the one-time upgrade
+            // backfill. The marker is then set, so the cutout edits below
+            // keep their stored values.
+            var primed = EditorJsonUtility.ToJson(optimizer);
+            EditorJsonUtility.FromJsonOverwrite(primed, optimizer);
+
+            var serialized = new SerializedObject(optimizer);
+            serialized.FindProperty("_minimumOpaqueCoveragePercent")
+                .intValue = 0;
+            serialized.FindProperty("_minimumOpaqueCoverageToPreservePercent")
+                .intValue = 0;
+            serialized.FindProperty("_cutoutMinimumOpaqueCoveragePercent")
+                .intValue = 0;
+            serialized.FindProperty(
+                    "_cutoutMinimumOpaqueCoverageToPreservePercent")
+                .intValue = 60;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+
+            Mesh mesh = null;
+            Material presetMaterial = null;
+            Material plainMaterial = null;
+
+            try
+            {
+                EnsureSamplingPolicyFolder();
+                var texture = ImportMixedHalfTexture(
+                    "sibling_pins_halves",
+                    MixedHalfAlphaPixels());
+                presetMaterial =
+                    PoiyomiFixtureTestBase.CreateVerifiedMaterial();
+                PoiyomiFixtureTestBase.ApplyConvertibleRenderState(
+                    presetMaterial);
+                presetMaterial.SetFloat("_AlphaForceOpaque", 0f);
+                presetMaterial.SetFloat("_MainAlphaMaskMode", 0f);
+                presetMaterial.SetColor("_Color", new Color(1f, 1f, 1f, 1f));
+                presetMaterial.SetFloat("_Mode", 1f);
+                presetMaterial.SetFloat("_Cutoff", 0.5f);
+                presetMaterial.SetTexture("_MainTex", texture);
+                presetMaterial.SetTextureScale("_MainTex", Vector2.one);
+                presetMaterial.SetTextureOffset("_MainTex", Vector2.zero);
+                plainMaterial =
+                    AlphaSeparationSplitTests.SplitAlphaMaterial(texture);
+                mesh = TwoSplitSlotMesh();
+                var renderer = root.AddComponent<SkinnedMeshRenderer>();
+                renderer.sharedMesh = mesh;
+                renderer.sharedMaterials = new[]
+                {
+                    presetMaterial, plainMaterial,
+                };
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                var state = context.GetState<AmusePlatformFinishState>();
+                state.AnimatorBindings =
+                    GenericPlatformAnimatorBindings.Instance;
+                AmuseStructuralGraphCheck.Execute(context);
+                AmusePlatformFinishPass.Execute(
+                    context,
+                    SupportedFacts(),
+                    SelectVerifiedFixtureRequest,
+                    CaptureVerifiedFixtureMaterials,
+                    VerifiedAlphaOnly,
+                    VerifiedPoiyomiTestSeams.VerifiedConversion);
+                var amuse = context.GetState<AmusePlatformFinishState>();
+
+                Assert.That(amuse.AnalyzedRendererCount, Is.EqualTo(1));
+                Assert.That(
+                    amuse.SemanticallyRefusedRendererCount, Is.Zero,
+                    "fixture precondition: the renderer must be " +
+                    "analyzable");
+                Assert.That(
+                    amuse.SlotRefusalCount(
+                        AlphaSeparationSlotRefusal.OpaqueConversionRefused),
+                    Is.Zero,
+                    "fixture precondition: the plain sibling converts");
+                Assert.That(amuse.Separation, Is.Not.Null);
+                var plan = amuse.Separation.Renderers[0].Plan;
+                Assert.That(plan.Submeshes, Has.Count.EqualTo(2));
+                var presetSlot = plan.Submeshes.Single(
+                    entry => entry.SourceMaterialBindingIndex == 0);
+                var plainSlot = plan.Submeshes.Single(
+                    entry => entry.SourceMaterialBindingIndex == 1);
+                Assert.That(
+                    presetSlot.Disposition,
+                    Is.EqualTo(
+                        SubmeshSeparationDisposition.WhollyOpaqueCandidate),
+                    "the cutout preset folds under the cutout pair's " +
+                    "own preserve value");
+                Assert.That(
+                    presetSlot.OpaqueTriangleOrdinals, Has.Count.EqualTo(2));
+                Assert.That(presetSlot.TransparentTriangleOrdinals, Is.Empty);
+                Assert.That(
+                    plainSlot.Disposition,
+                    Is.EqualTo(SubmeshSeparationDisposition.Split),
+                    "the plain sibling stays a split under the " +
+                    "transparent pair's inert preserve value");
+                Assert.That(
+                    plainSlot.OpaqueTriangleOrdinals, Has.Count.EqualTo(1));
+                Assert.That(
+                    plainSlot.TransparentTriangleOrdinals,
+                    Has.Count.EqualTo(1));
+            }
+            finally
+            {
+                AlphaSeparationTestLifecycle
+                    .DestroyCommittedCloneRecursive(root, null);
+                Object.DestroyImmediate(root);
+                if (mesh != null) Object.DestroyImmediate(mesh);
+                if (presetMaterial != null)
+                {
+                    Object.DestroyImmediate(presetMaterial);
+                }
+
+                if (plainMaterial != null)
+                {
+                    Object.DestroyImmediate(plainMaterial);
+                }
+
+                if (AssetDatabase.IsValidFolder(SamplingPolicyTempFolder))
+                {
+                    AssetDatabase.DeleteAsset(SamplingPolicyTempFolder);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Submesh 0 carries one left-half triangle plus one right-half
+        /// triangle. Submesh 1 carries one left-half triangle, then
+        /// three right-half triangles, so its opaque share is 25
+        /// percent. Both run over the mixed halves recipe.
+        /// </summary>
+        private static Mesh MixedArmsMesh()
+        {
+            var mesh = new Mesh();
+            mesh.vertices = new[]
+            {
+                new Vector3(0f, 0f, 0f),
+                new Vector3(1f, 0f, 0f),
+                new Vector3(0f, 1f, 0f),
+                new Vector3(3f, 0f, 0f),
+                new Vector3(4f, 0f, 0f),
+                new Vector3(3f, 1f, 0f),
+                new Vector3(6f, 0f, 0f),
+                new Vector3(7f, 0f, 0f),
+                new Vector3(6f, 1f, 0f),
+                new Vector3(9f, 0f, 0f),
+                new Vector3(10f, 0f, 0f),
+                new Vector3(9f, 1f, 0f),
+                new Vector3(12f, 0f, 0f),
+                new Vector3(13f, 0f, 0f),
+                new Vector3(12f, 1f, 0f),
+                new Vector3(15f, 0f, 0f),
+                new Vector3(16f, 0f, 0f),
+                new Vector3(15f, 1f, 0f),
+            };
+            mesh.uv = new[]
+            {
+                new Vector2(0.10f, 0.10f),
+                new Vector2(0.40f, 0.10f),
+                new Vector2(0.10f, 0.40f),
+                new Vector2(0.60f, 0.60f),
+                new Vector2(0.90f, 0.60f),
+                new Vector2(0.60f, 0.90f),
+                new Vector2(0.10f, 0.10f),
+                new Vector2(0.40f, 0.10f),
+                new Vector2(0.10f, 0.40f),
+                new Vector2(0.60f, 0.60f),
+                new Vector2(0.90f, 0.60f),
+                new Vector2(0.60f, 0.90f),
+                new Vector2(0.60f, 0.60f),
+                new Vector2(0.90f, 0.60f),
+                new Vector2(0.60f, 0.90f),
+                new Vector2(0.60f, 0.60f),
+                new Vector2(0.90f, 0.60f),
+                new Vector2(0.60f, 0.90f),
+            };
+            mesh.subMeshCount = 2;
+            mesh.SetTriangles(new[] { 0, 1, 2, 3, 4, 5 }, 0);
+            mesh.SetTriangles(
+                new[] { 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17 }, 1);
+            return mesh;
+        }
+
+        /// <summary>
+        /// Two submeshes, each one left-half triangle plus one
+        /// right-half triangle over the mixed halves recipe.
+        /// </summary>
+        private static Mesh TwoSplitSlotMesh()
+        {
+            var mesh = new Mesh();
+            mesh.vertices = new[]
+            {
+                new Vector3(0f, 0f, 0f),
+                new Vector3(1f, 0f, 0f),
+                new Vector3(0f, 1f, 0f),
+                new Vector3(3f, 0f, 0f),
+                new Vector3(4f, 0f, 0f),
+                new Vector3(3f, 1f, 0f),
+                new Vector3(6f, 0f, 0f),
+                new Vector3(7f, 0f, 0f),
+                new Vector3(6f, 1f, 0f),
+                new Vector3(9f, 0f, 0f),
+                new Vector3(10f, 0f, 0f),
+                new Vector3(9f, 1f, 0f),
+            };
+            mesh.uv = new[]
+            {
+                new Vector2(0.10f, 0.10f),
+                new Vector2(0.40f, 0.10f),
+                new Vector2(0.10f, 0.40f),
+                new Vector2(0.60f, 0.60f),
+                new Vector2(0.90f, 0.60f),
+                new Vector2(0.60f, 0.90f),
+                new Vector2(0.10f, 0.10f),
+                new Vector2(0.40f, 0.10f),
+                new Vector2(0.10f, 0.40f),
+                new Vector2(0.60f, 0.60f),
+                new Vector2(0.90f, 0.60f),
+                new Vector2(0.60f, 0.90f),
+            };
+            mesh.subMeshCount = 2;
+            mesh.SetTriangles(new[] { 0, 1, 2, 3, 4, 5 }, 0);
+            mesh.SetTriangles(new[] { 6, 7, 8, 9, 10, 11 }, 1);
+            return mesh;
         }
 
         private static void AssertTwoSlotTriangleFixture(Mesh mesh)

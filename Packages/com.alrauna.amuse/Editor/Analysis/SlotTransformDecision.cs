@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Alrauna.Amuse.Editor.Semantics;
 
 namespace Alrauna.Amuse.Editor.Analysis
 {
@@ -60,15 +61,28 @@ namespace Alrauna.Amuse.Editor.Analysis
         // slot with Split submeshes, CoverageBelowMinimum when the convert
         // coverage predicate refuses. Then Split. AlreadyOpaque comes from
         // the caller-supplied per-slot flag and wins over everything. A
-        // slot with no plan entry and no flag gets None.
+        // slot with no plan entry and no flag gets None. Both gates read
+        // the slot's own percent pair, so one plan can carry two proof
+        // arms. The ladder reads percents and never sees a family.
         internal static IReadOnlyList<SlotTransformVerdict> Decide(
             MeshSeparationPlan plan,
             IReadOnlyList<SlotResolutionResult> slotResults,
             IReadOnlyList<bool> alreadyOpaqueBySlot,
-            int minimumOpaqueCoveragePercent,
-            int minimumOpaqueCoverageToPreservePercent)
+            IReadOnlyList<int> minimumOpaqueCoveragePercents,
+            IReadOnlyList<int> minimumOpaqueCoverageToPreservePercents)
         {
             if (plan == null) throw new ArgumentNullException(nameof(plan));
+            if (minimumOpaqueCoveragePercents == null)
+            {
+                throw new ArgumentNullException(
+                    nameof(minimumOpaqueCoveragePercents));
+            }
+
+            if (minimumOpaqueCoverageToPreservePercents == null)
+            {
+                throw new ArgumentNullException(
+                    nameof(minimumOpaqueCoverageToPreservePercents));
+            }
 
             var entriesByBindingIndex =
                 new Dictionary<int, List<SubmeshSeparationPlan>>();
@@ -91,6 +105,26 @@ namespace Alrauna.Amuse.Editor.Analysis
                 }
             }
 
+            // The caller contracts both vectors to the largest binding
+            // index plus one. A shorter vector would make a slot read a
+            // foreign pair, so the defect is named here and not at the
+            // gate.
+            if (minimumOpaqueCoveragePercents.Count < slotCount)
+            {
+                throw new ArgumentException(
+                    "The coverage vector must cover the largest binding " +
+                    "index plus one.",
+                    nameof(minimumOpaqueCoveragePercents));
+            }
+
+            if (minimumOpaqueCoverageToPreservePercents.Count < slotCount)
+            {
+                throw new ArgumentException(
+                    "The preserve vector must cover the largest binding " +
+                    "index plus one.",
+                    nameof(minimumOpaqueCoverageToPreservePercents));
+            }
+
             if (alreadyOpaqueBySlot != null &&
                 alreadyOpaqueBySlot.Count > slotCount)
             {
@@ -107,11 +141,56 @@ namespace Alrauna.Amuse.Editor.Analysis
             {
                 verdicts.Add(DecideSlot(
                     entriesByBindingIndex, slotIndex, slotResults,
-                    alreadyOpaqueBySlot, minimumOpaqueCoveragePercent,
-                    minimumOpaqueCoverageToPreservePercent));
+                    alreadyOpaqueBySlot, minimumOpaqueCoveragePercents,
+                    minimumOpaqueCoverageToPreservePercents));
             }
 
             return verdicts;
+        }
+
+        /// <summary>
+        /// The three per-slot coverage vectors both callers build: the
+        /// barrier before preparation and the dry run before the ladder.
+        /// Each slot reads the pair of its own recorded proof arm, keyed
+        /// on the captured material's <c>PredicatesDeclareCutoff</c>, so
+        /// the build and the dry run cannot select different pairs for
+        /// one renderer. One shared function is the whole rule; a family
+        /// key would route a Poiyomi cutout preset and a plain Poiyomi
+        /// sibling to the same pair.
+        /// </summary>
+        internal static (int[] CoveragePercentsBySlot,
+                int[] PreservePercentsBySlot,
+                bool[] CutoutMembershipBySlot) CoverageVectorsBySlot(
+            IReadOnlyList<CapturedAlphaMaterial> currentMaterials,
+            int transparentCoveragePercent,
+            int transparentPreservePercent,
+            int cutoutCoveragePercent,
+            int cutoutPreservePercent)
+        {
+            if (currentMaterials == null)
+            {
+                throw new ArgumentNullException(nameof(currentMaterials));
+            }
+
+            var coverage = new int[currentMaterials.Count];
+            var preserve = new int[currentMaterials.Count];
+            var cutout = new bool[currentMaterials.Count];
+            for (var slot = 0; slot < currentMaterials.Count; slot++)
+            {
+                var captured = currentMaterials[slot];
+                if (captured != null && captured.PredicatesDeclareCutoff)
+                {
+                    coverage[slot] = cutoutCoveragePercent;
+                    preserve[slot] = cutoutPreservePercent;
+                    cutout[slot] = true;
+                    continue;
+                }
+
+                coverage[slot] = transparentCoveragePercent;
+                preserve[slot] = transparentPreservePercent;
+            }
+
+            return (coverage, preserve, cutout);
         }
 
         /// <summary>
@@ -168,8 +247,8 @@ namespace Alrauna.Amuse.Editor.Analysis
             int slotIndex,
             IReadOnlyList<SlotResolutionResult> slotResults,
             IReadOnlyList<bool> alreadyOpaqueBySlot,
-            int minimumOpaqueCoveragePercent,
-            int minimumOpaqueCoverageToPreservePercent)
+            IReadOnlyList<int> minimumOpaqueCoveragePercents,
+            IReadOnlyList<int> minimumOpaqueCoverageToPreservePercents)
         {
             entriesByBindingIndex.TryGetValue(
                 slotIndex, out var slotEntries);
@@ -193,7 +272,8 @@ namespace Alrauna.Amuse.Editor.Analysis
                     if (entry.Disposition ==
                             SubmeshSeparationDisposition.Split &&
                         OpaqueCoverageBelow(
-                            minimumOpaqueCoveragePercent, entry))
+                            minimumOpaqueCoveragePercents[slotIndex],
+                            entry))
                     {
                         splitSubmeshBelowCoverage = true;
                     }
@@ -210,7 +290,8 @@ namespace Alrauna.Amuse.Editor.Analysis
             else if (hasEntries &&
                      PreserveSlotQualifies(
                          slotEntries,
-                         minimumOpaqueCoverageToPreservePercent))
+                         minimumOpaqueCoverageToPreservePercents[
+                             slotIndex]))
             {
                 outcome = SlotTransformOutcome.Fold;
             }

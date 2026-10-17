@@ -9669,6 +9669,162 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// Stores the cutout arm's convert coverage percent on this root's
+        /// own optimizer through its serialized field. Only a slot whose
+        /// captured material records a cutoff declaration reads it.
+        /// </summary>
+        private static void SetCutoutConvertCoverage(
+            GameObject root,
+            int percent)
+        {
+            var optimizer = root.GetComponent<
+                Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            var serialized = new SerializedObject(optimizer);
+            serialized.FindProperty("_cutoutMinimumOpaqueCoveragePercent")
+                .intValue = percent;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        /// <summary>
+        /// Stores the cutout arm's preserve coverage percent on this
+        /// root's own optimizer through its serialized field. Only a slot
+        /// whose captured material records a cutoff declaration reads it.
+        /// </summary>
+        private static void SetCutoutPreserveCoverage(
+            GameObject root,
+            int percent)
+        {
+            var optimizer = root.GetComponent<
+                Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            var serialized = new SerializedObject(optimizer);
+            serialized.FindProperty(
+                    "_cutoutMinimumOpaqueCoverageToPreservePercent")
+                .intValue = percent;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        /// <summary>
+        /// An 8x8 mip-free RGBA32 asset with Point/Clamp sampling: the
+        /// left half carries full alpha and the right half carries zero,
+        /// so the cutout arms binarize a clean split and the exact arms
+        /// keep the right half unproven.
+        /// </summary>
+        private static Texture2D ImportHalfHoleTexture(string name)
+        {
+            var pixels = new Color32[64];
+            for (var y = 0; y < 8; y++)
+            {
+                for (var x = 0; x < 8; x++)
+                {
+                    pixels[y * 8 + x] = new Color32(
+                        64, 32, 16, (byte)(x < 4 ? 255 : 0));
+                }
+            }
+
+            return TestTextureImport.WritePng(
+                AlphaSeparationSplitTests.SplitTempFolder + "/" + name +
+                ".png",
+                8,
+                8,
+                pixels,
+                importer =>
+                {
+                    importer.mipmapEnabled = false;
+                    importer.isReadable = false;
+                    importer.textureCompression =
+                        TextureImporterCompression.Uncompressed;
+                    importer.filterMode = FilterMode.Point;
+                    importer.wrapMode = UnityEngine.TextureWrapMode.Clamp;
+                    importer.mipMapBias = 0f;
+                    importer.anisoLevel = 1;
+                    importer.streamingMipmaps = false;
+                });
+        }
+
+        /// <summary>
+        /// One triangle's geometry and UV support on the half-hole
+        /// recipe. A left column samples the opaque half, a right column
+        /// the zero half. The column offsets every triangle along x, so
+        /// the geometry stays finite and distinct.
+        /// </summary>
+        private static void FillHalfTriangle(
+            Vector3[] vertices,
+            Vector2[] uv,
+            int triangle,
+            bool left)
+        {
+            var first = triangle * 3;
+            var x = triangle * 3f;
+            vertices[first] = new Vector3(x, 0f, 0f);
+            vertices[first + 1] = new Vector3(x + 1f, 0f, 0f);
+            vertices[first + 2] = new Vector3(x, 1f, 0f);
+            uv[first] = left
+                ? new Vector2(0.1f, 0.1f)
+                : new Vector2(0.6f, 0.6f);
+            uv[first + 1] = left
+                ? new Vector2(0.4f, 0.1f)
+                : new Vector2(0.9f, 0.6f);
+            uv[first + 2] = left
+                ? new Vector2(0.1f, 0.4f)
+                : new Vector2(0.6f, 0.9f);
+        }
+
+        /// <summary>
+        /// One submesh per entry: each submesh carries one left-half
+        /// triangle plus that many right-half triangles, so the submesh's
+        /// unproven share is its count over count plus one.
+        /// </summary>
+        private static Mesh HalfHoleSlotsMesh(params int[] unprovenPerSubmesh)
+        {
+            var triangleCount = 0;
+            foreach (var unproven in unprovenPerSubmesh)
+            {
+                triangleCount += unproven + 1;
+            }
+
+            var vertices = new Vector3[triangleCount * 3];
+            var uv = new Vector2[triangleCount * 3];
+            var triangle = 0;
+            for (var submesh = 0;
+                 submesh < unprovenPerSubmesh.Length;
+                 submesh++)
+            {
+                FillHalfTriangle(vertices, uv, triangle, true);
+                triangle++;
+                for (var unproven = 0;
+                     unproven < unprovenPerSubmesh[submesh];
+                     unproven++)
+                {
+                    FillHalfTriangle(vertices, uv, triangle, false);
+                    triangle++;
+                }
+            }
+
+            var mesh = new Mesh { subMeshCount = unprovenPerSubmesh.Length };
+            mesh.vertices = vertices;
+            mesh.uv = uv;
+            triangle = 0;
+            for (var submesh = 0;
+                 submesh < unprovenPerSubmesh.Length;
+                 submesh++)
+            {
+                var first = triangle;
+                triangle += unprovenPerSubmesh[submesh] + 1;
+                var submeshIndices = new int[(triangle - first) * 3];
+                for (var corner = 0;
+                     corner < submeshIndices.Length;
+                     corner++)
+                {
+                    submeshIndices[corner] = first * 3 + corner;
+                }
+
+                mesh.SetTriangles(submeshIndices, submesh);
+            }
+
+            return mesh;
+        }
+
+        /// <summary>
         /// One split submesh over the shared split texture: triangle
         /// ordinal 0 sits wholly inside the opaque half, and ordinal 1 sits
         /// wholly inside the translucent half, so the plan is a one-and-one
@@ -10524,6 +10680,291 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 if (material != null)
                 {
                     UnityEngine.Object.DestroyImmediate(material);
+                }
+            }
+        }
+
+        /// <summary>
+        /// A mixed renderer whose cutout slots and transparent slot carry
+        /// different coverage pairs: the cutout preserve value folds the
+        /// cutout slot, the cutout coverage minimum refuses the other
+        /// cutout slot, and the inert transparent pair leaves the
+        /// transparent slot a surviving split. Every outcome matches the
+        /// slot's own pair, so a selection that hands one pair to the
+        /// whole renderer fails.
+        /// </summary>
+        [Test]
+        public void EachSlotSelectsItsOwnCoveragePair()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject(
+                "AMUSE each slot own coverage pair");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
+            SetConvertCoverage(root, 0);
+            SetPreserveCoverage(root, 0);
+            SetCutoutConvertCoverage(root, 40);
+            SetCutoutPreserveCoverage(root, 60);
+            Material cutoutMaterial = null;
+            Material transparentMaterial = null;
+            Mesh mesh = null;
+            AmusePlatformFinishState amuse = null;
+
+            try
+            {
+                AlphaSeparationSplitTests.EnsureSplitFolder();
+                try
+                {
+                    var texture = ImportHalfHoleTexture("each_slot_pair");
+                    cutoutMaterial =
+                        LilToonFixtureTestBase.CreateCutoutConversionMaterial();
+                    cutoutMaterial.SetTexture("_MainTex", texture);
+                    cutoutMaterial.SetTextureScale(
+                        "_MainTex", Vector2.one);
+                    cutoutMaterial.SetTextureOffset(
+                        "_MainTex", Vector2.zero);
+                    transparentMaterial =
+                        AlphaSeparationSplitTests.SplitAlphaMaterial(
+                            texture);
+                    mesh = HalfHoleSlotsMesh(1, 2, 1);
+                    var renderer = root.AddComponent<SkinnedMeshRenderer>();
+                    renderer.sharedMesh = mesh;
+                    renderer.sharedMaterials = new[]
+                    {
+                        cutoutMaterial, cutoutMaterial, transparentMaterial,
+                    };
+
+                    amuse = RunBarrier(root);
+
+                    Assert.That(amuse.AvatarRefusal,
+                        Is.EqualTo(AvatarAnimationRefusal.None));
+                    Assert.That(
+                        amuse.SemanticallyRefusedRendererCount, Is.Zero,
+                        "fixture precondition: the renderer must be " +
+                        "analyzable");
+                    Assert.That(
+                        amuse.SlotRefusalCount(
+                            AlphaSeparationSlotRefusal
+                                .OpaqueCoverageBelowMinimum),
+                        Is.EqualTo(1),
+                        "only the below-minimum cutout slot refuses, and " +
+                        "only under the cutout pair's own coverage");
+                    foreach (AlphaSeparationSlotRefusal reason in
+                             Enum.GetValues(
+                                 typeof(AlphaSeparationSlotRefusal)))
+                    {
+                        if (reason == AlphaSeparationSlotRefusal.None ||
+                            reason == AlphaSeparationSlotRefusal
+                                .OpaqueCoverageBelowMinimum)
+                        {
+                            continue;
+                        }
+
+                        Assert.That(
+                            amuse.SlotRefusalCount(reason), Is.Zero,
+                            "the mixed renderer must refuse nothing " +
+                            "else: " + reason);
+                    }
+
+                    Assert.That(amuse.Separation, Is.Not.Null);
+                    var plan = amuse.Separation.Renderers[0].Plan;
+                    Assert.That(plan.Submeshes, Has.Count.EqualTo(3));
+                    var foldSlot = plan.Submeshes.Single(
+                        entry => entry.SourceMaterialBindingIndex == 0);
+                    var refusedSlot = plan.Submeshes.Single(
+                        entry => entry.SourceMaterialBindingIndex == 1);
+                    var transparentSlot = plan.Submeshes.Single(
+                        entry => entry.SourceMaterialBindingIndex == 2);
+                    Assert.That(
+                        foldSlot.Disposition,
+                        Is.EqualTo(
+                            SubmeshSeparationDisposition
+                                .WhollyOpaqueCandidate),
+                        "the cutout slot folds under the cutout pair's " +
+                        "own preserve value");
+                    Assert.That(
+                        foldSlot.OpaqueTriangleOrdinals, Has.Count.EqualTo(2));
+                    Assert.That(foldSlot.TransparentTriangleOrdinals, Is.Empty);
+                    Assert.That(
+                        refusedSlot.Disposition,
+                        Is.EqualTo(SubmeshSeparationDisposition.Split),
+                        "the second cutout slot's unproven share stays " +
+                        "above the preserve value, so the cutout " +
+                        "coverage minimum refuses it");
+                    Assert.That(
+                        refusedSlot.OpaqueTriangleOrdinals,
+                        Has.Count.EqualTo(1));
+                    Assert.That(
+                        refusedSlot.TransparentTriangleOrdinals,
+                        Has.Count.EqualTo(2));
+                    Assert.That(
+                        transparentSlot.Disposition,
+                        Is.EqualTo(SubmeshSeparationDisposition.Split),
+                        "the transparent slot splits under its own " +
+                        "inert pair");
+                    Assert.That(
+                        transparentSlot.OpaqueTriangleOrdinals,
+                        Has.Count.EqualTo(1));
+                    Assert.That(
+                        transparentSlot.TransparentTriangleOrdinals,
+                        Has.Count.EqualTo(1));
+                }
+                finally
+                {
+                    AlphaSeparationSplitTests.DeleteSplitFolder();
+                }
+            }
+            finally
+            {
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                UnityEngine.Object.DestroyImmediate(root);
+                if (cutoutMaterial != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(cutoutMaterial);
+                }
+
+                if (transparentMaterial != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(transparentMaterial);
+                }
+            }
+        }
+
+        // --- Falsifier 8: A coverage selection keyed on the stored family enum routes a Poiyomi cutout preset and a plain Poiyomi sibling to the same pair. The Poiyomi sibling fixture asserts different pairs and fails it. ---
+        /// <summary>
+        /// Two Poiyomi slots on one renderer share one stored family and
+        /// differ only in the recorded membership: the cutout preset
+        /// declares the cutoff, the plain preset does not. The cutout
+        /// pair's preserve value folds the preset slot while the inert
+        /// transparent pair keeps the plain slot a split, so only the
+        /// recorded membership can select the pairs.
+        /// </summary>
+        [Test]
+        public void PoiyomiSiblingSlotsSelectDifferentPairs()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject(
+                "AMUSE poiyomi sibling pairs");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
+            SetConvertCoverage(root, 0);
+            SetPreserveCoverage(root, 0);
+            SetCutoutConvertCoverage(root, 0);
+            SetCutoutPreserveCoverage(root, 60);
+            Material presetMaterial = null;
+            Material plainMaterial = null;
+            Mesh mesh = null;
+            AmusePlatformFinishState amuse = null;
+
+            try
+            {
+                AlphaSeparationSplitTests.EnsureSplitFolder();
+                try
+                {
+                    var texture = ImportHalfHoleTexture("poi_siblings");
+                    presetMaterial =
+                        PoiyomiFixtureTestBase.CreateVerifiedMaterial();
+                    PoiyomiFixtureTestBase.ApplyConvertibleRenderState(
+                        presetMaterial);
+                    presetMaterial.SetFloat("_AlphaForceOpaque", 0f);
+                    presetMaterial.SetFloat("_MainAlphaMaskMode", 0f);
+                    presetMaterial.SetColor(
+                        "_Color", new Color(1f, 1f, 1f, 1f));
+                    presetMaterial.SetFloat("_Mode", 1f);
+                    presetMaterial.SetFloat("_Cutoff", 0.5f);
+                    presetMaterial.SetTexture("_MainTex", texture);
+                    presetMaterial.SetTextureScale(
+                        "_MainTex", Vector2.one);
+                    presetMaterial.SetTextureOffset(
+                        "_MainTex", Vector2.zero);
+                    plainMaterial =
+                        AlphaSeparationSplitTests.SplitAlphaMaterial(
+                            texture);
+                    mesh = HalfHoleSlotsMesh(1, 1);
+                    var renderer = root.AddComponent<SkinnedMeshRenderer>();
+                    renderer.sharedMesh = mesh;
+                    renderer.sharedMaterials = new[]
+                    {
+                        presetMaterial, plainMaterial,
+                    };
+
+                    amuse = RunBarrier(root);
+
+                    Assert.That(amuse.AvatarRefusal,
+                        Is.EqualTo(AvatarAnimationRefusal.None));
+                    Assert.That(
+                        amuse.SemanticallyRefusedRendererCount, Is.Zero,
+                        "fixture precondition: the renderer must be " +
+                        "analyzable");
+                    foreach (AlphaSeparationSlotRefusal reason in
+                             Enum.GetValues(
+                                 typeof(AlphaSeparationSlotRefusal)))
+                    {
+                        if (reason == AlphaSeparationSlotRefusal.None)
+                        {
+                            continue;
+                        }
+
+                        Assert.That(
+                            amuse.SlotRefusalCount(reason), Is.Zero,
+                            "the sibling fixture must refuse nothing: " +
+                            reason);
+                    }
+
+                    Assert.That(amuse.Separation, Is.Not.Null);
+                    var plan = amuse.Separation.Renderers[0].Plan;
+                    Assert.That(plan.Submeshes, Has.Count.EqualTo(2));
+                    var presetSlot = plan.Submeshes.Single(
+                        entry => entry.SourceMaterialBindingIndex == 0);
+                    var plainSlot = plan.Submeshes.Single(
+                        entry => entry.SourceMaterialBindingIndex == 1);
+                    Assert.That(
+                        presetSlot.Disposition,
+                        Is.EqualTo(
+                            SubmeshSeparationDisposition
+                                .WhollyOpaqueCandidate),
+                        "the cutout preset folds under the cutout " +
+                        "pair's own preserve value");
+                    Assert.That(
+                        presetSlot.OpaqueTriangleOrdinals,
+                        Has.Count.EqualTo(2));
+                    Assert.That(
+                        presetSlot.TransparentTriangleOrdinals, Is.Empty);
+                    Assert.That(
+                        plainSlot.Disposition,
+                        Is.EqualTo(SubmeshSeparationDisposition.Split),
+                        "the plain sibling stays a split under the " +
+                        "transparent pair's inert preserve value");
+                    Assert.That(
+                        plainSlot.OpaqueTriangleOrdinals,
+                        Has.Count.EqualTo(1));
+                    Assert.That(
+                        plainSlot.TransparentTriangleOrdinals,
+                        Has.Count.EqualTo(1));
+                }
+                finally
+                {
+                    AlphaSeparationSplitTests.DeleteSplitFolder();
+                }
+            }
+            finally
+            {
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
+                if (mesh != null) UnityEngine.Object.DestroyImmediate(mesh);
+                UnityEngine.Object.DestroyImmediate(root);
+                if (presetMaterial != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(presetMaterial);
+                }
+
+                if (plainMaterial != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(plainMaterial);
                 }
             }
         }
