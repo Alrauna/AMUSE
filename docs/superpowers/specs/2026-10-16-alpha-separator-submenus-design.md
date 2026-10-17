@@ -128,7 +128,7 @@ No new report events exist. The two existing folded-premise disclosures name the
 
 ## Dependencies
 
-None. No new packages, no new assembly references, no new production types. The change grows existing signatures: the capturer delegate, the two capture entry points, `GatherAlphaFields`, `Decide` and `DecideSlot`, and the two capture wrapper lambdas. It adds one recorded bool on `CapturedAlphaMaterial` and one serialized bool on the component.
+None. No new packages, no new assembly references, no new production types. The change grows existing signatures: the capturer delegate, the two capture entry points, `GatherAlphaFields`, `Decide` and `DecideSlot`, and the two capture wrapper lambdas. It adds one recorded bool on `CapturedAlphaMaterial` and one serialized bool on the component. The derived-evidence rebuild in `Packages/com.alrauna.amuse/Editor/Analysis/AdmittedMaterialStates.cs` keeps the recorded bool, so that file joins the blast radius.
 
 ## Test strategy
 
