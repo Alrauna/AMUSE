@@ -347,7 +347,8 @@ namespace Alrauna.Amuse.Editor.Analysis
                         material.MaterialPath,
                         material.MaterialName,
                         material.ShaderName,
-                        material.MultiResolution);
+                        material.MultiResolution,
+                        material.PredicatesDeclareCutoff);
                 var capturedSemantics = resolveSemantics(admitted)
                     ?? CapturedAlphaSemantics.AllUnknown();
                 // Field lookups are scoped to this admitted material's own

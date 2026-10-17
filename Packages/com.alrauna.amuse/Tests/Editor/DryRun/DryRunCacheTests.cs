@@ -1,18 +1,22 @@
 using System.Collections.Generic;
+using System.Reflection;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
 using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.DryRun;
+using Alrauna.Amuse.Runtime;
 
 namespace Alrauna.Amuse.Tests.Editor.DryRun
 {
     /// <summary>
     /// The fingerprint cache is the dry run's staleness defense. It is
-    /// pure, so every sentence here runs without a scene. Each test
-    /// pins one sentence the spec states about keys, eviction, and
-    /// errored marks. The falsifiers each name one way a weaker key
-    /// would serve stale rows to the user.
+    /// pure, so every sentence here runs without a scene. The one
+    /// exception builds the dry-run policy fingerprint from a
+    /// throwaway component. Each test pins one sentence the spec
+    /// states about keys, eviction, and errored marks. The falsifiers
+    /// each name one way a weaker key would serve stale rows to the
+    /// user.
     /// </summary>
     public sealed class DryRunCacheTests
     {
@@ -107,6 +111,68 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             Assert.That(DryRunCache.TryGetRenderer(
                 DryRunFingerprint.Composite(afterAvatarKey, rendererKey),
                 out _), Is.False);
+        }
+
+        [Test]
+        public void FingerprintChangesWhenACutoutValueChanges()
+        {
+            // --- Falsifier 5: A fingerprint that omits the cutout
+            // values leaves the dry-run view stale after a cutout edit.
+            // The fingerprint-change assertion fails it. ---
+            var before = DryRunPolicyFingerprint(cutoutMipLevel: 5);
+
+            // Guard: a transparent edit moves the fingerprint, so the
+            // miss below proves the cutout omission and not a dead
+            // builder path.
+            var transparentEdit =
+                DryRunPolicyFingerprint(cutoutMipLevel: 5, transparentMipLevel: 6);
+            Assert.That(transparentEdit, Is.Not.EqualTo(before));
+
+            var after = DryRunPolicyFingerprint(cutoutMipLevel: 6);
+            Assert.That(after, Is.Not.EqualTo(before));
+        }
+
+        /// <summary>
+        /// Builds the dry-run policy fingerprint from a throwaway
+        /// component. The component carries the stored cutout and
+        /// transparent mip levels this file pins.
+        /// </summary>
+        private static string DryRunPolicyFingerprint(
+            int cutoutMipLevel, int transparentMipLevel = 5)
+        {
+            var root = new GameObject("AMUSE dry run fingerprint fixture");
+            try
+            {
+                var component = root.AddComponent<AmuseAvatarOptimizer>();
+
+                // A first serialization round trip runs the one-time
+                // upgrade backfill. The marker is then set, so the
+                // cutout edit below keeps its stored value.
+                var primed = EditorJsonUtility.ToJson(component);
+                EditorJsonUtility.FromJsonOverwrite(primed, component);
+
+                var serialized = new SerializedObject(component);
+                serialized.FindProperty("_preserveTransparencyMaxMipLevel")
+                    .intValue = transparentMipLevel;
+                serialized.FindProperty("_cutoutPreserveTransparencyMaxMipLevel")
+                    .intValue = cutoutMipLevel;
+                serialized.ApplyModifiedPropertiesWithoutUndo();
+
+                var dryRun = new AlphaSeparationDryRun(
+                    component, () => BuildTarget.StandaloneWindows64);
+                var method = typeof(AlphaSeparationDryRun).GetMethod(
+                    "BuildPolicyFingerprint",
+                    BindingFlags.NonPublic | BindingFlags.Instance);
+                Assert.That(
+                    method,
+                    Is.Not.Null,
+                    "the dry run must declare BuildPolicyFingerprint");
+                return (string)method.Invoke(dryRun, null);
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
         }
 
         [Test]

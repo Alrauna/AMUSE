@@ -4,7 +4,7 @@ using Newtonsoft.Json.Linq;
 namespace Alrauna.Amuse.Editor.Presets
 {
     /// <summary>
-    /// Parses preset text against the closed version 3 schema. The
+    /// Parses preset text against the closed version 4 schema. The
     /// parser refuses instead of guessing: an unknown key, a missing
     /// key, a wrong type, or an out-of-range value answers a named
     /// refusal and no preset, because a file must never half-apply.
@@ -15,7 +15,7 @@ namespace Alrauna.Amuse.Editor.Presets
     /// </summary>
     internal static class PresetParser
     {
-        internal const int CurrentSchemaVersion = 3;
+        internal const int CurrentSchemaVersion = 4;
 
         private static readonly string[] FileKeys =
             { "schemaVersion", "name", "description", "features", "settings" };
@@ -31,6 +31,10 @@ namespace Alrauna.Amuse.Editor.Presets
             "minimumOpaqueAlphaPercent",
             "polygonAlphaUpperClampPercent",
             "polygonMinimumOpaqueCoveragePercent",
+            "cutoutPreserveTransparencyMaxMipLevel",
+            "cutoutPreserveTransparencyMinTextureSize",
+            "cutoutMinimumOpaqueCoveragePercent",
+            "cutoutMinimumOpaqueCoverageToPreservePercent",
             "allowDepthTestChange",
             "ignoreOutOfRangeMaterialSlots",
             "acceptDesktopAnisotropyDifferences",
@@ -100,8 +104,12 @@ namespace Alrauna.Amuse.Editor.Presets
                 || !TryRead<bool>(
                     features, "alphaSeparator", JTokenType.Boolean, ref refusal,
                     out var alphaSeparator)
-                || !TryReadMipCap(settings, ref refusal, out var mipCap)
-                || !TryReadMinTextureSize(settings, ref refusal, out var minSize)
+                || !TryReadMipCap(
+                    settings, "preserveTransparencyMaxMipLevel",
+                    ref refusal, out var mipCap)
+                || !TryReadMinTextureSize(
+                    settings, "preserveTransparencyMinTextureSize",
+                    ref refusal, out var minSize)
                 || !TryReadPercent(
                     settings, "minimumOpaqueCoveragePercent",
                     ref refusal, out var coverage)
@@ -117,6 +125,18 @@ namespace Alrauna.Amuse.Editor.Presets
                 || !TryReadPercent(
                     settings, "polygonMinimumOpaqueCoveragePercent",
                     ref refusal, out var polygonCoverage)
+                || !TryReadMipCap(
+                    settings, "cutoutPreserveTransparencyMaxMipLevel",
+                    ref refusal, out var cutoutMipCap)
+                || !TryReadMinTextureSize(
+                    settings, "cutoutPreserveTransparencyMinTextureSize",
+                    ref refusal, out var cutoutMinSize)
+                || !TryReadPercent(
+                    settings, "cutoutMinimumOpaqueCoveragePercent",
+                    ref refusal, out var cutoutCoverage)
+                || !TryReadPercent(
+                    settings, "cutoutMinimumOpaqueCoverageToPreservePercent",
+                    ref refusal, out var cutoutPreserveCoverage)
                 || !TryRead<bool>(
                     settings, "allowDepthTestChange",
                     JTokenType.Boolean, ref refusal, out var depthTest)
@@ -144,9 +164,13 @@ namespace Alrauna.Amuse.Editor.Presets
             }
 
             preset = new OptimizerPreset(
-                name, description, alphaSeparator, mipCap, minSize,
-                coverage, preserveCoverage, alphaClamp, polygonClamp,
-                polygonCoverage, depthTest, ignoreOutOfRange,
+                name, description, alphaSeparator,
+                mipCap, cutoutMipCap,
+                minSize, cutoutMinSize,
+                coverage, cutoutCoverage,
+                preserveCoverage, cutoutPreserveCoverage,
+                alphaClamp, polygonClamp, polygonCoverage,
+                depthTest, ignoreOutOfRange,
                 acceptDesktop, acceptMobile);
             return true;
         }
@@ -238,11 +262,12 @@ namespace Alrauna.Amuse.Editor.Presets
 
         private static bool TryReadMipCap(
             JObject obj,
+            string key,
             ref PresetLoadRefusal refusal,
             out int value)
         {
             if (!TryRead<int>(
-                    obj, "preserveTransparencyMaxMipLevel",
+                    obj, key,
                     JTokenType.Integer, ref refusal, out value))
             {
                 return false;
@@ -257,11 +282,12 @@ namespace Alrauna.Amuse.Editor.Presets
 
         private static bool TryReadMinTextureSize(
             JObject obj,
+            string key,
             ref PresetLoadRefusal refusal,
             out int value)
         {
             if (!TryRead<int>(
-                    obj, "preserveTransparencyMinTextureSize",
+                    obj, key,
                     JTokenType.Integer, ref refusal, out value))
             {
                 return false;

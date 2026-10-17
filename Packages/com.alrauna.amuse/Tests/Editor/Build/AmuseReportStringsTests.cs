@@ -145,6 +145,78 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
+        public void CutoutForcedOpaqueEntryExistsWithThreeParts()
+        {
+            var key = "amuse.slotSeparation.ForcedOpaqueCutout";
+            Assert.That(
+                AmuseReportStrings.Has(key), Is.True,
+                "missing title for the cutout forced-opaque entry");
+            Assert.That(
+                AmuseReportStrings.Has(key + ":description"), Is.True,
+                "missing description for the cutout forced-opaque entry");
+            Assert.That(
+                AmuseReportStrings.Has(key + ":hint"), Is.True,
+                "missing hint for the cutout forced-opaque entry");
+
+            var description = AmuseReportStrings.Get(key + ":description");
+            Assert.That(
+                description, Does.Contain("no opacity proof"),
+                "the description must state the missing opacity proof");
+            Assert.That(
+                description,
+                Does.Contain("Minimum Opaque Coverage to Preserve"),
+                "the description must name the exact setting");
+            Assert.That(
+                description, Does.Contain("Cutout submenu"),
+                "the cutout variant must reference the Cutout submenu");
+            Assert.That(
+                AmuseReportStrings.Get(key + ":hint"),
+                Does.Contain("Cutout submenu"),
+                "the cutout hint must point at the Cutout submenu");
+        }
+
+        [Test]
+        public void CutoutFoldedPremultiplyEntryExistsWithThreeParts()
+        {
+            var key =
+                "amuse.slotSeparation." +
+                "PremultiplyNormalizationFoldedCutout";
+            Assert.That(
+                AmuseReportStrings.Has(key), Is.True,
+                "missing title for the cutout folded premultiply entry");
+            Assert.That(
+                AmuseReportStrings.Has(key + ":description"), Is.True,
+                "missing description for the cutout folded premultiply " +
+                "entry");
+            Assert.That(
+                AmuseReportStrings.Has(key + ":hint"), Is.True,
+                "missing hint for the cutout folded premultiply entry");
+
+            var description = AmuseReportStrings.Get(key + ":description");
+            Assert.That(
+                description,
+                Does.Contain("Minimum Opaque Coverage to Preserve"),
+                "the cutout folded entry must name the preserve setting");
+            Assert.That(
+                description, Does.Contain("Cutout submenu"),
+                "the cutout variant must reference the Cutout submenu");
+            Assert.That(
+                description,
+                Does.Not.Contain(
+                    "The opaque material reproduces those colors exactly."),
+                "a folded slot moved unproven triangles, so the entry " +
+                "must not claim exact colors");
+            Assert.That(
+                description, Does.Contain("may differ"),
+                "the cutout folded entry must state the honest color " +
+                "premise");
+            Assert.That(
+                AmuseReportStrings.Get(key + ":hint"),
+                Does.Contain("Cutout submenu"),
+                "the cutout folded hint must point at the Cutout submenu");
+        }
+
+        [Test]
         public void DisclosureDescriptionsDescribeTheMovedSetAsOpaqueTriangles()
         {
             var descriptions = new[]

@@ -65,11 +65,73 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 var fingerprint = PlayModeBuildStore.ComputePolicyFingerprint(
                     component, BuildTarget.StandaloneWindows64);
                 Assert.That(fingerprint, Does.StartWith("StandaloneWindows64;"));
-                Assert.That(fingerprint.Split(';').Length, Is.EqualTo(9));
+                Assert.That(fingerprint.Split(';').Length, Is.EqualTo(13));
             }
             finally
             {
                 UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void ComputePolicyFingerprintDistinguishesTransparentAndCutoutValues()
+        {
+            var first = new GameObject("AMUSE store policy first");
+            var second = new GameObject("AMUSE store policy second");
+            try
+            {
+                var firstComponent = first.AddComponent<AmuseAvatarOptimizer>();
+                var secondComponent = second.AddComponent<AmuseAvatarOptimizer>();
+
+                // A first serialization round trip runs the one-time
+                // upgrade backfill. The marker is then set, so the
+                // cutout edits below keep their stored values.
+                var primedFirst = EditorJsonUtility.ToJson(firstComponent);
+                EditorJsonUtility.FromJsonOverwrite(primedFirst, firstComponent);
+                var primedSecond = EditorJsonUtility.ToJson(secondComponent);
+                EditorJsonUtility.FromJsonOverwrite(primedSecond, secondComponent);
+
+                SetStoredInt(
+                    secondComponent, "_preserveTransparencyMaxMipLevel", 6);
+                SetStoredInt(
+                    secondComponent, "_preserveTransparencyMinTextureSize", 256);
+                SetStoredInt(
+                    secondComponent, "_cutoutPreserveTransparencyMaxMipLevel", 5);
+                SetStoredInt(
+                    secondComponent, "_cutoutPreserveTransparencyMinTextureSize", 320);
+                SetStoredInt(
+                    secondComponent, "_cutoutMinimumOpaqueCoveragePercent", 40);
+                SetStoredInt(
+                    secondComponent,
+                    "_cutoutMinimumOpaqueCoverageToPreservePercent", 15);
+
+                var firstFingerprint =
+                    PlayModeBuildStore.ComputePolicyFingerprint(
+                        firstComponent, BuildTarget.StandaloneWindows64);
+                var secondFingerprint =
+                    PlayModeBuildStore.ComputePolicyFingerprint(
+                        secondComponent, BuildTarget.StandaloneWindows64);
+
+                // The two records differ in their transparent values
+                // and in their cutout values, so the store match
+                // refuses the second record under the first
+                // fingerprint.
+                Assert.That(secondFingerprint, Is.Not.EqualTo(firstFingerprint));
+
+                // Guard: a cutout-only edit alone moves the
+                // fingerprint, so the store never folds the cutout arm
+                // into the transparent one.
+                SetStoredInt(
+                    firstComponent, "_cutoutPreserveTransparencyMaxMipLevel", 5);
+                Assert.That(
+                    PlayModeBuildStore.ComputePolicyFingerprint(
+                        firstComponent, BuildTarget.StandaloneWindows64),
+                    Is.Not.EqualTo(firstFingerprint));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(first);
+                UnityEngine.Object.DestroyImmediate(second);
             }
         }
 
@@ -138,6 +200,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         private static string Fingerprint() => "fingerprint_matrix";
 
         private static string StoreKey() => "Amuse_PlayMode_" + AvatarKey();
+
+        private static void SetStoredInt(
+            AmuseAvatarOptimizer component, string field, int value)
+        {
+            var serialized = new SerializedObject(component);
+            serialized.FindProperty(field).intValue = value;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+        }
 
         [Test]
         public void CorruptStoredPayloadsReadAsNoRecordAndEraseTheKey()

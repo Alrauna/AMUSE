@@ -11,7 +11,8 @@ namespace Alrauna.Amuse.Tests.Editor
         {
             return new OptimizerPreset(
                 "Normal", "Shipped defaults.", true,
-                4, 128, 25, 5, 100, 100, 100, true, true, true, true);
+                4, 4, 128, 128, 25, 25, 5, 5, 100, 100, 100,
+                true, true, true, true);
         }
 
         [Test]
@@ -54,13 +55,18 @@ namespace Alrauna.Amuse.Tests.Editor
         public void FlippingAnyOneFieldValueBreaksTheMatch()
         {
             var preset = ShippedDefaults();
+            // --- Falsifier 6: A preset press that matches only the transparent fields presses while a cutout value differs. The sixteen-row flip table fails it. ---
             var fields = new (string name, object value)[]
             {
                 ("_alphaSeparatorEnabled", false),
                 ("_preserveTransparencyMaxMipLevel", 5),
+                ("_cutoutPreserveTransparencyMaxMipLevel", 3),
                 ("_preserveTransparencyMinTextureSize", 256),
+                ("_cutoutPreserveTransparencyMinTextureSize", 64),
                 ("_minimumOpaqueCoveragePercent", 30),
+                ("_cutoutMinimumOpaqueCoveragePercent", 20),
                 ("_minimumOpaqueCoverageToPreservePercent", 10),
+                ("_cutoutMinimumOpaqueCoverageToPreservePercent", 15),
                 ("_minimumOpaqueAlphaPercent", 90),
                 ("_polygonAlphaUpperClampPercent", 80),
                 ("_polygonMinimumOpaqueCoveragePercent", 70),
@@ -76,6 +82,18 @@ namespace Alrauna.Amuse.Tests.Editor
                 try
                 {
                     var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
+
+                    // A first serialize and deserialize round trip runs
+                    // the one-time upgrade backfill and sets its marker.
+                    // Without it, every serialized apply re-runs the
+                    // backfill and overwrites a fresh cutout edit. This
+                    // mirrors the engine, which backfills on the first
+                    // save.
+                    var primed = UnityEditor.EditorJsonUtility.ToJson(
+                        optimizer);
+                    UnityEditor.EditorJsonUtility.FromJsonOverwrite(
+                        primed, optimizer);
+
                     Assert.That(preset.Matches(optimizer), Is.True,
                         field.name + " starts matching");
 

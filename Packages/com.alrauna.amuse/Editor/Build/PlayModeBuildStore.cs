@@ -60,6 +60,10 @@ namespace Alrauna.Amuse.Editor.Build
                 component.PolygonMinimumOpaqueCoveragePercent,
                 component.MinimumOpaqueCoveragePercent,
                 component.MinimumOpaqueCoverageToPreservePercent,
+                component.CutoutPreserveTransparencyMaxMipLevel,
+                component.CutoutPreserveTransparencyMinTextureSize,
+                component.CutoutMinimumOpaqueCoveragePercent,
+                component.CutoutMinimumOpaqueCoverageToPreservePercent,
                 component.AllowDepthTestChange,
                 component.MinimumOpaqueAlphaPercent,
                 component.PolygonAlphaUpperClampPercent);

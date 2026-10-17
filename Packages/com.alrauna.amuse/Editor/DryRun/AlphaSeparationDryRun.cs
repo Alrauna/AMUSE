@@ -93,6 +93,10 @@ namespace Alrauna.Amuse.Editor.DryRun
         private int _densityCapPercent;
         private int _minimumOpaqueCoveragePercent;
         private int _minimumOpaqueCoverageToPreservePercent;
+        private int _cutoutMaxMipLevel;
+        private int _cutoutMinTextureSize;
+        private int _cutoutMinimumCoverage;
+        private int _cutoutPreserveCoverage;
         private bool _allowDepthTestChange;
 
         private int _rendererIndex;
@@ -362,6 +366,16 @@ namespace Alrauna.Amuse.Editor.DryRun
             _minimumOpaqueCoverageToPreservePercent =
                 RuntimeStateResolution.MinimumPreserveCoverageFrom(
                     _component.MinimumOpaqueCoverageToPreservePercent);
+            _cutoutMaxMipLevel = RuntimeStateResolution.ProofMipCapFrom(
+                _component.CutoutPreserveTransparencyMaxMipLevel);
+            _cutoutMinTextureSize = RuntimeStateResolution.MinTextureSizeFrom(
+                _component.CutoutPreserveTransparencyMinTextureSize);
+            _cutoutMinimumCoverage =
+                RuntimeStateResolution.MinimumCoverageFrom(
+                    _component.CutoutMinimumOpaqueCoveragePercent);
+            _cutoutPreserveCoverage =
+                RuntimeStateResolution.MinimumPreserveCoverageFrom(
+                    _component.CutoutMinimumOpaqueCoverageToPreservePercent);
             _allowDepthTestChange = _component.AllowDepthTestChange;
             _bounds = AlphaPolicyBounds.From(
                 RuntimeStateResolution.OpaquePercentFrom(
@@ -597,7 +611,9 @@ namespace Alrauna.Amuse.Editor.DryRun
                 RecordConsentFacts(evidence, admittedLive);
 
                 var alphaFields = UnityRendererAlphaAnalysis.GatherAlphaFields(
-                    evidence.AdmittedMaterials, _maxMipLevel, _minTextureSize);
+                    evidence.AdmittedMaterials, _maxMipLevel,
+                    _cutoutMaxMipLevel, _minTextureSize,
+                    _cutoutMinTextureSize);
                 resolved = RuntimeStateResolution.ResolveRuntimeStates(
                     rendererPath,
                     evidence,
@@ -769,12 +785,24 @@ namespace Alrauna.Amuse.Editor.DryRun
                     _inFlightRendererPath,
                     _inFlightRendererTypeName,
                     _allowDepthTestChange);
+
+                // One coverage pair per slot, selected by the slot's own
+                // recorded proof arm through the same builder the build
+                // path reads, so the dry run can never show a verdict the
+                // build would not prepare.
+                var coverageVectors =
+                    SlotTransformDecision.CoverageVectorsBySlot(
+                        _inFlightResolved.CurrentMaterials,
+                        _minimumOpaqueCoveragePercent,
+                        _minimumOpaqueCoverageToPreservePercent,
+                        _cutoutMinimumCoverage,
+                        _cutoutPreserveCoverage);
                 var verdicts = SlotTransformDecision.Decide(
                     plan,
                     _inFlightResolved.SlotResults,
                     alreadyOpaqueBySlot,
-                    _minimumOpaqueCoveragePercent,
-                    _minimumOpaqueCoverageToPreservePercent);
+                    coverageVectors.CoveragePercentsBySlot,
+                    coverageVectors.PreservePercentsBySlot);
                 var rows = BuildRows(
                     _inFlightRenderer,
                     _inFlightRendererPath,
@@ -881,7 +909,9 @@ namespace Alrauna.Amuse.Editor.DryRun
                     rendererTypeName,
                     LockedMaterialIdentity.PreCheckRefusal,
                     null,
-                    null);
+                    null,
+                    cutoutRawMipCap: _cutoutMaxMipLevel,
+                    exactRawMipCap: _maxMipLevel);
             }
 
             return UnityAnimationEvidenceCapture.CaptureGraphThroughSeams(
@@ -898,7 +928,9 @@ namespace Alrauna.Amuse.Editor.DryRun
                 rendererTypeName,
                 LockedMaterialIdentity.PreCheckRefusal,
                 null,
-                null);
+                null,
+                cutoutRawMipCap: _cutoutMaxMipLevel,
+                exactRawMipCap: _maxMipLevel);
         }
 
         /// <summary>
@@ -973,6 +1005,8 @@ namespace Alrauna.Amuse.Editor.DryRun
                 IReadOnlyList<CapturedAlphaMaterialFamily> families,
                 MaterialEvidenceRequest request,
                 AlphaPolicyBounds bounds,
+                int cutoutRawMipCap,
+                int exactRawMipCap,
                 out ClosedAlphaCaptureOutcome outcome) =>
             {
                 var ordinals = new List<int>(materials.Count);
@@ -1000,6 +1034,8 @@ namespace Alrauna.Amuse.Editor.DryRun
                 IReadOnlyList<CapturedAlphaMaterialFamily> families,
                 MaterialEvidenceRequest request,
                 AlphaPolicyBounds bounds,
+                int chainCutoutRawMipCap,
+                int chainExactRawMipCap,
                 out ClosedAlphaCaptureOutcome outcome) =>
             {
                 var effective = EffectiveMaterialMaterialization
@@ -1010,14 +1046,19 @@ namespace Alrauna.Amuse.Editor.DryRun
                     // request: the request withdraws the streaming route's
                     // disk-fallback clone, so no capture in this batch can
                     // create assets on disk. The optimizer's raw policy mip
-                    // cap rides the same request, so the proof reads back
-                    // only its own levels.
+                    // caps ride the same request: the request carries the
+                    // wider of the two arms, so the unshared fallback
+                    // over-captures, and the two arm values ride beside it
+                    // so the closed capture can pin each bucket to its arm.
                     return inner(
                         effective,
                         families,
                         request.DisallowingDiskFallback()
-                            .WithRawMipCap(_maxMipLevel),
+                            .WithRawMipCap(Math.Max(
+                                _cutoutMaxMipLevel, _maxMipLevel)),
                         bounds,
+                        chainCutoutRawMipCap,
+                        chainExactRawMipCap,
                         out outcome);
                 }
                 finally
@@ -1037,9 +1078,12 @@ namespace Alrauna.Amuse.Editor.DryRun
                 IReadOnlyList<CapturedAlphaMaterialFamily> families,
                 MaterialEvidenceRequest request,
                 AlphaPolicyBounds bounds,
+                int cutoutRawMipCap,
+                int exactRawMipCap,
                 out ClosedAlphaCaptureOutcome outcome) =>
                 UnityMaterialSemantics.TryCaptureClosedAlphaMaterials(
-                    materials, families, request, bounds, out outcome, null);
+                    materials, families, request, bounds, out outcome, null,
+                    cutoutRawMipCap, exactRawMipCap);
         }
 
         /// <summary>
@@ -1531,6 +1575,10 @@ namespace Alrauna.Amuse.Editor.DryRun
                 _component.PreserveTransparencyMinTextureSize,
                 _component.MinimumOpaqueCoveragePercent,
                 _component.MinimumOpaqueCoverageToPreservePercent,
+                _component.CutoutPreserveTransparencyMaxMipLevel,
+                _component.CutoutPreserveTransparencyMinTextureSize,
+                _component.CutoutMinimumOpaqueCoveragePercent,
+                _component.CutoutMinimumOpaqueCoverageToPreservePercent,
                 _component.MinimumOpaqueAlphaPercent,
                 _component.PolygonAlphaUpperClampPercent,
                 _component.PolygonMinimumOpaqueCoveragePercent,

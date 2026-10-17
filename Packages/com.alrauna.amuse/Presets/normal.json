@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "name": "Normal",
   "description": "Accepts desktop and mobile anisotropy differences, slot exceptions, and depth-test changes. It flattens a nearly opaque material to save a draw call.",
   "features": {
@@ -13,6 +13,10 @@
     "minimumOpaqueAlphaPercent": 100,
     "polygonAlphaUpperClampPercent": 100,
     "polygonMinimumOpaqueCoveragePercent": 100,
+    "cutoutPreserveTransparencyMaxMipLevel": 4,
+    "cutoutPreserveTransparencyMinTextureSize": 128,
+    "cutoutMinimumOpaqueCoveragePercent": 25,
+    "cutoutMinimumOpaqueCoverageToPreservePercent": 5,
     "allowDepthTestChange": true,
     "ignoreOutOfRangeMaterialSlots": true,
     "acceptDesktopAnisotropyDifferences": true,

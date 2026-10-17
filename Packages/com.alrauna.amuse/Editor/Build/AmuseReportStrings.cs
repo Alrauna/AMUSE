@@ -614,6 +614,20 @@ namespace Alrauna.Amuse.Editor.Build
                 "Lower Minimum Opaque Coverage to Preserve on the AMUSE " +
                 "Avatar Optimizer component if you want to keep this " +
                 "material's transparency.",
+            ["amuse.slotSeparation.PremultiplyNormalizationFoldedCutout"] =
+                "AMUSE separated material slot {0} of renderer '{1}'.",
+            ["amuse.slotSeparation.PremultiplyNormalizationFoldedCutout:description"] =
+                "AMUSE moved the triangles of material slot {0} of " +
+                "renderer '{1}' onto an opaque material without an " +
+                "opacity proof. The unproven share sits below the " +
+                "Minimum Opaque Coverage to Preserve setting in the " +
+                "Cutout submenu. The source material scaled its color " +
+                "by alpha, so the moved colors may differ from the " +
+                "original colors.",
+            ["amuse.slotSeparation.PremultiplyNormalizationFoldedCutout:hint"] =
+                "Lower Minimum Opaque Coverage to Preserve in the " +
+                "Cutout submenu on the AMUSE Avatar Optimizer component " +
+                "if you want to keep this material's transparency.",
             ["amuse.slotSeparation.ForcedOpaque"] =
                 "AMUSE moved {2} of material slot {0} of renderer '{1}' " +
                 "onto an opaque material.",
@@ -626,6 +640,19 @@ namespace Alrauna.Amuse.Editor.Build
                 "Lower Minimum Opaque Coverage to Preserve on the AMUSE " +
                 "Avatar Optimizer component to keep this material's " +
                 "transparency.",
+            ["amuse.slotSeparation.ForcedOpaqueCutout"] =
+                "AMUSE moved {2} of material slot {0} of renderer '{1}' " +
+                "onto an opaque material.",
+            ["amuse.slotSeparation.ForcedOpaqueCutout:description"] =
+                "The moved triangles have no opacity proof. The unproven " +
+                "share of material slot {0} of renderer '{1}' sits below " +
+                "the Minimum Opaque Coverage to Preserve setting in the " +
+                "Cutout submenu, so AMUSE moved the whole slot onto the " +
+                "opaque material.",
+            ["amuse.slotSeparation.ForcedOpaqueCutout:hint"] =
+                "Lower Minimum Opaque Coverage to Preserve in the " +
+                "Cutout submenu on the AMUSE Avatar Optimizer component " +
+                "to keep this material's transparency.",
             ["amuse.slotSeparation.ConversionBindingUnrecognized"] =
                 "AMUSE left material slot {0} of renderer '{2}' unchanged.",
             ["amuse.slotSeparation.ConversionBindingUnrecognized:description"] =
@@ -865,6 +892,34 @@ namespace Alrauna.Amuse.Editor.Build
         internal static string SlotSeparationForcedOpaqueKey
         {
             get { return Prefix + "slotSeparation.ForcedOpaque"; }
+        }
+
+        /// <summary>
+        /// The report key for one folded submesh whose fold cause was the
+        /// Cutout submenu's own preserve value. The sentences match the
+        /// base forced entries and name the Cutout submenu, so the
+        /// reader lowers the setting that actually folded the slot.
+        /// </summary>
+        internal static string SlotSeparationForcedOpaqueCutoutKey
+        {
+            get { return Prefix + "slotSeparation.ForcedOpaqueCutout"; }
+        }
+
+        /// <summary>
+        /// The report key for one prepared folded slot whose conversion
+        /// used the premultiply premise and whose fold cause was the
+        /// Cutout submenu's own preserve value. The entry names the
+        /// Cutout submenu and never claims exact colors.
+        /// </summary>
+        internal static string
+            SlotSeparationPremultiplyNormalizationFoldedCutoutKey
+        {
+            get
+            {
+                return Prefix +
+                       "slotSeparation." +
+                       "PremultiplyNormalizationFoldedCutout";
+            }
         }
 
         /// <summary>

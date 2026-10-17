@@ -74,21 +74,35 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             return material != null;
         }
 
+        /// <summary>
+        /// The closed capture for a Poiyomi batch through the production
+        /// capture. The two arm caps ride the delegate shape only. This
+        /// fixture keeps the smallest-cap bucket merge, because it serves
+        /// attestation and never sees the build's arm values.
+        /// </summary>
         internal static bool CaptureVerifiedFixtureMaterials(
             IReadOnlyList<Material> materials,
             IReadOnlyList<CapturedAlphaMaterialFamily> families,
             MaterialEvidenceRequest request,
             AlphaPolicyBounds bounds,
+            int cutoutRawMipCap,
+            int exactRawMipCap,
             out ClosedAlphaCaptureOutcome captured)
         {
             var inputs = new MaterialEvidenceCaptureInput[materials.Count];
+            var declaresCutoff = new bool[materials.Count];
             for (var index = 0; index < materials.Count; index++)
             {
+                var predicate = UnityMaterialSemantics
+                    .AlphaPredicateRequestFor(
+                        materials[index], families[index]);
                 inputs[index] = new MaterialEvidenceCaptureInput(
                     materials[index],
                     request,
-                    UnityMaterialSemantics.AlphaPredicateRequestFor(
-                        materials[index], families[index]));
+                    predicate);
+                declaresCutoff[index] =
+                    UnityMaterialSemantics.PredicateDeclaresCutoff(
+                        predicate);
             }
 
             var evidence = UnityMaterialEvidenceCapture.Capture(
@@ -102,6 +116,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     evidence[index],
                     default(PoiyomiSourceEvidence),
                     null,
+                    predicatesDeclareCutoff: declaresCutoff[index],
                     materialPath: source != null
                         ? AssetDatabase.GetAssetPath(source)
                         : null,

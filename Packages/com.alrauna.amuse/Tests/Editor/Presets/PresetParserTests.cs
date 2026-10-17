@@ -6,7 +6,7 @@ namespace Alrauna.Amuse.Tests.Editor
     public sealed class PresetParserTests
     {
         private const string ValidJson = @"{
-  ""schemaVersion"": 3,
+  ""schemaVersion"": 4,
   ""name"": ""Safe"",
   ""description"": ""Shipped defaults."",
   ""features"": { ""alphaSeparator"": true },
@@ -18,6 +18,10 @@ namespace Alrauna.Amuse.Tests.Editor
     ""minimumOpaqueAlphaPercent"": 100,
     ""polygonAlphaUpperClampPercent"": 100,
     ""polygonMinimumOpaqueCoveragePercent"": 100,
+    ""cutoutPreserveTransparencyMaxMipLevel"": 4,
+    ""cutoutPreserveTransparencyMinTextureSize"": 128,
+    ""cutoutMinimumOpaqueCoveragePercent"": 25,
+    ""cutoutMinimumOpaqueCoverageToPreservePercent"": 0,
     ""allowDepthTestChange"": true,
     ""ignoreOutOfRangeMaterialSlots"": true,
     ""acceptDesktopAnisotropyDifferences"": false,
@@ -31,27 +35,57 @@ namespace Alrauna.Amuse.Tests.Editor
         }
 
         // A realistic version 2 body: version 2 and none of the
-        // version 3 preserve key.
+        // version 3 preserve key or the version 4 cutout keys.
         private static string LegacyVersionTwoBody()
         {
             return WithSettings(
-                    "\"schemaVersion\": 3", "\"schemaVersion\": 2")
+                    "\"schemaVersion\": 4", "\"schemaVersion\": 2")
                 .Replace(
                     "    \"minimumOpaqueCoverageToPreservePercent\": 0,\n",
+                    "")
+                .Replace(
+                    "    \"cutoutPreserveTransparencyMaxMipLevel\": 4,\n" +
+                    "    \"cutoutPreserveTransparencyMinTextureSize\": 128,\n" +
+                    "    \"cutoutMinimumOpaqueCoveragePercent\": 25,\n" +
+                    "    \"cutoutMinimumOpaqueCoverageToPreservePercent\": 0,\n",
                     "");
         }
 
         // A realistic version 1 body: version 1 and none of the
-        // version 2 acceptance keys.
+        // version 2 acceptance keys, the version 3 preserve key, or
+        // the version 4 cutout keys.
         private static string LegacyVersionOneBody()
         {
             return WithSettings(
-                    "\"schemaVersion\": 3", "\"schemaVersion\": 1")
+                    "\"schemaVersion\": 4", "\"schemaVersion\": 1")
+                .Replace(
+                    "    \"minimumOpaqueCoverageToPreservePercent\": 0,\n",
+                    "")
+                .Replace(
+                    "    \"cutoutPreserveTransparencyMaxMipLevel\": 4,\n" +
+                    "    \"cutoutPreserveTransparencyMinTextureSize\": 128,\n" +
+                    "    \"cutoutMinimumOpaqueCoveragePercent\": 25,\n" +
+                    "    \"cutoutMinimumOpaqueCoverageToPreservePercent\": 0,\n",
+                    "")
                 .Replace(
                     "    \"ignoreOutOfRangeMaterialSlots\": true,\n" +
                     "    \"acceptDesktopAnisotropyDifferences\": false,\n" +
                     "    \"acceptMobileAnisotropyDifferences\": false\n",
                     "    \"ignoreOutOfRangeMaterialSlots\": true\n");
+        }
+
+        // A realistic version 3 body: version 3 and none of the
+        // version 4 cutout keys.
+        private static string LegacyVersionThreeBody()
+        {
+            return WithSettings(
+                    "\"schemaVersion\": 4", "\"schemaVersion\": 3")
+                .Replace(
+                    "    \"cutoutPreserveTransparencyMaxMipLevel\": 4,\n" +
+                    "    \"cutoutPreserveTransparencyMinTextureSize\": 128,\n" +
+                    "    \"cutoutMinimumOpaqueCoveragePercent\": 25,\n" +
+                    "    \"cutoutMinimumOpaqueCoverageToPreservePercent\": 0,\n",
+                    "");
         }
 
         private static void Refuses(string json, PresetLoadRefusal expected)
@@ -62,7 +96,7 @@ namespace Alrauna.Amuse.Tests.Editor
         }
 
         [Test]
-        public void ValidSchemaParsesAllTwelveValues()
+        public void ValidSchemaParsesAllSixteenValues()
         {
             var parsed = PresetParser.TryParse(
                 ValidJson, out var preset, out var refusal);
@@ -71,10 +105,18 @@ namespace Alrauna.Amuse.Tests.Editor
             Assert.That(preset.Description, Is.EqualTo("Shipped defaults."));
             Assert.That(preset.AlphaSeparatorEnabled, Is.True);
             Assert.That(preset.PreserveTransparencyMaxMipLevel, Is.EqualTo(4));
+            Assert.That(preset.CutoutPreserveTransparencyMaxMipLevel,
+                Is.EqualTo(4));
             Assert.That(preset.PreserveTransparencyMinTextureSize,
                 Is.EqualTo(128));
+            Assert.That(preset.CutoutPreserveTransparencyMinTextureSize,
+                Is.EqualTo(128));
             Assert.That(preset.MinimumOpaqueCoveragePercent, Is.EqualTo(25));
+            Assert.That(preset.CutoutMinimumOpaqueCoveragePercent,
+                Is.EqualTo(25));
             Assert.That(preset.MinimumOpaqueCoverageToPreservePercent,
+                Is.EqualTo(0));
+            Assert.That(preset.CutoutMinimumOpaqueCoverageToPreservePercent,
                 Is.EqualTo(0));
             Assert.That(preset.MinimumOpaqueAlphaPercent, Is.EqualTo(100));
             Assert.That(preset.PolygonAlphaUpperClampPercent, Is.EqualTo(100));
@@ -115,7 +157,7 @@ namespace Alrauna.Amuse.Tests.Editor
         public void WrongSchemaVersionRefuses()
         {
             var json = WithSettings(
-                "\"schemaVersion\": 3", "\"schemaVersion\": 4");
+                "\"schemaVersion\": 4", "\"schemaVersion\": 5");
             Refuses(json, PresetLoadRefusal.UnknownSchemaVersion);
         }
 
@@ -141,6 +183,18 @@ namespace Alrauna.Amuse.Tests.Editor
             Refuses(legacy, PresetLoadRefusal.UnknownSchemaVersion);
         }
 
+        // --- Falsifier 7: A parser that invents cutout values for a version 3 file answers a preset instead of UnknownSchemaVersion. The refusal test fails it. ---
+        [Test]
+        public void SchemaVersionThreeRefusesAsUnknown()
+        {
+            // A real version 3 file carries only the version 3 keys.
+            // It refuses with UnknownSchemaVersion, not with a
+            // missing-key refusal, and nothing invents its missing
+            // cutout values.
+            var legacy = LegacyVersionThreeBody();
+            Refuses(legacy, PresetLoadRefusal.UnknownSchemaVersion);
+        }
+
         [Test]
         public void MissingAcceptanceKeyRefuses()
         {
@@ -163,7 +217,7 @@ namespace Alrauna.Amuse.Tests.Editor
         public void UnknownTopLevelFieldRefuses()
         {
             var json = WithSettings(
-                "\"schemaVersion\": 3", "\"schemaVersion\": 3, \"extra\": 1");
+                "\"schemaVersion\": 4", "\"schemaVersion\": 4, \"extra\": 1");
             Refuses(json, PresetLoadRefusal.UnknownField);
         }
 
@@ -197,7 +251,7 @@ namespace Alrauna.Amuse.Tests.Editor
         public void WrongValueTypeForSchemaVersionRefuses()
         {
             var json = WithSettings(
-                "\"schemaVersion\": 3", "\"schemaVersion\": \"3\"");
+                "\"schemaVersion\": 4", "\"schemaVersion\": \"4\"");
             Refuses(json, PresetLoadRefusal.WrongValueType);
         }
 
@@ -241,6 +295,41 @@ namespace Alrauna.Amuse.Tests.Editor
             Refuses(WithMinTextureSize(1), PresetLoadRefusal.ValueOutOfRange);
         }
 
+        // One range-edge refusal per reader shape, each routed
+        // through a cutout key. The cutout values must pass the same
+        // range readers as their transparent counterparts.
+        [Test]
+        public void CutoutMipCapAboveTenRefuses()
+        {
+            Refuses(
+                WithCutoutMipCap(11), PresetLoadRefusal.ValueOutOfRange);
+        }
+
+        [Test]
+        public void CutoutTextureSizeAboveLimitRefuses()
+        {
+            Refuses(
+                WithCutoutMinTextureSize(16384),
+                PresetLoadRefusal.ValueOutOfRange);
+        }
+
+        [Test]
+        public void CutoutPercentAboveHundredRefuses()
+        {
+            Refuses(WithSettings(
+                    "\"cutoutMinimumOpaqueCoveragePercent\": 25",
+                    "\"cutoutMinimumOpaqueCoveragePercent\": 101"),
+                PresetLoadRefusal.ValueOutOfRange);
+        }
+
+        [Test]
+        public void MissingCutoutKeyRefuses()
+        {
+            var json = ValidJson.Replace(
+                "    \"cutoutMinimumOpaqueCoveragePercent\": 25,\n", "");
+            Refuses(json, PresetLoadRefusal.MissingField);
+        }
+
         private static string WithMipCap(int value)
         {
             return ValidJson.Replace(
@@ -260,6 +349,20 @@ namespace Alrauna.Amuse.Tests.Editor
             return ValidJson.Replace(
                 "\"minimumOpaqueCoverageToPreservePercent\": 0",
                 "\"minimumOpaqueCoverageToPreservePercent\": " + value);
+        }
+
+        private static string WithCutoutMipCap(int value)
+        {
+            return ValidJson.Replace(
+                "\"cutoutPreserveTransparencyMaxMipLevel\": 4",
+                "\"cutoutPreserveTransparencyMaxMipLevel\": " + value);
+        }
+
+        private static string WithCutoutMinTextureSize(int value)
+        {
+            return ValidJson.Replace(
+                "\"cutoutPreserveTransparencyMinTextureSize\": 128",
+                "\"cutoutPreserveTransparencyMinTextureSize\": " + value);
         }
 
         [Test]
@@ -292,7 +395,7 @@ namespace Alrauna.Amuse.Tests.Editor
         public void IntegerBeyondIntRangeRefusesValueOutOfRange()
         {
             Refuses(WithSettings(
-                    "\"schemaVersion\": 3",
+                    "\"schemaVersion\": 4",
                     "\"schemaVersion\": 3000000000"),
                 PresetLoadRefusal.ValueOutOfRange);
         }
@@ -301,7 +404,7 @@ namespace Alrauna.Amuse.Tests.Editor
         public void IntegerBeyondLongRangeRefusesValueOutOfRange()
         {
             Refuses(WithSettings(
-                    "\"schemaVersion\": 3",
+                    "\"schemaVersion\": 4",
                     "\"schemaVersion\": 99999999999999999999"),
                 PresetLoadRefusal.ValueOutOfRange);
         }

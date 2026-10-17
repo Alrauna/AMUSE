@@ -83,12 +83,22 @@ namespace Alrauna.Amuse.Editor.Host
     /// policy's evidence. The inert bounds reproduce the base exact-255
     /// contract.
     /// </param>
+    /// <param name="cutoutRawMipCap">
+    /// The cutout arm's raw policy mip cap. The closed capture pins every
+    /// shared bucket whose captured threshold sits below one to this cap.
+    /// </param>
+    /// <param name="exactRawMipCap">
+    /// The exact arm's raw policy mip cap. The closed capture pins every
+    /// bucket at the exact threshold to this cap.
+    /// </param>
     /// </summary>
     internal delegate bool ClosedAlphaMaterialCapturer(
         IReadOnlyList<Material> materials,
         IReadOnlyList<CapturedAlphaMaterialFamily> families,
         MaterialEvidenceRequest request,
         AlphaPolicyBounds bounds,
+        int cutoutRawMipCap,
+        int exactRawMipCap,
         out ClosedAlphaCaptureOutcome outcome);
 
     /// <summary>
@@ -158,11 +168,14 @@ namespace Alrauna.Amuse.Editor.Host
                 IReadOnlyList<CapturedAlphaMaterialFamily> batchFamilies,
                 MaterialEvidenceRequest batchRequest,
                 AlphaPolicyBounds batchBounds,
+                int batchCutoutRawMipCap,
+                int batchExactRawMipCap,
                 out ClosedAlphaCaptureOutcome batchOutcome) =>
                 UnityMaterialSemantics.TryCaptureClosedAlphaMaterials(
                     batchMaterials, batchFamilies, batchRequest,
                     batchBounds, out batchOutcome,
-                    resolveRegisteredSource);
+                    resolveRegisteredSource,
+                    batchCutoutRawMipCap, batchExactRawMipCap);
         }
 
         /// <summary>
@@ -198,7 +211,9 @@ namespace Alrauna.Amuse.Editor.Host
             string rendererTypeName = null,
             LockedMaterialRefusalCheck lockedRefusalCheck = null,
             Func<Material, Material> observedMaterialMapper = null,
-            RegisteredSourceLookup resolveRegisteredSource = null)
+            RegisteredSourceLookup resolveRegisteredSource = null,
+            int cutoutRawMipCap = int.MaxValue,
+            int exactRawMipCap = int.MaxValue)
         {
             ClosedAlphaMaterialCapturer effectiveCapturer = capturer ??
                 DefaultCapturer(resolveRegisteredSource);
@@ -215,7 +230,9 @@ namespace Alrauna.Amuse.Editor.Host
                 rendererTypeName,
                 lockedRefusalCheck,
                 observedMaterialMapper,
-                resolveRegisteredSource);
+                resolveRegisteredSource,
+                cutoutRawMipCap,
+                exactRawMipCap);
         }
         // The seam-parameterized graph capture. The barrier's fixture
         // route uses it when a selector seam is injected and no animation
@@ -234,7 +251,9 @@ namespace Alrauna.Amuse.Editor.Host
             string rendererTypeName = null,
             LockedMaterialRefusalCheck lockedRefusalCheck = null,
             Func<Material, Material> observedMaterialMapper = null,
-            RegisteredSourceLookup resolveRegisteredSource = null)
+            RegisteredSourceLookup resolveRegisteredSource = null,
+            int cutoutRawMipCap = int.MaxValue,
+            int exactRawMipCap = int.MaxValue)
         {
             var effectiveSelectRequest = selectRequest ??
                 UnityMaterialSemantics.TrySelectAlphaMaterialRequests;
@@ -256,7 +275,9 @@ namespace Alrauna.Amuse.Editor.Host
                     rendererTypeName,
                     lockedRefusalCheck,
                     observedMaterialMapper,
-                    resolveRegisteredSource);
+                    resolveRegisteredSource,
+                    cutoutRawMipCap,
+                    exactRawMipCap);
             }
 
             return CaptureGraph(
@@ -272,7 +293,9 @@ namespace Alrauna.Amuse.Editor.Host
                 rendererTypeName,
                 lockedRefusalCheck,
                 observedMaterialMapper,
-                resolveRegisteredSource);
+                resolveRegisteredSource,
+                cutoutRawMipCap,
+                exactRawMipCap);
         }
 
         /// <summary>
@@ -303,7 +326,9 @@ namespace Alrauna.Amuse.Editor.Host
             string rendererTypeName = null,
             LockedMaterialRefusalCheck lockedRefusalCheck = null,
             Func<Material, Material> observedMaterialMapper = null,
-            RegisteredSourceLookup resolveRegisteredSource = null)
+            RegisteredSourceLookup resolveRegisteredSource = null,
+            int cutoutRawMipCap = int.MaxValue,
+            int exactRawMipCap = int.MaxValue)
         {
             if (rendererPath == null)
                 throw new ArgumentNullException(nameof(rendererPath));
@@ -358,7 +383,9 @@ namespace Alrauna.Amuse.Editor.Host
                 rendererTypeName,
                 lockedRefusalCheck,
                 observedMaterialMapper,
-                resolveRegisteredSource);
+                resolveRegisteredSource,
+                cutoutRawMipCap,
+                exactRawMipCap);
         }
         private static CapturedAnimationEvidence CaptureGraph(
             string rendererPath,
@@ -373,7 +400,9 @@ namespace Alrauna.Amuse.Editor.Host
             string rendererTypeName = null,
             LockedMaterialRefusalCheck lockedRefusalCheck = null,
             Func<Material, Material> observedMaterialMapper = null,
-            RegisteredSourceLookup resolveRegisteredSource = null)
+            RegisteredSourceLookup resolveRegisteredSource = null,
+            int cutoutRawMipCap = int.MaxValue,
+            int exactRawMipCap = int.MaxValue)
         {
             // Empty is the avatar root's animation path and is valid; only an
             // absent path is a caller defect.
@@ -413,7 +442,9 @@ namespace Alrauna.Amuse.Editor.Host
                 rendererTypeName,
                 lockedRefusalCheck,
                 observedMaterialMapper,
-                resolveRegisteredSource);
+                resolveRegisteredSource,
+                cutoutRawMipCap,
+                exactRawMipCap);
         }
         private static CapturedAnimationEvidence CaptureObserved(
             string rendererPath,
@@ -428,7 +459,9 @@ namespace Alrauna.Amuse.Editor.Host
             string rendererTypeName = null,
             LockedMaterialRefusalCheck lockedRefusalCheck = null,
             Func<Material, Material> observedMaterialMapper = null,
-            RegisteredSourceLookup resolveRegisteredSource = null)
+            RegisteredSourceLookup resolveRegisteredSource = null,
+            int cutoutRawMipCap = int.MaxValue,
+            int exactRawMipCap = int.MaxValue)
         {
             // Assigned once here so that the renderer-wide closure-failure
             // return hands back an empty list rather than a partial one. The
@@ -691,6 +724,8 @@ namespace Alrauna.Amuse.Editor.Host
                         attestedFamilies,
                         captureRequest,
                         bounds,
+                        cutoutRawMipCap,
+                        exactRawMipCap,
                         out var batchOutcome))
                 {
                     throw new InvalidOperationException(

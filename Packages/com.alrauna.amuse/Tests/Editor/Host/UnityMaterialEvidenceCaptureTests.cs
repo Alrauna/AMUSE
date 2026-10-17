@@ -1,3 +1,4 @@
+using Alrauna.Amuse.Tests.Editor.Build;
 using Alrauna.Amuse.Tests.Editor.Shared;
 using System;
 using System.Collections;
@@ -28,6 +29,15 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             "Hidden/Alrauna/AmuseTests/LilToonSemanticTest";
         private const string LilToonCutoutConversionShader =
             "Hidden/Alrauna/AmuseTests/LilToonCutoutConversionTest";
+        private const string LilToonTransparentConversionShader =
+            "Hidden/Alrauna/AmuseTests/LilToonTransparentConversionTest";
+        private const string PoiyomiModeProperty = "_Mode";
+        private const string MultiCutoutContainerShaderPath =
+            "Packages/com.alrauna.amuse/Tests/Editor/Semantics/LilToon/" +
+            "LilToonMultiCutoutTest.shader";
+        private const string MultiTransparentContainerShaderPath =
+            "Packages/com.alrauna.amuse/Tests/Editor/Semantics/LilToon/" +
+            "LilToonMultiTransparentTest.shader";
 
         private readonly TestTransientScope _scope =
             new TestTransientScope();
@@ -128,6 +138,146 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
             Assert.That(ClassifyIsolationRegion(captured[reverse ? 0 : 1], 0.4f),
                 Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        // --- Falsifier 2: A batch-uniform capture cap, stamped once per
+        // batch as at base, gives both arms one cap. The mixed-batch
+        // shared-texture fixture asserts each arm's chain level count and
+        // fails it. ---
+        [Test]
+        public void MixedBatchCapturesEachArmAtItsOwnCap()
+        {
+            // The RED form of this test captured against the one-cap
+            // signature. The batch request carried the exact cap 4 alone,
+            // and the cutout arm read five levels instead of one: one
+            // request carried one cap. The two-cap form pins each bucket
+            // to its own arm, so the ideal per-arm outcome holds in code.
+            var captured = CaptureMixedBatchAtArms(0, 4);
+            Assert.That(
+                captured[0].TryGetTexture("_MainTex", out var cutoutAssignment),
+                Is.True);
+            Assert.That(
+                captured[1].TryGetTexture("_MainTex", out var exactAssignment),
+                Is.True);
+            Assert.That(cutoutAssignment.Texture.AlphaChannel.Count,
+                Is.EqualTo(1),
+                "the cutout arm's chain holds the cutout cap's one level");
+            Assert.That(exactAssignment.Texture.AlphaChannel.Count,
+                Is.EqualTo(5),
+                "the exact arm's chain holds the exact cap's five levels");
+            // The intersect pin: a request cap narrower than its arm cap
+            // yields the narrower chain.
+            var narrowed = CaptureMixedBatchAtArms(0, 4, requestRawMipCap: 2);
+            Assert.That(
+                narrowed[1].TryGetTexture(
+                    "_MainTex", out var narrowedAssignment),
+                Is.True);
+            Assert.That(narrowedAssignment.Texture.AlphaChannel.Count,
+                Is.EqualTo(3),
+                "the request cap narrower than the exact arm's cap " +
+                "narrows the chain");
+        }
+
+        // --- Falsifier 3: A bucket cap keyed on the predicate declaration
+        // instead of the captured threshold lets a cutoff-1.0 cutout
+        // material stamp the cutout cap into the 1.0 bucket. The exact
+        // arm's chain level count assertion fails it. ---
+        [Test]
+        public void CutoutMaterialsAtCutoffOneCaptureAtTheTransparentCap()
+        {
+            var captured = CaptureMixedBatchAtArms(0, 4, cutoutCutoff: 1f);
+            Assert.That(
+                captured[0].TryGetTexture("_MainTex", out var cutoutAssignment),
+                Is.True);
+            Assert.That(
+                captured[1].TryGetTexture("_MainTex", out var exactAssignment),
+                Is.True);
+            Assert.That(
+                ReferenceEquals(
+                    cutoutAssignment.Texture, exactAssignment.Texture),
+                Is.True,
+                "the cutoff-one bucket and the exact bucket are one " +
+                "shared capture");
+            Assert.That(cutoutAssignment.Texture.AlphaChannel.Count,
+                Is.EqualTo(5),
+                "the cutoff-one cutout material captures at the exact " +
+                "arm's cap");
+            Assert.That(exactAssignment.Texture.AlphaChannel.Count,
+                Is.EqualTo(5),
+                "the exact arm's chain holds the exact cap's five levels");
+        }
+
+        // --- Falsifier 4: A cross-family leak lets a cutout value move a
+        // transparent verdict, or the reverse. The isolation assertions
+        // fail it. ---
+        [Test]
+        public void ChangingTheCutoutCapLeavesTheExactArmsChainUnchanged()
+        {
+            var captured = CaptureMixedBatchAtArms(3, 4);
+            Assert.That(
+                captured[0].TryGetTexture("_MainTex", out var cutoutAssignment),
+                Is.True);
+            Assert.That(
+                captured[1].TryGetTexture("_MainTex", out var exactAssignment),
+                Is.True);
+            Assert.That(cutoutAssignment.Texture.AlphaChannel.Count,
+                Is.EqualTo(4),
+                "the cutout arm's chain moved with the cutout cap 3");
+            Assert.That(exactAssignment.Texture.AlphaChannel.Count,
+                Is.EqualTo(5),
+                "the exact arm's chain still holds the exact cap's five " +
+                "levels");
+            Assert.That(ClassifyIsolationRegion(captured[1], 0.4f),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent),
+                "the transparent verdict stays under the changed cutout " +
+                "cap");
+            Assert.That(ClassifyIsolationRegion(captured[1], 0.75f),
+                Is.EqualTo(TriangleAlphaOutcome.ProvenOpaque),
+                "the transparent verdict stays under the changed cutout " +
+                "cap");
+        }
+
+        /// <summary>
+        /// Builds the closed mixed batch the production assembly builds:
+        /// one union request for the whole batch, each material's own
+        /// family request as its predicate, and the wrapper's wider-cap
+        /// stamp on the request. The two arm caps pin each bucket's chain
+        /// through the closed capture. The optional request cap overrides
+        /// the wider stamp, so a test can supply a request narrower than
+        /// an arm cap.
+        /// </summary>
+        private CapturedMaterialEvidence[] CaptureMixedBatchAtArms(
+            int cutoutRawMipCap,
+            int exactRawMipCap,
+            float cutoutCutoff = 0.25f,
+            int? requestRawMipCap = null)
+        {
+            var texture = CreateArmCapTexture();
+            var transparent = NewMaterial(
+                "Hidden/Alrauna/AmuseTests/LilToonTransparentConversionTest");
+            var cutout = NewMaterial(
+                "Hidden/Alrauna/AmuseTests/LilToonCutoutConversionTest");
+            transparent.SetTexture("_MainTex", texture);
+            cutout.SetTexture("_MainTex", texture);
+            cutout.SetFloat("_Cutoff", cutoutCutoff);
+            var request = MaterialEvidenceRequest.Combine(
+                LilToonCutoutMaterialSemantics.AlphaEvidenceRequest,
+                LilToonTransparentMaterialSemantics.AlphaEvidenceRequest)
+                .WithRawMipCap(requestRawMipCap
+                    ?? Math.Max(cutoutRawMipCap, exactRawMipCap));
+            var inputs = new[]
+            {
+                new MaterialEvidenceCaptureInput(
+                    cutout, request,
+                    LilToonCutoutMaterialSemantics.AlphaEvidenceRequest),
+                new MaterialEvidenceCaptureInput(
+                    transparent, request,
+                    LilToonTransparentMaterialSemantics.AlphaEvidenceRequest),
+            };
+
+            return UnityMaterialEvidenceCapture.Capture(
+                inputs, AlphaPolicyBounds.Inert,
+                cutoutRawMipCap, exactRawMipCap).ToArray();
         }
 
         [Test]
@@ -260,6 +410,39 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 GeneratedTextureAttestation.TryIdentifyProducer(texture),
                 Is.True,
                 "The fixture must enter the generated capture route.");
+            return texture;
+        }
+
+        /// <summary>
+        /// The arm-cap fixture: a real imported PNG of the isolation
+        /// columns with the importer's mip chain. The asset declares
+        /// eight levels, so the cap semantics are observable on the
+        /// imported GPU route: cap 0 keeps one level, cap 3 keeps four,
+        /// and cap 4 keeps five. The generated route reads the live
+        /// object and never applies the raw mip cap, so a generated
+        /// fixture cannot express these counts.
+        /// </summary>
+        private static Texture2D CreateArmCapTexture()
+        {
+            var path = TempFolder + "/arm-cap-isolation.png";
+            var pixels = new Color32[128 * 128];
+            for (var y = 0; y < 128; y++)
+            for (var x = 0; x < 128; x++)
+            {
+                var alpha = (byte)(x < 42 ? 0 : x < 84 ? 128 : 255);
+                pixels[y * 128 + x] = new Color32(255, 255, 255, alpha);
+            }
+            var texture = TestTextureImport.WritePng(
+                path, 128, 128, pixels, importer =>
+                {
+                    importer.isReadable = true;
+                    importer.textureCompression =
+                        TextureImporterCompression.Uncompressed;
+                    importer.filterMode = FilterMode.Point;
+                    importer.wrapMode = UnityEngine.TextureWrapMode.Clamp;
+                });
+            Assert.That(texture.mipmapCount, Is.EqualTo(8),
+                "The arm-cap fixture must declare the full mip chain.");
             return texture;
         }
 
@@ -728,6 +911,183 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 unrequested.Keywords,
                 Is.Empty,
                 "the request is closed: no flag, no keyword facts");
+        }
+
+        // --- Falsifier 8: A coverage selection keyed on the stored family enum routes a Poiyomi cutout preset and a plain Poiyomi sibling to the same pair. The Poiyomi sibling rows of this table assert different memberships and fail it. ---
+        [Test]
+        public void MenuMembershipRecordsPerMaterial()
+        {
+            // One closed batch covers the six menu-membership sources. Each
+            // recorded flag answers one question: does the material's own
+            // predicate request declare a cutoff property. The stored
+            // family alone cannot answer it. A Poiyomi cutout preset and a
+            // plain preset share one family and must not share one
+            // membership. A Multi container's own predicate request is the
+            // union schema, which carries every resolved mode's
+            // declaration, so the resolved mode's own family predicate
+            // decides at the one resolution point.
+            var cutoutMaterial = NewMaterial(LilToonCutoutConversionShader);
+            var transparentMaterial = NewMaterial(
+                LilToonTransparentConversionShader);
+            var multiCutoutMaterial = MultiContainerMaterial(
+                MultiCutoutContainerShaderPath, 1f, "UNITY_UI_ALPHACLIP");
+            var multiTransparentMaterial = MultiContainerMaterial(
+                MultiTransparentContainerShaderPath, 2f,
+                "UNITY_UI_CLIP_RECT");
+            var poiyomiCutoutMaterial = NewMaterial(PoiyomiFixtureShader);
+            poiyomiCutoutMaterial.SetFloat(PoiyomiModeProperty, 1f);
+            var poiyomiPlainMaterial = NewMaterial(PoiyomiFixtureShader);
+
+            var multiCutoutSelected =
+                UnityMaterialSemantics.TrySelectAlphaMaterialRequests(
+                    multiCutoutMaterial,
+                    out var multiCutoutFamily,
+                    out _,
+                    out var multiSchema);
+            Assert.That(multiCutoutSelected, Is.True);
+            Assert.That(
+                multiCutoutFamily,
+                Is.EqualTo(CapturedAlphaMaterialFamily.LilToonMulti));
+            var multiTransparentSelected =
+                UnityMaterialSemantics.TrySelectAlphaMaterialRequests(
+                    multiTransparentMaterial,
+                    out var multiTransparentFamily,
+                    out _,
+                    out _);
+            Assert.That(multiTransparentSelected, Is.True);
+            Assert.That(
+                multiTransparentFamily,
+                Is.EqualTo(CapturedAlphaMaterialFamily.LilToonMulti));
+
+            // One union request for the whole batch: each family's own
+            // capture schema, exactly as the production assembly unions
+            // the batch's selected schemas.
+            var request = MaterialEvidenceRequest.Combine(
+                MaterialEvidenceRequest.Combine(
+                    LilToonCutoutMaterialSemantics.AlphaEvidenceRequest,
+                    LilToonCutoutSourceEligibility
+                        .ConversionEvidenceRequest),
+                MaterialEvidenceRequest.Combine(
+                    LilToonTransparentMaterialSemantics
+                        .AlphaEvidenceRequest,
+                    LilToonTransparentSourceEligibility
+                        .ConversionEvidenceRequest),
+                multiSchema,
+                MaterialEvidenceRequest.Combine(
+                    PoiyomiMaterialSemantics.AlphaEvidenceRequest,
+                    PoiyomiOpaqueConversion.ConversionEvidenceRequest));
+
+            VerifiedLilToonTestSeams.CaptureVerifiedFixtureMaterials(
+                new[]
+                {
+                    cutoutMaterial,
+                    transparentMaterial,
+                    multiCutoutMaterial,
+                    multiTransparentMaterial,
+                    poiyomiCutoutMaterial,
+                    poiyomiPlainMaterial,
+                },
+                new[]
+                {
+                    CapturedAlphaMaterialFamily.LilToonCutout,
+                    CapturedAlphaMaterialFamily.LilToonTransparent,
+                    multiCutoutFamily,
+                    multiTransparentFamily,
+                    CapturedAlphaMaterialFamily.Poiyomi,
+                    CapturedAlphaMaterialFamily.Poiyomi,
+                },
+                request,
+                AlphaPolicyBounds.Inert,
+                int.MaxValue,
+                int.MaxValue,
+                out var captured);
+            Assert.That(captured.Captured, Has.Count.EqualTo(6));
+
+            Assert.That(
+                captured.Captured[0].Family,
+                Is.EqualTo(CapturedAlphaMaterialFamily.LilToonCutout));
+            Assert.That(
+                captured.Captured[0].PredicatesDeclareCutoff,
+                Is.True,
+                "the lilToon cutout family's own request declares the " +
+                "cutoff");
+            Assert.That(
+                captured.Captured[1].Family,
+                Is.EqualTo(CapturedAlphaMaterialFamily.LilToonTransparent));
+            Assert.That(
+                captured.Captured[1].PredicatesDeclareCutoff,
+                Is.False,
+                "the lilToon transparent family's own request declares " +
+                "no cutoff");
+            Assert.That(
+                captured.Captured[2].MultiResolution.IsResolved,
+                Is.True,
+                "the mode-1 container must resolve to prove the row is " +
+                "a resolved Multi record");
+            Assert.That(
+                captured.Captured[2].Family,
+                Is.EqualTo(CapturedAlphaMaterialFamily.LilToonCutout),
+                "the mode-1 container resolves to the cutout family");
+            Assert.That(
+                captured.Captured[2].PredicatesDeclareCutoff,
+                Is.True,
+                "the resolved mode-1 membership rides the cutout " +
+                "family's own declaration");
+            Assert.That(
+                captured.Captured[3].MultiResolution.IsResolved,
+                Is.True,
+                "the mode-2 container must resolve to prove the row is " +
+                "a resolved Multi record");
+            Assert.That(
+                captured.Captured[3].Family,
+                Is.EqualTo(CapturedAlphaMaterialFamily.LilToonTransparent),
+                "the mode-2 container resolves to the transparent " +
+                "family");
+            Assert.That(
+                captured.Captured[3].PredicatesDeclareCutoff,
+                Is.False,
+                "the resolved mode-2 membership rides the transparent " +
+                "family's own declaration");
+            Assert.That(
+                captured.Captured[4].Family,
+                Is.EqualTo(CapturedAlphaMaterialFamily.Poiyomi));
+            Assert.That(
+                captured.Captured[4].PredicatesDeclareCutoff,
+                Is.True,
+                "the cutout preset's own predicate declares the cutoff " +
+                "under the same stored family as row six");
+            Assert.That(
+                captured.Captured[5].Family,
+                Is.EqualTo(CapturedAlphaMaterialFamily.Poiyomi));
+            Assert.That(
+                captured.Captured[5].PredicatesDeclareCutoff,
+                Is.False,
+                "the plain preset's own predicate declares no cutoff " +
+                "under the same stored family as row five");
+        }
+
+        /// <summary>
+        /// Creates one committed Multi container stand-in material at one
+        /// mode's vendor state. The stand-in loads by asset path, because
+        /// the fixture containers share the vendor-mimic shader name. The
+        /// mode and both gate scalars are set explicitly, so the fixture
+        /// never depends on stand-in defaults.
+        /// </summary>
+        private Material MultiContainerMaterial(
+            string shaderAssetPath,
+            float transparentMode,
+            string modeKeyword)
+        {
+            var shader =
+                AssetDatabase.LoadAssetAtPath<Shader>(shaderAssetPath);
+            Assert.That(shader, Is.Not.Null, shaderAssetPath);
+            var material = new Material(shader);
+            _scope.Track(material);
+            material.SetFloat("_TransparentMode", transparentMode);
+            material.SetFloat("_UseClippingCanceller", 0f);
+            material.SetFloat("_AsOverlay", 0f);
+            material.shaderKeywords = new[] { modeKeyword };
+            return material;
         }
 
         [Test]

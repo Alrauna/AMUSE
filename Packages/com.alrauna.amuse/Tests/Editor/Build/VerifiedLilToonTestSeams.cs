@@ -119,27 +119,38 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// request, then per-family source-evidence gathering with vendor
         /// attestation bypassed — the gathered evidence objects are the
         /// production ones; verification simply never runs here, because
-        /// every stand-in would fail it.
+        /// every stand-in would fail it. The two arm caps ride the delegate
+        /// shape only. This fixture keeps the smallest-cap bucket merge,
+        /// because it serves attestation and never sees the build's arm
+        /// values.
         /// </summary>
         internal static bool CaptureVerifiedFixtureMaterials(
             IReadOnlyList<Material> materials,
             IReadOnlyList<CapturedAlphaMaterialFamily> families,
             MaterialEvidenceRequest request,
             AlphaPolicyBounds bounds,
+            int cutoutRawMipCap,
+            int exactRawMipCap,
             out ClosedAlphaCaptureOutcome captured)
         {
             var shaders = new Shader[materials.Count];
             var inputs = new MaterialEvidenceCaptureInput[materials.Count];
+            var declaresCutoff = new bool[materials.Count];
             for (var index = 0; index < materials.Count; index++)
             {
                 shaders[index] = materials[index] == null
                     ? null
                     : materials[index].shader;
+                var predicate = UnityMaterialSemantics
+                    .AlphaPredicateRequestFor(
+                        materials[index], families[index]);
                 inputs[index] = new MaterialEvidenceCaptureInput(
                     materials[index],
                     request,
-                    UnityMaterialSemantics.AlphaPredicateRequestFor(
-                        materials[index], families[index]));
+                    predicate);
+                declaresCutoff[index] =
+                    UnityMaterialSemantics.PredicateDeclaresCutoff(
+                        predicate);
             }
 
             var evidence = UnityMaterialEvidenceCapture.Capture(
@@ -169,6 +180,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     if (multiResolution.IsResolved)
                     {
                         lilToon = multiResolution.SourceEvidence;
+                        // The same resolution-point re-derivation the
+                        // production build runs: the container's union
+                        // request declares every resolved mode's cutoff,
+                        // so the resolved family's own predicate decides.
+                        declaresCutoff[index] = UnityMaterialSemantics
+                            .PredicateDeclaresCutoff(
+                                UnityMaterialSemantics
+                                    .AlphaPredicateRequestFor(
+                                        materials[index], family));
                     }
                 }
                 else
@@ -209,6 +229,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 result[index] = new CapturedAlphaMaterial(
                     family, evidence[index], poiyomi, lilToon,
                     multiResolution: multiResolution,
+                    predicatesDeclareCutoff: declaresCutoff[index],
                     materialPath: source != null
                         ? AssetDatabase.GetAssetPath(source)
                         : null,

@@ -5,7 +5,7 @@ namespace Alrauna.Amuse.Editor.Presets
     /// <summary>
     /// Writes a preset onto the component through the serialized
     /// object, so Undo and Reset treat the change like every other
-    /// control. The apply covers exactly the twelve mapped fields and
+    /// control. The apply covers exactly the sixteen mapped fields and
     /// never the master switch or the inspector-only reveal flag.
     /// Applying a preset replaces both acceptance settings, so no
     /// earlier acceptance survives unless the selected preset grants it.
@@ -22,13 +22,26 @@ namespace Alrauna.Amuse.Editor.Presets
                     "_preserveTransparencyMaxMipLevel")
                 .intValue = preset.PreserveTransparencyMaxMipLevel;
             serializedObject.FindProperty(
+                    "_cutoutPreserveTransparencyMaxMipLevel")
+                .intValue = preset.CutoutPreserveTransparencyMaxMipLevel;
+            serializedObject.FindProperty(
                     "_preserveTransparencyMinTextureSize")
                 .intValue = preset.PreserveTransparencyMinTextureSize;
+            serializedObject.FindProperty(
+                    "_cutoutPreserveTransparencyMinTextureSize")
+                .intValue = preset.CutoutPreserveTransparencyMinTextureSize;
             serializedObject.FindProperty("_minimumOpaqueCoveragePercent")
                 .intValue = preset.MinimumOpaqueCoveragePercent;
             serializedObject.FindProperty(
+                    "_cutoutMinimumOpaqueCoveragePercent")
+                .intValue = preset.CutoutMinimumOpaqueCoveragePercent;
+            serializedObject.FindProperty(
                     "_minimumOpaqueCoverageToPreservePercent")
                 .intValue = preset.MinimumOpaqueCoverageToPreservePercent;
+            serializedObject.FindProperty(
+                    "_cutoutMinimumOpaqueCoverageToPreservePercent")
+                .intValue =
+                preset.CutoutMinimumOpaqueCoverageToPreservePercent;
             serializedObject.FindProperty("_minimumOpaqueAlphaPercent")
                 .intValue = preset.MinimumOpaqueAlphaPercent;
             serializedObject.FindProperty(

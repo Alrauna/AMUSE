@@ -1571,5 +1571,151 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 "the accepted policy drops the footprint, so the mixed " +
                 "corner proves");
         }
+
+        // --- Falsifier 1: A shared-scope implementation applies one mip cap or one size minimum to both arms in GatherAlphaFields. The mixed-renderer fixture with a cutout cap of 0 and a transparent cap of 4 shows one arm over-reading or under-reading. The per-arm assertion fails it. ---
+
+        /// <summary>
+        /// Each gathered field takes its proof scope from its own arm. A
+        /// shared-scope gather stamps one cap and one floor on both arms,
+        /// so one arm over-reads a shared source or drops a source the
+        /// other arm admits. The per-arm assertions fail that shape.
+        /// </summary>
+        [Test]
+        public void EachFieldScopesByItsOwnArm()
+        {
+            var bigSource = new TextureSourceId(
+                "amuse-tests:arm-scope:big:1");
+            var smallSource = new TextureSourceId(
+                "amuse-tests:arm-scope:small:1");
+            // Five levels whose last one still covers the transparent
+            // floor of 128 texels, beside a 64-texel source between the
+            // two floors.
+            var bigChain = SquareChain(2048, 5);
+            var smallChain = SquareChain(64, 2);
+            var materials = new[]
+            {
+                MaterialCapturedAt(bigSource, bigChain, 0.5f),
+                MaterialCapturedAt(bigSource, bigChain, 1f),
+                MaterialCapturedAt(smallSource, smallChain, 0.5f),
+                MaterialCapturedAt(smallSource, smallChain, 1f),
+            };
+
+            // The RED form of this test carried the transparent pair
+            // alone. The cutout arm read five levels over the shared big
+            // source, and the shared floor dropped the 64-texel source
+            // from the cutout arm. The per-arm call pins each arm to its
+            // own pair.
+            var fields = UnityRendererAlphaAnalysis.GatherAlphaFields(
+                materials, 4, 0, 128, 32);
+
+            Assert.That(
+                fields.TryGetFor(
+                    materials[0].Evidence, null, bigSource,
+                    TextureChannel.Alpha, out var cutoutBig),
+                Is.True);
+            Assert.That(
+                cutoutBig.Count,
+                Is.EqualTo(1),
+                "the cutout arm's chain holds the cutout cap's one " +
+                "level");
+            Assert.That(
+                fields.TryGetFor(
+                    materials[1].Evidence, null, bigSource,
+                    TextureChannel.Alpha, out var exactBig),
+                Is.True);
+            Assert.That(
+                exactBig.Count,
+                Is.EqualTo(5),
+                "the transparent arm's chain holds the transparent " +
+                "cap's five levels");
+            Assert.That(
+                fields.TryGetFor(
+                    materials[2].Evidence, null, smallSource,
+                    TextureChannel.Alpha, out var cutoutSmall),
+                Is.True,
+                "the 64-texel source covers the cutout floor, so the " +
+                "cutout arm keeps it");
+            Assert.That(
+                cutoutSmall.Count,
+                Is.EqualTo(1),
+                "the cutout arm's chain holds the cutout cap's one " +
+                "level");
+            Assert.That(
+                fields.TryGetFor(
+                    materials[3].Evidence, null, smallSource,
+                    TextureChannel.Alpha, out _),
+                Is.False,
+                "the 64-texel source sits below the transparent floor, " +
+                "so only the transparent arm drops it");
+        }
+
+        /// <summary>
+        /// Builds a square chain whose levels halve from the given mip 0
+        /// size. The gather reads level dimensions alone, so the texel
+        /// bytes carry no verdict in this fixture.
+        /// </summary>
+        private static AlphaMipChain SquareChain(int mipZeroSize, int levels)
+        {
+            var levelList = new List<AlphaTextureData>();
+            var size = mipZeroSize;
+            for (var level = 0; level < levels; level++)
+            {
+                var texels = new byte[size * size];
+                for (var texel = 0; texel < texels.Length; texel++)
+                {
+                    texels[texel] = byte.MaxValue;
+                }
+
+                levelList.Add(new AlphaTextureData(size, size, texels));
+                var halved = size >> 1;
+                size = halved < 1 ? 1 : halved;
+            }
+
+            return new AlphaMipChain(levelList);
+        }
+
+        /// <summary>
+        /// One captured material whose single texture assignment names the
+        /// source under one predicate. The single entry keeps the field
+        /// lookup free of predicate disagreement, so the lookup answers
+        /// for that predicate alone.
+        /// </summary>
+        private static CapturedAlphaMaterial MaterialCapturedAt(
+            TextureSourceId source,
+            AlphaMipChain chain,
+            float captureThreshold)
+        {
+            var texture = new CapturedTextureEvidence(
+                true, source, captureThreshold, AlphaPolicyBounds.Inert,
+                false, default(TextureSampling),
+                false, default(TextureColorInterpretation),
+                false, false,
+                false, true, chain,
+                TextureCaptureRefusalReason.None,
+                false, null,
+                TextureCaptureRefusalReason.None);
+            var assignment = new CapturedTextureAssignment(
+                true, TextureEvidenceKinds.AlphaChannel,
+                false, Vector2.one, Vector2.zero,
+                texture, new TextureCaptureRefusal[0]);
+            var evidence = new CapturedMaterialEvidence(
+                false, null, false, default(ColorSpace),
+                new CapturedMaterialEvidence.PresenceEntry[0],
+                new CapturedMaterialEvidence.ScalarEntry[0],
+                new CapturedMaterialEvidence.ColorEntry[0],
+                new CapturedMaterialEvidence.VectorEntry[0],
+                new[]
+                {
+                    new CapturedMaterialEvidence.TextureEntry(
+                        "_MainTex", true, assignment),
+                },
+                new[] { texture });
+            return new CapturedAlphaMaterial(
+                CapturedAlphaMaterialFamily.Unsupported,
+                evidence,
+                default(Alrauna.Amuse.Editor.Semantics.Poiyomi
+                    .PoiyomiSourceEvidence),
+                null);
+        }
     }
 }

@@ -28,7 +28,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var plan = Plan(SplitSubmesh(0, 0, 1, 2));
 
             var verdicts = SlotTransformDecision.Decide(
-                plan, null, null, 50, 0);
+                plan, null, null, new[] { 50 }, new[] { 0 });
 
             Assert.That(verdicts, Has.Count.EqualTo(1));
             Assert.That(verdicts[0].SlotIndex, Is.Zero);
@@ -45,7 +45,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var plan = Plan(SplitSubmesh(0, 0, 1, 1));
 
             var verdicts = SlotTransformDecision.Decide(
-                plan, null, null, 50, 0);
+                plan, null, null, new[] { 50 }, new[] { 0 });
 
             // The predicate proceeds at the boundary, so a share exactly at
             // the minimum stays a split.
@@ -66,7 +66,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 SplitSubmesh(1, 0, 49, 1));
 
             var verdicts = SlotTransformDecision.Decide(
-                plan, null, null, 50, 5);
+                plan, null, null, new[] { 50 }, new[] { 5 });
 
             Assert.That(verdicts, Has.Count.EqualTo(1));
             Assert.That(verdicts[0].Outcome, Is.EqualTo(
@@ -85,7 +85,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 SplitSubmesh(1, 0, 49, 1));
 
             var verdicts = SlotTransformDecision.Decide(
-                plan, null, null, 50, 0);
+                plan, null, null, new[] { 50 }, new[] { 0 });
 
             // A preserve value of 0 qualifies nothing, so the slot stays a
             // split and never folds.
@@ -105,7 +105,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var refuses = SlotTransformDecision.Decide(
                 allUnchanged,
                 new[] { AnisotropicSlot() },
-                null, 50, 0);
+                null, new[] { 50 }, new[] { 0 });
             Assert.That(refuses[0].Outcome, Is.EqualTo(
                 SlotTransformOutcome.AnisotropyDifferences));
 
@@ -115,7 +115,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var keepsSplit = SlotTransformDecision.Decide(
                 splitSibling,
                 new[] { AnisotropicSlot() },
-                null, 50, 0);
+                null, new[] { 50 }, new[] { 0 });
             Assert.That(keepsSplit[0].Outcome, Is.EqualTo(
                 SlotTransformOutcome.Split),
                 "a slot with a split submesh never refuses for anisotropy");
@@ -123,7 +123,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var nonAnisotropic = SlotTransformDecision.Decide(
                 allUnchanged,
                 new[] { NonAnisotropicSlot() },
-                null, 50, 0);
+                null, new[] { 50 }, new[] { 0 });
             Assert.That(nonAnisotropic[0].Outcome, Is.EqualTo(
                 SlotTransformOutcome.Split),
                 "a resolved slot without anisotropic sampling never refuses");
@@ -140,7 +140,8 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 UnchangedSubmesh(1, 1));
 
             var verdicts = SlotTransformDecision.Decide(
-                plan, null, new[] { true, false }, 50, 5);
+                plan, null, new[] { true, false },
+                new[] { 50, 50 }, new[] { 5, 5 });
 
             Assert.That(verdicts, Has.Count.EqualTo(2));
             Assert.That(verdicts[0].SlotIndex, Is.Zero);
@@ -152,7 +153,8 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 SlotTransformOutcome.Split));
 
             var extended = SlotTransformDecision.Decide(
-                plan, null, new[] { true, true, false }, 50, 5);
+                plan, null, new[] { true, true, false },
+                new[] { 50, 50 }, new[] { 5, 5 });
 
             // The flag wins over a plan entry, and a slot with no plan
             // entry and no flag gets None.
@@ -162,6 +164,32 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             Assert.That(extended[2].Outcome, Is.EqualTo(
                 SlotTransformOutcome.None));
             AssertPlanEntriesNeverYieldNone(plan, extended);
+        }
+
+        // --- Falsifier 10: A dry run that keeps one coverage pair diverges from the build for a mixed renderer at non-default values. The shared-ladder test asserts equal verdicts and fails it. ---
+        [Test]
+        public void LadderReadsPerSlotPercents()
+        {
+            // Slot 0 pairs with the transparent percents and slot 1 with
+            // the cutout percents. Slot 0 folds under its own preserve
+            // value, and slot 1 splits under its own pair. One pair for
+            // the whole plan cannot produce both verdicts: the pair of
+            // slot 0 refuses slot 1's split submesh.
+            var plan = Plan(
+                SplitSubmesh(0, 0, 99, 1),
+                SplitSubmesh(1, 1, 1, 2));
+
+            var verdicts = SlotTransformDecision.Decide(
+                plan, null, null,
+                new[] { 50, 0 },
+                new[] { 5, 0 });
+
+            Assert.That(verdicts, Has.Count.EqualTo(2));
+            Assert.That(verdicts[0].Outcome, Is.EqualTo(
+                SlotTransformOutcome.Fold));
+            Assert.That(verdicts[1].Outcome, Is.EqualTo(
+                SlotTransformOutcome.Split));
+            AssertPlanEntriesNeverYieldNone(plan, verdicts);
         }
 
         private static void AssertPlanEntriesNeverYieldNone(
