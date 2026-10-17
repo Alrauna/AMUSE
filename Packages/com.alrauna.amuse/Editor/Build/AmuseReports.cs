@@ -344,25 +344,43 @@ namespace Alrauna.Amuse.Editor.Build
         /// with a folded submesh selects the folded entries instead,
         /// which name the preserve setting and never claim exact
         /// colors, because the fold moved unproven triangles too. A
-        /// slot without a premultiply conversion reports nothing here,
-        /// exactly as before.
+        /// fold whose cause was the Cutout submenu's own preserve value
+        /// selects the folded cutout entries, which name that submenu.
+        /// The cause rides the recorded membership, because two
+        /// preserves can store equal values. A slot without a
+        /// premultiply conversion reports nothing here, exactly as
+        /// before.
         /// </summary>
         internal static void SlotSeparationPremultiplyNormalization(
             Renderer renderer,
             int slotIndex,
             string rendererName = null,
-            bool slotHasFoldedSubmeshes = false)
+            bool slotHasFoldedSubmeshes = false,
+            bool causedByCutoutPreset = false)
         {
             using (ErrorReport.WithContextObject(renderer))
             {
+                string key;
+                if (!slotHasFoldedSubmeshes)
+                {
+                    key = AmuseReportStrings
+                        .SlotSeparationPremultiplyNormalizationKey;
+                }
+                else if (causedByCutoutPreset)
+                {
+                    key = AmuseReportStrings
+                        .SlotSeparationPremultiplyNormalizationFoldedCutoutKey;
+                }
+                else
+                {
+                    key = AmuseReportStrings
+                        .SlotSeparationPremultiplyNormalizationFoldedKey;
+                }
+
                 ErrorReport.ReportError(
                     Localizer,
                     ErrorSeverity.Information,
-                    slotHasFoldedSubmeshes
-                        ? AmuseReportStrings
-                            .SlotSeparationPremultiplyNormalizationFoldedKey
-                        : AmuseReportStrings
-                            .SlotSeparationPremultiplyNormalizationKey,
+                    key,
                     slotIndex,
                     rendererName);
             }
@@ -372,24 +390,32 @@ namespace Alrauna.Amuse.Editor.Build
         /// One Information entry per folded surviving submesh whose
         /// triangles moved onto the opaque material without an opacity
         /// proof: the preserve fold moved a split whose unproven share
-        /// sat below the preserve setting. The report names the
-        /// renderer, the slot, and the exact unproven triangle count,
-        /// so the user can weigh the flatten against the setting. A
-        /// submesh without a fold reports nothing here, exactly as
-        /// before, and a refused slot never reaches its report.
+        /// sat below the preserve setting. A fold whose cause was the
+        /// Cutout submenu's own preserve value selects the cutout
+        /// entries, which name that submenu. The cause rides the
+        /// recorded membership, because two preserves can store equal
+        /// values. The report names the renderer, the slot, and the
+        /// exact unproven triangle count, so the user can weigh the
+        /// flatten against the setting. A submesh without a fold
+        /// reports nothing here, exactly as before, and a refused slot
+        /// never reaches its report.
         /// </summary>
         internal static void SlotSeparationForcedOpaque(
             Renderer renderer,
             int slotIndex,
             int unprovenTriangleCount,
-            string rendererName = null)
+            string rendererName = null,
+            bool causedByCutoutPreset = false)
         {
             using (ErrorReport.WithContextObject(renderer))
             {
                 ErrorReport.ReportError(
                     Localizer,
                     ErrorSeverity.Information,
-                    AmuseReportStrings.SlotSeparationForcedOpaqueKey,
+                    causedByCutoutPreset
+                        ? AmuseReportStrings
+                            .SlotSeparationForcedOpaqueCutoutKey
+                        : AmuseReportStrings.SlotSeparationForcedOpaqueKey,
                     slotIndex,
                     rendererName,
                     UnprovenTrianglesPhrase(unprovenTriangleCount));

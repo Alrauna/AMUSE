@@ -96,8 +96,8 @@ namespace Alrauna.Amuse.Editor.Build
         /// from the slot's own recorded proof arm. Both gates read the slot's
         /// own pair, so a mixed renderer never folds or refuses one slot by
         /// another arm's value. The membership vector records which arm each
-        /// slot selected and is kept for the fold cause the report pass
-        /// names. All three vectors cover the largest binding index plus
+        /// slot selected and carries the fold cause the folded disclosures
+        /// report. All three vectors cover the largest binding index plus
         /// one.
         /// </para>
         /// </summary>
@@ -671,7 +671,9 @@ namespace Alrauna.Amuse.Editor.Build
                 // folded slot reports once per submesh, and a slot the
                 // gate did not fold stays silent. A refused slot never
                 // reaches this point, so a marker-clip refusal reports
-                // alone.
+                // alone. The membership vector names the fold cause, so
+                // the disclosure names the setting that actually folded
+                // the slot.
                 var hasFoldedSubmesh =
                     unprovenCountByFoldedSubmesh.TryGetValue(
                         submesh.SourceSubmeshIndex,
@@ -684,7 +686,9 @@ namespace Alrauna.Amuse.Editor.Build
                         foldedUnprovenCount,
                         target.Renderer != null
                             ? target.Renderer.gameObject.name
-                            : null);
+                            : null,
+                        causedByCutoutPreset:
+                            cutoutMembershipBySlot[slotIndex]);
                 }
 
                 // One Information entry per prepared slot whose
@@ -702,7 +706,9 @@ namespace Alrauna.Amuse.Editor.Build
                         target.Renderer != null
                             ? target.Renderer.gameObject.name
                             : null,
-                        hasFoldedSubmesh);
+                        hasFoldedSubmesh,
+                        causedByCutoutPreset:
+                            cutoutMembershipBySlot[slotIndex]);
                 }
             }
 
