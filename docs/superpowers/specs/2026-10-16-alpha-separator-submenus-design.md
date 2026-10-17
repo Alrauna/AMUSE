@@ -62,6 +62,8 @@ Each field carries the same sentinel and range shape as its transparent counterp
 
 The component also gains one serialized bool `_cutoutSettingsBackfilled`, default false, and implements `ISerializationCallbackReceiver`. `OnBeforeSerialize` is empty. `OnAfterDeserialize` returns at once when the marker is true, and otherwise copies the four transparent values into the four cutout fields and sets the marker. The callback touches only plain ints, never Unity API objects. This is the only new member kind on the runtime type, and the plan states it explicitly because the runtime file otherwise carries data and doc comments only.
 
+Accepted window, owner decision of 2026-10-17: Unity fires no deserialization callback when a component is created. A brand-new component's first same-session batch that writes cutout values is backfilled over one time, and the marker latches in the same pass. The visible effect is one Safe preset click or one cutout slider edit that snaps back, and every later session is unaffected. The design accepts this window and documents it in the README.
+
 ## Data files
 
 The three shipped files at `Packages/com.alrauna.amuse/Presets/` change in place. Each bumps `"schemaVersion"` to 4 and gains the four cutout keys after `polygonMinimumOpaqueCoveragePercent`, mirroring that file's transparent values as the table above shows. The preset descriptions stay unchanged, because every existing description sentence stays true.

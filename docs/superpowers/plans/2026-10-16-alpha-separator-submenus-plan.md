@@ -221,7 +221,7 @@ One atomic task. The parser, the record, the applier, the three shipped files, a
 **Files:**
 - Modify: `README.md`
 
-- [ ] **10.1** Apply the three exact replacements from the spec's Documentation section: the navigation sentence, the stale toggles sentence, and the migration paragraph. Change nothing else in the file.
+- [ ] **10.1** Apply the three exact replacements from the spec's Documentation section: the navigation sentence, the stale toggles sentence, and the migration paragraph. Then add one sentence at the end of the proof modes section, exact text: `A brand-new component's first cutout edit in the session that adds it is replaced once by the transparent values. Every later edit sticks.` Change nothing else in the file.
 - [ ] **10.2** Verify the file contains no private identifiers, no absolute paths, no ports, and no unqualified `today`.
 - [ ] **10.3** Commit: `git add README.md && git commit -m "docs: document the transparent and cutout submenus and the version 4 migration"`
 
