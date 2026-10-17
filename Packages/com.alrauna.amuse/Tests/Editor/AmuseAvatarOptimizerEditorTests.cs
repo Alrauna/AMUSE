@@ -179,6 +179,47 @@ namespace Alrauna.Amuse.Tests.Editor
                 "the cutout submenu header must draw under the reveal");
         }
 
+        /// <summary>
+        /// --- Falsifier 2: an implementation that inverts the drawn value
+        /// (draws the negation of the stored bool) or renames the stored
+        /// field. The drawn-value assertions fail against the inversion,
+        /// because stored true must draw checked. A rename fails the property
+        /// lookup outright. ---
+        /// </summary>
+        [UnityTest]
+        public IEnumerator OutOfRangeToggleDrawsTheStoredValueInTheAllowVoice()
+        {
+            var component = NewHiddenComponent();
+            var drawn = new List<bool>();
+            Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                .OnOutOfRangeToggleDrawnForTest = value => drawn.Add(value);
+            try
+            {
+                SetSwitch(component, "_ignoreOutOfRangeMaterialSlots", true);
+                drawn.Clear();
+                yield return RepaintThroughHostWindow(component);
+                Assert.That(drawn, Does.Contain(true),
+                    "stored true draws the Allow checkbox checked");
+                Assert.That(
+                    Stored(component, "_ignoreOutOfRangeMaterialSlots"),
+                    Is.EqualTo(1), "a plain repaint writes nothing");
+
+                SetSwitch(component, "_ignoreOutOfRangeMaterialSlots", false);
+                drawn.Clear();
+                yield return RepaintThroughHostWindow(component);
+                Assert.That(drawn, Does.Contain(false),
+                    "stored false draws the Allow checkbox unchecked");
+                Assert.That(
+                    Stored(component, "_ignoreOutOfRangeMaterialSlots"),
+                    Is.EqualTo(0), "a plain repaint writes nothing");
+            }
+            finally
+            {
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                    .OnOutOfRangeToggleDrawnForTest = null;
+            }
+        }
+
         [UnityTest]
         public IEnumerator PlainRepaintDoesNotRewriteStoredMipCap()
         {

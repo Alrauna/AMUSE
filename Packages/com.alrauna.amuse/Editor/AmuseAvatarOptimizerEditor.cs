@@ -60,6 +60,7 @@ namespace Alrauna.Amuse.Editor
         internal static Action<string> OnButtonDrawnForTest;
         internal static Func<string, bool> ButtonClickOverrideForTest;
         internal static Action<string> OnFoldoutHeaderDrawnForTest;
+        internal static Action<bool> OnOutOfRangeToggleDrawnForTest;
 
         private void OnEnable()
         {
@@ -675,7 +676,7 @@ namespace Alrauna.Amuse.Editor
                 "quality at a distance at the cost of " +
                 "performance. Mip 0 is the full texture. A 2048 " +
                 "by 2048 texture renders at 128 by 128 at mip 4. " +
-                "The default of Mip 4 fits most viewing " +
+                "The default of Mip 3 fits most viewing " +
                 "distances. Select All Mips to check every copy. " +
                 "This is the safest choice. Select a larger " +
                 "level when a cutout part looks solid at long " +
@@ -1240,10 +1241,16 @@ namespace Alrauna.Amuse.Editor
                             serializedObject.FindProperty(
                                 "_ignoreOutOfRangeMaterialSlots"),
                             new GUIContent(
-                                "Ignore Out-of-Range Material Slots",
-                                "Some animation files animate material slots that do not exist on this mesh. " +
-                                "By default, AMUSE safely ignores these extra slot animations and optimizes the valid slots. " +
-                                "Turn this setting off to refuse meshes with extra slot animations."));
+                                "Allow Out-of-Range Material Slots",
+                                "Some animation files animate material slots that do not " +
+                                "exist on this mesh. When this setting is on, AMUSE ignores " +
+                                "these extra slot animations and optimizes the valid slots. " +
+                                "Turn this setting off to refuse meshes with extra slot " +
+                                "animations."));
+                        OnOutOfRangeToggleDrawnForTest?.Invoke(
+                            serializedObject.FindProperty(
+                                "_ignoreOutOfRangeMaterialSlots")
+                                .boolValue);
 
                         EditorGUILayout.PropertyField(
                             serializedObject.FindProperty("_allowDepthTestChange"),
