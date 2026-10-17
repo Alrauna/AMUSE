@@ -43,11 +43,13 @@ Supported shaders: Poiyomi Toon 9.3.64 (including Two Pass) and lilToon 2.3.0-2.
 ## Proof modes and acceptance
 
 Open **Settings**, turn on **Advanced Settings**, and open **Alpha
-Separator Settings**. You find two toggles there: **Accept Desktop
-Anisotropy Differences** and **Accept Mobile Anisotropy Differences**.
-The **Active Sampling Proof** row shows the proof mode the current build
-target reads. New components leave both toggles off. The Safe, Normal,
-and Aggressive presets turn them on.
+Separator Settings**. The Transparent submenu holds the proof settings
+for transparent materials. The Cutout submenu holds the matching
+settings for cutout materials. You find two toggles there: **Accept
+Desktop Anisotropy Differences** and **Accept Mobile Anisotropy
+Differences**. The **Active Sampling Proof** row shows the proof mode
+the current build target reads. New components start with both toggles
+on. The Safe, Normal, and Aggressive presets keep them on.
 
 With a toggle off, the proof is conservative. The proof keeps anisotropic
 evidence, so some triangles may not prove. With a toggle on, the proof is
@@ -67,11 +69,21 @@ build reports the missing policy and keeps the conservative output.
 The last build status and the build report name the selected proof mode.
 They name it even when no triangle moves.
 
-Custom preset files use schema version 3. To migrate a version 2 file, set
-`"schemaVersion": 3` and add `"minimumOpaqueCoverageToPreservePercent"` to
-its settings. To migrate a version 1 file, set `"schemaVersion": 3`, add
-both anisotropy acceptance keys and the new preserve key, and keep the
-version 2 acceptance values you want.
+Custom preset files use schema version 4. To migrate a version 3 file, set
+`"schemaVersion": 4` and add the four cutout keys to its settings:
+`cutoutPreserveTransparencyMaxMipLevel`,
+`cutoutPreserveTransparencyMinTextureSize`,
+`cutoutMinimumOpaqueCoveragePercent`, and
+`cutoutMinimumOpaqueCoverageToPreservePercent`. To migrate a version 2
+file, first make it version 3: set `"schemaVersion": 3` and add
+`"minimumOpaqueCoverageToPreservePercent"`. Then make it version 4. To
+migrate a version 1 file, first make it version 2: set
+`"schemaVersion": 2` and add `"acceptDesktopAnisotropyDifferences"` and
+`"acceptMobileAnisotropyDifferences"`. Then make it version 3. Then make
+it version 4.
+
+A brand-new component's first cutout edit in the session that adds it is
+replaced once by the transparent values. Every later edit sticks.
 
 ### Show Material Transformations
 
