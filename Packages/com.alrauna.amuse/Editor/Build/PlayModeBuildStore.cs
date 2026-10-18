@@ -17,8 +17,6 @@ namespace Alrauna.Amuse.Editor.Build
         public int movedTriangles;
         public int provenTriangles;
         public int totalTriangles;
-        public int refusedSlots;
-        public int slotCount;
         public string sentence;
     }
 

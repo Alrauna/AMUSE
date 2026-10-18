@@ -204,12 +204,12 @@ namespace Alrauna.Amuse.Editor.Build
                         // order, and every slot keeps L.
                         foreach (var slot in entry.Slots)
                         {
-                            RecordRefusal(
+                            AmuseReports.RecordRefusal(
                                 finishState, renderer: slot.Renderer,
                                 slot.SlotIndex,
                                 AlphaSeparationSlotRefusal
                                     .TransientUnlockRestoreMismatch,
-                                mismatchReason);
+                                detail: mismatchReason);
                             summary.RestoreMismatchSlots++;
                         }
 
@@ -503,21 +503,6 @@ namespace Alrauna.Amuse.Editor.Build
             return ReferenceEquals(candidate, material) ||
                 (candidate is Material candidateMaterial &&
                     candidateMaterial == material);
-        }
-
-        private static void RecordRefusal(
-            AmusePlatformFinishState finishState,
-            Renderer renderer,
-            int slotIndex,
-            AlphaSeparationSlotRefusal cause,
-            string detail = null)
-        {
-            AmuseReports.RecordRefusal(
-                finishState,
-                renderer,
-                slotIndex,
-                cause,
-                detail: detail);
         }
 
         /// <summary>

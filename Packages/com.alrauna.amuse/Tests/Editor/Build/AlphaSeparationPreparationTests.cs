@@ -3418,7 +3418,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "contrast proves nothing");
             Assert.That(
                 AffineUvTransform.TryTransform(
-                    mapping, triangle, out var transformed, out var envelope),
+                    AffineUvTransform.Decode(mapping), triangle, out var transformed, out var envelope),
                 Is.True);
             Assert.That(
                 TriangleAlphaClassifier.Classify(

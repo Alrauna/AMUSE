@@ -173,7 +173,7 @@ namespace Alrauna.Amuse.Editor.DryRun
             return MaterialTransformationRow.Renderer(
                 rendererPath,
                 rendererTypeName,
-                -1, -1, -1, -1, -1,
+                -1, -1, -1,
                 RowText.RendererRefusedSentence(
                     rendererPath,
                     rendererTypeName,

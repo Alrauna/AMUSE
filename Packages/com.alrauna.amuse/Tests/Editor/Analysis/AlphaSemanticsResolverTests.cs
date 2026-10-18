@@ -714,7 +714,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 0, new Vector2(2f, 2f), new Vector2(0.5f, 0.25f));
             Assert.That(
                 AffineUvTransform.TryTransform(
-                    mapping, triangle, out var transformed, out var envelope),
+                    AffineUvTransform.Decode(mapping), triangle, out var transformed, out var envelope),
                 Is.True);
             var sampling = new TextureSampling(
                 TextureFilterMode.Point, TextureWrapMode.Clamp);

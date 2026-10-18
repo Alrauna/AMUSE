@@ -218,7 +218,6 @@ namespace Alrauna.Amuse.Editor.Build
             Renderer renderer,
             int slotIndex,
             AlphaSeparationSlotRefusal cause,
-            string rendererName = null,
             Material offendingMaterial = null,
             System.Collections.Generic.IReadOnlyDictionary<Material, Material>
                 provenMapping = null,
@@ -229,7 +228,6 @@ namespace Alrauna.Amuse.Editor.Build
                 renderer,
                 slotIndex,
                 cause,
-                rendererName,
                 offendingMaterial,
                 provenMapping,
                 detail);
@@ -250,7 +248,6 @@ namespace Alrauna.Amuse.Editor.Build
             Renderer renderer,
             int slotIndex,
             AlphaSeparationSlotRefusal cause,
-            string rendererName = null,
             Material offendingMaterial = null,
             System.Collections.Generic.IReadOnlyDictionary<Material, Material>
                 provenMapping = null,
@@ -266,12 +263,10 @@ namespace Alrauna.Amuse.Editor.Build
             // ends: the build-copy renderer is destroyed then, the
             // console's object link is dead, and the report text is the
             // only place that still names the renderer. NDMF renders a
-            // null substitution as the literal "<missing>", so an
-            // omitted name falls back to the live renderer's own name.
-            // An explicit name keeps winning, and a null renderer keeps
-            // the honest placeholder.
-            rendererName = rendererName
-                ?? (renderer != null ? renderer.gameObject.name : null);
+            // null substitution as the literal "<missing>", so the name
+            // falls back to the live renderer's own name, and a null
+            // renderer keeps the honest placeholder.
+            var rendererName = renderer != null ? renderer.gameObject.name : null;
 
             // The offending material arrives as the live build copy; the
             // report names the authoring asset when a producer registered

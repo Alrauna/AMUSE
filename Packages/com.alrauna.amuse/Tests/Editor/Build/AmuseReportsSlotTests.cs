@@ -253,8 +253,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     _renderer,
                     0,
                     AlphaSeparationSlotRefusal.AnisotropyDifferences,
-                    "TestRenderer",
-                    material));
+                    offendingMaterial: material));
 
             Assert.That(errors, Has.Count.EqualTo(1));
             var simple = errors[0].TheError as SimpleError;
@@ -263,7 +262,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 simple.TitleKey,
                 Is.EqualTo("amuse.slotSeparation.AnisotropyDifferences"));
             var message = errors[0].TheError.ToMessage();
-            Assert.That(message, Does.Contain("TestRenderer"));
+            Assert.That(message, Does.Contain("AMUSE slot report"));
             Assert.That(message, Does.Contain("0"));
             Assert.That(message, Does.Contain("anisotropic sampling"));
         }
@@ -341,12 +340,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     _renderer,
                     0,
                     AlphaSeparationSlotRefusal.RuntimeMaterialValueNotMapped,
-                    "AMUSE reported renderer",
-                    material));
+                    offendingMaterial: material));
 
             Assert.That(errors, Has.Count.EqualTo(1));
             var message = errors[0].TheError.ToMessage();
-            Assert.That(message, Does.Contain("AMUSE reported renderer"),
+            Assert.That(message, Does.Contain("AMUSE slot report"),
                 "the report must name the renderer");
             Assert.That(message, Does.Contain("AMUSE reported material"),
                 "the report must name the offending material");

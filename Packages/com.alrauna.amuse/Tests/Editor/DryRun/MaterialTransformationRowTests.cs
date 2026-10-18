@@ -183,8 +183,6 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             Assert.That(row.MovedTriangles, Is.EqualTo(-1));
             Assert.That(row.ProvenTriangles, Is.EqualTo(-1));
             Assert.That(row.TotalTriangles, Is.EqualTo(-1));
-            Assert.That(row.RefusedSlots, Is.EqualTo(-1));
-            Assert.That(row.SlotCount, Is.EqualTo(-1));
             Assert.That(row.Sentence, Is.EqualTo("errored sentence"));
         }
 
@@ -194,7 +192,6 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             var row = MaterialTransformationRow.Renderer(
                 Path, TypeName,
                 moved: 300, proven: 120, total: 400,
-                refusedSlots: 1, slotCount: 4,
                 sentence: "summary sentence");
             Assert.That(row.Kind, Is.EqualTo(MaterialTransformationRowKind.Renderer));
             Assert.That(row.RendererPath, Is.EqualTo(Path));
@@ -203,8 +200,6 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             Assert.That(row.MovedTriangles, Is.EqualTo(300));
             Assert.That(row.ProvenTriangles, Is.EqualTo(120));
             Assert.That(row.TotalTriangles, Is.EqualTo(400));
-            Assert.That(row.RefusedSlots, Is.EqualTo(1));
-            Assert.That(row.SlotCount, Is.EqualTo(4));
             Assert.That(row.Sentence, Is.EqualTo("summary sentence"));
         }
 
@@ -222,8 +217,6 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             Assert.That(row.MovedTriangles, Is.EqualTo(-1));
             Assert.That(row.ProvenTriangles, Is.EqualTo(12));
             Assert.That(row.TotalTriangles, Is.EqualTo(40));
-            Assert.That(row.RefusedSlots, Is.EqualTo(-1));
-            Assert.That(row.SlotCount, Is.EqualTo(-1));
             Assert.That(row.Sentence, Is.EqualTo("slot sentence"));
         }
 
@@ -238,7 +231,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 () => MaterialTransformationRow.Errored(Path, TypeName, null));
             Assert.Throws<ArgumentException>(
                 () => MaterialTransformationRow.Renderer(
-                    Path, TypeName, 1, 2, 3, 0, 1, ""));
+                    Path, TypeName, 1, 2, 3, ""));
             Assert.Throws<ArgumentException>(
                 () => MaterialTransformationRow.Slot(
                     Path, TypeName, 0, 1, 2, null));
