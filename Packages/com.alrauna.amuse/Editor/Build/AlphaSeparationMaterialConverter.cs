@@ -309,7 +309,7 @@ namespace Alrauna.Amuse.Editor.Build
             IReadOnlyCollection<string> conversionPropertyNames,
             out CapturedMaterialEvidence derived)
         {
-            if (!AdmittedMaterialStates.TryAdmitDerivedEvidence(
+            if (!AnimatedPropertyAdmission.TryAdmitDerivedEvidence(
                     captured,
                     conversionBindings,
                     ConversionRequestForFamily(captured.Family),

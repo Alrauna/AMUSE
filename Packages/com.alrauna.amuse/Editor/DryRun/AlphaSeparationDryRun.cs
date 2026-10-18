@@ -1300,7 +1300,7 @@ namespace Alrauna.Amuse.Editor.DryRun
                     continue;
                 }
 
-                if (!AdmittedMaterialStates.TryAdmitDerivedEvidence(
+                if (!AnimatedPropertyAdmission.TryAdmitDerivedEvidence(
                         captured,
                         conversionBindings,
                         PoiyomiOpaqueConversion.ConversionEvidenceRequest,

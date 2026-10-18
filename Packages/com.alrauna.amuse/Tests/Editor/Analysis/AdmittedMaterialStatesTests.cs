@@ -48,7 +48,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         [Test]
         public void AgreeingSourcesAndDefaultAdmitTheSingleValue()
         {
-            var outcome = AdmittedMaterialStates.AdmitScalar(
+            var outcome = AnimatedPropertyAdmission.AdmitScalar(
                 new[] { Binding(true, 1f), Binding(true, 1f) },
                 1f,
                 out var admitted);
@@ -61,7 +61,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         public void DisagreeingAnimationSourcesRefuse()
         {
             Assert.That(
-                AdmittedMaterialStates.AdmitScalar(
+                AnimatedPropertyAdmission.AdmitScalar(
                     new[] { Binding(true, 1f), Binding(true, 0f) },
                     1f,
                     out _),
@@ -72,7 +72,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         public void AnimationDoesNotOverrideADifferentSerializedDefault()
         {
             Assert.That(
-                AdmittedMaterialStates.AdmitScalar(
+                AnimatedPropertyAdmission.AdmitScalar(
                     new[] { Binding(true, 1f) },
                     0f,
                     out _),
@@ -83,7 +83,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         public void AnyNonFiniteExactBindingRefuses()
         {
             Assert.That(
-                AdmittedMaterialStates.AdmitScalar(
+                AnimatedPropertyAdmission.AdmitScalar(
                     new[]
                     {
                         Binding(true, 1f),
@@ -98,7 +98,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         public void MultipleValuesInOneFiniteExactBindingRefuse()
         {
             Assert.That(
-                AdmittedMaterialStates.AdmitScalar(
+                AnimatedPropertyAdmission.AdmitScalar(
                     new[] { Binding(true, 0f, 1f) },
                     1f,
                     out _),
@@ -109,7 +109,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         public void RepeatedIdenticalValuesAdmit()
         {
             Assert.That(
-                AdmittedMaterialStates.AdmitScalar(
+                AnimatedPropertyAdmission.AdmitScalar(
                     new[] { Binding(true, 1f, 1f, 1f) },
                     1f,
                     out var admitted),
@@ -121,7 +121,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         public void SerializedDefaultAloneAdmits()
         {
             Assert.That(
-                AdmittedMaterialStates.AdmitScalar(
+                AnimatedPropertyAdmission.AdmitScalar(
                     Array.Empty<CapturedFloatBinding>(),
                     0.25f,
                     out var admitted),
@@ -137,7 +137,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
 
             Assert.That(adjacent, Is.Not.EqualTo(1f));
             Assert.That(
-                AdmittedMaterialStates.AdmitScalar(
+                AnimatedPropertyAdmission.AdmitScalar(
                     new[] { Binding(true, adjacent) },
                     1f,
                     out _),
@@ -148,7 +148,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         public void NaNDoesNotBecomeASingletonThroughFloatEqualsSemantics()
         {
             Assert.That(
-                AdmittedMaterialStates.AdmitScalar(
+                AnimatedPropertyAdmission.AdmitScalar(
                     new[] { Binding(true, float.NaN) },
                     float.NaN,
                     out _),
@@ -160,7 +160,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         {
             var serialized = new Color(0.1f, 0.2f, 0.3f, 0.4f);
 
-            var outcome = AdmittedMaterialStates.AdmitColor(
+            var outcome = AnimatedPropertyAdmission.AdmitColor(
                 Components((3, 0.4f)), serialized, out var admitted);
 
             Assert.That(outcome, Is.EqualTo(AdmittedPropertyOutcome.Singleton));
@@ -171,7 +171,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         public void AnimatedAlphaDoesNotOverrideADifferentDefault()
         {
             Assert.That(
-                AdmittedMaterialStates.AdmitColor(
+                AnimatedPropertyAdmission.AdmitColor(
                     Components((3, 1f)),
                     new Color(0.1f, 0.2f, 0.3f, 0.4f),
                     out _),
@@ -188,7 +188,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             };
 
             Assert.That(
-                AdmittedMaterialStates.AdmitColor(
+                AnimatedPropertyAdmission.AdmitColor(
                     components,
                     new Color(0.1f, 0.2f, 0.3f, 0.4f),
                     out _),
@@ -198,7 +198,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         [Test]
         public void ComponentThreePreservesUnanimatedRgbComponents()
         {
-            var outcome = AdmittedMaterialStates.AdmitColor(
+            var outcome = AnimatedPropertyAdmission.AdmitColor(
                 Components((3, 1f)),
                 new Color(0.25f, 0.5f, 0.75f, 1f),
                 out var admitted);
@@ -214,7 +214,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         {
             var serialized = new Vector4(1f, 1f, 0f, 0f);
 
-            var outcome = AdmittedMaterialStates.AdmitVector(
+            var outcome = AnimatedPropertyAdmission.AdmitVector(
                 Components((0, 1f), (1, 1f)),
                 serialized,
                 out var admitted);
@@ -227,7 +227,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         public void AnimatedVectorComponentDoesNotOverrideADifferentDefault()
         {
             Assert.That(
-                AdmittedMaterialStates.AdmitVector(
+                AnimatedPropertyAdmission.AdmitVector(
                     Components((0, 2f)),
                     new Vector4(1f, 1f, 0f, 0f),
                     out _),
@@ -244,7 +244,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             };
 
             Assert.That(
-                AdmittedMaterialStates.AdmitVector(
+                AnimatedPropertyAdmission.AdmitVector(
                     components, new Vector4(1f, 2f, 3f, 4f), out _),
                 Is.EqualTo(AdmittedPropertyOutcome.NotFiniteExact));
         }
@@ -252,7 +252,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         [Test]
         public void UnanimatedVectorComponentsPreserveSerializedValues()
         {
-            var outcome = AdmittedMaterialStates.AdmitVector(
+            var outcome = AnimatedPropertyAdmission.AdmitVector(
                 Components((0, 1f)),
                 new Vector4(1f, 2f, 3f, 4f),
                 out var admitted);
@@ -266,7 +266,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         public void InvalidComponentIndexIsAProgrammingDefect(int component)
         {
             Assert.Throws<ArgumentOutOfRangeException>(() =>
-                AdmittedMaterialStates.AdmitVector(
+                AnimatedPropertyAdmission.AdmitVector(
                     Components((component, 1f)), Vector4.one, out _));
         }
 
@@ -288,11 +288,11 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var serialized = new Vector4(1f, 2f, 3f, 4f);
 
             Assert.That(
-                AdmittedMaterialStates.AdmitVector(
+                AnimatedPropertyAdmission.AdmitVector(
                     disagreementFirst, serialized, out _),
                 Is.EqualTo(AdmittedPropertyOutcome.NotFiniteExact));
             Assert.That(
-                AdmittedMaterialStates.AdmitVector(
+                AnimatedPropertyAdmission.AdmitVector(
                     nonFiniteFirst, serialized, out _),
                 Is.EqualTo(AdmittedPropertyOutcome.NotFiniteExact));
         }
