@@ -79,25 +79,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             return material;
         }
 
-        private static List<Material> CurveMaterials(AnimationClip clip)
-        {
-            var materials = new List<Material>();
-            foreach (var binding in
-                     AnimationUtility.GetObjectReferenceCurveBindings(clip))
-            {
-                foreach (var keyframe in AnimationUtility
-                             .GetObjectReferenceCurve(clip, binding))
-                {
-                    if (keyframe.value is Material material)
-                    {
-                        materials.Add(material);
-                    }
-                }
-            }
-
-            return materials;
-        }
-
         /// <summary>
         /// The increment's core proof: the locked slot reaches the
         /// pipeline as its unlocked clone, so capture reads U, the
@@ -251,7 +232,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var clip = TransientUnlockTestLifecycle.CommittedClip(root);
             Assert.That(clip, Is.Not.Null,
                 "the committed animator must hold a clip");
-            var curveMaterials = CurveMaterials(clip);
+            var curveMaterials = TransientUnlockTestLifecycle.CurveMaterials(clip);
             Assert.That(curveMaterials, Is.Not.Empty,
                 "the committed animator must carry the material swap");
             Assert.That(curveMaterials, Has.All.EqualTo(canonical),
@@ -587,7 +568,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             // The material-swap curve references the locked original the
             // build ships, so the animation stays live against the
             // shipped material.
-            var curveMaterials = CurveMaterials(committed);
+            var curveMaterials = TransientUnlockTestLifecycle.CurveMaterials(committed);
             Assert.That(curveMaterials, Is.Not.Empty,
                 "the committed animator must carry the material swap");
             Assert.That(curveMaterials, Has.All.EqualTo(shipped));
@@ -759,7 +740,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var committed = TransientUnlockTestLifecycle.CommittedClip(root);
             Assert.That(committed, Is.Not.Null,
                 "the committed animator must hold a clip");
-            var curveMaterials = CurveMaterials(committed);
+            var curveMaterials = TransientUnlockTestLifecycle.CurveMaterials(committed);
             Assert.That(curveMaterials, Is.Not.Empty,
                 "the committed animator must carry the clip-only swap");
             Assert.That(curveMaterials, Has.All.EqualTo(
@@ -909,7 +890,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var clip = TransientUnlockTestLifecycle.CommittedClip(root);
             Assert.That(clip, Is.Not.Null,
                 "the committed animator must hold a clip");
-            Assert.That(CurveMaterials(clip), Has.All.EqualTo(locked),
+            Assert.That(TransientUnlockTestLifecycle.CurveMaterials(clip), Has.All.EqualTo(locked),
                 "the committed references return to L after the " +
                 "reversion");
             Assert.That(unlockedClone == null, Is.True,
@@ -1040,7 +1021,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var clip = TransientUnlockTestLifecycle.CommittedClip(root);
             Assert.That(clip, Is.Not.Null,
                 "the committed animator must hold a clip");
-            var curveMaterials = CurveMaterials(clip);
+            var curveMaterials = TransientUnlockTestLifecycle.CurveMaterials(clip);
             Assert.That(curveMaterials, Is.Not.Empty,
                 "the committed animator must carry the material swap");
             Assert.That(curveMaterials, Has.All.EqualTo(canonicalOutput),
@@ -1551,7 +1532,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var clip = TransientUnlockTestLifecycle.CommittedClip(root);
             Assert.That(clip, Is.Not.Null,
                 "the committed animator must hold a clip");
-            var curveMaterials = CurveMaterials(clip);
+            var curveMaterials = TransientUnlockTestLifecycle.CurveMaterials(clip);
             Assert.That(curveMaterials, Is.Not.Empty,
                 "the committed animator must carry the material swap");
             Assert.That(curveMaterials, Has.All.EqualTo(canonicalOutput),

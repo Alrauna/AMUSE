@@ -20,9 +20,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
     /// <list type="bullet">
     /// <item><see cref="AddRendererPadded"/> pads the material list to the
     /// mesh sub-mesh count; <see cref="AddRenderer"/> does not.</item>
-    /// <item><see cref="CommittedClipCarrying"/> returns the first match;
-    /// <see cref="CommittedClipCarryingExactlyOne"/> throws when two
-    /// committed clips carry one binding.</item>
+    /// <item><see cref="CommittedClipWithObjectBinding"/> returns the
+    /// first match; <see cref="CommittedClipCarryingExactlyOne"/> throws
+    /// when two committed clips carry one binding.</item>
     /// <item><see cref="DestroyCommittedClone"/> destroys each layer state
     /// machine; <see cref="DestroyCommittedCloneRecursive"/> also destroys
     /// the states, behaviours and sub-state-machines under them.</item>
@@ -186,50 +186,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// The first committed clip that carries the binding, or null.
         /// </summary>
         internal static AnimationClip CommittedClipWithObjectBinding(
-            GameObject root,
-            string rendererPath,
-            string propertyName)
-        {
-            foreach (var animator in root
-                         .GetComponentsInChildren<Animator>(true))
-            {
-                if (!(animator.runtimeAnimatorController is
-                        AnimatorController controller))
-                {
-                    continue;
-                }
-
-                foreach (var layer in controller.layers)
-                {
-                    foreach (var child in layer.stateMachine.states)
-                    {
-                        if (!(child.state.motion is AnimationClip clip))
-                        {
-                            continue;
-                        }
-
-                        foreach (var binding in AnimationUtility
-                                     .GetObjectReferenceCurveBindings(clip))
-                        {
-                            if (binding.path == rendererPath &&
-                                binding.propertyName == propertyName)
-                            {
-                                return clip;
-                            }
-                        }
-                    }
-                }
-            }
-
-            return null;
-        }
-
-        /// <summary>
-        /// The first committed clip that carries the binding, or null.
-        /// Same walk as <see cref="CommittedClipWithObjectBinding"/>; the
-        /// persistence suite reads the result under this name.
-        /// </summary>
-        internal static AnimationClip CommittedClipCarrying(
             GameObject root,
             string rendererPath,
             string propertyName)

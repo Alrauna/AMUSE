@@ -67,11 +67,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         public void TearDown()
         {
             _filteringPin.Dispose();
-            DestroyTracked();
-        }
-
-        private void DestroyTracked()
-        {
             _scope.TearDown();
         }
 
@@ -212,7 +207,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     // --- The curve-only proof comes first: if the renderer
                     // referenced the clone, persistence would prove nothing
                     // about curve traversal.
-                    var committedClip = AlphaSeparationTestLifecycle.CommittedClipCarrying(
+                    var committedClip = AlphaSeparationTestLifecycle.CommittedClipWithObjectBinding(
                         root, "body", "m_Materials.Array.data[0]");
                     Assert.That(committedClip, Is.Not.Null,
                         "fixture precondition: the committed clip must " +
@@ -284,7 +279,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     "the test-owned persistence directory must be deleted " +
                     "even when an assertion fails");
                 AlphaSeparationTestLifecycle.DestroyGenerated(state);
-                DestroyTracked();
+                _scope.TearDown();
             }
         }
 
@@ -387,7 +382,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 UnityEngine.Object.DestroyImmediate(root);
                 AssetDatabase.DeleteAsset(PersistenceTempFolder);
                 AlphaSeparationTestLifecycle.DestroyGenerated(state);
-                DestroyTracked();
+                _scope.TearDown();
             }
         }
 
@@ -529,7 +524,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         Is.Not.SameAs(controller),
                         "the built avatar must carry NDMF's committed " +
                         "controller clone, not the source controller");
-                    var committedClip = AlphaSeparationTestLifecycle.CommittedClipCarrying(
+                    var committedClip = AlphaSeparationTestLifecycle.CommittedClipWithObjectBinding(
                         root, "body", "m_Materials.Array.data[0]");
                     Assert.That(committedClip, Is.Not.Null,
                         "fixture precondition: the committed clip must " +
@@ -668,7 +663,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     }
                 }
 
-                DestroyTracked();
+                _scope.TearDown();
             }
         }
 
