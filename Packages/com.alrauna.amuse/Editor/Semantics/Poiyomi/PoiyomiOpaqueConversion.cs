@@ -262,7 +262,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// state after the evidence a decision depends on.
         /// <para>
         /// Call only with evidence that passed
-        /// <see cref="PoiyomiMaterialSemantics.TryVerifyPoiyomiIdentity"/>:
+        /// <see cref="PoiyomiSourceAttestation.TryVerifyPoiyomiIdentity"/>:
         /// attestation lives in the verified-entry caller
         /// (<c>AlphaSeparationPreparation</c> refuses with a
         /// <c>SourceIdentity</c> detail before eligibility), so the refusal
@@ -584,7 +584,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// <summary>
         /// Narrow conversion entry to the shared Poiyomi source-evidence
         /// gatherer, passing conversion's own schema. Verification stays
-        /// <see cref="PoiyomiMaterialSemantics.TryVerifyPoiyomiIdentity"/>, so
+        /// <see cref="PoiyomiSourceAttestation.TryVerifyPoiyomiIdentity"/>, so
         /// hashing, GUID and package lookup, locked-state gathering, and the
         /// identity conjunction are reused rather than duplicated.
         /// <para>
@@ -598,7 +598,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             UnityEngine.Shader shader,
             CapturedMaterialEvidence evidence)
         {
-            return PoiyomiMaterialSemantics.GatherSourceEvidence(
+            return PoiyomiSourceAttestation.GatherSourceEvidence(
                 shader, evidence, ConversionSchema);
         }
 

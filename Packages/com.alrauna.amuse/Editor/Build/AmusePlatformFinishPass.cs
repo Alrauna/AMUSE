@@ -188,7 +188,7 @@ namespace Alrauna.Amuse.Editor.Build
             ReplacementTextureAttestation.ClearVersionCacheForSession();
             AaoAtlasTextureAttestation.ClearVersionCacheForSession();
             Semantics.LilToon.LilToonSourceAttestation.ClearGatherMemo();
-            Semantics.Poiyomi.PoiyomiMaterialSemantics.ClearSourceHashMemo();
+            Semantics.Poiyomi.PoiyomiSourceAttestation.ClearSourceHashMemo();
             if (!lifecycle.MayUsePositiveMutation)
             {
                 // V7: a lifecycle refusal is never silent. One plain

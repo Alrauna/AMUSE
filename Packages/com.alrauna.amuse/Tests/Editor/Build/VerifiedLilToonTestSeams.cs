@@ -196,7 +196,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     switch (family)
                     {
                         case CapturedAlphaMaterialFamily.Poiyomi:
-                            poiyomi = PoiyomiMaterialSemantics
+                            poiyomi = PoiyomiSourceAttestation
                                 .GatherAlphaSourceEvidence(
                                     shaders[index], evidence[index]);
                             break;
@@ -204,7 +204,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             // Both Poiyomi identities verify through one
                             // conjunction, so the gather is the same function
                             // the plain family uses.
-                            poiyomi = PoiyomiMaterialSemantics
+                            poiyomi = PoiyomiSourceAttestation
                                 .GatherAlphaSourceEvidence(
                                     shaders[index], evidence[index]);
                             break;

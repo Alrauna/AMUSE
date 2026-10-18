@@ -32,23 +32,9 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         internal const string CanonicalNormalizedSourceHash = PoiyomiSourceAttestation.CanonicalNormalizedSourceHash;
         internal const string PoiyomiTwoPassShaderName = PoiyomiSourceAttestation.PoiyomiTwoPassShaderName;
         internal const string TwoPassCanonicalShaderGuid = PoiyomiSourceAttestation.TwoPassCanonicalShaderGuid;
-        internal const string TwoPassCanonicalNormalizedSourceHash = PoiyomiSourceAttestation.TwoPassCanonicalNormalizedSourceHash;
 
         private const string ShaderOptimizerEnabledProperty =
             "_ShaderOptimizerEnabled";
-
-        private const string SrcBlendProperty = "_SrcBlend";
-        private const string DstBlendProperty = "_DstBlend";
-        private const string BlendOpProperty = "_BlendOp";
-        private const string SrcBlendAlphaProperty = "_SrcBlendAlpha";
-        private const string DstBlendAlphaProperty = "_DstBlendAlpha";
-        private const string BlendOpAlphaProperty = "_BlendOpAlpha";
-        private const string SrcBlend2Property = "_SrcBlend2";
-        private const string DstBlend2Property = "_DstBlend2";
-        private const string BlendOp2Property = "_BlendOp2";
-        private const string BlendOpAlpha2Property = "_BlendOpAlpha2";
-        private const string SrcBlendAlpha2Property = "_SrcBlendAlpha2";
-        private const string DstBlendAlpha2Property = "_DstBlendAlpha2";
 
         private const string MainTextureProperty = "_MainTex";
         private const string ColorProperty = "_Color";
@@ -56,23 +42,11 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         internal const string OutlineOverrideAlphaProperty = "_OutlineOverrideAlpha";
         internal const string LineColorProperty = "_LineColor";
         internal const string OutlineTextureProperty = "_OutlineTexture";
-        internal const string OutlineAlphaDistanceFadeProperty =
-            "_OutlineAlphaDistanceFade";
-        internal const string OutlineAudioLinkColorProperty =
-            "_OutlineALColorEnabled";
         internal const string OutlineTextureUvProperty = "_OutlineTextureUV";
         internal const string OutlineTexturePanProperty = "_OutlineTexturePan";
 
-        // The Two Pass second family reads this tint's alpha where the plain
-        // base reads _Color.a (note 4.1, vendor line 29785).
-        private const string TwoPassColorProperty = "_TwoPassColor";
         private const string MainTexUvProperty = "_MainTexUV";
         private const string MainTexPanProperty = "_MainTexPan";
-        private const string AlphaForceOpaqueProperty = "_AlphaForceOpaque";
-
-        // The Two Pass shader declares a separate force-opaque flag for its
-        // second family (note 4.4, Two Pass source line 862).
-        private const string AlphaForceOpaque2Property = "_AlphaForceOpaque2";
 
         // The _Mode preset selector of the pinned source, and the second
         // family's own selector on the Two Pass shader (note 4.4, Two Pass
@@ -82,22 +56,6 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         // route for that family's claim.
         private const string ModeProperty = "_Mode";
         private const string TwoPassModeProperty = "_ModeTwoPass";
-        private const string IgnoreMainTexAlphaProperty = "_MainIgnoreTexAlpha";
-        private const string MainAlphaMaskModeProperty = "_MainAlphaMaskMode";
-        private const string AlphaMaskProperty = "_AlphaMask";
-        private const string CutoffProperty = "_Cutoff";
-        private const string AlphaMaskBlendStrengthProperty =
-            "_AlphaMaskBlendStrength";
-        private const string AlphaMaskValueProperty = "_AlphaMaskValue";
-        private const string AlphaMaskInvertProperty = "_AlphaMaskInvert";
-        private const string AlphaMaskUvProperty = "_AlphaMaskUV";
-        private const string AlphaMaskPanProperty = "_AlphaMaskPan";
-        private const string PoiParallaxProperty = "_PoiParallax";
-
-        // Names the whole mask sum rather than one input: an overflow is a
-        // property of the addition, not of either finite operand.
-        private const string AlphaMaskExpressionDetail =
-            AlphaMaskBlendStrengthProperty + " + " + AlphaMaskValueProperty;
         private const string NormalMapProperty = "_BumpMap";
         private const string NormalMapUvProperty = "_BumpMapUV";
         private const string NormalMapPanProperty = "_BumpMapPan";
@@ -195,90 +153,6 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             "_EmissionReplace2",
             "_EmissionReplace3",
             "_AlphaPremultiply",
-        };
-
-        // Coverage/clip mechanisms that change effective alpha coverage even
-        // when the alpha value is forced opaque. Proven off on every alpha path,
-        // including the forced-opaque short-circuit.
-        private static readonly string[] AlphaCoverageGates =
-        {
-            "_AlphaToCoverage",
-            "_AlphaSharpenedA2C",
-            "_AlphaDithering",
-            "_EnableDissolve",
-            "_EnableUDIMDiscardOptions",
-
-            // The Beat Saber module toggle of the pinned source (note 4.7).
-            // When it is on, the pass writes alpha after the clip as
-            // alpha = alpha * emission.z and rewrites the alpha blend pair.
-            // An enabled module must never sit inside a claimed exactly-one
-            // alpha. The coverage gate run precedes the _AlphaForceOpaque
-            // short-circuit, so this entry keeps the forced path protected.
-            "_BSSEnabled",
-        };
-
-        // Enabled writers/masks that add to or replace the non-forced alpha
-        // term. The alpha mask mode is deliberately absent: it is interpreted by
-        // TryInterpretAlphaMask rather than gated, because Replace is provable
-        // with no mask bound and, for the admitted strength-value pairs,
-        // through the bound mask's red field, and Multiply is provable for the
-        // declared default shape and for the same admitted pairs through the
-        // exact product fold.
-        //
-        // _AlphaPremultiply is deliberately absent. The vendor premultiply
-        // scales the base color by saturate(alpha) in three passes at vendor
-        // lines 30216, 47274, 58331 and never writes the alpha value (note
-        // 4.3). The proof only moves triangles whose alpha is exactly 1, so
-        // the factor is exactly 1 there and the feature is an identity on the
-        // proven domain. The base-color gate list keeps the entry because the
-        // color equation genuinely changes per pixel.
-        //
-        // The four decal slots are deliberately absent: FirstNonInertDecalSlot
-        // interprets them per slot, because an enabled slot whose
-        // override-alpha mode is exactly zero writes no alpha (vendor lines
-        // 22958 to 22978).
-        //
-        // The audio link decal module writes the chain alpha through
-        // lerp(alpha, alpha * audioLinkValue, _ALDecalControlsAlpha)
-        // (investigation 2026-09-22, vendor line 24833), independently of
-        // the four decal slots. A zero weight is an identity, so it is
-        // proven exactly zero on every non-forced alpha path.
-        private static readonly string[] AlphaFeatureGates =
-        {
-            "_AlphaMod",
-            "_AlphaDistanceFade",
-            "_AlphaFresnel",
-            "_AlphaAngular",
-            "_AlphaAudioLinkEnabled",
-            "_EnableAudioLink",
-            "_AlphaGlobalMask",
-            "_BackFaceEnabled",
-            "_RGBMaskEnabled",
-            "_ALDecalControlsAlpha",
-            "_EnableFlipbook",
-            // The rim family: the liltoon-style and UTS2-style arms never
-            // touch the chain alpha, and the poi-style arm writes it only
-            // through _RimApplyAlpha (design 2026-09-22; pinned 9.3.64
-            // source, vendor lines 25838 to 25843, both slots sharing the
-            // one scalar). At zero every compiled arm is an alpha identity,
-            // whatever the enable floats and keywords say, because the call
-            // sites guard on the keywords.
-            "_RimApplyAlpha",
-            "_EnableDepthRimLighting",
-            "_EnableEnvironmentalRim",
-            "_VideoEffectsEnable",
-            "_EnableTouchGlow",
-            "_MainVertexColoringEnabled",
-        };
-
-        // Proven off only immediately before a texture-backed _MainTex alpha
-        // claim. applyParallax overwrites poiMesh.uv[_ParallaxUV] before the
-        // _MainTex sample, so an enabled parallax would make that sample's
-        // coordinate view-dependent. It is not an AlphaFeatureGate: a constant
-        // alpha term never reads a UV, so parallax cannot disturb it.
-        private static readonly string[] TextureBackedAlphaGates =
-        {
-            PoiParallaxProperty,
         };
 
         // The four decal slots. An enabled slot writes the chain alpha only
@@ -390,9 +264,9 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     request,
                     AlphaPredicateRequestFor(material, isTwoPass)),
             })[0];
-            var evidence = GatherSourceEvidence(
+            var evidence = PoiyomiSourceAttestation.GatherSourceEvidence(
                 material.shader, captured, RequiredSchemaProperties);
-            if (!TryVerifyPoiyomiIdentity(evidence, out var diagnostic))
+            if (!PoiyomiSourceAttestation.TryVerifyPoiyomiIdentity(evidence, out var diagnostic))
             {
                 return Unsupported(diagnostic);
             }
@@ -613,7 +487,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
 
             var texture = material.GetTexture(MainTextureProperty);
-            if (!TryGetAssignedTextureSourceId(texture, out var sourceId))
+            if (!UnityTextureEvidence.TryGetSourceId(texture, out var sourceId))
             {
                 AddDiagnostic(
                     diagnostics,
@@ -634,7 +508,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
 
             if (requireColorInterpretation &&
-                !TryGetColorInterpretation(texture, out interpretation))
+                !UnityTextureEvidence.TryGetColorInterpretation(texture, out interpretation))
             {
                 AddDiagnostic(
                     diagnostics,
@@ -970,7 +844,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
 
             var texture = material.GetTexture(EmissionMapProperty);
-            if (!TryGetAssignedTextureSourceId(texture, out var sourceId))
+            if (!UnityTextureEvidence.TryGetSourceId(texture, out var sourceId))
             {
                 return RecordUnknown<ColorSemanticValue>(
                     diagnostics,
@@ -979,7 +853,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     EmissionMapProperty);
             }
 
-            if (!TryGetColorInterpretation(texture, out var interpretation))
+            if (!UnityTextureEvidence.TryGetColorInterpretation(texture, out var interpretation))
             {
                 return RecordUnknown<ColorSemanticValue>(
                     diagnostics,
@@ -990,7 +864,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
             // Independent RGB requires a sampled alpha of exactly one; an RGBA
             // map's sample alpha would otherwise silently scale the emission.
-            if (!TryProveSampledAlphaIsOne(texture))
+            if (!UnityTextureEvidence.TryProveSampledAlphaIsOne(texture))
             {
                 return RecordUnknown<ColorSemanticValue>(
                     diagnostics,
@@ -1095,7 +969,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
 
             var texture = material.GetTexture(NormalMapProperty);
-            if (!TryGetAssignedTextureSourceId(texture, out var sourceId))
+            if (!UnityTextureEvidence.TryGetSourceId(texture, out var sourceId))
             {
                 return RecordUnknown<NormalSemanticValue>(
                     diagnostics,
@@ -1104,7 +978,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     NormalMapProperty);
             }
 
-            if (!IsCanonicalNormalMapImport(texture))
+            if (!UnityTextureEvidence.IsCanonicalNormalMapImport(texture))
             {
                 return RecordUnknown<NormalSemanticValue>(
                     diagnostics,
@@ -1139,56 +1013,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 new PoiyomiSemanticDiagnostic(output, code, detail));
         }
 
-        // --- Source attestation ---------------------------------------------
-
-        internal static string ComputeNormalizedSourceHash(string rawSource) =>
-            PoiyomiSourceAttestation.ComputeNormalizedSourceHash(rawSource);
-
-        internal static bool TryReadNormalizedSourceHashCached(
-            string assetPath,
-            out string normalizedHash) =>
-            PoiyomiSourceAttestation.TryReadNormalizedSourceHashCached(assetPath, out normalizedHash);
-
-        internal static bool ClearSourceHashMemo() =>
-            PoiyomiSourceAttestation.ClearSourceHashMemo();
-
-        internal static bool TryVerifyPoiyomiIdentity(
-            in PoiyomiSourceEvidence evidence,
-            out PoiyomiSemanticDiagnostic diagnostic) =>
-            PoiyomiSourceAttestation.TryVerifyPoiyomiIdentity(evidence, out diagnostic);
-
-        internal static PoiyomiSourceEvidence GatherAlphaSourceEvidence(
-            Shader shader,
-            CapturedMaterialEvidence evidence) =>
-            PoiyomiSourceAttestation.GatherAlphaSourceEvidence(shader, evidence);
-
-        internal static PoiyomiSourceEvidence GatherSourceEvidence(
-            Shader shader,
-            CapturedMaterialEvidence evidence,
-            IReadOnlyCollection<string> requiredSchemaProperties) =>
-            PoiyomiSourceAttestation.GatherSourceEvidence(shader, evidence, requiredSchemaProperties);
-
-        /// <summary>
-        /// The second family's own scalars and tint. The first family reads
-        /// none of them, so the plain Toon request combines without them. The
-        /// cutoff declaration rides the base request's main texture entry, so
-        /// the declaring and plain-clip bases carry the split choice and the
-        /// extras never carry one.
         // --- Texture evidence extraction (Task 3) ---------------------------
-
-        /// <summary>
-        /// Resolves the stable project identity of an assigned texture as
-        /// <c>unity-asset:&lt;lowercase-guid&gt;:&lt;invariant-decimal-local-id&gt;</c>.
-        /// Scene-only, generated, or otherwise unidentifiable textures are
-        /// refused; identity is never fabricated from instance id, path, name,
-        /// pixels, or reference equality.
-        /// </summary>
-        internal static bool TryGetAssignedTextureSourceId(
-            Texture texture,
-            out TextureSourceId sourceId)
-        {
-            return UnityTextureEvidence.TryGetSourceId(texture, out sourceId);
-        }
 
         /// <summary>
         /// Converts a texture property's UV channel and scale/offset into a
@@ -1262,40 +1087,6 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 ? material.GetTexture(MainTextureProperty)
                 : null;
             return UnityTextureEvidence.TryGetSampling(mainTexture, out sampling);
-        }
-
-
-        /// <summary>
-        /// Selects a color texture's linear/sRGB import interpretation from its
-        /// <see cref="TextureImporter.sRGBTexture"/> flag. A texture with no
-        /// importer (scene-only, generated) cannot prove a color meaning.
-        /// </summary>
-        internal static bool TryGetColorInterpretation(
-            Texture texture,
-            out TextureColorInterpretation interpretation)
-        {
-            return UnityTextureEvidence.TryGetColorInterpretation(
-                texture, out interpretation);
-        }
-
-        /// <summary>
-        /// Proves a sampled alpha of exactly one: the source carries no alpha
-        /// channel and the importer imports none. Input or grayscale-derived
-        /// alpha is not one and is therefore not proven.
-        /// </summary>
-        internal static bool TryProveSampledAlphaIsOne(Texture texture)
-        {
-            return UnityTextureEvidence.TryProveSampledAlphaIsOne(texture);
-        }
-
-        /// <summary>
-        /// Recognizes the canonical Unity tangent-space normal-map import: the
-        /// normal-map texture type with no green-channel inversion. Any other
-        /// import cannot be read as an unmodified tangent-space normal.
-        /// </summary>
-        internal static bool IsCanonicalNormalMapImport(Texture texture)
-        {
-            return UnityTextureEvidence.IsCanonicalNormalMapImport(texture);
         }
 
 

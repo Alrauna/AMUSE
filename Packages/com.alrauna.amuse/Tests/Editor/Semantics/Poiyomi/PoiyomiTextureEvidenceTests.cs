@@ -23,7 +23,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         {
             var texture = ImportTexture("identity_format");
 
-            var ok = PoiyomiMaterialSemantics.TryGetAssignedTextureSourceId(
+            var ok = UnityTextureEvidence.TryGetSourceId(
                 texture,
                 out var sourceId);
 
@@ -37,9 +37,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         {
             var texture = ImportTexture("identity_stable");
 
-            PoiyomiMaterialSemantics.TryGetAssignedTextureSourceId(
+            UnityTextureEvidence.TryGetSourceId(
                 texture, out var first);
-            PoiyomiMaterialSemantics.TryGetAssignedTextureSourceId(
+            UnityTextureEvidence.TryGetSourceId(
                 texture, out var second);
 
             Assert.That(first, Is.EqualTo(second));
@@ -51,8 +51,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             var a = ImportTexture("identity_a");
             var b = ImportTexture("identity_b");
 
-            PoiyomiMaterialSemantics.TryGetAssignedTextureSourceId(a, out var idA);
-            PoiyomiMaterialSemantics.TryGetAssignedTextureSourceId(b, out var idB);
+            UnityTextureEvidence.TryGetSourceId(a, out var idA);
+            UnityTextureEvidence.TryGetSourceId(b, out var idB);
 
             Assert.That(idA, Is.Not.EqualTo(idB));
         }
@@ -61,7 +61,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         public void SourceId_RenamedAsset_IsUnchanged()
         {
             var texture = ImportTexture("identity_before_rename");
-            PoiyomiMaterialSemantics.TryGetAssignedTextureSourceId(
+            UnityTextureEvidence.TryGetSourceId(
                 texture, out var before);
 
             var moveError = AssetDatabase.MoveAsset(
@@ -69,7 +69,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 TempFolder + "/identity_after_rename.png");
             Assert.That(moveError, Is.Empty, "Rename must succeed for this probe.");
 
-            PoiyomiMaterialSemantics.TryGetAssignedTextureSourceId(
+            UnityTextureEvidence.TryGetSourceId(
                 texture, out var after);
 
             Assert.That(after, Is.EqualTo(before));
@@ -83,7 +83,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             var transient = new Texture2D(4, 4);
             Track(transient);
 
-            var ok = PoiyomiMaterialSemantics.TryGetAssignedTextureSourceId(
+            var ok = UnityTextureEvidence.TryGetSourceId(
                 transient,
                 out _);
 
@@ -358,7 +358,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         {
             var texture = ImportTexture("color_srgb", i => i.sRGBTexture = true);
 
-            var ok = PoiyomiMaterialSemantics.TryGetColorInterpretation(
+            var ok = UnityTextureEvidence.TryGetColorInterpretation(
                 texture, out var interpretation);
 
             Assert.That(ok, Is.True);
@@ -372,7 +372,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         {
             var texture = ImportTexture("color_linear", i => i.sRGBTexture = false);
 
-            var ok = PoiyomiMaterialSemantics.TryGetColorInterpretation(
+            var ok = UnityTextureEvidence.TryGetColorInterpretation(
                 texture, out var interpretation);
 
             Assert.That(ok, Is.True);
@@ -387,7 +387,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             var transient = new Texture2D(4, 4);
             Track(transient);
 
-            var ok = PoiyomiMaterialSemantics.TryGetColorInterpretation(
+            var ok = UnityTextureEvidence.TryGetColorInterpretation(
                 transient, out _);
 
             Assert.That(ok, Is.False);
@@ -404,7 +404,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 sourceHasAlpha: false);
 
             var proven =
-                PoiyomiMaterialSemantics.TryProveSampledAlphaIsOne(texture);
+                UnityTextureEvidence.TryProveSampledAlphaIsOne(texture);
 
             Assert.That(proven, Is.True);
         }
@@ -418,7 +418,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 sourceHasAlpha: true);
 
             var proven =
-                PoiyomiMaterialSemantics.TryProveSampledAlphaIsOne(texture);
+                UnityTextureEvidence.TryProveSampledAlphaIsOne(texture);
 
             Assert.That(proven, Is.False);
         }
@@ -430,7 +430,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Track(transient);
 
             var proven =
-                PoiyomiMaterialSemantics.TryProveSampledAlphaIsOne(transient);
+                UnityTextureEvidence.TryProveSampledAlphaIsOne(transient);
 
             Assert.That(proven, Is.False);
         }
@@ -446,7 +446,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 i.flipGreenChannel = false;
             });
 
-            var ok = PoiyomiMaterialSemantics.IsCanonicalNormalMapImport(texture);
+            var ok = UnityTextureEvidence.IsCanonicalNormalMapImport(texture);
 
             Assert.That(ok, Is.True);
         }
@@ -459,7 +459,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 i.textureType = TextureImporterType.Default;
             });
 
-            var ok = PoiyomiMaterialSemantics.IsCanonicalNormalMapImport(texture);
+            var ok = UnityTextureEvidence.IsCanonicalNormalMapImport(texture);
 
             Assert.That(ok, Is.False);
         }
@@ -473,7 +473,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 i.flipGreenChannel = true;
             });
 
-            var ok = PoiyomiMaterialSemantics.IsCanonicalNormalMapImport(texture);
+            var ok = UnityTextureEvidence.IsCanonicalNormalMapImport(texture);
 
             Assert.That(ok, Is.False);
         }
@@ -484,7 +484,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             var transient = new Texture2D(4, 4);
             Track(transient);
 
-            var ok = PoiyomiMaterialSemantics.IsCanonicalNormalMapImport(transient);
+            var ok = UnityTextureEvidence.IsCanonicalNormalMapImport(transient);
 
             Assert.That(ok, Is.False);
         }

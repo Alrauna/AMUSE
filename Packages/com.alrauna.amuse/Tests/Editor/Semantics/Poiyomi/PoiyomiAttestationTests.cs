@@ -61,12 +61,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                     fixturePath, File.GetLastWriteTimeUtc(fixturePath));
                 var stamp = File.GetLastWriteTimeUtc(fixturePath);
 
-                var primed = PoiyomiMaterialSemantics
+                var primed = PoiyomiSourceAttestation
                     .TryReadNormalizedSourceHashCached(
                         fixturePath, out var seedDigest);
                 Assert.That(primed, Is.True);
 
-                var dropped = PoiyomiMaterialSemantics.ClearSourceHashMemo();
+                var dropped = PoiyomiSourceAttestation.ClearSourceHashMemo();
                 Assert.That(
                     dropped,
                     Is.True,
@@ -79,13 +79,13 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 File.WriteAllText(fixturePath, editedSource);
                 File.SetLastWriteTimeUtc(fixturePath, stamp);
 
-                var second = PoiyomiMaterialSemantics
+                var second = PoiyomiSourceAttestation
                     .TryReadNormalizedSourceHashCached(
                         fixturePath, out var reDigest);
                 Assert.That(second, Is.True);
                 Assert.That(
                     reDigest,
-                    Is.EqualTo(PoiyomiMaterialSemantics
+                    Is.EqualTo(PoiyomiSourceAttestation
                         .ComputeNormalizedSourceHash(editedSource)),
                     "a cleared memo must re-read the source from disk");
             }

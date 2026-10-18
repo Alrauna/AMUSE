@@ -489,7 +489,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                     else if (family ==
                         CapturedAlphaMaterialFamily.Poiyomi)
                     {
-                        poiyomi = PoiyomiMaterialSemantics
+                        poiyomi = PoiyomiSourceAttestation
                             .GatherAlphaSourceEvidence(
                                 shaders[index], evidence[index]);
                     }

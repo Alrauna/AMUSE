@@ -207,7 +207,7 @@ namespace Alrauna.Amuse.Editor.Build
                             PoiyomiOpaqueConversion
                                 .GatherConversionSourceEvidence(
                                     live.shader, derived);
-                        if (!PoiyomiMaterialSemantics
+                        if (!PoiyomiSourceAttestation
                                 .TryVerifyPoiyomiIdentity(
                                     sourceEvidence,
                                     out var poiIdentityDiagnostic))

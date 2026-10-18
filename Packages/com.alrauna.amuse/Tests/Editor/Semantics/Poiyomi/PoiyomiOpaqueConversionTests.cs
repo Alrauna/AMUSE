@@ -1518,7 +1518,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             var evidence = PoiyomiOpaqueConversion.GatherConversionSourceEvidence(
                 material.shader, CaptureConversion(material));
 
-            var verified = PoiyomiMaterialSemantics.TryVerifyPoiyomiIdentity(
+            var verified = PoiyomiSourceAttestation.TryVerifyPoiyomiIdentity(
                 evidence, out var diagnostic);
 
             Assert.That(verified, Is.False);
