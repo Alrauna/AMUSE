@@ -60,6 +60,7 @@ namespace Alrauna.Amuse.Editor
         internal static Action<string> OnButtonDrawnForTest;
         internal static Func<string, bool> ButtonClickOverrideForTest;
         internal static Action<string> OnFoldoutHeaderDrawnForTest;
+        internal static Action<bool> OnOutOfRangeToggleDrawnForTest;
 
         private void OnEnable()
         {
@@ -203,140 +204,143 @@ namespace Alrauna.Amuse.Editor
                 "Show Material Transformations",
                 EditorStyles.foldoutHeader);
             OnFoldoutHeaderDrawnForTest?.Invoke("Show Material Transformations");
-            if (!_materialTransformationsOpen)
+            using (new EditorGUI.IndentLevelScope())
             {
-                return;
-            }
-
-            var optimizer = (AmuseAvatarOptimizer)target;
-            var avatarRoot = optimizer?.transform;
-            var avatarKey = avatarRoot != null
-                ? PlayModeBuildStore.ComputeAvatarKey(avatarRoot)
-                : null;
-
-            if (GUILayout.Button("Refresh"))
-            {
-                if (!string.IsNullOrEmpty(avatarKey))
+                if (!_materialTransformationsOpen)
                 {
-                    PlayModeBuildStore.Clear(avatarKey);
+                    return;
                 }
 
-                _dryRun?.Cancel();
-                DryRunCache.Clear();
-                _dryRun = null;
-                _dryRunCompletedLatched = false;
-            }
+                var optimizer = (AmuseAvatarOptimizer)target;
+                var avatarRoot = optimizer?.transform;
+                var avatarKey = avatarRoot != null
+                    ? PlayModeBuildStore.ComputeAvatarKey(avatarRoot)
+                    : null;
 
-            _alphaSeparationTransformationsOpen = EditorGUILayout.Foldout(
-                _alphaSeparationTransformationsOpen,
-                "Alpha Separator",
-                EditorStyles.foldoutHeader);
-            OnFoldoutHeaderDrawnForTest?.Invoke("Alpha Separator");
-            if (!_alphaSeparationTransformationsOpen)
-            {
-                return;
-            }
-
-            EditorGUILayout.LabelField(
-                RowText.DisclosureSentence(0),
-                EditorStyles.wordWrappedLabel);
-            EditorGUILayout.LabelField(
-                RowText.DisclosureSentence(1),
-                EditorStyles.wordWrappedLabel);
-
-            if (Event.current.type == EventType.Layout)
-            {
-                _dryRunCompletedLatched = _dryRun != null && _dryRun.Done;
-            }
-
-            var fingerprint = optimizer != null
-                ? PlayModeBuildStore.ComputePolicyFingerprint(
-                    optimizer, EditorUserBuildSettings.activeBuildTarget)
-                : null;
-            var playRecord = (!string.IsNullOrEmpty(avatarKey) && !string.IsNullOrEmpty(fingerprint))
-                ? PlayModeBuildStore.TryLoad(avatarKey, fingerprint)
-                : null;
-
-            if (playRecord != null)
-            {
-                const string playSentence =
-                    "This view shows accurate results from the Play mode build.";
-                EditorGUILayout.HelpBox(playSentence, MessageType.Info);
-                OnHelpBoxDrawnForTest?.Invoke(playSentence, MessageType.Info);
-
-                if (playRecord.avatarRows != null)
+                if (GUILayout.Button("Refresh"))
                 {
-                    foreach (var serializedRow in playRecord.avatarRows)
+                    if (!string.IsNullOrEmpty(avatarKey))
                     {
-                        DrawTransformationRow(
-                            MaterialTransformationRow.FromSerialized(serializedRow),
-                            avatarRoot);
+                        PlayModeBuildStore.Clear(avatarKey);
                     }
-                }
 
-                if (playRecord.rendererRows != null)
-                {
-                    foreach (var serializedRow in playRecord.rendererRows)
-                    {
-                        DrawTransformationRow(
-                            MaterialTransformationRow.FromSerialized(serializedRow),
-                            avatarRoot);
-                    }
-                }
-
-                return;
-            }
-
-            if (_dryRun == null)
-            {
-                _dryRun = new AlphaSeparationDryRun(
-                    optimizer,
-                    () => EditorUserBuildSettings.activeBuildTarget);
-                _dryRun.RepaintRequested = RequestHostRepaint;
-                _dryRun.Begin();
-                _dryRunCompletedLatched = false;
-                RequestHostRepaint();
-            }
-
-            if (_dryRun != null && _dryRun.IsCancelled)
-            {
-                EditorGUILayout.HelpBox("AMUSE material transformation analysis was cancelled.", MessageType.Info);
-                OnHelpBoxDrawnForTest?.Invoke("AMUSE material transformation analysis was cancelled.", MessageType.Info);
-                OnButtonDrawnForTest?.Invoke("Compute");
-                if (GUILayout.Button("Compute", GUILayout.Width(80)) ||
-                    (ButtonClickOverrideForTest != null && ButtonClickOverrideForTest("Compute")))
-                {
+                    _dryRun?.Cancel();
+                    DryRunCache.Clear();
                     _dryRun = null;
                     _dryRunCompletedLatched = false;
                 }
-                return;
-            }
 
-            if (!_dryRunCompletedLatched)
-            {
-                var text = _dryRun != null && _dryRun.TotalRendererCount > 0
-                    ? $"AMUSE is computing material transformations: renderer {_dryRun.CurrentRendererIndex + 1} of {_dryRun.TotalRendererCount}."
-                    : "AMUSE is computing material transformations.";
-                EditorGUILayout.HelpBox(text, MessageType.Info);
-                OnHelpBoxDrawnForTest?.Invoke(text, MessageType.Info);
-                OnButtonDrawnForTest?.Invoke("Cancel");
-                if (GUILayout.Button("Cancel", GUILayout.Width(60)) ||
-                    (ButtonClickOverrideForTest != null && ButtonClickOverrideForTest("Cancel")))
+                _alphaSeparationTransformationsOpen = EditorGUILayout.Foldout(
+                    _alphaSeparationTransformationsOpen,
+                    "Alpha Separator",
+                    EditorStyles.foldoutHeader);
+                OnFoldoutHeaderDrawnForTest?.Invoke("Alpha Separator");
+                if (!_alphaSeparationTransformationsOpen)
                 {
-                    _dryRun?.Cancel();
-                    GUIUtility.ExitGUI();
+                    return;
                 }
-                return;
-            }
 
-            foreach (var row in _dryRun.AvatarRows)
-            {
-                DrawTransformationRow(row, avatarRoot);
-            }
+                EditorGUILayout.LabelField(
+                    RowText.DisclosureSentence(0),
+                    EditorStyles.wordWrappedLabel);
+                EditorGUILayout.LabelField(
+                    RowText.DisclosureSentence(1),
+                    EditorStyles.wordWrappedLabel);
 
-            foreach (var row in _dryRun.RendererRows)
-            {
-                DrawTransformationRow(row, avatarRoot);
+                if (Event.current.type == EventType.Layout)
+                {
+                    _dryRunCompletedLatched = _dryRun != null && _dryRun.Done;
+                }
+
+                var fingerprint = optimizer != null
+                    ? PlayModeBuildStore.ComputePolicyFingerprint(
+                        optimizer, EditorUserBuildSettings.activeBuildTarget)
+                    : null;
+                var playRecord = (!string.IsNullOrEmpty(avatarKey) && !string.IsNullOrEmpty(fingerprint))
+                    ? PlayModeBuildStore.TryLoad(avatarKey, fingerprint)
+                    : null;
+
+                if (playRecord != null)
+                {
+                    const string playSentence =
+                        "This view shows accurate results from the Play mode build.";
+                    EditorGUILayout.HelpBox(playSentence, MessageType.Info);
+                    OnHelpBoxDrawnForTest?.Invoke(playSentence, MessageType.Info);
+
+                    if (playRecord.avatarRows != null)
+                    {
+                        foreach (var serializedRow in playRecord.avatarRows)
+                        {
+                            DrawTransformationRow(
+                                MaterialTransformationRow.FromSerialized(serializedRow),
+                                avatarRoot);
+                        }
+                    }
+
+                    if (playRecord.rendererRows != null)
+                    {
+                        foreach (var serializedRow in playRecord.rendererRows)
+                        {
+                            DrawTransformationRow(
+                                MaterialTransformationRow.FromSerialized(serializedRow),
+                                avatarRoot);
+                        }
+                    }
+
+                    return;
+                }
+
+                if (_dryRun == null)
+                {
+                    _dryRun = new AlphaSeparationDryRun(
+                        optimizer,
+                        () => EditorUserBuildSettings.activeBuildTarget);
+                    _dryRun.RepaintRequested = RequestHostRepaint;
+                    _dryRun.Begin();
+                    _dryRunCompletedLatched = false;
+                    RequestHostRepaint();
+                }
+
+                if (_dryRun != null && _dryRun.IsCancelled)
+                {
+                    EditorGUILayout.HelpBox("AMUSE material transformation analysis was cancelled.", MessageType.Info);
+                    OnHelpBoxDrawnForTest?.Invoke("AMUSE material transformation analysis was cancelled.", MessageType.Info);
+                    OnButtonDrawnForTest?.Invoke("Compute");
+                    if (GUILayout.Button("Compute", GUILayout.Width(80)) ||
+                        (ButtonClickOverrideForTest != null && ButtonClickOverrideForTest("Compute")))
+                    {
+                        _dryRun = null;
+                        _dryRunCompletedLatched = false;
+                    }
+                    return;
+                }
+
+                if (!_dryRunCompletedLatched)
+                {
+                    var text = _dryRun != null && _dryRun.TotalRendererCount > 0
+                        ? $"AMUSE is computing material transformations: renderer {_dryRun.CurrentRendererIndex + 1} of {_dryRun.TotalRendererCount}."
+                        : "AMUSE is computing material transformations.";
+                    EditorGUILayout.HelpBox(text, MessageType.Info);
+                    OnHelpBoxDrawnForTest?.Invoke(text, MessageType.Info);
+                    OnButtonDrawnForTest?.Invoke("Cancel");
+                    if (GUILayout.Button("Cancel", GUILayout.Width(60)) ||
+                        (ButtonClickOverrideForTest != null && ButtonClickOverrideForTest("Cancel")))
+                    {
+                        _dryRun?.Cancel();
+                        GUIUtility.ExitGUI();
+                    }
+                    return;
+                }
+
+                foreach (var row in _dryRun.AvatarRows)
+                {
+                    DrawTransformationRow(row, avatarRoot);
+                }
+
+                foreach (var row in _dryRun.RendererRows)
+                {
+                    DrawTransformationRow(row, avatarRoot);
+                }
             }
         }
 
@@ -672,7 +676,7 @@ namespace Alrauna.Amuse.Editor
                 "quality at a distance at the cost of " +
                 "performance. Mip 0 is the full texture. A 2048 " +
                 "by 2048 texture renders at 128 by 128 at mip 4. " +
-                "The default of Mip 4 fits most viewing " +
+                "The default of Mip 3 fits most viewing " +
                 "distances. Select All Mips to check every copy. " +
                 "This is the safest choice. Select a larger " +
                 "level when a cutout part looks solid at long " +
@@ -784,24 +788,46 @@ namespace Alrauna.Amuse.Editor
         /// </summary>
         private void DrawAlphaSeparatorSettings()
         {
-            _alphaSeparatorOpen = EditorGUILayout.Foldout(
-                _alphaSeparatorOpen, "Alpha Separator Settings",
-                EditorStyles.foldoutHeader);
-            OnFoldoutHeaderDrawnForTest?.Invoke("Alpha Separator Settings");
-            if (!_alphaSeparatorOpen)
+            using (new EditorGUI.IndentLevelScope())
             {
-                return;
-            }
+                using (new EditorGUI.IndentLevelScope())
+                {
+                    _alphaSeparatorOpen = EditorGUILayout.Foldout(
+                        _alphaSeparatorOpen, "Alpha Separator Settings",
+                        EditorStyles.foldoutHeader);
+                    OnFoldoutHeaderDrawnForTest?.Invoke("Alpha Separator Settings");
+                    if (!_alphaSeparatorOpen)
+                    {
+                        return;
+                    }
 
-            var widest = RowContents.Max(
-                content => EditorStyles.label.CalcSize(content).x);
-            var previousWidth = EditorGUIUtility.labelWidth;
-            EditorGUIUtility.labelWidth = Mathf.Ceil(widest) + 2f;
-            DrawTransparentSubmenu();
-            DrawCutoutSubmenu();
-            DrawAcceptanceControls();
-            EditorGUIUtility.labelWidth = previousWidth;
+                    var widest = RowContents.Max(
+                        content => EditorStyles.label.CalcSize(content).x);
+                    using (new EditorGUI.IndentLevelScope())
+                    {
+                        var previousWidth = EditorGUIUtility.labelWidth;
+                        EditorGUIUtility.labelWidth =
+                            AlphaSeparatorLabelWidth(widest);
+                        DrawTransparentSubmenu();
+                        DrawCutoutSubmenu();
+                        DrawAcceptanceControls();
+                        EditorGUIUtility.labelWidth = previousWidth;
+                    }
+                }
+            }
             serializedObject.ApplyModifiedProperties();
+        }
+
+        /// <summary>
+        /// The label width for one Alpha Separator Settings row. The widest
+        /// label text sets the base width, and each indent level subtracts
+        /// its 15-pixel offset, so the value column keeps its share of the
+        /// row at every depth.
+        /// </summary>
+        internal static float AlphaSeparatorLabelWidth(float widestLabelWidth)
+        {
+            return Mathf.Ceil(widestLabelWidth) + 2f
+                - EditorGUI.indentLevel * 15f;
         }
 
         /// <summary>
@@ -1189,50 +1215,62 @@ namespace Alrauna.Amuse.Editor
                 return false;
             }
 
-            EditorGUILayout.PropertyField(
-                serializedObject.FindProperty("_amuseDisabled"),
-                new GUIContent("Disable AMUSE",
-                    "Treats this component as absent: nothing runs on " +
-                    "build, in Play mode, or anywhere else, and nothing " +
-                    "is reported."));
-
             var reveal = serializedObject.FindProperty(
                 "_advancedSettingsRevealed");
-            EditorGUILayout.PropertyField(
-                reveal,
-                new GUIContent("Advanced Settings",
-                    "Shows the two tolerance consents and the Alpha " +
-                    "Separator Settings menu below. Most users never " +
-                    "need them."));
-
-            if (reveal.boolValue)
+            using (new EditorGUI.IndentLevelScope())
             {
                 EditorGUILayout.PropertyField(
-                    serializedObject.FindProperty(
-                        "_ignoreOutOfRangeMaterialSlots"),
-                    new GUIContent(
-                        "Ignore Out-of-Range Material Slots",
-                        "Some animation files animate material slots that do not exist on this mesh. " +
-                        "By default, AMUSE safely ignores these extra slot animations and optimizes the valid slots. " +
-                        "Turn this setting off to refuse meshes with extra slot animations."));
+                    serializedObject.FindProperty("_amuseDisabled"),
+                    new GUIContent("Disable AMUSE",
+                        "Treats this component as absent: nothing runs on " +
+                        "build, in Play mode, or anywhere else, and nothing " +
+                        "is reported."));
 
                 EditorGUILayout.PropertyField(
-                    serializedObject.FindProperty("_allowDepthTestChange"),
-                    new GUIContent(
-                        "Allow Depth Test Change on Moved Triangles",
-                        "Some materials set a special depth rule: draw a " +
-                        "pixel only when it is strictly closer than " +
-                        "everything already drawn. When AMUSE moves solid " +
-                        "triangles of such a material onto an opaque copy, " +
-                        "those triangles use the normal depth rule, which " +
-                        "also draws pixels at the same distance. On rare " +
-                        "layered parts, surfaces at exactly the same " +
-                        "distance can swap their draw order or flicker." +
-                        "\n\n" +
-                        "By default, AMUSE accepts this stated change and " +
-                        "moves the triangles. Turn this setting off to keep " +
-                        "materials with a special depth rule on their " +
-                        "original material."));
+                    reveal,
+                    new GUIContent("Advanced Settings",
+                        "Shows the two tolerance consents and the Alpha " +
+                        "Separator Settings menu below. Most users never " +
+                        "need them."));
+
+                if (reveal.boolValue)
+                {
+                    using (new EditorGUI.IndentLevelScope())
+                    {
+                        EditorGUILayout.PropertyField(
+                            serializedObject.FindProperty(
+                                "_ignoreOutOfRangeMaterialSlots"),
+                            new GUIContent(
+                                "Allow Out-of-Range Material Slots",
+                                "Some animation files animate material slots that do not " +
+                                "exist on this mesh. When this setting is on, AMUSE ignores " +
+                                "these extra slot animations and optimizes the valid slots. " +
+                                "Turn this setting off to refuse meshes with extra slot " +
+                                "animations."));
+                        OnOutOfRangeToggleDrawnForTest?.Invoke(
+                            serializedObject.FindProperty(
+                                "_ignoreOutOfRangeMaterialSlots")
+                                .boolValue);
+
+                        EditorGUILayout.PropertyField(
+                            serializedObject.FindProperty("_allowDepthTestChange"),
+                            new GUIContent(
+                                "Allow Depth Test Change on Moved Triangles",
+                                "Some materials set a special depth rule: draw a " +
+                                "pixel only when it is strictly closer than " +
+                                "everything already drawn. When AMUSE moves solid " +
+                                "triangles of such a material onto an opaque copy, " +
+                                "those triangles use the normal depth rule, which " +
+                                "also draws pixels at the same distance. On rare " +
+                                "layered parts, surfaces at exactly the same " +
+                                "distance can swap their draw order or flicker." +
+                                "\n\n" +
+                                "By default, AMUSE accepts this stated change and " +
+                                "moves the triangles. Turn this setting off to keep " +
+                                "materials with a special depth rule on their " +
+                                "original material."));
+                    }
+                }
             }
 
             serializedObject.ApplyModifiedProperties();

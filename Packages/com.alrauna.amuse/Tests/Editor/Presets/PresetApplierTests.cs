@@ -101,9 +101,9 @@ namespace Alrauna.Amuse.Tests.Editor
             var expected = new (string name, int mipCap, int size,
                 int coverage, int preserve)[]
             {
-                ("Safe", 4, 128, 25, 0),
-                ("Normal", 4, 128, 25, 5),
-                ("Aggressive", 3, 128, 25, 10),
+                ("Safe", 3, 128, 25, 0),
+                ("Normal", 3, 128, 25, 5),
+                ("Aggressive", 2, 128, 25, 10),
             };
 
             foreach (var row in expected)
@@ -240,7 +240,7 @@ namespace Alrauna.Amuse.Tests.Editor
                 Assert.That(optimizer.PreserveTransparencyMaxMipLevel,
                     Is.EqualTo(4));
                 Assert.That(optimizer.CutoutPreserveTransparencyMaxMipLevel,
-                    Is.EqualTo(4));
+                    Is.EqualTo(3));
                 Assert.That(optimizer.PreserveTransparencyMinTextureSize,
                     Is.EqualTo(128));
                 Assert.That(

@@ -123,21 +123,23 @@ namespace Alrauna.Amuse.Runtime
         /// True after the upgrade backfill copies the transparent values
         /// into the cutout fields. A legacy payload predates the cutout
         /// fields, so it deserializes with this marker false. The marker
-        /// is serialized so the copy runs once. Without it, the marker
-        /// would reset on every load and the copy would overwrite the
-        /// stored cutout values each session.
+        /// is also true after Reset establishes the factory defaults on
+        /// a fresh component. The marker is serialized so the copy runs
+        /// once. Without it, the marker would reset on every load and
+        /// the copy would overwrite the stored cutout values each
+        /// session.
         /// </summary>
         [SerializeField] private bool _cutoutSettingsBackfilled;
 
         /// <summary>
         /// The largest mip level the opacity proof consults for cutout
-        /// sources. The value -1 means every level. The default of 4
-        /// matches the transparent setting. The inspector shows it as
-        /// "Smallest Tested Mipmap". This setting governs cutout sources
-        /// only.
+        /// sources. The value -1 means every level. The default is 3.
+        /// The transparent setting defaults to 4. The inspector shows
+        /// it as "Smallest Tested Mipmap". This setting governs cutout
+        /// sources only.
         /// </summary>
         [SerializeField]
-        private int _cutoutPreserveTransparencyMaxMipLevel = 4;
+        private int _cutoutPreserveTransparencyMaxMipLevel = 3;
 
         /// <summary>
         /// The smallest texture size the opacity proof consults for
@@ -211,6 +213,38 @@ namespace Alrauna.Amuse.Runtime
         [ToggleLeft]
         [SerializeField]
         private bool _advancedSettingsRevealed;
+
+        /// <summary>
+        /// Restores every serialized field to its declared default, the same
+        /// contract Unity's context-menu Reset offers when no Reset is
+        /// defined. It also sets the backfill marker, so the first
+        /// serialization round trip of a fresh component does not copy the
+        /// transparent values over the cutout defaults. Unity calls Reset
+        /// only in the editor, when the component is first added or the user
+        /// presses Reset.
+        /// </summary>
+        private void Reset()
+        {
+            _amuseDisabled = false;
+            _alphaSeparatorEnabled = true;
+            _preserveTransparencyMaxMipLevel = 4;
+            _preserveTransparencyMinTextureSize = 128;
+            _minimumOpaqueCoveragePercent = 25;
+            _minimumOpaqueCoverageToPreservePercent = 5;
+            _minimumOpaqueAlphaPercent = 100;
+            _polygonAlphaUpperClampPercent = 100;
+            _polygonMinimumOpaqueCoveragePercent = 100;
+            _cutoutSettingsBackfilled = true;
+            _cutoutPreserveTransparencyMaxMipLevel = 3;
+            _cutoutPreserveTransparencyMinTextureSize = 128;
+            _cutoutMinimumOpaqueCoveragePercent = 25;
+            _cutoutMinimumOpaqueCoverageToPreservePercent = 5;
+            _allowDepthTestChange = true;
+            _acceptDesktopAnisotropyDifferences = true;
+            _acceptMobileAnisotropyDifferences = true;
+            _ignoreOutOfRangeMaterialSlots = true;
+            _advancedSettingsRevealed = false;
+        }
 
         /// <summary>
         /// True when the user disabled AMUSE from the inspector. The build

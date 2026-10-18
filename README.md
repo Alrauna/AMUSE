@@ -18,12 +18,13 @@ Then add the **AMUSE** package to your avatar project from the package manager. 
 Add the **AMUSE Avatar Optimizer** component to the avatar root and build as usual.
 
 - The preset row under the header picks Safe, Normal, or Aggressive.
-  Safe turns on both anisotropy acceptance settings. It still disables
-  **Ignore Out-of-Range Material Slots** and **Allow Depth Test Change on
-  Moved Triangles**, and it never flattens a mixed material. Normal
+  Safe turns on both anisotropy acceptance settings. It keeps
+  **Allow Out-of-Range Material Slots** and **Allow Depth Test Change on
+  Moved Triangles** off, and it never flattens a mixed material. Normal
   and Aggressive enable all four settings. Normal flattens a nearly opaque
   material when fewer than 5 percent of its triangles are unproven.
   Aggressive uses 10 percent and sets Smallest Tested Mipmap to Mip 3.
+  Cutout textures use Mip 2.
 - The two **Accept Anisotropy Differences** toggles and the preset files
   that carry them live in the Alpha Separator Settings. See **Proof modes
   and acceptance** below.

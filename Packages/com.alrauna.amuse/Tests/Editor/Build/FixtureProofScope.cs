@@ -31,6 +31,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var serialized = new SerializedObject(optimizer);
             serialized.FindProperty("_preserveTransparencyMinTextureSize")
                 .intValue = AllSizes;
+            serialized.FindProperty("_cutoutPreserveTransparencyMinTextureSize")
+                .intValue = AllSizes;
             serialized.ApplyModifiedPropertiesWithoutUndo();
         }
 

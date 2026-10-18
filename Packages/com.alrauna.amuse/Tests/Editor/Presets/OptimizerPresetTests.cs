@@ -11,7 +11,7 @@ namespace Alrauna.Amuse.Tests.Editor
         {
             return new OptimizerPreset(
                 "Normal", "Shipped defaults.", true,
-                4, 4, 128, 128, 25, 25, 5, 5, 100, 100, 100,
+                4, 3, 128, 128, 25, 25, 5, 5, 100, 100, 100,
                 true, true, true, true);
         }
 
@@ -60,7 +60,7 @@ namespace Alrauna.Amuse.Tests.Editor
             {
                 ("_alphaSeparatorEnabled", false),
                 ("_preserveTransparencyMaxMipLevel", 5),
-                ("_cutoutPreserveTransparencyMaxMipLevel", 3),
+                ("_cutoutPreserveTransparencyMaxMipLevel", 4),
                 ("_preserveTransparencyMinTextureSize", 256),
                 ("_cutoutPreserveTransparencyMinTextureSize", 64),
                 ("_minimumOpaqueCoveragePercent", 30),

@@ -4915,7 +4915,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// <summary>
         /// The component's "Preserve Transparency Maximum Mipmap" policy
         /// scopes the opacity proof end to end. A chain that stays opaque
-        /// through mip 4 and fades only in its 1x1 tail proves its triangle
+        /// through mip 3 and fades only in its 1x1 tail proves its triangle
         /// under the default cap. The same texture under "All Mips" does
         /// not, because the faded tail is consulted again. A fade inside
         /// the cap still stops the proof under the default cap.
@@ -8034,6 +8034,16 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     UnityEngine.TextureWrapMode.Repeat);
             }
 
+            // The transparent conversion tests exercise the sampled
+            // chain and the refusal paths. Their fully-opaque staging
+            // keeps a real alpha channel and must not take the
+            // importer-theorem shortcut the cutout fixtures use.
+            internal new Texture2D ImportFullyOpaqueMipmap(string name)
+            {
+                return ImportMipmapTexture(
+                    name, 4, 4, FullyOpaquePixels());
+            }
+
         }
 
         /// <summary>
@@ -9096,8 +9106,62 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             internal Texture2D ImportFullyOpaqueMipmap(string name)
             {
+                // Stages without a source alpha channel and imports with
+                // alphaSource None, so the importer theorem proves sampled
+                // alpha exactly one without reading texels. This is the
+                // evidence the cutout conversion admission demands.
                 return ImportMipmapTexture(
-                    name, 4, 4, FullyOpaquePixels());
+                    name, 4, 4, FullyOpaquePixels(), sourceHasAlpha: false);
+            }
+
+            /// <summary>
+            /// The base's mipmap import plus one knob: the source alpha
+            /// shape. The default true stages the identical RGBA32 source
+            /// the base stages. False stages an RGB24 source and sets
+            /// alphaSource None, the theorem-admitting form. Declaring it
+            /// here routes this class and its subclasses through this
+            /// overload; the default keeps their staging identical to the
+            /// base's.
+            /// </summary>
+            protected Texture2D ImportMipmapTexture(
+                string name,
+                int width,
+                int height,
+                Color32[] baseLevelBottomToTop,
+                FilterMode filterMode = FilterMode.Bilinear,
+                UnityEngine.TextureWrapMode wrapMode =
+                    UnityEngine.TextureWrapMode.Repeat,
+                Action<TextureImporter> configure = null,
+                bool sourceHasAlpha = true)
+            {
+                return TestTextureImport.WritePng(
+                    TempFolder + "/" + name + ".png",
+                    width,
+                    height,
+                    baseLevelBottomToTop,
+                    importer =>
+                    {
+                        importer.mipmapEnabled = true;
+                        importer.filterMode = filterMode;
+                        importer.wrapMode = wrapMode;
+                        importer.streamingMipmaps = false;
+                        // Uncompressed keeps the imported GPU format inside
+                        // the alpha-evidence format allowlist; platform
+                        // compression would collapse the source and the
+                        // capture would refuse it.
+                        importer.textureCompression =
+                            TextureImporterCompression.Uncompressed;
+                        // The importer theorem needs both facts: the source
+                        // file carries no alpha chunk, and the alpha source
+                        // is none.
+                        if (!sourceHasAlpha)
+                        {
+                            importer.alphaSource =
+                                TextureImporterAlphaSource.None;
+                        }
+                        configure?.Invoke(importer);
+                    },
+                    alpha: sourceHasAlpha);
             }
 
             /// <summary>
@@ -9234,7 +9298,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     size,
                     pixels,
                     configure: importer =>
-                        importer.streamingMipmaps = true);
+                        importer.streamingMipmaps = true,
+                    sourceHasAlpha: false);
                 Assert.That(texture.streamingMipmaps, Is.True,
                     "fixture precondition: the imported texture must " +
                     "retain streaming residency");
@@ -9275,7 +9340,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 return loaded;
             }
 
-            private static Color32[] FullyOpaquePixels()
+            // Protected so the transparent conversion fixtures' hiding
+            // override of ImportFullyOpaqueMipmap can reuse the staging
+            // pixels.
+            protected static Color32[] FullyOpaquePixels()
             {
                 var pixels = new Color32[4 * 4];
                 for (var index = 0; index < pixels.Length; index++)

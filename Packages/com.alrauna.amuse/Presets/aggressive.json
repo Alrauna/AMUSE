@@ -13,7 +13,7 @@
     "minimumOpaqueAlphaPercent": 95,
     "polygonAlphaUpperClampPercent": 94,
     "polygonMinimumOpaqueCoveragePercent": 95,
-    "cutoutPreserveTransparencyMaxMipLevel": 3,
+    "cutoutPreserveTransparencyMaxMipLevel": 2,
     "cutoutPreserveTransparencyMinTextureSize": 128,
     "cutoutMinimumOpaqueCoveragePercent": 25,
     "cutoutMinimumOpaqueCoverageToPreservePercent": 10,
