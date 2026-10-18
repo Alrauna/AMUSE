@@ -91,7 +91,9 @@ Method: six parallel read-only scans covered disjoint slices on 2026-10-18. The 
 
 ### 3.8 The lilToon eligibility evaluators duplicate their render-state gate block
 
-[SOURCE] Gates 5 through 13 of `Editor/Semantics/LilToon/LilToonCutoutSourceEligibility.cs:186-289` and `Editor/Semantics/LilToon/LilToonTransparentSourceEligibility.cs:267-370` are near-verbatim. Bodies and comments match except the cutoff bound and the cutoff refusal value. Each file also carries a private `Read` helper. The general form lives in `LilToonMultiSourceEligibility.cs:442-465`.
+[SOURCE] Gates 5 through 13 of `Editor/Semantics/LilToon/LilToonCutoutSourceEligibility.cs:186-289` and `Editor/Semantics/LilToon/LilToonTransparentSourceEligibility.cs:267-370` are near-verbatim. Bodies and comments match except the cutoff bound, the cutoff refusal value, and the per-family tails after gate 12. Each file also carries a private `Read` helper. The general form lives in `LilToonMultiSourceEligibility.cs:442-465`.
+
+[SOURCE] `OutlineScalarSchema` at `Editor/Semantics/LilToon/LilToonMultiSourceEligibility.cs:59-68` captures seven outline scalars into the multi-state request. No gate and no test reads them back. The scan marks the cut with a verify gate against the capture-contract fixtures. Estimated cut 18 `[ESTIMATE]`.
 
 [SOURCE] Six files hand-roll NaN and Infinity sweeps while `EvidenceGates.IsFinite` exists. Four sites hand-roll loops with standard library equivalents: `KeywordIsPresent`, `IsSpecializedContainerShaderName`, `CountCharacter`, and `BuildRecipeSchema`. `KeywordSetReadsBack` hand-rolls set equality that `HashSet.SetEquals` states in one line. Three files redeclare the same lilToon property-name consts. `TryVerifyIdentityForShaderName` re-encodes the name dispatch that `TryGetProfileForShaderName` already owns.
 
