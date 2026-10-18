@@ -7,200 +7,6 @@ using UnityEngine;
 
 namespace Alrauna.Amuse.Editor.Host
 {
-    /// <summary>
-    /// The closed set of facts that make a whole renderer unanalyzable. Each
-    /// member is a renderer- or mesh-scoped condition; everything a single
-    /// material or triangle can fail at is scoped narrower and never reaches
-    /// this enum. The research census mirror holds a snapshot of these names
-    /// and may retain names the product has retired. Runtime refusal
-    /// precedence is defined by the analysis pipeline, not this enum.
-    /// </summary>
-    internal enum RendererAnalysisRefusal
-    {
-        None,
-        UnsupportedRendererType,
-        MaterialDependencyClosureFailed,
-        UnrecognizedAnimatedMaterialBinding,
-        MissingMesh,
-        UnprovenMaterialSlotMapping,
-        UnsupportedTopology,
-        MalformedMeshData,
-        AnimatedMeshReplacement,
-        AnimatedMaterialSlotCount,
-
-        /// <summary>
-        /// This renderer carries a proof-relevant float binding, or a
-        /// material-slot object binding, whose clip occurrence was observed
-        /// on an additive layer. The refusal follows the captured per-clip
-        /// provenance. A graph-wide additive layer alone refuses nothing.
-        /// Layer weight is not modeled.
-        /// </summary>
-        AdditiveLayerWithProofRelevantMaterialProperty,
-
-        /// <summary>
-        /// This renderer has a proof-relevant animated material property while
-        /// the committed graph contains a Direct Blend Tree whose values are not
-        /// normalized. Captured graph facts carry no per-binding provenance, so
-        /// V1 cannot prove that the unbounded weighted sum leaves this renderer's
-        /// singleton property value intact.
-        /// </summary>
-        UnnormalizedDirectBlendTreeWithProofRelevantMaterialProperty,
-
-        /// <summary>
-        /// A proof-relevant animated material property is absent from an
-        /// admitted material. Task 5 observed that a bare
-        /// <c>material.&lt;Property&gt;</c> curve for a property the material
-        /// does not declare is still sampled into a non-empty renderer-wide
-        /// <c>MaterialPropertyBlock</c>, but that observation cannot establish
-        /// whether a shader that does not declare the property ignores the
-        /// write when rendering. The design therefore takes the fail-closed
-        /// branch and refuses rather than preserving absence and ignoring the
-        /// animated value. Substitution preserving <c>HasValue == false</c> is
-        /// a property of the evidence primitive, never authorization to ignore
-        /// the binding: this refusal must be returned before any substitution
-        /// for that admitted material is treated as authorized.
-        /// </summary>
-        AnimatedPropertyAbsentFromAdmittedMaterial,
-
-        /// <summary>
-        /// A proof-relevant animated property is driven by a curve whose exact
-        /// value set cannot be enumerated. Finite-exactness is a precondition
-        /// of admission rather than a tie-breaker among agreeing values: a
-        /// curve whose sampled endpoints happen to equal the serialized default
-        /// still passes through unproven intermediate values.
-        /// </summary>
-        UnsupportedAnimationCurveForm,
-
-        /// <summary>
-        /// The sources contributing to one proof-relevant animated property do
-        /// not agree on a single exact value, so its admitted set is not a
-        /// singleton. Under V1 the admitted set is
-        /// the animated values together with that material's own captured default,
-        /// so an animated value differing from the default is exactly this
-        /// refusal: animation never overrides a differing default.
-        /// </summary>
-        AnimatedMaterialPropertyNotSingleton,
-
-        /// <summary>
-        /// At least one admitted material resolved to the all-Unknown alpha
-        /// equation, so the slot has no attested alpha semantics to classify.
-        /// </summary>
-        AdmittedMaterialSemanticsUnknown,
-
-        /// <summary>
-        /// A supported vendor feature is active on an admitted material, and
-        /// the family's rule retains the material. This is an expected
-        /// outcome, not missing support. The report sentence names the
-        /// feature and the property.
-        /// </summary>
-        AdmittedMaterialRetainedByFeature,
-
-        /// <summary>
-        /// This renderer holds a material whose serialization carries the
-        /// Thry locked identity, and that identity names an original shader
-        /// the AssetDatabase cannot resolve or that fails the pinned Poiyomi
-        /// identity. The generic semantics-unknown refusal would hide a
-        /// recognized lock behind an unnamed cause, so this refusal names
-        /// the lock. A locked serialization that records no original shader
-        /// stays on the 2026-09-19 orphan refusal
-        /// <see cref="AdmittedMaterialSemanticsUnknown"/>.
-        /// </summary>
-        LockedPoiyomiOriginalShaderUnattested,
-    }
-
-    /// <summary>
-    /// Why one submesh's alpha could or could not be proven at the material and
-    /// resolver level. The failure vocabulary is the resolver's own, reused
-    /// rather than duplicated; <see cref="HasMaterial"/> adds the one Unity fact
-    /// the resolver cannot express, because an empty slot and an unattested
-    /// shader both reduce to <c>SemanticsUnknown</c>.
-    /// <para>
-    /// It deliberately does <em>not</em> explain every preserved triangle. A
-    /// triangle can be <c>Unknown</c> on a submesh whose failure is
-    /// <c>None</c> — through unavailable UV0 under a UV-dependent equation, a
-    /// non-finite position, degeneracy, or the classifier's own workload
-    /// refusal — and no reason for that is recorded anywhere. The original
-    /// per-triangle outcomes remain readable from
-    /// <c>MeshSeparationPlan.Source</c>, so <c>Unknown</c> stays distinguishable
-    /// from <c>MustRemainTransparent</c>, but their causes do not.
-    /// </para>
-    /// </summary>
-    internal sealed class SubmeshAlphaAnalysis
-    {
-        internal int SubmeshIndex { get; }
-        internal int MaterialSlotIndex { get; }
-        internal bool HasMaterial { get; }
-        internal AlphaResolutionFailure Failure { get; }
-
-        internal SubmeshAlphaAnalysis(
-            int submeshIndex,
-            int materialSlotIndex,
-            bool hasMaterial,
-            AlphaResolutionFailure failure)
-        {
-            SubmeshIndex = submeshIndex;
-            MaterialSlotIndex = materialSlotIndex;
-            HasMaterial = hasMaterial;
-            Failure = failure;
-        }
-    }
-
-    /// <summary>
-    /// One immutable renderer-level analysis: either a separation plan with one
-    /// provenance record per submesh, or a named refusal and no plan. It holds
-    /// no live Unity object; the caller supplied the renderer and still owns it.
-    /// </summary>
-    internal sealed class RendererAlphaAnalysis
-    {
-        internal RendererAnalysisRefusal Refusal { get; }
-        internal MeshSeparationPlan Plan { get; }
-        internal IReadOnlyList<SubmeshAlphaAnalysis> Submeshes { get; }
-
-        private RendererAlphaAnalysis(
-            RendererAnalysisRefusal refusal,
-            MeshSeparationPlan plan,
-            IReadOnlyList<SubmeshAlphaAnalysis> submeshes)
-        {
-            // A refusal has no plan and a plan has no refusal.
-            if ((refusal == RendererAnalysisRefusal.None) != (plan != null))
-            {
-                throw new ArgumentException(
-                    "A renderer analysis has a plan exactly when it has no refusal.",
-                    nameof(refusal));
-            }
-
-            var copy = new SubmeshAlphaAnalysis[submeshes.Count];
-            for (var index = 0; index < submeshes.Count; index++)
-            {
-                copy[index] = submeshes[index];
-            }
-
-            Refusal = refusal;
-            Plan = plan;
-            Submeshes = Array.AsReadOnly(copy);
-        }
-
-        internal static RendererAlphaAnalysis Refused(
-            RendererAnalysisRefusal refusal)
-        {
-            return new RendererAlphaAnalysis(
-                refusal, null, Array.Empty<SubmeshAlphaAnalysis>());
-        }
-
-        internal static RendererAlphaAnalysis Planned(
-            MeshSeparationPlan plan,
-            IReadOnlyList<SubmeshAlphaAnalysis> submeshes)
-        {
-            if (plan == null)
-            {
-                throw new ArgumentNullException(nameof(plan));
-            }
-
-            return new RendererAlphaAnalysis(
-                RendererAnalysisRefusal.None, plan, submeshes);
-        }
-    }
-
     internal delegate CapturedAlphaSemantics
         CapturedAlphaMaterialSemanticsResolver(
             CapturedAlphaMaterial material);
@@ -266,7 +72,7 @@ namespace Alrauna.Amuse.Editor.Host
 
         internal static RendererAlphaAnalysis Analyze(Renderer renderer)
         {
-            var extraction = Capture(
+            var extraction = UnityRendererGeometryExtractor.Capture(
                 renderer, null, null, out _, null);
             return extraction.Refusal == RendererAnalysisRefusal.None
                 ? Analyze(extraction.Snapshot)
@@ -286,7 +92,7 @@ namespace Alrauna.Amuse.Editor.Host
                 throw new ArgumentNullException(nameof(semanticsProvider));
             }
 
-            var extraction = Capture(
+            var extraction = UnityRendererGeometryExtractor.Capture(
                 renderer,
                 semanticsProvider,
                 null,
@@ -303,306 +109,27 @@ namespace Alrauna.Amuse.Editor.Host
         }
 
 
-        /// <summary>
-        /// Captures only renderer and mesh geometry while carrying forward the
-        /// already-closed immutable material slots. This path deliberately never
-        /// reads <see cref="Renderer.sharedMaterials"/> or recaptures material
-        /// semantics.
-        /// </summary>
         internal static UnityRendererAlphaExtraction CaptureGeometry(
             Renderer renderer,
-            IReadOnlyList<CapturedAlphaMaterial> capturedMaterialSlots)
-        {
-            if (capturedMaterialSlots == null)
-            {
-                throw new ArgumentNullException(nameof(capturedMaterialSlots));
-            }
+            IReadOnlyList<CapturedAlphaMaterial> capturedMaterialSlots) =>
+            UnityRendererGeometryExtractor.CaptureGeometry(renderer, capturedMaterialSlots);
 
-            return Capture(renderer, null, capturedMaterialSlots, out _);
-        }
-
-        /// <summary>
-        /// The same host facts, plus the two slot counts a mapping
-        /// refusal report must carry. The counts stay minus one unless
-        /// the mapping check itself ran, so a report never shows a count
-        /// that no decision used.
-        /// </summary>
         internal static RendererAnalysisRefusal HostStructuralRefusalFor(
             Renderer renderer,
             out int meshSubMeshCount,
-            out int materialSlotCount)
-        {
-            var refusal = HostStructuralRefusalFor(renderer, out var mesh);
-            meshSubMeshCount = -1;
-            materialSlotCount = -1;
-            if (refusal != RendererAnalysisRefusal.None)
-            {
-                return refusal;
-            }
+            out int materialSlotCount) =>
+            UnityRendererGeometryExtractor.HostStructuralRefusalFor(
+                renderer, out meshSubMeshCount, out materialSlotCount);
 
-            meshSubMeshCount = mesh.subMeshCount;
-            var materials = renderer.sharedMaterials;
-            materialSlotCount = materials == null ? -1 : materials.Length;
-            return MaterialSlotMappingRefusalFor(mesh, materialSlotCount);
-        }
-
-        private static UnityRendererAlphaExtraction Capture(
+        internal static RendererAnalysisRefusal HostStructuralRefusalFor(
             Renderer renderer,
-            ResearchMaterialSemanticsProvider legacySemanticsProvider,
-            IReadOnlyList<CapturedAlphaMaterial> capturedMaterialSlots,
-            out Dictionary<CapturedAlphaMaterial, MaterialSemantics>
-                legacySemantics,
-            RegisteredSourceLookup resolveRegisteredSource = null)
-        {
-            legacySemantics = null;
-            if (ReferenceEquals(renderer, null))
-            {
-                throw new ArgumentNullException(nameof(renderer));
-            }
+            out Mesh mesh) =>
+            UnityRendererGeometryExtractor.HostStructuralRefusalFor(renderer, out mesh);
 
-            // Unity's overloaded equality reports a destroyed object as null.
-            if (renderer == null)
-            {
-                throw new ArgumentException(
-                    "The renderer has been destroyed and cannot be analyzed.",
-                    nameof(renderer));
-            }
-
-            var structural = HostStructuralRefusalFor(renderer, out var mesh);
-            if (structural != RendererAnalysisRefusal.None)
-                return UnityRendererAlphaExtraction.Refused(structural);
-
-            Material[] materials = null;
-            var materialSlotCount = capturedMaterialSlots == null
-                ? -1
-                : capturedMaterialSlots.Count;
-            if (capturedMaterialSlots == null)
-            {
-                materials = renderer.sharedMaterials;
-                materialSlotCount = materials == null ? -1 : materials.Length;
-            }
-
-            structural = MaterialSlotMappingRefusalFor(mesh, materialSlotCount);
-            if (structural != RendererAnalysisRefusal.None)
-                return UnityRendererAlphaExtraction.Refused(
-                    structural, mesh.subMeshCount, materialSlotCount);
-
-            for (var submesh = 0; submesh < mesh.subMeshCount; submesh++)
-            {
-                if (mesh.GetTopology(submesh) != MeshTopology.Triangles)
-                {
-                    return UnityRendererAlphaExtraction.Refused(
-                        RendererAnalysisRefusal.UnsupportedTopology);
-                }
-            }
-
-            // Measured in this project on Unity 2022.3.22f1: vertices, uv, and
-            // GetIndices all return complete data on a mesh whose isReadable is
-            // false, because the Editor permits mesh access outside the
-            // game/rendering loop. There is therefore no readability pre-check
-            // and no exception handling here — catching what has been observed
-            // not to throw would hide the very defect the characterization test
-            // exists to find.
-            var positions = mesh.vertices;
-            var uv = mesh.uv;
-            if (positions == null || positions.Length != mesh.vertexCount)
-            {
-                return UnityRendererAlphaExtraction.Refused(
-                    RendererAnalysisRefusal.MalformedMeshData);
-            }
-
-            // A UV channel is either absent or complete; anything else is data
-            // Unity should never produce.
-            var hasUv0 = uv != null && uv.Length == mesh.vertexCount;
-            if (!hasUv0 && uv != null && uv.Length != 0)
-            {
-                return UnityRendererAlphaExtraction.Refused(
-                    RendererAnalysisRefusal.MalformedMeshData);
-            }
-
-            // Layer UV channels: HLSL uv1 to uv3 live in Unity mesh channels
-            // one to three. Read through GetUVs, which sees channels written
-            // by both the legacy uv2-to-uv4 properties and SetUVs. Each
-            // channel is either absent or complete, like uv0; a present
-            // channel rides the snapshot for the layer proof.
-            var extraUvSets = new IReadOnlyList<Vector2>[3];
-            for (var channel = 1; channel <= 3; channel++)
-            {
-                var set = new List<Vector2>();
-                mesh.GetUVs(channel, set);
-                if (set.Count == 0)
-                {
-                    extraUvSets[channel - 1] = null;
-                    continue;
-                }
-
-                if (set.Count != mesh.vertexCount)
-                {
-                    return UnityRendererAlphaExtraction.Refused(
-                        RendererAnalysisRefusal.MalformedMeshData);
-                }
-
-                extraUvSets[channel - 1] = set;
-            }
-
-            var submeshes = new UnitySubmeshAlphaSnapshot[mesh.subMeshCount];
-            for (var submesh = 0; submesh < mesh.subMeshCount; submesh++)
-            {
-                var indices = mesh.GetIndices(submesh);
-
-                // MeshSeparationInput validates these too, but it throws where
-                // renderer analysis must refuse, and a refusal is only
-                // conservative if it happens before the throw.
-                if (indices == null || indices.Length % 3 != 0)
-                {
-                    return UnityRendererAlphaExtraction.Refused(
-                        RendererAnalysisRefusal.MalformedMeshData);
-                }
-
-                for (var index = 0; index < indices.Length; index++)
-                {
-                    if (indices[index] < 0 || indices[index] >= mesh.vertexCount)
-                    {
-                        return UnityRendererAlphaExtraction.Refused(
-                            RendererAnalysisRefusal.MalformedMeshData);
-                    }
-                }
-
-                submeshes[submesh] = new UnitySubmeshAlphaSnapshot(
-                    submesh, submesh, indices);
-            }
-
-            var capturedSlots = new CapturedAlphaMaterial[materialSlotCount];
-            if (capturedMaterialSlots == null)
-            {
-                // The proof reads effective material state: the block entries
-                // the renderer actually shows, materialized onto transient
-                // clones. The clones are capture inputs and die in this
-                // scope; captured records hold values, never live objects.
-                var effectiveClones = new List<Material>();
-                var effective = materials == null
-                    ? materials
-                    : EffectiveMaterialMaterialization.Materialize(
-                        renderer, materials, out effectiveClones, textureOnly: true);
-                try
-                {
-                    var captured =
-                        UnityMaterialSemantics.CaptureAlphaMaterials(
-                            effective,
-                            resolveRegisteredSource);
-                    for (var index = 0; index < captured.Count; index++)
-                    {
-                        capturedSlots[index] = effective[index] == null
-                            ? null
-                            : captured[index];
-                    }
-                }
-                finally
-                {
-                    foreach (var clone in effectiveClones)
-                    {
-                        UnityEngine.Object.DestroyImmediate(clone);
-                    }
-                }
-            }
-            else
-            {
-                for (var index = 0; index < capturedSlots.Length; index++)
-                    capturedSlots[index] = capturedMaterialSlots[index];
-            }
-
-            if (legacySemanticsProvider != null)
-            {
-                legacySemantics = new Dictionary<
-                    CapturedAlphaMaterial, MaterialSemantics>();
-                // The provider must see the same effective state the capture
-                // proved: materialized block state, not the serialized
-                // original. The clones die in this scope.
-                var effectiveClones = new List<Material>();
-                var effective = materials == null
-                    ? materials
-                    : EffectiveMaterialMaterialization.Materialize(
-                        renderer, materials, out effectiveClones);
-                try
-                {
-                    var byLiveMaterial =
-                        new Dictionary<Material, MaterialSemantics>();
-                    for (var index = 0; index < effective.Length; index++)
-                    {
-                        var material = effective[index];
-                        if (material == null || capturedSlots[index] == null)
-                        {
-                            continue;
-                        }
-
-                        if (!byLiveMaterial.TryGetValue(
-                                material, out var semantics))
-                        {
-                            semantics = legacySemanticsProvider(material)
-                                ?? EvidenceGates.AllUnknown();
-                            byLiveMaterial.Add(material, semantics);
-                        }
-
-                        legacySemantics.Add(capturedSlots[index], semantics);
-                    }
-                }
-                finally
-                {
-                    foreach (var clone in effectiveClones)
-                    {
-                        UnityEngine.Object.DestroyImmediate(clone);
-                    }
-                }
-            }
-
-            var snapshot = new UnityRendererAlphaSnapshot(
-                mesh.vertexCount,
-                positions,
-                hasUv0 ? uv : Array.Empty<Vector2>(),
-                hasUv0,
-                submeshes,
-                capturedSlots,
-                extraUvSets);
-            var target = new UnityRendererMutationTarget(
-                renderer, mesh, materialSlotCount);
-            return UnityRendererAlphaExtraction.Accepted(snapshot, target);
-        }
-
-        private static RendererAnalysisRefusal HostStructuralRefusalFor(
-            Renderer renderer,
-            out Mesh mesh)
-        {
-            if (ReferenceEquals(renderer, null))
-            {
-                throw new ArgumentNullException(nameof(renderer));
-            }
-
-            // Unity's overloaded equality reports a destroyed object as null.
-            if (renderer == null)
-            {
-                throw new ArgumentException(
-                    "The renderer has been destroyed and cannot be analyzed.",
-                    nameof(renderer));
-            }
-
-            mesh = null;
-            if (!IsSupportedRendererType(renderer))
-                return RendererAnalysisRefusal.UnsupportedRendererType;
-
-            mesh = SharedMeshOf(renderer);
-            return mesh == null
-                ? RendererAnalysisRefusal.MissingMesh
-                : RendererAnalysisRefusal.None;
-        }
-
-        private static RendererAnalysisRefusal MaterialSlotMappingRefusalFor(
+        internal static RendererAnalysisRefusal MaterialSlotMappingRefusalFor(
             Mesh mesh,
-            int materialSlotCount)
-        {
-            return materialSlotCount != mesh.subMeshCount
-                ? RendererAnalysisRefusal.UnprovenMaterialSlotMapping
-                : RendererAnalysisRefusal.None;
-        }
+            int materialSlotCount) =>
+            UnityRendererGeometryExtractor.MaterialSlotMappingRefusalFor(mesh, materialSlotCount);
 
         internal static RendererAlphaAnalysis Analyze(
             UnityRendererAlphaSnapshot snapshot,
@@ -1198,27 +725,10 @@ namespace Alrauna.Amuse.Editor.Host
                 propertyName, structural, StringComparison.Ordinal);
         }
 
-        private static bool IsSupportedRendererType(Renderer renderer)
-        {
-            // ParticleSystemRenderer, LineRenderer, TrailRenderer,
-            // SpriteRenderer, and BillboardRenderer derive from Renderer
-            // directly, not from MeshRenderer, so this cannot capture them.
-            return renderer is SkinnedMeshRenderer || renderer is MeshRenderer;
-        }
+        internal static bool IsSupportedRendererType(Renderer renderer) =>
+            UnityRendererGeometryExtractor.IsSupportedRendererType(renderer);
 
-        /// <summary>
-        /// The one mesh a supported renderer contributes. Both paths converge on
-        /// a shared reference; neither instantiates a copy.
-        /// </summary>
-        private static Mesh SharedMeshOf(Renderer renderer)
-        {
-            if (renderer is SkinnedMeshRenderer skinned)
-            {
-                return skinned.sharedMesh;
-            }
-
-            var filter = renderer.GetComponent<MeshFilter>();
-            return filter == null ? null : filter.sharedMesh;
-        }
+        internal static Mesh SharedMeshOf(Renderer renderer) =>
+            UnityRendererGeometryExtractor.SharedMeshOf(renderer);
     }
 }
