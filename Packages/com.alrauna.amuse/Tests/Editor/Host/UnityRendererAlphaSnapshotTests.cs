@@ -272,11 +272,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         private static MaterialSemantics ConstantAlpha(float alpha)
         {
             return new MaterialSemantics(
-                SemanticOutput<ColorSemanticValue>.Unknown(),
                 SemanticOutput<ScalarSemanticValue>.Complete(
-                    ScalarSemanticValue.Constant(alpha)),
-                SemanticOutput<ColorSemanticValue>.Unknown(),
-                SemanticOutput<NormalSemanticValue>.Unknown());
+                    ScalarSemanticValue.Constant(alpha)));
         }
 
         /// <summary>

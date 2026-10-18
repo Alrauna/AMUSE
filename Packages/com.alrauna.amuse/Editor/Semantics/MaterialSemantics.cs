@@ -258,148 +258,6 @@ namespace Alrauna.Amuse.Editor.Semantics
         Alpha
     }
 
-    internal enum ColorSemanticValueKind
-    {
-        Constant,
-        TextureSample,
-        TextureSampleTimesConstant
-    }
-
-    internal sealed record ColorSemanticValue
-    {
-        private readonly Vector3 _constantValue;
-        private readonly TextureSample _sample;
-        private readonly TextureColorInterpretation _interpretation;
-        private readonly Vector3 _multiplier;
-
-        internal ColorSemanticValueKind Kind { get; }
-
-        private ColorSemanticValue(
-            ColorSemanticValueKind kind,
-            Vector3 constantValue,
-            TextureSample sample,
-            TextureColorInterpretation interpretation,
-            Vector3 multiplier)
-        {
-            Kind = kind;
-            _constantValue = constantValue;
-            _sample = sample;
-            _interpretation = interpretation;
-            _multiplier = multiplier;
-        }
-
-        internal static ColorSemanticValue Constant(Vector3 value)
-        {
-            ValidateFinite(value, nameof(value));
-            return new ColorSemanticValue(
-                ColorSemanticValueKind.Constant,
-                value,
-                null,
-                default,
-                default);
-        }
-
-        internal static ColorSemanticValue Texture(
-            TextureSample sample,
-            TextureColorInterpretation interpretation)
-        {
-            ValidateTextureArguments(sample, interpretation);
-            return new ColorSemanticValue(
-                ColorSemanticValueKind.TextureSample,
-                default,
-                sample,
-                interpretation,
-                default);
-        }
-
-        internal static ColorSemanticValue TextureTimesConstant(
-            TextureSample sample,
-            TextureColorInterpretation interpretation,
-            Vector3 multiplier)
-        {
-            ValidateTextureArguments(sample, interpretation);
-            ValidateFinite(multiplier, nameof(multiplier));
-            return new ColorSemanticValue(
-                ColorSemanticValueKind.TextureSampleTimesConstant,
-                default,
-                sample,
-                interpretation,
-                multiplier);
-        }
-
-        internal Vector3 GetConstantValue()
-        {
-            if (Kind != ColorSemanticValueKind.Constant)
-            {
-                throw new InvalidOperationException(
-                    "A constant value is not meaningful for this kind.");
-            }
-
-            return _constantValue;
-        }
-
-        internal TextureSample GetTextureSample()
-        {
-            if (Kind == ColorSemanticValueKind.Constant)
-            {
-                throw new InvalidOperationException(
-                    "A texture sample is not meaningful for this kind.");
-            }
-
-            return _sample;
-        }
-
-        internal TextureColorInterpretation GetColorInterpretation()
-        {
-            if (Kind == ColorSemanticValueKind.Constant)
-            {
-                throw new InvalidOperationException(
-                    "A color interpretation is not meaningful for this kind.");
-            }
-
-            return _interpretation;
-        }
-
-        internal Vector3 GetMultiplier()
-        {
-            if (Kind != ColorSemanticValueKind.TextureSampleTimesConstant)
-            {
-                throw new InvalidOperationException(
-                    "A multiplier is not meaningful for this kind.");
-            }
-
-            return _multiplier;
-        }
-
-        private static void ValidateTextureArguments(
-            TextureSample sample,
-            TextureColorInterpretation interpretation)
-        {
-            if (sample == null)
-            {
-                throw new ArgumentNullException(nameof(sample));
-            }
-            if (!Enum.IsDefined(
-                    typeof(TextureColorInterpretation),
-                    interpretation))
-            {
-                throw new ArgumentOutOfRangeException(nameof(interpretation));
-            }
-        }
-
-        private static void ValidateFinite(Vector3 value, string parameterName)
-        {
-            if (float.IsNaN(value.x) || float.IsInfinity(value.x) ||
-                float.IsNaN(value.y) || float.IsInfinity(value.y) ||
-                float.IsNaN(value.z) || float.IsInfinity(value.z))
-            {
-                throw new ArgumentException(
-                    "Color values must be finite.",
-                    parameterName);
-            }
-        }
-    }
-
     internal enum ScalarSemanticValueKind
     {
         Constant,
@@ -1183,59 +1041,6 @@ namespace Alrauna.Amuse.Editor.Semantics
         }
     }
 
-    internal enum NormalSemanticValueKind
-    {
-        Unmodified,
-        TangentSpaceNormalMap
-    }
-
-    internal sealed record NormalSemanticValue
-    {
-        private readonly TextureSample _sample;
-
-        internal NormalSemanticValueKind Kind { get; }
-
-        private NormalSemanticValue(
-            NormalSemanticValueKind kind,
-            TextureSample sample)
-        {
-            Kind = kind;
-            _sample = sample;
-        }
-
-        internal static NormalSemanticValue Unmodified()
-        {
-            return new NormalSemanticValue(
-                NormalSemanticValueKind.Unmodified,
-                null);
-        }
-
-        internal static NormalSemanticValue TangentSpaceNormalMap(
-            TextureSample sample)
-        {
-            if (sample == null)
-            {
-                throw new ArgumentNullException(nameof(sample));
-            }
-
-            return new NormalSemanticValue(
-                NormalSemanticValueKind.TangentSpaceNormalMap,
-                sample);
-        }
-
-        internal TextureSample GetTextureSample()
-        {
-            if (Kind != NormalSemanticValueKind.TangentSpaceNormalMap)
-            {
-                throw new InvalidOperationException(
-                    "A texture sample is not meaningful for this kind.");
-            }
-
-            return _sample;
-        }
-
-    }
-
     internal readonly struct SemanticOutput<T> : IEquatable<SemanticOutput<T>>
         where T : class
     {
@@ -1296,21 +1101,11 @@ namespace Alrauna.Amuse.Editor.Semantics
 
     internal sealed record MaterialSemantics
     {
-        internal SemanticOutput<ColorSemanticValue> BaseColor { get; }
         internal SemanticOutput<ScalarSemanticValue> Alpha { get; }
-        internal SemanticOutput<ColorSemanticValue> Emission { get; }
-        internal SemanticOutput<NormalSemanticValue> Normal { get; }
 
-        internal MaterialSemantics(
-            SemanticOutput<ColorSemanticValue> baseColor,
-            SemanticOutput<ScalarSemanticValue> alpha,
-            SemanticOutput<ColorSemanticValue> emission,
-            SemanticOutput<NormalSemanticValue> normal)
+        internal MaterialSemantics(SemanticOutput<ScalarSemanticValue> alpha)
         {
-            BaseColor = baseColor;
             Alpha = alpha;
-            Emission = emission;
-            Normal = normal;
         }
 
     }

@@ -491,11 +491,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 material => supported.Contains(material)
                     ? new CapturedAlphaSemantics(
                         new MaterialSemantics(
-                            SemanticOutput<ColorSemanticValue>.Unknown(),
                             SemanticOutput<ScalarSemanticValue>.Complete(
-                                ScalarSemanticValue.Constant(1f)),
-                            SemanticOutput<ColorSemanticValue>.Unknown(),
-                            SemanticOutput<NormalSemanticValue>.Unknown()),
+                                ScalarSemanticValue.Constant(1f))),
                         null)
                     : CapturedAlphaSemantics.AllUnknown());
         }
@@ -1409,11 +1406,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 extraction.Snapshot,
                 AlphaSamplingPolicy.AcceptedNonAnisotropic,
                 material => new CapturedAlphaSemantics(
-                    new MaterialSemantics(
-                        SemanticOutput<ColorSemanticValue>.Unknown(),
-                        alpha,
-                        SemanticOutput<ColorSemanticValue>.Unknown(),
-                        SemanticOutput<NormalSemanticValue>.Unknown()),
+                    new MaterialSemantics(alpha),
                     null));
 
             Assert.That(
@@ -1513,11 +1506,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 SemanticOutput<ScalarSemanticValue> alpha)
         {
             return material => new CapturedAlphaSemantics(
-                new MaterialSemantics(
-                    SemanticOutput<ColorSemanticValue>.Unknown(),
-                    alpha,
-                    SemanticOutput<ColorSemanticValue>.Unknown(),
-                    SemanticOutput<NormalSemanticValue>.Unknown()),
+                new MaterialSemantics(alpha),
                 null);
         }
 

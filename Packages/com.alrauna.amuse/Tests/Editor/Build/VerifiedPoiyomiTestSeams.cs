@@ -136,11 +136,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             return new CapturedAlphaSemantics(
                 new MaterialSemantics(
-                    SemanticOutput<ColorSemanticValue>.Unknown(),
                     PoiyomiMaterialSemantics.InterpretVerifiedAlpha(
-                        material.Evidence, out _),
-                    SemanticOutput<ColorSemanticValue>.Unknown(),
-                    SemanticOutput<NormalSemanticValue>.Unknown()),
+                        material.Evidence, out _)),
                 null);
         }
     }

@@ -55,12 +55,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
             MaterialSemantics reduced,
             string mutation)
         {
-            NoInformationGain(
-                baseline.BaseColor, reduced.BaseColor, "BaseColor", mutation);
             NoInformationGain(baseline.Alpha, reduced.Alpha, "Alpha", mutation);
-            NoInformationGain(
-                baseline.Emission, reduced.Emission, "Emission", mutation);
-            NoInformationGain(baseline.Normal, reduced.Normal, "Normal", mutation);
         }
 
         /// <summary>
@@ -92,8 +87,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
     public sealed class PoiyomiUncertaintyMonotonicityTests : PoiyomiFixtureTestBase
     {
         private Texture2D _main;
-        private Texture2D _bump;
-        private Texture2D _emission;
 
         private Material FullyProvenMaterial()
         {
@@ -105,33 +98,17 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
             _main = ImportTexture("mono_main");
             material.SetTexture("_MainTex", _main);
 
-            _bump = ImportTexture(
-                "mono_bump",
-                i => i.textureType = TextureImporterType.NormalMap);
-            material.SetTexture("_BumpMap", _bump);
-
-            material.SetFloat("_EnableEmission", 1f);
-            _emission = ImportTexture(
-                "mono_emis",
-                i => i.alphaSource = TextureImporterAlphaSource.None,
-                sourceHasAlpha: false);
-            material.SetTexture("_EmissionMap", _emission);
-
             return material;
         }
 
         [TestCase("MainTexBecomesMirror")]
-        [TestCase("BumpMapLosesNormalImport")]
-        [TestCase("BumpMapGreenChannelFlipped")]
-        [TestCase("EmissionMapGainsImportedAlpha")]
         public void RemovingEvidence_NeverAddsInformation(string mutation)
         {
             var material = FullyProvenMaterial();
 
             var baseline = Interpret(material).Semantics;
             Assert.That(
-                baseline.BaseColor.IsComplete && baseline.Alpha.IsComplete &&
-                baseline.Emission.IsComplete && baseline.Normal.IsComplete,
+                baseline.Alpha.IsComplete,
                 Is.True,
                 "The monotonicity baseline must start fully proven.");
 
@@ -142,20 +119,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
                         _main,
                         i => i.wrapMode =
                             UnityEngine.TextureWrapMode.Mirror);
-                    break;
-                case "BumpMapLosesNormalImport":
-                    MonotonicityAssert.Reimport(
-                        _bump, i => i.textureType = TextureImporterType.Default);
-                    break;
-                case "BumpMapGreenChannelFlipped":
-                    MonotonicityAssert.Reimport(
-                        _bump, i => i.flipGreenChannel = true);
-                    break;
-                case "EmissionMapGainsImportedAlpha":
-                    MonotonicityAssert.Reimport(
-                        _emission,
-                        i => i.alphaSource =
-                            TextureImporterAlphaSource.FromGrayScale);
                     break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(mutation));
@@ -170,8 +133,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
     public sealed class LilToonUncertaintyMonotonicityTests : LilToonFixtureTestBase
     {
         private Texture2D _main;
-        private Texture2D _bump;
-        private Texture2D _emission;
 
         private Material FullyProvenMaterial()
         {
@@ -180,30 +141,18 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
             _main = ImportTexture("mono_main");
             material.SetTexture("_MainTex", _main);
 
-            material.SetFloat("_UseBumpMap", 1f);
-            _bump = ImportNormalMap("mono_bump");
-            material.SetTexture("_BumpMap", _bump);
-
-            material.SetFloat("_UseEmission", 1f);
-            _emission = ImportOpaqueColorMap("mono_emis");
-            material.SetTexture("_EmissionMap", _emission);
-
             return material;
         }
 
         private void AssertBaselineFullyProven(MaterialSemantics baseline)
         {
             Assert.That(
-                baseline.BaseColor.IsComplete && baseline.Alpha.IsComplete &&
-                baseline.Emission.IsComplete && baseline.Normal.IsComplete,
+                baseline.Alpha.IsComplete,
                 Is.True,
                 "The monotonicity baseline must start fully proven.");
         }
 
         [TestCase("MainTexBecomesMirror")]
-        [TestCase("BumpMapLosesNormalImport")]
-        [TestCase("BumpMapGreenChannelFlipped")]
-        [TestCase("EmissionMapGainsImportedAlpha")]
         public void RemovingImportEvidence_NeverAddsInformation(string mutation)
         {
             var material = FullyProvenMaterial();
@@ -218,20 +167,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
                         _main,
                         i => i.wrapMode =
                             UnityEngine.TextureWrapMode.Mirror);
-                    break;
-                case "BumpMapLosesNormalImport":
-                    MonotonicityAssert.Reimport(
-                        _bump, i => i.textureType = TextureImporterType.Default);
-                    break;
-                case "BumpMapGreenChannelFlipped":
-                    MonotonicityAssert.Reimport(
-                        _bump, i => i.flipGreenChannel = true);
-                    break;
-                case "EmissionMapGainsImportedAlpha":
-                    MonotonicityAssert.Reimport(
-                        _emission,
-                        i => i.alphaSource =
-                            TextureImporterAlphaSource.FromGrayScale);
                     break;
                 default:
                     throw new ArgumentOutOfRangeException(nameof(mutation));

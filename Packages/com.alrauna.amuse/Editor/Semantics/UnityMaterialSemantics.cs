@@ -1142,11 +1142,7 @@ namespace Alrauna.Amuse.Editor.Semantics
             }
 
             return new CapturedAlphaSemantics(
-                new MaterialSemantics(
-                    SemanticOutput<ColorSemanticValue>.Unknown(),
-                    alpha,
-                    SemanticOutput<ColorSemanticValue>.Unknown(),
-                    SemanticOutput<NormalSemanticValue>.Unknown()),
+                new MaterialSemantics(alpha),
                 unknownReason);
         }
 

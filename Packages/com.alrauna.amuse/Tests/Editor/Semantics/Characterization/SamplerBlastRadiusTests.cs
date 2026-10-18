@@ -9,15 +9,13 @@ using UnityEngine;
 namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
 {
     /// <summary>
-    /// Characterization: which outputs does one texture's import state
-    /// invalidate?
+    /// Characterization: what does one texture's import state invalidate?
     ///
-    /// Architectural question — the two frontends couple their outputs to
-    /// <c>_MainTex</c>'s sampler differently, and neither blast radius was
-    /// pinned. Poiyomi samples every assigned map through the <c>_MainTex</c>
-    /// sampler, so one unsupported import invalidates all four outputs. lilToon
-    /// borrows that sampler only for the normal: emission declares its own, and
-    /// alpha is attested rather than sampled, so both survive.
+    /// Architectural question — the two frontends couple alpha to
+    /// <c>_MainTex</c> differently, and neither behavior was pinned. Poiyomi
+    /// samples the alpha through the <c>_MainTex</c> sampler, so one unsupported
+    /// import invalidates it. lilToon's alpha is attested rather than sampled,
+    /// so it survives.
     ///
     /// This is the property a third frontend is most likely to get wrong,
     /// because it is invisible unless several texture slots are assigned at
@@ -27,7 +25,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
     public sealed class PoiyomiSamplerBlastRadiusTests : PoiyomiFixtureTestBase
     {
         /// <summary>
-        /// Every output populated and provable. Alpha is deliberately taken off
+        /// Every texture slot populated. Alpha is deliberately taken off
         /// the forced-opaque short-circuit, because a forced-opaque material
         /// never consults the sampler and would understate the coupling.
         /// </summary>
@@ -62,44 +60,25 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
         }
 
         [Test]
-        public void Baseline_AllFourOutputsAreProven()
+        public void Baseline_AlphaIsProven()
         {
             // A blast-radius test that started from an accidentally-unknown
             // baseline would prove nothing, so the baseline is asserted first.
             var result = Interpret(AllOutputsMaterial(unsupportedMain: false));
 
-            AssertOutputComplete(result, PoiyomiSemanticOutput.BaseColor);
             AssertOutputComplete(result, PoiyomiSemanticOutput.Alpha);
-            AssertOutputComplete(result, PoiyomiSemanticOutput.Emission);
-            AssertOutputComplete(result, PoiyomiSemanticOutput.Normal);
         }
 
         [Test]
-        public void UnsupportedMainSampler_InvalidatesAllFourOutputs()
+        public void UnsupportedMainSampler_InvalidatesAlpha()
         {
             var result = Interpret(AllOutputsMaterial(unsupportedMain: true));
 
-            // Poiyomi routes every assigned sample through the _MainTex
-            // sampler, including the emission map and the bump map, so the
-            // blast radius is total.
-            AssertUnsupportedOutput(
-                result,
-                PoiyomiSemanticOutput.BaseColor,
-                PoiyomiSemanticDiagnosticCode.UnsupportedSampling,
-                "_MainTex");
+            // Poiyomi routes the alpha sample through the _MainTex sampler, so
+            // the blast radius reaches alpha itself.
             AssertUnsupportedOutput(
                 result,
                 PoiyomiSemanticOutput.Alpha,
-                PoiyomiSemanticDiagnosticCode.UnsupportedSampling,
-                "_MainTex");
-            AssertUnsupportedOutput(
-                result,
-                PoiyomiSemanticOutput.Emission,
-                PoiyomiSemanticDiagnosticCode.UnsupportedSampling,
-                "_MainTex");
-            AssertUnsupportedOutput(
-                result,
-                PoiyomiSemanticOutput.Normal,
                 PoiyomiSemanticDiagnosticCode.UnsupportedSampling,
                 "_MainTex");
         }
@@ -108,8 +87,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
     public sealed class LilToonSamplerBlastRadiusTests : LilToonFixtureTestBase
     {
         /// <summary>
-        /// Every output populated and provable. The main texture must be a
-        /// bounded LDR import so the tone-correction range proof holds.
+        /// Every texture slot populated. The main texture must be a
+        /// bounded LDR import so the alpha attestation inputs stay clean.
         /// </summary>
         private Material AllOutputsMaterial(bool unsupportedMain)
         {
@@ -131,46 +110,21 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Characterization
         }
 
         [Test]
-        public void Baseline_AllFourOutputsAreProven()
+        public void Baseline_AlphaIsProven()
         {
             var semantics = Interpret(AllOutputsMaterial(unsupportedMain: false))
                 .Semantics;
 
-            Assert.That(semantics.BaseColor.IsComplete, Is.True, "BaseColor");
             Assert.That(semantics.Alpha.IsComplete, Is.True, "Alpha");
-            Assert.That(semantics.Emission.IsComplete, Is.True, "Emission");
-            Assert.That(semantics.Normal.IsComplete, Is.True, "Normal");
         }
 
         [Test]
-        public void UnsupportedMainSampler_InvalidatesOnlyBaseColorAndNormal()
+        public void UnsupportedMainSampler_AlphaSurvives()
         {
             var result = Interpret(AllOutputsMaterial(unsupportedMain: true));
 
-            // BaseColor samples _MainTex; Normal borrows its sampler.
-            AssertSingleDiagnostic(
-                result,
-                LilToonSemanticOutput.BaseColor,
-                LilToonSemanticDiagnosticCode.UnsupportedSampling,
-                "_MainTex");
-            AssertSingleDiagnostic(
-                result,
-                LilToonSemanticOutput.Normal,
-                LilToonSemanticDiagnosticCode.UnsupportedSampling,
-                "_MainTex");
-
-            // Emission declares sampler_EmissionMap, and alpha is attested from
-            // LIL_RENDER rather than sampled. Both survive a failure that
-            // invalidates their siblings — the behaviour that distinguishes this
-            // frontend from Poiyomi.
-            Assert.That(
-                result.Semantics.Emission.IsComplete,
-                Is.True,
-                "Emission uses its own sampler and must survive.");
-            Assert.That(
-                DiagnosticsFor(result, LilToonSemanticOutput.Emission).Count,
-                Is.EqualTo(0));
-
+            // Alpha is attested from LIL_RENDER rather than sampled, so it
+            // survives an unsupported _MainTex sampler.
             Assert.That(
                 result.Semantics.Alpha.IsComplete,
                 Is.True,

@@ -69,10 +69,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         private static void AssertAllUnknown(MaterialSemantics semantics)
         {
             Assert.That(semantics, Is.Not.Null);
-            Assert.That(semantics.BaseColor.IsComplete, Is.False);
             Assert.That(semantics.Alpha.IsComplete, Is.False);
-            Assert.That(semantics.Emission.IsComplete, Is.False);
-            Assert.That(semantics.Normal.IsComplete, Is.False);
         }
 
         [Test]

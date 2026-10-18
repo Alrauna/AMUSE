@@ -137,11 +137,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
 
             return new LilToonSemanticResult(
                 true,
-                new MaterialSemantics(
-                    SemanticOutput<ColorSemanticValue>.Unknown(),
-                    alpha,
-                    SemanticOutput<ColorSemanticValue>.Unknown(),
-                    SemanticOutput<NormalSemanticValue>.Unknown()),
+                new MaterialSemantics(alpha),
                 diagnostics);
         }
 

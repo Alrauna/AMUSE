@@ -155,10 +155,7 @@ namespace Alrauna.Amuse.Editor.Semantics
         internal static MaterialSemantics AllUnknown()
         {
             return new MaterialSemantics(
-                SemanticOutput<ColorSemanticValue>.Unknown(),
-                SemanticOutput<ScalarSemanticValue>.Unknown(),
-                SemanticOutput<ColorSemanticValue>.Unknown(),
-                SemanticOutput<NormalSemanticValue>.Unknown());
+                SemanticOutput<ScalarSemanticValue>.Unknown());
         }
 
         /// <summary>

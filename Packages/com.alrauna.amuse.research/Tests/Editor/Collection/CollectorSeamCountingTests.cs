@@ -37,21 +37,14 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Collection
         public void TearDown() => _scene.Destroy();
 
         /// <summary>
-        /// Alpha only. The other three channels stay Unknown, because the census
-        /// measures alpha and a seam that claimed base colour, emission, or
-        /// normals would be asserting something it has no basis for.
+        /// Alpha only. The census measures alpha, and a seam that claimed
+        /// anything else would be asserting something it has no basis for.
         /// </summary>
         private static Semantics.MaterialSemantics ConstantOpaque()
         {
             return new Semantics.MaterialSemantics(
-                Semantics.SemanticOutput<Semantics.ColorSemanticValue>
-                    .Unknown(),
                 Semantics.SemanticOutput<Semantics.ScalarSemanticValue>
-                    .Complete(Semantics.ScalarSemanticValue.Constant(1f)),
-                Semantics.SemanticOutput<Semantics.ColorSemanticValue>
-                    .Unknown(),
-                Semantics.SemanticOutput<Semantics.NormalSemanticValue>
-                    .Unknown());
+                    .Complete(Semantics.ScalarSemanticValue.Constant(1f)));
         }
 
         /// <summary>
@@ -71,15 +64,9 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Collection
                     Semantics.TextureWrapMode.Clamp));
 
             return new Semantics.MaterialSemantics(
-                Semantics.SemanticOutput<Semantics.ColorSemanticValue>
-                    .Unknown(),
                 Semantics.SemanticOutput<Semantics.ScalarSemanticValue>
                     .Complete(Semantics.ScalarSemanticValue.Texture(
-                        sample, Semantics.TextureChannel.Alpha)),
-                Semantics.SemanticOutput<Semantics.ColorSemanticValue>
-                    .Unknown(),
-                Semantics.SemanticOutput<Semantics.NormalSemanticValue>
-                    .Unknown());
+                        sample, Semantics.TextureChannel.Alpha)));
         }
 
         /// <summary>
@@ -90,14 +77,8 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Collection
         private static Semantics.MaterialSemantics ConstantSubUnitAlpha()
         {
             return new Semantics.MaterialSemantics(
-                Semantics.SemanticOutput<Semantics.ColorSemanticValue>
-                    .Unknown(),
                 Semantics.SemanticOutput<Semantics.ScalarSemanticValue>
-                    .Complete(Semantics.ScalarSemanticValue.Constant(0.4f)),
-                Semantics.SemanticOutput<Semantics.ColorSemanticValue>
-                    .Unknown(),
-                Semantics.SemanticOutput<Semantics.NormalSemanticValue>
-                    .Unknown());
+                    .Complete(Semantics.ScalarSemanticValue.Constant(0.4f)));
         }
 
         private ObservedRenderer Observe(

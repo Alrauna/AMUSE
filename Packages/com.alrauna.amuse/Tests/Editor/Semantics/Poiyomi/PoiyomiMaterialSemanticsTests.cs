@@ -71,17 +71,14 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         }
 
         [Test]
-        public void AnalyzeBaseMaterial_UnsupportedResult_HasFourUnknownOutputsAndOneMaterialDiagnostic()
+        public void AnalyzeBaseMaterial_UnsupportedResult_HasUnknownAlphaAndOneMaterialDiagnostic()
         {
             var material = NewMaterial("Unlit/Color");
 
             var result = PoiyomiMaterialSemantics.AnalyzeBaseMaterial(material);
 
             Assert.That(result.Semantics, Is.Not.Null);
-            Assert.That(result.Semantics.BaseColor.IsComplete, Is.False);
             Assert.That(result.Semantics.Alpha.IsComplete, Is.False);
-            Assert.That(result.Semantics.Emission.IsComplete, Is.False);
-            Assert.That(result.Semantics.Normal.IsComplete, Is.False);
 
             Assert.That(result.Diagnostics, Is.Not.Null);
             Assert.That(result.Diagnostics.Count, Is.EqualTo(1));
@@ -125,10 +122,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Assert.That(
                 result.Diagnostics[0].Output,
                 Is.EqualTo(PoiyomiSemanticOutput.Material));
-            Assert.That(result.Semantics.BaseColor.IsComplete, Is.False);
             Assert.That(result.Semantics.Alpha.IsComplete, Is.False);
-            Assert.That(result.Semantics.Emission.IsComplete, Is.False);
-            Assert.That(result.Semantics.Normal.IsComplete, Is.False);
         }
 
         [Test]

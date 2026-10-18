@@ -333,11 +333,8 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         {
             return new CapturedAlphaSemantics(
                 new MaterialSemantics(
-                    SemanticOutput<ColorSemanticValue>.Unknown(),
                     PoiyomiMaterialSemantics.InterpretVerifiedAlpha(
-                        material.Evidence, out _),
-                    SemanticOutput<ColorSemanticValue>.Unknown(),
-                    SemanticOutput<NormalSemanticValue>.Unknown()),
+                        material.Evidence, out _)),
                 null);
         }
 
@@ -733,11 +730,8 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     ? VerifiedAlphaOnly(material)
                     : new CapturedAlphaSemantics(
                         new MaterialSemantics(
-                            SemanticOutput<ColorSemanticValue>.Unknown(),
                             SemanticOutput<ScalarSemanticValue>.Complete(
-                                ScalarSemanticValue.Constant(1f)),
-                            SemanticOutput<ColorSemanticValue>.Unknown(),
-                            SemanticOutput<NormalSemanticValue>.Unknown()),
+                                ScalarSemanticValue.Constant(1f))),
                         null));
 
             Assert.That(result.IsResolved, Is.True);
@@ -1254,12 +1248,9 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     TextureFilterMode.Point, TextureWrapMode.Clamp));
             return new CapturedAlphaSemantics(
                 new MaterialSemantics(
-                    SemanticOutput<ColorSemanticValue>.Unknown(),
                     SemanticOutput<ScalarSemanticValue>.Complete(
                         ScalarSemanticValue.Texture(
-                            sample, TextureChannel.Alpha)),
-                    SemanticOutput<ColorSemanticValue>.Unknown(),
-                    SemanticOutput<NormalSemanticValue>.Unknown()),
+                            sample, TextureChannel.Alpha))),
                 null);
         }
 

@@ -1017,11 +1017,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         {
                             return new CapturedAlphaSemantics(
                                 new MaterialSemantics(
-                                    SemanticOutput<ColorSemanticValue>.Unknown(),
                                     SemanticOutput<ScalarSemanticValue>.Complete(
-                                        ScalarSemanticValue.Constant(1f)),
-                                    SemanticOutput<ColorSemanticValue>.Unknown(),
-                                    SemanticOutput<NormalSemanticValue>.Unknown()),
+                                        ScalarSemanticValue.Constant(1f))),
                                 null);
                         }
 
@@ -1125,16 +1122,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             {
                                 return new CapturedAlphaSemantics(
                                     new MaterialSemantics(
-                                        SemanticOutput<ColorSemanticValue>
-                                            .Unknown(),
                                         SemanticOutput<ScalarSemanticValue>
                                             .Complete(
                                                 ScalarSemanticValue
-                                                    .Constant(1f)),
-                                        SemanticOutput<ColorSemanticValue>
-                                            .Unknown(),
-                                        SemanticOutput<NormalSemanticValue>
-                                            .Unknown()),
+                                                    .Constant(1f))),
                                     null);
                             }
 
@@ -9057,11 +9048,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 case CapturedAlphaMaterialFamily.LilToon:
                     return new CapturedAlphaSemantics(
                         new MaterialSemantics(
-                            SemanticOutput<ColorSemanticValue>.Unknown(),
                             LilToonMaterialSemantics.InterpretVerifiedAlpha(
-                                captured.Evidence, out _),
-                            SemanticOutput<ColorSemanticValue>.Unknown(),
-                            SemanticOutput<NormalSemanticValue>.Unknown()),
+                                captured.Evidence, out _)),
                         null);
                 default:
                     return VerifiedPoiyomiTestSeams.VerifiedAlphaOnly(captured);
