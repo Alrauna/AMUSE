@@ -25,25 +25,14 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         // --- Pinned canonical source identity (Poiyomi Toon Shader 9.3.64) ---
         // Tag commit e125e1c33cbfb860f59330799dd4d10a1097242d. See the design
         // doc's authoritative research basis before changing any constant.
-        internal const string PoiyomiToonShaderName = ".poiyomi/Poiyomi Toon";
-        internal const string PoiyomiPackageName = "com.poiyomi.toon";
-        internal const string PoiyomiPackageVersion = "9.3.64";
-        internal const string CanonicalShaderGuid =
-            "9444ce77bf4418748b1e8591b9d97f85";
-        internal const string CanonicalNormalizedSourceHash =
-            "31f2ff15615c5e2ac9b05fea08b6310731394d1b5a928b16048e7bde8f8b1755";
-
-        // Second pinned identity (S10): the Two Pass generated shader in the
-        // same package. The digest was measured on the official v9.3.64 tag
-        // artifact by the production ComputeNormalizedSourceHash and an
-        // independent sha256, which agree; the file is LF-only with no BOM,
-        // so the installed bytes are the tag's bytes.
-        internal const string PoiyomiTwoPassShaderName =
-            ".poiyomi/Poiyomi Toon Two Pass";
-        internal const string TwoPassCanonicalShaderGuid =
-            "eda2412ac7ab2db45a47a521f6d7d8a6";
-        internal const string TwoPassCanonicalNormalizedSourceHash =
-            "b1d9ecd3072d21db97001dd23f88d089996b809e4039891a05f64d2ffcd4df67";
+        internal const string PoiyomiToonShaderName = PoiyomiSourceAttestation.PoiyomiToonShaderName;
+        internal const string PoiyomiPackageName = PoiyomiSourceAttestation.PoiyomiPackageName;
+        internal const string PoiyomiPackageVersion = PoiyomiSourceAttestation.PoiyomiPackageVersion;
+        internal const string CanonicalShaderGuid = PoiyomiSourceAttestation.CanonicalShaderGuid;
+        internal const string CanonicalNormalizedSourceHash = PoiyomiSourceAttestation.CanonicalNormalizedSourceHash;
+        internal const string PoiyomiTwoPassShaderName = PoiyomiSourceAttestation.PoiyomiTwoPassShaderName;
+        internal const string TwoPassCanonicalShaderGuid = PoiyomiSourceAttestation.TwoPassCanonicalShaderGuid;
+        internal const string TwoPassCanonicalNormalizedSourceHash = PoiyomiSourceAttestation.TwoPassCanonicalNormalizedSourceHash;
 
         private const string ShaderOptimizerEnabledProperty =
             "_ShaderOptimizerEnabled";
@@ -140,7 +129,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             "_EnableEmission3",
         };
 
-        private static readonly string[] AlphaRequiredSchemaProperties =
+        internal static readonly string[] AlphaRequiredSchemaProperties =
         {
             "shader_master_label",
             ShaderOptimizerEnabledProperty,
@@ -2473,262 +2462,32 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
         // --- Source attestation ---------------------------------------------
 
-        /// <summary>
-        /// Normalizes shader source (drop an optional leading UTF-8 BOM, then
-        /// convert CRLF and lone CR to LF) and returns the lowercase-hex
-        /// SHA-256 of its UTF-8 bytes. Pinning the normalization accepts the
-        /// same official source across line-ending changes while still
-        /// rejecting any content edit.
-        /// </summary>
-        internal static string ComputeNormalizedSourceHash(string rawSource)
-        {
-            return NormalizedSourceHash.Compute(rawSource);
-        }
+        internal static string ComputeNormalizedSourceHash(string rawSource) =>
+            PoiyomiSourceAttestation.ComputeNormalizedSourceHash(rawSource);
 
-        private static readonly Dictionary<string, (DateTime LastWriteUtc, string Hash)>
-            SourceHashMemo = new(StringComparer.Ordinal);
-
-        /// <summary>
-        /// Reads the shader asset source and returns its normalized hash, at
-        /// most once per unchanged file. The digest is a pure function of the
-        /// immutable asset, so the memo key is the asset path and the guard is
-        /// the file's UTC write time. A failed read stays uncached, so a
-        /// transient failure costs one retry on the next call.
-        /// </summary>
         internal static bool TryReadNormalizedSourceHashCached(
             string assetPath,
-            out string normalizedHash)
-        {
-            var lastWrite = File.GetLastWriteTimeUtc(assetPath);
-            if (SourceHashMemo.TryGetValue(assetPath, out var cached) &&
-                cached.LastWriteUtc == lastWrite)
-            {
-                normalizedHash = cached.Hash;
-                return true;
-            }
+            out string normalizedHash) =>
+            PoiyomiSourceAttestation.TryReadNormalizedSourceHashCached(assetPath, out normalizedHash);
 
-            normalizedHash = ComputeNormalizedSourceHash(
-                File.ReadAllText(assetPath, Encoding.UTF8));
-            SourceHashMemo[assetPath] = (lastWrite, normalizedHash);
-            return true;
-        }
+        internal static bool ClearSourceHashMemo() =>
+            PoiyomiSourceAttestation.ClearSourceHashMemo();
 
-        /// <summary>
-        /// Drops every memoized source digest. Returns true when at least
-        /// one entry was dropped. The per-build clear blocks call this at
-        /// the build boundary, so a build never inherits a digest that an
-        /// earlier build memoized.
-        /// </summary>
-        internal static bool ClearSourceHashMemo()
-        {
-            var droppedAny = SourceHashMemo.Count > 0;
-            SourceHashMemo.Clear();
-            return droppedAny;
-        }
-
-        /// <summary>
-        /// Evaluates the exact identity conjunction against already-read
-        /// evidence. Returns true only for the canonical, unlocked source at
-        /// the pinned revision; otherwise emits one material-scoped diagnostic
-        /// naming the first failed check in documented order.
-        /// </summary>
         internal static bool TryVerifyPoiyomiIdentity(
             in PoiyomiSourceEvidence evidence,
-            out PoiyomiSemanticDiagnostic diagnostic)
-        {
-            // 1. Exact shader name and unlocked state. Two admitted
-            // identities share one conjunction: the plain Toon shader and
-            // the Two Pass generated shader (S10), each verified against
-            // its own pinned GUID and digest.
-            var isTwoPass = string.Equals(
-                evidence.ShaderName,
-                PoiyomiTwoPassShaderName,
-                StringComparison.Ordinal);
-            if (!isTwoPass &&
-                !string.Equals(
-                    evidence.ShaderName,
-                    PoiyomiToonShaderName,
-                    StringComparison.Ordinal))
-            {
-                diagnostic = MaterialDiagnostic(
-                    PoiyomiSemanticDiagnosticCode.UnsupportedShader,
-                    $"shader name '{evidence.ShaderName}'");
-                return false;
-            }
-
-            if (evidence.IsLocked)
-            {
-                diagnostic = MaterialDiagnostic(
-                    PoiyomiSemanticDiagnosticCode.UnsupportedShader,
-                    ShaderOptimizerEnabledProperty);
-                return false;
-            }
-
-            // 2. Readable asset source, canonical GUID, and package evidence.
-            if (!evidence.HasReadableSource)
-            {
-                diagnostic = MaterialDiagnostic(
-                    PoiyomiSemanticDiagnosticCode.MissingSourceEvidence,
-                    "shader asset source");
-                return false;
-            }
-
-            var expectedGuid = isTwoPass
-                ? TwoPassCanonicalShaderGuid
-                : CanonicalShaderGuid;
-            if (!string.Equals(
-                    evidence.AssetGuid,
-                    expectedGuid,
-                    StringComparison.Ordinal))
-            {
-                diagnostic = MaterialDiagnostic(
-                    PoiyomiSemanticDiagnosticCode.MissingSourceEvidence,
-                    "shader asset GUID");
-                return false;
-            }
-
-            if (evidence.HasPackage)
-            {
-                if (!string.Equals(
-                        evidence.PackageName,
-                        PoiyomiPackageName,
-                        StringComparison.Ordinal))
-                {
-                    diagnostic = MaterialDiagnostic(
-                        PoiyomiSemanticDiagnosticCode.MissingSourceEvidence,
-                        $"package name '{evidence.PackageName}'");
-                    return false;
-                }
-
-                if (!string.Equals(
-                        evidence.PackageVersion,
-                        PoiyomiPackageVersion,
-                        StringComparison.Ordinal))
-                {
-                    diagnostic = MaterialDiagnostic(
-                        PoiyomiSemanticDiagnosticCode.UnsupportedVersion,
-                        $"package version '{evidence.PackageVersion}'");
-                    return false;
-                }
-            }
-
-            // 3. Normalized source hash, against the resolved identity.
-            var expectedHash = isTwoPass
-                ? TwoPassCanonicalNormalizedSourceHash
-                : CanonicalNormalizedSourceHash;
-            if (!string.Equals(
-                    evidence.NormalizedSourceHash,
-                    expectedHash,
-                    StringComparison.Ordinal))
-            {
-                diagnostic = MaterialDiagnostic(
-                    PoiyomiSemanticDiagnosticCode.ModifiedShaderSource,
-                    "normalized source hash");
-                return false;
-            }
-
-            // 4. Required property schema.
-            if (!evidence.HasRequiredSchema)
-            {
-                diagnostic = MaterialDiagnostic(
-                    PoiyomiSemanticDiagnosticCode.ModifiedShaderSource,
-                    "required property schema");
-                return false;
-            }
-
-            diagnostic = null;
-            return true;
-        }
+            out PoiyomiSemanticDiagnostic diagnostic) =>
+            PoiyomiSourceAttestation.TryVerifyPoiyomiIdentity(evidence, out diagnostic);
 
         internal static PoiyomiSourceEvidence GatherAlphaSourceEvidence(
             Shader shader,
-            CapturedMaterialEvidence evidence)
-        {
-            return GatherSourceEvidence(
-                shader, evidence, AlphaRequiredSchemaProperties);
-        }
+            CapturedMaterialEvidence evidence) =>
+            PoiyomiSourceAttestation.GatherAlphaSourceEvidence(shader, evidence);
 
-        /// <summary>
-        /// Assembly-internal so a second frontend-owned schema can reuse it:
-        /// <see cref="PoiyomiOpaqueConversion.GatherConversionSourceEvidence"/>
-        /// passes the conversion schema exactly as
-        /// <see cref="GatherAlphaSourceEvidence"/> passes the alpha schema.
-        /// Body, signature and every existing caller are unchanged.
-        /// </summary>
         internal static PoiyomiSourceEvidence GatherSourceEvidence(
             Shader shader,
             CapturedMaterialEvidence evidence,
-            IReadOnlyCollection<string> requiredSchemaProperties)
-        {
-            var shaderName = evidence.HasShaderName
-                ? evidence.ShaderName
-                : null;
-            var isLocked = evidence.TryGetScalar(
-                ShaderOptimizerEnabledProperty, out var optimizerEnabled) &&
-                optimizerEnabled != 0f;
-
-            var assetPath = AssetDatabase.GetAssetPath(shader);
-
-            var hasReadableSource = false;
-            string assetGuid = null;
-            string normalizedHash = null;
-            if (!string.IsNullOrEmpty(assetPath) &&
-                AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
-                    shader,
-                    out var guid,
-                    out long _))
-            {
-                assetGuid = guid?.ToLowerInvariant();
-                try
-                {
-                    if (File.Exists(assetPath) &&
-                        TryReadNormalizedSourceHashCached(assetPath, out var cachedHash))
-                    {
-                        normalizedHash = cachedHash;
-                        hasReadableSource = true;
-                    }
-                }
-                catch (IOException)
-                {
-                    hasReadableSource = false;
-                    normalizedHash = null;
-                }
-                catch (UnauthorizedAccessException)
-                {
-                    hasReadableSource = false;
-                    normalizedHash = null;
-                }
-            }
-
-            var package =
-                UnityEditor.PackageManager.PackageInfo.FindForAssetPath(assetPath);
-
-            return new PoiyomiSourceEvidence(
-                shaderName,
-                isLocked,
-                hasReadableSource,
-                assetGuid,
-                normalizedHash,
-                package != null,
-                package?.name,
-                package?.version,
-                HasRequiredSchema(evidence, requiredSchemaProperties));
-        }
-
-        private static bool HasRequiredSchema(
-            CapturedMaterialEvidence evidence,
-            IReadOnlyCollection<string> requiredSchemaProperties)
-        {
-            foreach (var property in requiredSchemaProperties)
-            {
-                if (!evidence.HasProperty(property))
-                {
-                    return false;
-                }
-            }
-
-            return true;
-        }
+            IReadOnlyCollection<string> requiredSchemaProperties) =>
+            PoiyomiSourceAttestation.GatherSourceEvidence(shader, evidence, requiredSchemaProperties);
 
         /// <summary>
         /// The second family's own scalars and tint. The first family reads
@@ -2994,7 +2753,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         }
 
 
-        private static PoiyomiSemanticDiagnostic MaterialDiagnostic(
+        internal static PoiyomiSemanticDiagnostic MaterialDiagnostic(
             PoiyomiSemanticDiagnosticCode code,
             string detail)
         {
@@ -3013,46 +2772,6 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 new[] { diagnostic });
         }
 
-    }
-
-    /// <summary>
-    /// Already-read shader identity evidence. Separating extraction from the
-    /// identity decision keeps the conjunction deterministically testable
-    /// without a live Unity asset or the real Poiyomi shader.
-    /// </summary>
-    internal readonly struct PoiyomiSourceEvidence
-    {
-        internal string ShaderName { get; }
-        internal bool IsLocked { get; }
-        internal bool HasReadableSource { get; }
-        internal string AssetGuid { get; }
-        internal string NormalizedSourceHash { get; }
-        internal bool HasPackage { get; }
-        internal string PackageName { get; }
-        internal string PackageVersion { get; }
-        internal bool HasRequiredSchema { get; }
-
-        internal PoiyomiSourceEvidence(
-            string shaderName,
-            bool isLocked,
-            bool hasReadableSource,
-            string assetGuid,
-            string normalizedSourceHash,
-            bool hasPackage,
-            string packageName,
-            string packageVersion,
-            bool hasRequiredSchema)
-        {
-            ShaderName = shaderName;
-            IsLocked = isLocked;
-            HasReadableSource = hasReadableSource;
-            AssetGuid = assetGuid;
-            NormalizedSourceHash = normalizedSourceHash;
-            HasPackage = hasPackage;
-            PackageName = packageName;
-            PackageVersion = packageVersion;
-            HasRequiredSchema = hasRequiredSchema;
-        }
     }
 
     /// <summary>
