@@ -21,8 +21,7 @@ namespace Alrauna.Amuse.Editor.Analysis
 
     /// <summary>
     /// The counts behind one slot's outcome. The dry run shows them beside
-    /// the verdict, and a fold carries the unproven triangle count the
-    /// build's forced report event needs.
+    /// the verdict.
     /// </summary>
     internal readonly struct SlotTransformVerdict
     {
@@ -30,20 +29,17 @@ namespace Alrauna.Amuse.Editor.Analysis
         internal SlotTransformOutcome Outcome { get; }
         internal int ProvenTriangles { get; }
         internal int TotalTriangles { get; }
-        internal int FoldedUnprovenTriangles { get; }
 
         internal SlotTransformVerdict(
             int slotIndex,
             SlotTransformOutcome outcome,
             int provenTriangles,
-            int totalTriangles,
-            int foldedUnprovenTriangles)
+            int totalTriangles)
         {
             SlotIndex = slotIndex;
             Outcome = outcome;
             ProvenTriangles = provenTriangles;
             TotalTriangles = totalTriangles;
-            FoldedUnprovenTriangles = foldedUnprovenTriangles;
         }
     }
 
@@ -312,15 +308,11 @@ namespace Alrauna.Amuse.Editor.Analysis
                 outcome = SlotTransformOutcome.Split;
             }
 
-            // The fold's unproven count is what MeshSeparationPlanner.Folded
-            // would drop from the entry, read without building the folded
-            // plan: the verdict never mutates the plan it judges.
             return new SlotTransformVerdict(
                 slotIndex,
                 outcome,
                 proven,
-                proven + unproven,
-                outcome == SlotTransformOutcome.Fold ? unproven : 0);
+                proven + unproven);
         }
     }
 }

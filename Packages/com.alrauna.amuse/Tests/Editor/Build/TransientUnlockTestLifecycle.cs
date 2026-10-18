@@ -497,31 +497,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
 
             var material = new Material(shader) { name = materialName };
-            material.SetFloat(
-                LockedMaterialIdentity
-                    .OptimizerEnabledPropertyName, 1f);
-            material.SetOverrideTag(
-                LockedMaterialIdentity.OriginalShaderTagName,
-                originalShaderName);
-            if (originalShader != null &&
-                AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
-                    originalShader, out var guid, out long _))
-            {
-                material.SetOverrideTag(
-                    LockedMaterialIdentity
-                        .OriginalShaderGuidTagName,
-                    guid);
-            }
-            else
-            {
-                throw new InvalidOperationException(
-                    "The recorded original shader must resolve so the " +
-                    "recorded GUID tag can be written.");
-            }
-
-            material.SetOverrideTag(
-                LockedMaterialIdentity.AllLockedGuidsTagName,
-                "0123456789abcdef0123456789abcdef");
+            ApplyLockTags(material, originalShader);
             return material;
         }
 
@@ -552,6 +528,27 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     "The locked stand-in shader must import.");
             }
 
+            configuredMaterial.name = materialName;
+            configuredMaterial.shader = lockedShader;
+            ApplyLockTags(configuredMaterial, originalShader);
+            return configuredMaterial;
+        }
+
+        /// <summary>
+        /// Writes the locked stand-in's optimizer flag and the three
+        /// identity tags onto the material: the recorded original shader's
+        /// name and GUID, and the all-locked GUIDs payload.
+        /// </summary>
+        private static void ApplyLockTags(
+            Material material, Shader originalShader)
+        {
+            if (originalShader == null)
+            {
+                throw new InvalidOperationException(
+                    "The recorded original shader must resolve so the " +
+                    "recorded GUID tag can be written.");
+            }
+
             if (!AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
                     originalShader, out var guid, out long _))
             {
@@ -559,19 +556,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     "The original fixture shader must have a GUID.");
             }
 
-            configuredMaterial.name = materialName;
-            configuredMaterial.shader = lockedShader;
-            configuredMaterial.SetFloat(
-                LockedMaterialIdentity.OptimizerEnabledPropertyName, 1f);
-            configuredMaterial.SetOverrideTag(
+            material.SetFloat(
+                LockedMaterialIdentity
+                    .OptimizerEnabledPropertyName, 1f);
+            material.SetOverrideTag(
                 LockedMaterialIdentity.OriginalShaderTagName,
                 originalShader.name);
-            configuredMaterial.SetOverrideTag(
-                LockedMaterialIdentity.OriginalShaderGuidTagName, guid);
-            configuredMaterial.SetOverrideTag(
+            material.SetOverrideTag(
+                LockedMaterialIdentity.OriginalShaderGuidTagName,
+                guid);
+            material.SetOverrideTag(
                 LockedMaterialIdentity.AllLockedGuidsTagName,
                 "0123456789abcdef0123456789abcdef");
-            return configuredMaterial;
         }
 
         /// <summary>
@@ -667,32 +663,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             int slotIndex,
             params Material[] swapValues)
         {
-            var clip = new AnimationClip { name = "AMUSE material swap" };
-            var path = AnimationUtility.CalculateTransformPath(
-                renderer.transform, root.transform);
-            var keyframes = swapValues.Select((material, index) =>
-                new ObjectReferenceKeyframe
-                {
-                    time = index,
-                    value = material,
-                }).ToArray();
-            AnimationUtility.SetObjectReferenceCurve(
-                clip,
-                EditorCurveBinding.PPtrCurve(
-                    path,
-                    renderer.GetType(),
-                    "m_Materials.Array.data[" + slotIndex + "]"),
-                keyframes);
-
-            var controller = new AnimatorController
-            {
-                name = "AMUSE swap graph",
-            };
-            controller.AddLayer("L0");
-            controller.layers[0].stateMachine.AddState("S0").motion = clip;
-            root.AddComponent<Animator>().runtimeAnimatorController =
-                controller;
-            return clip;
+            return AddSwapAnimation(
+                root, renderer, slotIndex, (_, motion) => motion,
+                swapValues);
         }
 
         /// <summary>
@@ -705,6 +678,38 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             GameObject root,
             Renderer renderer,
             int slotIndex,
+            params Material[] swapValues)
+        {
+            return AddSwapAnimation(
+                root,
+                renderer,
+                slotIndex,
+                (controller, motion) =>
+                {
+                    controller.AddParameter(
+                        "Blend", AnimatorControllerParameterType.Float);
+                    var blendTree = new BlendTree
+                    {
+                        name = "AMUSE swap tree",
+                        blendType = BlendTreeType.Simple1D,
+                        blendParameter = "Blend",
+                    };
+                    blendTree.AddChild(motion);
+                    return blendTree;
+                },
+                swapValues);
+        }
+
+        /// <summary>
+        /// The shared swap-animation skeleton: one clip carrying the swap
+        /// object curve, one "AMUSE swap graph" controller layer, and one
+        /// state whose motion the variant supplies.
+        /// </summary>
+        private static AnimationClip AddSwapAnimation(
+            GameObject root,
+            Renderer renderer,
+            int slotIndex,
+            Func<AnimatorController, AnimationClip, Motion> stateMotion,
             params Material[] swapValues)
         {
             var clip = new AnimationClip { name = "AMUSE material swap" };
@@ -729,17 +734,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 name = "AMUSE swap graph",
             };
             controller.AddLayer("L0");
-            controller.AddParameter(
-                "Blend", AnimatorControllerParameterType.Float);
-            var blendTree = new BlendTree
-            {
-                name = "AMUSE swap tree",
-                blendType = BlendTreeType.Simple1D,
-                blendParameter = "Blend",
-            };
-            blendTree.AddChild(clip);
             controller.layers[0].stateMachine.AddState("S0").motion =
-                blendTree;
+                stateMotion(controller, clip);
             root.AddComponent<Animator>().runtimeAnimatorController =
                 controller;
             return clip;
@@ -766,6 +762,30 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     renderer.GetType(),
                     propertyName),
                 AnimationCurve.Constant(0f, 1f, value));
+        }
+
+        /// <summary>
+        /// Every material keyframe on the given clip, in binding order.
+        /// The real clip is read back after the build, so the assertion
+        /// sees what the shipped animation actually holds.
+        /// </summary>
+        internal static List<Material> CurveMaterials(AnimationClip clip)
+        {
+            var materials = new List<Material>();
+            foreach (var binding in
+                     AnimationUtility.GetObjectReferenceCurveBindings(clip))
+            {
+                foreach (var keyframe in AnimationUtility
+                             .GetObjectReferenceCurve(clip, binding))
+                {
+                    if (keyframe.value is Material material)
+                    {
+                        materials.Add(material);
+                    }
+                }
+            }
+
+            return materials;
         }
 
         internal static void DestroyControllerGraph(

@@ -271,7 +271,7 @@ namespace Alrauna.Amuse.Editor.Build
             {
                 try
                 {
-                    normalizedHash = PoiyomiMaterialSemantics
+                    normalizedHash = PoiyomiSourceAttestation
                         .ComputeNormalizedSourceHash(
                             File.ReadAllText(assetPath, Encoding.UTF8));
                     hasReadableSource = true;
@@ -302,7 +302,7 @@ namespace Alrauna.Amuse.Editor.Build
                 package?.version,
                 hasRequiredSchema: true);
 
-            return PoiyomiMaterialSemantics.TryVerifyPoiyomiIdentity(
+            return PoiyomiSourceAttestation.TryVerifyPoiyomiIdentity(
                 evidence, out _);
         }
     }

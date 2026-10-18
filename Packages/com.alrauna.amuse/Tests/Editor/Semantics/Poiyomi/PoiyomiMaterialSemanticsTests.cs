@@ -71,17 +71,14 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         }
 
         [Test]
-        public void AnalyzeBaseMaterial_UnsupportedResult_HasFourUnknownOutputsAndOneMaterialDiagnostic()
+        public void AnalyzeBaseMaterial_UnsupportedResult_HasUnknownAlphaAndOneMaterialDiagnostic()
         {
             var material = NewMaterial("Unlit/Color");
 
             var result = PoiyomiMaterialSemantics.AnalyzeBaseMaterial(material);
 
             Assert.That(result.Semantics, Is.Not.Null);
-            Assert.That(result.Semantics.BaseColor.IsComplete, Is.False);
             Assert.That(result.Semantics.Alpha.IsComplete, Is.False);
-            Assert.That(result.Semantics.Emission.IsComplete, Is.False);
-            Assert.That(result.Semantics.Normal.IsComplete, Is.False);
 
             Assert.That(result.Diagnostics, Is.Not.Null);
             Assert.That(result.Diagnostics.Count, Is.EqualTo(1));
@@ -125,10 +122,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Assert.That(
                 result.Diagnostics[0].Output,
                 Is.EqualTo(PoiyomiSemanticOutput.Material));
-            Assert.That(result.Semantics.BaseColor.IsComplete, Is.False);
             Assert.That(result.Semantics.Alpha.IsComplete, Is.False);
-            Assert.That(result.Semantics.Emission.IsComplete, Is.False);
-            Assert.That(result.Semantics.Normal.IsComplete, Is.False);
         }
 
         [Test]
@@ -185,7 +179,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
     {
         private static string Hash(string source)
         {
-            return PoiyomiMaterialSemantics.ComputeNormalizedSourceHash(source);
+            return PoiyomiSourceAttestation.ComputeNormalizedSourceHash(source);
         }
 
         private static PoiyomiSourceEvidence Evidence(
@@ -260,14 +254,14 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 // unchanged.
                 File.SetLastWriteTimeUtc(path, File.GetLastWriteTimeUtc(path));
                 var stamp = File.GetLastWriteTimeUtc(path);
-                var first = PoiyomiMaterialSemantics
+                var first = PoiyomiSourceAttestation
                     .TryReadNormalizedSourceHashCached(path, out var hash);
                 Assert.That(first, Is.True);
 
                 File.WriteAllText(path, "second source");
                 File.SetLastWriteTimeUtc(path, stamp);
 
-                var second = PoiyomiMaterialSemantics
+                var second = PoiyomiSourceAttestation
                     .TryReadNormalizedSourceHashCached(path, out var cached);
                 Assert.That(second, Is.True);
                 Assert.That(
@@ -291,19 +285,19 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             try
             {
                 File.WriteAllText(path, "first source");
-                PoiyomiMaterialSemantics.TryReadNormalizedSourceHashCached(
+                PoiyomiSourceAttestation.TryReadNormalizedSourceHashCached(
                     path, out _);
 
                 File.WriteAllText(path, "second source");
                 File.SetLastWriteTimeUtc(
                     path, File.GetLastWriteTimeUtc(path).AddSeconds(2));
 
-                var refreshed = PoiyomiMaterialSemantics
+                var refreshed = PoiyomiSourceAttestation
                     .TryReadNormalizedSourceHashCached(path, out var hash);
                 Assert.That(refreshed, Is.True);
                 Assert.That(
                     hash,
-                    Is.EqualTo(PoiyomiMaterialSemantics
+                    Is.EqualTo(PoiyomiSourceAttestation
                         .ComputeNormalizedSourceHash("second source")),
                     "a changed write time must refresh the memo");
             }
@@ -322,14 +316,14 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 "hash_memo_missing_" + Guid.NewGuid().ToString("N") + ".shader");
 
             Assert.Throws<FileNotFoundException>(() =>
-                PoiyomiMaterialSemantics.TryReadNormalizedSourceHashCached(
+                PoiyomiSourceAttestation.TryReadNormalizedSourceHashCached(
                     path, out _));
         }
 
         [Test]
         public void Identity_CanonicalUnlockedEvidence_IsSupported()
         {
-            var supported = PoiyomiMaterialSemantics.TryVerifyPoiyomiIdentity(
+            var supported = PoiyomiSourceAttestation.TryVerifyPoiyomiIdentity(
                 Evidence(),
                 out var diagnostic);
 
@@ -342,7 +336,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         {
             // A legacy Assets/_PoiyomiShaders install has no package metadata;
             // the GUID and exact source hash remain the proof.
-            var supported = PoiyomiMaterialSemantics.TryVerifyPoiyomiIdentity(
+            var supported = PoiyomiSourceAttestation.TryVerifyPoiyomiIdentity(
                 Evidence(hasPackage: false, packageName: null, packageVersion: null),
                 out var diagnostic);
 
@@ -448,7 +442,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             PoiyomiSourceEvidence evidence,
             PoiyomiSemanticDiagnosticCode expectedCode)
         {
-            var supported = PoiyomiMaterialSemantics.TryVerifyPoiyomiIdentity(
+            var supported = PoiyomiSourceAttestation.TryVerifyPoiyomiIdentity(
                 evidence,
                 out var diagnostic);
 

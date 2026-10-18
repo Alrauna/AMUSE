@@ -16,7 +16,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [SetUp]
         public void SetUp()
         {
-            AaoAtlasTextureAttestation.ResetForTests();
+            AaoAtlasTextureAttestation.Versions.ResetForTests();
             _container = ScriptableObject.CreateInstance<nadena.dev.ndmf.runtime.SubAssetContainer>();
             AssetDatabase.CreateAsset(_container, TestContainerPath);
 
@@ -29,8 +29,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [TearDown]
         public void TearDown()
         {
-            ReplacementTextureAttestation.ResetForTests();
-            AaoAtlasTextureAttestation.ResetForTests();
+            ReplacementTextureAttestation.Versions.ResetForTests();
+            AaoAtlasTextureAttestation.Versions.ResetForTests();
             if (AssetDatabase.LoadAssetAtPath<ScriptableObject>(TestContainerPath) != null)
             {
                 AssetDatabase.DeleteAsset(TestContainerPath);
@@ -44,8 +44,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
 
         private static void InstallAdmittedCompressorVersion()
         {
-            ReplacementTextureAttestation.ResetForTests();
-            ReplacementTextureAttestation.ReadInstalledPackageVersionOrNull =
+            ReplacementTextureAttestation.Versions.ResetForTests();
+            ReplacementTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
                 _ => "0.9.0";
         }
 
@@ -169,10 +169,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             copy.name = "MainTex_compressed";
             AssetDatabase.AddObjectToAsset(copy, TestContainerPath);
             AssetDatabase.SaveAssets();
-            ReplacementTextureAttestation.ResetForTests();
-            ReplacementTextureAttestation.ReadInstalledPackageVersionOrNull =
+            ReplacementTextureAttestation.Versions.ResetForTests();
+            ReplacementTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
                 _ => "0.9.0";
-            ReplacementTextureAttestation.SetAdmittedVersionsForTests();
+            ReplacementTextureAttestation.Versions.SetAdmittedVersionsForTests();
 
             var isCharacterized = GeneratedTextureAttestation.TryIdentifyProducer(copy);
 
@@ -186,8 +186,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             copy.name = "MainTex_compressed";
             AssetDatabase.AddObjectToAsset(copy, TestContainerPath);
             AssetDatabase.SaveAssets();
-            ReplacementTextureAttestation.ResetForTests();
-            ReplacementTextureAttestation.ReadInstalledPackageVersionOrNull = _ => null;
+            ReplacementTextureAttestation.Versions.ResetForTests();
+            ReplacementTextureAttestation.Versions.ReadInstalledPackageVersionOrNull = _ => null;
 
             var isCharacterized = GeneratedTextureAttestation.TryIdentifyProducer(copy);
 
@@ -255,8 +255,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [Test]
         public void LooseAtlasWithAdmittedVersion_TakesTheGeneratedRoute()
         {
-            AaoAtlasTextureAttestation.ResetForTests();
-            AaoAtlasTextureAttestation.ReadInstalledPackageVersionOrNull =
+            AaoAtlasTextureAttestation.Versions.ResetForTests();
+            AaoAtlasTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
                 _ => "1.9.17";
             var loose = new Texture2D(4, 4, TextureFormat.RGBA32, false);
             loose.name = "MainTex (AAO UV Packed)";
@@ -269,15 +269,15 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             finally
             {
                 Object.DestroyImmediate(loose);
-                AaoAtlasTextureAttestation.ResetForTests();
+                AaoAtlasTextureAttestation.Versions.ResetForTests();
             }
         }
 
         [Test]
         public void LooseAtlasWithUnadmittedVersion_RefusesTheRoute()
         {
-            AaoAtlasTextureAttestation.ResetForTests();
-            AaoAtlasTextureAttestation.ReadInstalledPackageVersionOrNull =
+            AaoAtlasTextureAttestation.Versions.ResetForTests();
+            AaoAtlasTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
                 _ => "1.9.18";
             var loose = new Texture2D(4, 4, TextureFormat.RGBA32, false);
             loose.name = "MainTex (AAO UV Packed)";
@@ -290,7 +290,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             finally
             {
                 Object.DestroyImmediate(loose);
-                AaoAtlasTextureAttestation.ResetForTests();
+                AaoAtlasTextureAttestation.Versions.ResetForTests();
             }
         }
     }

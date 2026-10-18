@@ -332,11 +332,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         public void TearDown()
         {
             _filteringPin.Dispose();
-            DestroyTracked();
-        }
-
-        private void DestroyTracked()
-        {
             _scope.TearDown();
         }
 
@@ -448,7 +443,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 AlphaSeparationTestLifecycle.DestroyGenerated(state);
-                DestroyTracked();
+                _scope.TearDown();
                 UnityEngine.Object.DestroyImmediate(root);
             }
         }
@@ -537,7 +532,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 AlphaSeparationTestLifecycle.DestroyGenerated(state);
-                DestroyTracked();
+                _scope.TearDown();
                 UnityEngine.Object.DestroyImmediate(root);
             }
         }
@@ -604,7 +599,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 AlphaSeparationTestLifecycle.DestroyGenerated(state);
-                DestroyTracked();
+                _scope.TearDown();
                 UnityEngine.Object.DestroyImmediate(root);
             }
         }
@@ -657,7 +652,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 AlphaSeparationTestLifecycle.DestroyGenerated(state);
-                DestroyTracked();
+                _scope.TearDown();
                 UnityEngine.Object.DestroyImmediate(root);
             }
         }
@@ -739,7 +734,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 AlphaSeparationTestLifecycle.DestroyGenerated(state);
-                DestroyTracked();
+                _scope.TearDown();
                 UnityEngine.Object.DestroyImmediate(root);
             }
         }
@@ -950,7 +945,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 AlphaSeparationTestLifecycle.DestroyGenerated(state);
-                DestroyTracked();
+                _scope.TearDown();
                 UnityEngine.Object.DestroyImmediate(root);
             }
         }

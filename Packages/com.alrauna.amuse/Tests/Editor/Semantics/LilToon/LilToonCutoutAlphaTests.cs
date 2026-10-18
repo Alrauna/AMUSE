@@ -310,13 +310,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         /// </summary>
         private static TriangleAlphaInput TriangleOverBlackTexel()
         {
-            return TriangleAlphaInput.WithUv0(
-                Vector3.zero,
-                Vector3.right,
-                Vector3.up,
-                new Vector2(0.05f, 0.05f),
-                new Vector2(0.45f, 0.05f),
-                new Vector2(0.05f, 0.45f));
+            return CornerTriangle();
         }
 
         private static TriangleAlphaInput MipZeroOpaqueTexelTriangle()

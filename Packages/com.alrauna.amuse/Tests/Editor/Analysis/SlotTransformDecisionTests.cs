@@ -71,7 +71,6 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             Assert.That(verdicts, Has.Count.EqualTo(1));
             Assert.That(verdicts[0].Outcome, Is.EqualTo(
                 SlotTransformOutcome.Fold));
-            Assert.That(verdicts[0].FoldedUnprovenTriangles, Is.EqualTo(2));
             Assert.That(verdicts[0].ProvenTriangles, Is.EqualTo(148));
             Assert.That(verdicts[0].TotalTriangles, Is.EqualTo(150));
             AssertPlanEntriesNeverYieldNone(plan, verdicts);
@@ -91,7 +90,6 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             // split and never folds.
             Assert.That(verdicts[0].Outcome, Is.EqualTo(
                 SlotTransformOutcome.Split));
-            Assert.That(verdicts[0].FoldedUnprovenTriangles, Is.Zero);
             AssertPlanEntriesNeverYieldNone(plan, verdicts);
         }
 
@@ -147,7 +145,6 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             Assert.That(verdicts[0].SlotIndex, Is.Zero);
             Assert.That(verdicts[0].Outcome, Is.EqualTo(
                 SlotTransformOutcome.AlreadyOpaque));
-            Assert.That(verdicts[0].FoldedUnprovenTriangles, Is.Zero);
             Assert.That(verdicts[1].SlotIndex, Is.EqualTo(1));
             Assert.That(verdicts[1].Outcome, Is.EqualTo(
                 SlotTransformOutcome.Split));

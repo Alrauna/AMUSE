@@ -255,7 +255,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
-        public void FromSerializedMapsAllFieldsToMaterialTransformationRow()
+        public void FromSerializedMapsTheKeptFieldsToMaterialTransformationRow()
         {
             var serialized = new SerializedTransformationRow
             {
@@ -267,8 +267,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 movedTriangles = 50,
                 provenTriangles = 50,
                 totalTriangles = 100,
-                refusedSlots = 0,
-                slotCount = 2,
                 sentence = "Convertable: 50 out of 100 polygons may be moved"
             };
 
@@ -281,8 +279,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(row.MovedTriangles, Is.EqualTo(50));
             Assert.That(row.ProvenTriangles, Is.EqualTo(50));
             Assert.That(row.TotalTriangles, Is.EqualTo(100));
-            Assert.That(row.RefusedSlots, Is.EqualTo(0));
-            Assert.That(row.SlotCount, Is.EqualTo(2));
             Assert.That(row.Sentence, Is.EqualTo("Convertable: 50 out of 100 polygons may be moved"));
         }
 

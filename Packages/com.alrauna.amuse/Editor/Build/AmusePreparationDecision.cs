@@ -18,11 +18,6 @@ namespace Alrauna.Amuse.Editor.Build
         /// pass may legitimately have changed either between the capture and
         /// the apply pass.</summary>
         StaleSamplingPolicy,
-
-        /// <summary>An admitted material's opaque conversion refused, so the
-        /// slot keeps its original material. The display detail names the
-        /// underlying conversion failure.</summary>
-        OpaqueConversionRefused,
     }
 
     /// <summary>
@@ -35,28 +30,19 @@ namespace Alrauna.Amuse.Editor.Build
         private AmusePreparationDecision(
             bool isPrepared,
             bool hasMutation,
-            PreparationRefusal refusal,
-            string refusalDetail)
+            PreparationRefusal refusal)
         {
             IsPrepared = isPrepared;
             HasMutation = hasMutation;
             Refusal = refusal;
-            RefusalDetail = refusalDetail;
         }
 
         internal bool IsPrepared { get; }
         internal bool HasMutation { get; }
         internal PreparationRefusal Refusal { get; }
 
-        /// <summary>
-        /// The display text that explains the refusal at a report edge, or
-        /// null when the refusal needs no detail beyond its member name.
-        /// </summary>
-        internal string RefusalDetail { get; }
-
         internal static AmusePreparationDecision Refused(
-            PreparationRefusal reason,
-            string detail = null)
+            PreparationRefusal reason)
         {
             if (reason == PreparationRefusal.None)
             {
@@ -65,19 +51,19 @@ namespace Alrauna.Amuse.Editor.Build
                 return NoMutation();
             }
 
-            return new AmusePreparationDecision(false, false, reason, detail);
+            return new AmusePreparationDecision(false, false, reason);
         }
 
         internal static AmusePreparationDecision NoMutation()
         {
             return new AmusePreparationDecision(
-                true, false, PreparationRefusal.None, null);
+                true, false, PreparationRefusal.None);
         }
 
         internal static AmusePreparationDecision Ready()
         {
             return new AmusePreparationDecision(
-                true, true, PreparationRefusal.None, null);
+                true, true, PreparationRefusal.None);
         }
     }
 }

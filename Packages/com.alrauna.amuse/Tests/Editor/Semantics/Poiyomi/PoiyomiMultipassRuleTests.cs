@@ -141,7 +141,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 true);
 
             Assert.That(
-                PoiyomiMaterialSemantics.TryVerifyPoiyomiIdentity(
+                PoiyomiSourceAttestation.TryVerifyPoiyomiIdentity(
                     evidence, out var diagnostic),
                 Is.True);
             Assert.That(diagnostic, Is.Null);
@@ -161,7 +161,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 PoiyomiMaterialSemantics.TwoPassCanonicalShaderGuid,
                 Is.EqualTo("eda2412ac7ab2db45a47a521f6d7d8a6"));
             Assert.That(
-                PoiyomiMaterialSemantics
+                PoiyomiSourceAttestation
                     .TwoPassCanonicalNormalizedSourceHash,
                 Is.EqualTo(
                     "b1d9ecd3072d21db97001dd23f88d089996b809e4039891a05f64d2ffcd4df67"));

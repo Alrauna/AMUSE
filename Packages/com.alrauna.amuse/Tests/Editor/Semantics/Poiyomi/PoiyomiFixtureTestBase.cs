@@ -250,14 +250,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         {
             switch (output)
             {
-                case PoiyomiSemanticOutput.BaseColor:
-                    return result.Semantics.BaseColor.IsComplete;
                 case PoiyomiSemanticOutput.Alpha:
                     return result.Semantics.Alpha.IsComplete;
-                case PoiyomiSemanticOutput.Emission:
-                    return result.Semantics.Emission.IsComplete;
-                case PoiyomiSemanticOutput.Normal:
-                    return result.Semantics.Normal.IsComplete;
                 default:
                     return false;
             }

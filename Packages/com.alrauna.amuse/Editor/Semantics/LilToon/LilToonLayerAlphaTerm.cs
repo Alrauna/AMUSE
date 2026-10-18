@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Alrauna.Amuse.Editor.Host;
 using UnityEngine;
+using static Alrauna.Amuse.Editor.Semantics.EvidenceGates;
 
 namespace Alrauna.Amuse.Editor.Semantics.LilToon
 {
@@ -426,17 +427,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 ScalarSemanticValue.ProductChain(
                     chainSamples, chainChannels, colorAlpha),
                 alphaMode);
-        }
-
-        private static bool IsFinite(float value)
-        {
-            return !float.IsNaN(value) && !float.IsInfinity(value);
-        }
-
-        private static bool IsFinite(Vector4 value)
-        {
-            return IsFinite(value.x) && IsFinite(value.y) &&
-                IsFinite(value.z) && IsFinite(value.w);
         }
     }
 }

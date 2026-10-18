@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 
@@ -39,67 +38,32 @@ namespace Alrauna.Amuse.Editor.Semantics
             "1.9.17",
         };
 
-        private static readonly AdmittedProducerVersions Versions =
+        /// <summary>
+        /// The exposed producer-version seam of this attestation. Each
+        /// member is addressed directly through this field:
+        /// Versions.ReadInstalledPackageVersionOrNull is set by
+        /// AaoAtlasTextureAttestationTests, GeneratedTextureAttestationTests,
+        /// UnityTextureEvidenceTests, UnityAlphaFieldEvidenceTests,
+        /// UnityGeneratedTextureEvidenceTests, and
+        /// UnityMaterialEvidenceCaptureTests. Versions.AdmittedVersions is
+        /// read by AaoAtlasTextureAttestationTests.
+        /// Versions.ResetForTests is called by
+        /// AaoAtlasTextureAttestationTests, GeneratedTextureAttestationTests,
+        /// UnityTextureEvidenceTests, UnityAlphaFieldEvidenceTests,
+        /// UnityGeneratedTextureEvidenceTests, and
+        /// UnityMaterialEvidenceCaptureTests.
+        /// Versions.TryReadInstalledProducerVersion is exercised through
+        /// the admission and refusal tests in
+        /// AaoAtlasTextureAttestationTests.
+        /// Versions.ClearVersionCacheForSession is called by the
+        /// production session resets in AlphaSeparationApply and
+        /// AmusePlatformFinishPlugin. Versions.IsVersionAdmitted is
+        /// exercised by AaoAtlasTextureAttestationTests.
+        /// </summary>
+        internal static readonly AdmittedProducerVersions Versions =
             new AdmittedProducerVersions(
                 ProducerPackageName,
                 ProductionAdmittedVersions);
-
-        /// <summary>
-        /// Forwarded seam. Addressed by AaoAtlasTextureAttestationTests,
-        /// GeneratedTextureAttestationTests, UnityTextureEvidenceTests,
-        /// UnityAlphaFieldEvidenceTests, UnityGeneratedTextureEvidenceTests,
-        /// and UnityMaterialEvidenceCaptureTests.
-        /// </summary>
-        internal static Func<string, string>
-            ReadInstalledPackageVersionOrNull
-        {
-            get => Versions.ReadInstalledPackageVersionOrNull;
-            set => Versions.ReadInstalledPackageVersionOrNull = value;
-        }
-
-        /// <summary>
-        /// Forwarded seam. Addressed by AaoAtlasTextureAttestationTests.
-        /// </summary>
-        internal static IReadOnlyList<string> AdmittedVersions =>
-            Versions.AdmittedVersions;
-
-        /// <summary>
-        /// Forwarded seam. Addressed by AaoAtlasTextureAttestationTests,
-        /// GeneratedTextureAttestationTests, UnityTextureEvidenceTests,
-        /// UnityAlphaFieldEvidenceTests, UnityGeneratedTextureEvidenceTests,
-        /// and UnityMaterialEvidenceCaptureTests.
-        /// </summary>
-        internal static void ResetForTests()
-        {
-            Versions.ResetForTests();
-        }
-
-        /// <summary>
-        /// Forwarded seam. Addressed through the admission and refusal
-        /// tests in AaoAtlasTextureAttestationTests.
-        /// </summary>
-        internal static bool TryReadInstalledProducerVersion(
-            out string version)
-        {
-            return Versions.TryReadInstalledProducerVersion(out version);
-        }
-
-        /// <summary>
-        /// Forwarded seam. The production session resets in
-        /// AlphaSeparationApply and AmusePlatformFinishPlugin call it.
-        /// </summary>
-        internal static void ClearVersionCacheForSession()
-        {
-            Versions.ClearVersionCacheForSession();
-        }
-
-        /// <summary>
-        /// Forwarded seam. Addressed by AaoAtlasTextureAttestationTests.
-        /// </summary>
-        internal static bool IsVersionAdmitted(string version)
-        {
-            return Versions.IsVersionAdmitted(version);
-        }
 
         /// <summary>
         /// The shape predicate, conjuncts C1 to C3 of spec 2026-10-04
@@ -129,8 +93,8 @@ namespace Alrauna.Amuse.Editor.Semantics
             }
             // Conjunct 3: the producer is installed and its version is
             // admitted.
-            return TryReadInstalledProducerVersion(out var version) &&
-                   IsVersionAdmitted(version);
+            return Versions.TryReadInstalledProducerVersion(out var version) &&
+                   Versions.IsVersionAdmitted(version);
         }
 
         /// <summary>

@@ -5,393 +5,13 @@ using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
 using CoreWrapMode = Alrauna.Amuse.Editor.Semantics.TextureWrapMode;
+using static Alrauna.Amuse.Tests.Editor.Analysis.AlphaSemanticsResolverTests;
 
 namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 {
     /// <summary>
-    /// Task 4 BaseColor equation tests. They drive the verified-material seam
-    /// with explicit <see cref="ColorSpace.Linear"/> evidence so linear-light
-    /// color is exercised without changing the project's Gamma setting. Each
-    /// unsupported case pins the primary diagnostic, and each source-writing
-    /// group the design names is proven to fail closed at BaseColor.
-    /// </summary>
-    public sealed class PoiyomiBaseColorTests : PoiyomiFixtureTestBase
-    {
-        // Every enabled source block the design lists as changing or replacing
-        // the main color term, plus the color-theme selector. This is the test's
-        // authoritative gate spec: production must refuse each one.
-        private static readonly string[] BaseColorFeatureGates =
-        {
-            "_ColorThemeIndex",
-            "_MainColorAdjustToggle",
-            "_MainHueShiftToggle",
-            "_MainHueALCTEnabled",
-            "_DetailEnabled",
-            "_MainVertexColoringEnabled",
-            "_BackFaceEnabled",
-            "_RGBMaskEnabled",
-            "_EnableDissolve",
-            "_DecalEnabled",
-            "_DecalEnabled1",
-            "_DecalEnabled2",
-            "_DecalEnabled3",
-            "_EnableAniso",
-            "_MatcapEnable",
-            "_Matcap2Enable",
-            "_Matcap3Enable",
-            "_Matcap4Enable",
-            "_CubeMapEnabled",
-            "_EnableAudioLink",
-            "_EnableFlipbook",
-            "_EnableRimLighting",
-            "_EnableRim2Lighting",
-            "_EnableDepthRimLighting",
-            "_EnableEnvironmentalRim",
-            "_GlitterEnable",
-            "_StylizedSpecular",
-            "_EnablePathing",
-            "_EnableMirrorOptions",
-            "_MirrorTextureEnabled",
-            "_TextEnabled",
-            "_PoiInternalParallax",
-            "_PoiParallax",
-            "_VideoEffectsEnable",
-            "_EnableTouchGlow",
-            "_VoronoiEnabled",
-            "_EnableTruchet",
-            "_EmissionReplace0",
-            "_EmissionReplace1",
-            "_EmissionReplace2",
-            "_EmissionReplace3",
-            "_AlphaPremultiply",
-        };
-
-        private static ColorSemanticValue BaseColor(PoiyomiSemanticResult result)
-        {
-            Assert.That(
-                result.Semantics.BaseColor.IsComplete,
-                Is.True,
-                "BaseColor expected complete.");
-            return result.Semantics.BaseColor.GetCompleteValue();
-        }
-
-        // --- Constant color (no MainTex) -----------------------------------
-
-        [Test]
-        public void MissingMainTex_WhiteColor_IsLinearWhiteConstant()
-        {
-            var material = NewFixtureMaterial();
-            material.SetColor("_Color", Color.white);
-
-            var value = BaseColor(Interpret(material));
-
-            Assert.That(value.Kind, Is.EqualTo(ColorSemanticValueKind.Constant));
-            Assert.That(value.GetConstantValue(), Is.EqualTo(Vector3.one));
-        }
-
-        [Test]
-        public void MissingMainTex_DistinctColor_IsNumericLinearConstant()
-        {
-            // Proves a real, per-channel sRGB->linear conversion happened using a
-            // nontrivial color whose three channels differ. The expected values
-            // are the hardcoded sRGB->linear results (IEC 61966-2-1 curve), NOT
-            // derived from Color.linear, so the test pins the actual numbers and
-            // would catch identity passthrough or a channel swap:
-            //   0.25 -> 0.0509,  0.50 -> 0.2140,  0.75 -> 0.5225.
-            var material = NewFixtureMaterial();
-            material.SetColor("_Color", new Color(0.25f, 0.5f, 0.75f, 1f));
-
-            var value = BaseColor(Interpret(material));
-
-            Assert.That(value.Kind, Is.EqualTo(ColorSemanticValueKind.Constant));
-            var rgb = value.GetConstantValue();
-            Assert.That(rgb.x, Is.EqualTo(0.0509f).Within(0.002f));
-            Assert.That(rgb.y, Is.EqualTo(0.2140f).Within(0.002f));
-            Assert.That(rgb.z, Is.EqualTo(0.5225f).Within(0.002f));
-        }
-
-        // --- Texture sample (MainTex assigned) -----------------------------
-
-        [Test]
-        public void AssignedMainTex_IdentityTint_IsTextureSample()
-        {
-            var material = NewFixtureMaterial();
-            var texture = ImportTexture("basecolor_identity");
-            material.SetTexture("_MainTex", texture);
-            material.SetColor("_Color", Color.white);
-
-            var value = BaseColor(Interpret(material));
-
-            var expected = ColorSemanticValue.Texture(
-                new TextureSample(
-                    new TextureSourceId(ExpectedToken(texture)),
-                    new UvMapping(0, Vector2.one, Vector2.zero),
-                    new TextureSampling(
-                        TextureFilterMode.Bilinear, CoreWrapMode.Repeat)),
-                TextureColorInterpretation.Srgb);
-            Assert.That(value, Is.EqualTo(expected));
-        }
-
-        [Test]
-        public void AssignedMainTex_NonIdentityTint_IsTextureSampleTimesConstant()
-        {
-            var material = NewFixtureMaterial();
-            var texture = ImportTexture("basecolor_tinted");
-            material.SetTexture("_MainTex", texture);
-            material.SetColor("_Color", new Color(0.25f, 0.5f, 0.75f, 1f));
-
-            var value = BaseColor(Interpret(material));
-
-            // In a Linear project the material round-trips the colour on
-            // set and get, so the stored tint can sit one ULP off the
-            // authored literal and the exact multiplier comparison must
-            // read the property back, as NearOneTintStaysAnExactTexture-
-            // Multiplier already does.
-            var tint = material.GetColor("_Color");
-            var expected = ColorSemanticValue.TextureTimesConstant(
-                new TextureSample(
-                    new TextureSourceId(ExpectedToken(texture)),
-                    new UvMapping(0, Vector2.one, Vector2.zero),
-                    new TextureSampling(
-                        TextureFilterMode.Bilinear, CoreWrapMode.Repeat)),
-                TextureColorInterpretation.Srgb,
-                new Vector3(tint.linear.r, tint.linear.g, tint.linear.b));
-            Assert.That(value, Is.EqualTo(expected));
-        }
-
-        [Test]
-        public void NearOneTintStaysAnExactTextureMultiplier()
-        {
-            var material = NewFixtureMaterial();
-            material.SetTexture("_MainTex", ImportTexture("basecolor_near_one"));
-            // 0.999999 sRGB decodes to 0.9999979 linear: not exactly one, but
-            // well inside Unity's Vector3 approximate-equality ball around one.
-            material.SetColor("_Color", new Color(0.999999f, 1f, 1f, 1f));
-
-            var linear = material.GetColor("_Color").linear;
-            var tint = new Vector3(linear.r, linear.g, linear.b);
-            Assert.That(
-                tint.x == 1f && tint.y == 1f && tint.z == 1f,
-                Is.False,
-                "the derived tint must differ from one under exact comparison");
-            Assert.That(
-                tint == Vector3.one,
-                Is.True,
-                "the derived tint must sit inside Unity's approximate-equality " +
-                "ball around one");
-
-            var value = BaseColor(Interpret(material));
-
-            // Falsifies: collapsing a near-one tint to the unscaled texture
-            // through Unity's epsilon-based Vector3 equality, which drops a
-            // real multiplier from the modeled color.
-            Assert.That(
-                value.Kind,
-                Is.EqualTo(ColorSemanticValueKind.TextureSampleTimesConstant));
-            var multiplier = value.GetMultiplier();
-            Assert.That(multiplier.x == tint.x, Is.True, "exact red multiplier");
-            Assert.That(multiplier.y == tint.y, Is.True, "exact green multiplier");
-            Assert.That(multiplier.z == tint.z, Is.True, "exact blue multiplier");
-        }
-
-        [Test]
-        public void AssignedMainTex_LinearImport_IsLinearInterpretation()
-        {
-            var material = NewFixtureMaterial();
-            var texture = ImportTexture(
-                "basecolor_linear", i => i.sRGBTexture = false);
-            material.SetTexture("_MainTex", texture);
-            material.SetColor("_Color", Color.white);
-
-            var value = BaseColor(Interpret(material));
-
-            Assert.That(
-                value.Kind, Is.EqualTo(ColorSemanticValueKind.TextureSample));
-            Assert.That(
-                value.GetColorInterpretation(),
-                Is.EqualTo(TextureColorInterpretation.Linear));
-        }
-
-        [Test]
-        public void AssignedMainTex_Uv1WithScaleOffset_IsCaptured()
-        {
-            var material = NewFixtureMaterial();
-            var texture = ImportTexture("basecolor_uv1");
-            material.SetTexture("_MainTex", texture);
-            material.SetColor("_Color", Color.white);
-            material.SetFloat("_MainTexUV", 1f);
-            material.SetTextureScale("_MainTex", new Vector2(2f, 3f));
-            material.SetTextureOffset("_MainTex", new Vector2(0.1f, 0.2f));
-
-            var value = BaseColor(Interpret(material));
-            var sample = value.GetTextureSample();
-
-            Assert.That(sample.Coordinates.Channel, Is.EqualTo(1));
-            Assert.That(sample.Coordinates.Scale, Is.EqualTo(new Vector2(2f, 3f)));
-            Assert.That(sample.Coordinates.Offset, Is.EqualTo(new Vector2(0.1f, 0.2f)));
-        }
-
-        // --- Feature-writer gates ------------------------------------------
-
-        [Test]
-        public void BaseColorFeatureWriterEnabled_IsUnsupportedFeature(
-            [ValueSource(nameof(BaseColorFeatureGates))] string property)
-        {
-            var material = NewFixtureMaterial();
-            material.SetFloat(property, 1f);
-
-            AssertUnsupportedOutput(
-                Interpret(material),
-                PoiyomiSemanticOutput.BaseColor,
-                PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                property);
-        }
-
-        [Test]
-        public void EmissionSlotEnabled_LeavesBaseColorComplete()
-        {
-            // An emission slot is not a main-color writer; only its
-            // replace-base-color flag competes for BaseColor.
-            var material = NewFixtureMaterial();
-            material.SetFloat("_EnableEmission1", 1f);
-
-            AssertOutputComplete(
-                Interpret(material), PoiyomiSemanticOutput.BaseColor);
-        }
-
-        // --- UV / sampling-mode / identity / sampler / import gates ---------
-
-        [Test]
-        public void AssignedMainTex_UnsupportedUvChannel_IsUnsupportedUv()
-        {
-            var material = NewFixtureMaterial();
-            material.SetTexture("_MainTex", ImportTexture("basecolor_uv_bad"));
-            material.SetFloat("_MainTexUV", 4f);
-
-            AssertUnsupportedOutput(
-                Interpret(material),
-                PoiyomiSemanticOutput.BaseColor,
-                PoiyomiSemanticDiagnosticCode.UnsupportedUv);
-        }
-
-        [Test]
-        public void AssignedMainTex_NonZeroPan_IsUnsupportedUv()
-        {
-            var material = NewFixtureMaterial();
-            material.SetTexture("_MainTex", ImportTexture("basecolor_pan_bad"));
-            material.SetVector("_MainTexPan", new Vector4(0.1f, 0f, 0f, 0f));
-
-            AssertUnsupportedOutput(
-                Interpret(material),
-                PoiyomiSemanticOutput.BaseColor,
-                PoiyomiSemanticDiagnosticCode.UnsupportedUv);
-        }
-
-        [Test]
-        public void AssignedMainTex_PixelMode_IsUnsupportedFeature()
-        {
-            var material = NewFixtureMaterial();
-            material.SetTexture("_MainTex", ImportTexture("basecolor_pixel"));
-            material.SetFloat("_MainPixelMode", 1f);
-
-            AssertUnsupportedOutput(
-                Interpret(material),
-                PoiyomiSemanticOutput.BaseColor,
-                PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                "_MainPixelMode");
-        }
-
-        [Test]
-        public void AssignedMainTex_Stochastic_IsUnsupportedFeature()
-        {
-            var material = NewFixtureMaterial();
-            material.SetTexture("_MainTex", ImportTexture("basecolor_stochastic"));
-            material.SetFloat("_MainTexStochastic", 1f);
-
-            AssertUnsupportedOutput(
-                Interpret(material),
-                PoiyomiSemanticOutput.BaseColor,
-                PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                "_MainTexStochastic");
-        }
-
-        [Test]
-        public void TransientMainTex_IsUnstableIdentity()
-        {
-            var material = NewFixtureMaterial();
-            material.SetTexture("_MainTex", Track(new Texture2D(4, 4)));
-
-            AssertUnsupportedOutput(
-                Interpret(material),
-                PoiyomiSemanticOutput.BaseColor,
-                PoiyomiSemanticDiagnosticCode.UnstableTextureIdentity);
-        }
-
-        [Test]
-        public void AssignedMainTex_MirrorWrapSampler_IsUnsupportedSampling()
-        {
-            var material = NewFixtureMaterial();
-            material.SetTexture("_MainTex", ImportTexture(
-                "basecolor_mirror", i => i.wrapMode = UnityEngine.TextureWrapMode.Mirror));
-
-            AssertUnsupportedOutput(
-                Interpret(material),
-                PoiyomiSemanticOutput.BaseColor,
-                PoiyomiSemanticDiagnosticCode.UnsupportedSampling);
-        }
-
-        [Test]
-        public void AssignedMainTex_NoImporter_IsUnsupportedTextureImport()
-        {
-            // A native texture asset passes identity and sampler checks but has
-            // no TextureImporter, so its color interpretation is unprovable.
-            var material = NewFixtureMaterial();
-            material.SetTexture(
-                "_MainTex", NewNativeTextureAsset("basecolor_native"));
-
-            AssertUnsupportedOutput(
-                Interpret(material),
-                PoiyomiSemanticOutput.BaseColor,
-                PoiyomiSemanticDiagnosticCode.UnsupportedTextureImport);
-        }
-
-        // --- Value / color-space failures ----------------------------------
-
-        [Test]
-        public void NonFiniteColor_IsUnsupportedFeature()
-        {
-            var material = NewFixtureMaterial();
-            material.SetColor("_Color", new Color(float.NaN, 0f, 0f, 1f));
-
-            AssertUnsupportedOutput(
-                Interpret(material),
-                PoiyomiSemanticOutput.BaseColor,
-                PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                "_Color");
-        }
-
-        [Test]
-        public void GammaProject_InvalidatesBaseColorOnly()
-        {
-            var material = NewFixtureMaterial();
-            material.SetColor("_Color", Color.white);
-
-            var result = Interpret(material, ColorSpace.Gamma);
-
-            AssertUnsupportedOutput(
-                result,
-                PoiyomiSemanticOutput.BaseColor,
-                PoiyomiSemanticDiagnosticCode.UnsupportedColorSpace);
-            // Alpha is a raw scalar independent of the working color space; the
-            // BaseColor invalidation must not touch the proven Alpha output.
-            AssertOutputComplete(result, PoiyomiSemanticOutput.Alpha);
-        }
-    }
-
-    /// <summary>
     /// Task 4 Alpha equation tests. Alpha is a raw scalar, so the working color
-    /// space is irrelevant here; both outputs are still interpreted together
-    /// through the linear seam. Force-opaque, coverage/clip mechanisms, and the
+    /// space is irrelevant here. Force-opaque, coverage/clip mechanisms, and the
     /// per-feature alpha writers are each proven to fail closed, and the shared
     /// main sample is proven to need no color-import evidence for alpha.
     /// </summary>
@@ -571,10 +191,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 });
                 return true;
             };
-            var triangle = TriangleAlphaInput.WithUv0(
-                Vector3.zero,
-                Vector3.right,
-                Vector3.up,
+            var triangle = CornerTriangle(
                 new Vector2(0.05f, 0.15f),
                 new Vector2(0.1f, 0.15f),
                 new Vector2(0.05f, 0.2f));
@@ -776,32 +393,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 Is.Not.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
         }
 
-        /// <summary>
-        /// Admission removes the premultiply entry from the alpha gate list
-        /// only. The vendor premultiply scales the color per pixel, so the
-        /// base-color equation genuinely changes and its gate stays closed.
-        /// A wrong implementation that drops the entry from both arrays lets
-        /// the base-color output complete for a premultiply material.
-        /// </summary>
-        [Test]
-        public void Premultiply_StillGatesBaseColor()
-        {
-            // No-op guard: without the feature the base-color output
-            // completes. The refusal below comes from the premultiply gate.
-            AssertOutputComplete(
-                Interpret(NonForcedMaterial()),
-                PoiyomiSemanticOutput.BaseColor);
-
-            var material = NonForcedMaterial();
-            material.SetFloat("_AlphaPremultiply", 1f);
-
-            AssertUnsupportedOutput(
-                Interpret(material),
-                PoiyomiSemanticOutput.BaseColor,
-                PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                "_AlphaPremultiply");
-        }
-
         // Resolves one material's proven alpha through the classification
         // seam the fixture machinery already exposes.
         private static TriangleAlphaOutcome ClassifyAlphaTriangle(
@@ -816,10 +407,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 RefusingFieldProvider, AlphaSamplingPolicy.ConservativeDesktop,
                 0);
             Assert.That(resolution.IsResolved, Is.True);
-            return resolution.Classify(TriangleAlphaInput.WithUv0(
-                Vector3.zero,
-                Vector3.right,
-                Vector3.up,
+            return resolution.Classify(CornerTriangle(
                 new Vector2(0.05f, 0.15f),
                 new Vector2(0.1f, 0.15f),
                 new Vector2(0.05f, 0.2f)));
@@ -912,15 +500,28 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         }
 
         [Test]
-        public void BaseColorOnlyWriter_LeavesAlphaComplete()
+        public void NonAlphaWriter_LeavesAlphaComplete()
         {
-            // A writer that only invalidates BaseColor must not invalidate the
+            // A writer outside the alpha equation must not invalidate the
             // independently proven Alpha output.
             var material = NewFixtureMaterial();
             material.SetFloat("_DetailEnabled", 1f);
 
             AssertOutputComplete(
                 Interpret(material), PoiyomiSemanticOutput.Alpha);
+        }
+
+        [Test]
+        public void GammaColorSpace_AlphaStaysProven()
+        {
+            // Alpha is a raw scalar independent of the working color space;
+            // the color-space fact never touches the proven Alpha output.
+            var material = NewFixtureMaterial();
+            material.SetColor("_Color", Color.white);
+
+            AssertOutputComplete(
+                Interpret(material, ColorSpace.Gamma),
+                PoiyomiSemanticOutput.Alpha);
         }
     }
 }

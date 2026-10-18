@@ -14,9 +14,10 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
     /// Gates 1-11 are the merged cutout rules unchanged — gate 9 already
     /// admits the transparent canonical <c>_DstBlend</c> OneMinusSrcAlpha
     /// (T1 §7) — gate 12 carries this family's bound, and gates 13-15 refuse
-    /// the transparent-only post-clip writers. No bound here is shared,
-    /// parameterized, or widened with any other source family's (design
-    /// §11).
+    /// the transparent-only post-clip writers. Gates 5-12 run through
+    /// <see cref="LilToonSharedEligibility.EvaluateRenderStateGates"/> with
+    /// this family's own cutoff bound as its input. No bound here is shared
+    /// with or widened against any other source family's (design §11).
     /// </para>
     /// </summary>
     internal static class LilToonTransparentSourceEligibility
@@ -139,7 +140,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
 
         /// <summary>
         /// The 22 property names this module reads off the SOURCE material,
-        /// in a fixed order the finiteness sweep and <see cref="Read"/> index
+        /// in a fixed order the finiteness sweep and <see cref="LilToonSharedEligibility.Read"/> index
         /// by. Sharing a name with the recipe does not make a source
         /// render-state fact target evidence.
         /// </summary>
@@ -226,10 +227,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 }
             }
 
-            if (float.IsNaN(distanceFade.x) || float.IsInfinity(distanceFade.x) ||
-                float.IsNaN(distanceFade.y) || float.IsInfinity(distanceFade.y) ||
-                float.IsNaN(distanceFade.z) || float.IsInfinity(distanceFade.z) ||
-                float.IsNaN(distanceFade.w) || float.IsInfinity(distanceFade.w))
+            if (!EvidenceGates.IsFinite(distanceFade))
             {
                 return LilToonOpaqueConversionEligibility.Refused(
                     LilToonOpaqueConversionRefusal.ConversionPropertyNotFinite);
@@ -264,123 +262,20 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     LilToonOpaqueConversionRefusal.UnsupportedRenderType);
             }
 
-            // 5. Depth comparison. Required to be LEqual already rather than
-            //    normalized to it: a different comparison changes visibility
-            //    independently of alpha, so a material authored to draw with
-            //    Always, Greater or Disabled expresses a visibility intent
-            //    the alpha proof knows nothing about. The opt-in policy
-            //    admits Less beside LEqual (design §D2). Less and LEqual
-            //    differ only at exact depth equality. That class depends on
-            //    depth-buffer population, so no per-pixel proof reaches it.
-            //    The admission is a stated, consented divergence. The
-            //    caller learns it through DepthTestDivergence. The recipe
-            //    still writes 4. Without the policy that write is a no-op.
-            //    With the policy it is the reported normalization.
-            var depthComparison = Read(values, "_ZTest");
-            if (depthComparison !=
-                    OpaqueConversionFactors.LEqualDepthComparison &&
-                !(allowDepthTestChange &&
-                  depthComparison ==
-                  OpaqueConversionFactors.LessDepthComparison))
+            // 5-12. The shared render-state gates, in the pinned order,
+            //     with this family's own cutoff bound. On a pass the out
+            //     parameter carries this family's DepthTestDivergence
+            //     answer; on a refusal it is false.
+            var renderStateRefusal = LilToonSharedEligibility
+                .EvaluateRenderStateGates(
+                    values,
+                    EligibilitySchema,
+                    allowDepthTestChange,
+                    MaxProvableCutoff,
+                    out var depthTestDivergence);
+            if (renderStateRefusal.HasValue)
             {
-                return LilToonOpaqueConversionEligibility.Refused(
-                    LilToonOpaqueConversionRefusal.UnsupportedDepthComparison);
-            }
-
-            // 6. Depth write. The canonical target writes depth; a source
-            //    authored with ZWrite off expresses different visibility
-            //    intent than the recipe preserves.
-            if (Read(values, "_ZWrite") != OpaqueConversionFactors.DepthWriteOn)
-            {
-                return LilToonOpaqueConversionEligibility.Refused(
-                    LilToonOpaqueConversionRefusal.UnsupportedDepthWrite);
-            }
-
-            // 7. Color mask. The canonical target writes all channels; a
-            //    masked material deliberately suppresses channel output the
-            //    recipe would restore.
-            if (Read(values, "_ColorMask") != OpaqueConversionFactors.ColorMaskAll)
-            {
-                return LilToonOpaqueConversionEligibility.Refused(
-                    LilToonOpaqueConversionRefusal.UnsupportedColorMask);
-            }
-
-            // 8. Depth offset. The canonical target applies none; a material
-            //    authored with an offset expresses polygon-offset intent the
-            //    recipe would erase.
-            if (Read(values, "_OffsetFactor") != 0f ||
-                Read(values, "_OffsetUnits") != 0f)
-            {
-                return LilToonOpaqueConversionEligibility.Refused(
-                    LilToonOpaqueConversionRefusal.UnsupportedDepthOffset);
-            }
-
-            // 9. Base RGB blend. At alpha 1 both accepted source factors
-            //    evaluate to 1 and both accepted destination factors to 0,
-            //    so the blend degenerates to `dst := src` and normalizing
-            //    to One/Zero is an identity there. The operation must be
-            //    Add: the accepted Max operation in ForwardAdd does not
-            //    carry over here, and any other operation changes how RGB
-            //    is combined, not just how factors weigh it.
-            if (Read(values, "_BlendOp") != OpaqueConversionFactors.BlendOpAdd ||
-                !OpaqueConversionFactors.IsUnitSourceFactorAtAlphaOne(
-                    Read(values, "_SrcBlend")) ||
-                !OpaqueConversionFactors.IsZeroDestinationFactorAtAlphaOne(
-                    Read(values, "_DstBlend")))
-            {
-                return LilToonOpaqueConversionEligibility.Refused(
-                    LilToonOpaqueConversionRefusal.UnsupportedBlendEquation);
-            }
-
-            // 10. Base alpha blend, same degeneracy argument as gate 9.
-            if (Read(values, "_BlendOpAlpha") !=
-                    OpaqueConversionFactors.BlendOpAdd ||
-                !OpaqueConversionFactors.IsUnitSourceFactorAtAlphaOne(
-                    Read(values, "_SrcBlendAlpha")) ||
-                !OpaqueConversionFactors.IsZeroDestinationFactorAtAlphaOne(
-                    Read(values, "_DstBlendAlpha")))
-            {
-                return LilToonOpaqueConversionEligibility.Refused(
-                    LilToonOpaqueConversionRefusal
-                        .UnsupportedAlphaBlendEquation);
-            }
-
-            // 11. ForwardAdd blend. The recipe rewrites this pass to
-            //    Max(Max) with One/One factors (B2 §3.1's FORWARD_ADD
-            //    declares the literal Zero One alpha pair, which the alpha
-            //    operation overwrites). At alpha 1 the accepted source
-            //    factors evaluate to 1 and the accepted destination factor
-            //    to 1, so the accepted states are equivalent to the
-            //    canonical tuple. Unlike the Poiyomi path, the blend
-            //    OPERATIONS are constrained too: lilToon's recipe writes
-            //    Max into both, and an Add-kept ForwardAdd pass would
-            //    double-composite against the base pass.
-            if (!OpaqueConversionFactors.IsUnitSourceFactorAtAlphaOne(
-                    Read(values, "_SrcBlendFA")) ||
-                Read(values, "_DstBlendFA") !=
-                OpaqueConversionFactors.BlendFactorOne ||
-                Read(values, "_BlendOpFA") !=
-                OpaqueConversionFactors.BlendOpMax ||
-                Read(values, "_BlendOpAlphaFA") !=
-                OpaqueConversionFactors.BlendOpMax)
-            {
-                return LilToonOpaqueConversionEligibility.Refused(
-                    LilToonOpaqueConversionRefusal
-                        .UnsupportedForwardAddBlendEquation);
-            }
-
-            // 12. Clip threshold. The transparent forward pass clips with
-            //     `clip(alpha - _Cutoff)` — the plain clip, not the cutout
-            //     coverage transform — so alpha exactly 1 provably survives
-            //     while _Cutoff stays at or under this family's bound; the
-            //     cutout twice-margin constant is deliberately not shared
-            //     (T1 §9.2). A NaN cutoff never reaches this comparison:
-            //     gate 2 already refused it.
-            if (Read(values, CutoffProperty) > MaxProvableCutoff)
-            {
-                return LilToonOpaqueConversionEligibility.Refused(
-                    LilToonOpaqueConversionRefusal
-                        .ClipThresholdDiscardsOpaqueAlpha);
+                return renderStateRefusal.Value;
             }
 
             // 13. ForwardAdd premultiply. The FORWARD_ADD pass applies
@@ -389,7 +284,9 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             //     an identity and the ForwardAdd site is one only when the
             //     boost saturates to at least 1; below that the additive
             //     pass composites a darker colour than the opaque target.
-            if (Read(values, AlphaBoostFaProperty) < MinProvableAlphaBoostFa)
+            if (LilToonSharedEligibility.Read(
+                    EligibilitySchema, values, AlphaBoostFaProperty) <
+                MinProvableAlphaBoostFa)
             {
                 return LilToonOpaqueConversionEligibility.Refused(
                     LilToonOpaqueConversionRefusal
@@ -413,7 +310,9 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             //     clip(1 - _SubpassCutoff) and keeps iff the bound holds.
             //     The target casts shadows unconditionally, so a source that
             //     clips its shadow here is not convertible.
-            if (Read(values, SubpassCutoffProperty) > MaxProvableSubpassCutoff)
+            if (LilToonSharedEligibility.Read(
+                    EligibilitySchema, values, SubpassCutoffProperty) >
+                MaxProvableSubpassCutoff)
             {
                 return LilToonOpaqueConversionEligibility.Refused(
                     LilToonOpaqueConversionRefusal.UnsupportedSubpassCutoff);
@@ -429,28 +328,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             // negative.
 
             return LilToonOpaqueConversionEligibility.Convertible(
-                depthComparison ==
-                OpaqueConversionFactors.LessDepthComparison);
-        }
-
-        /// <summary>
-        /// Reads one conversion-read property from the captured values, which
-        /// are indexed by <see cref="EligibilitySchema"/> order.
-        /// </summary>
-        private static float Read(IReadOnlyList<float> values, string property)
-        {
-            for (var index = 0; index < EligibilitySchema.Length; index++)
-            {
-                if (string.Equals(
-                        EligibilitySchema[index], property, StringComparison.Ordinal))
-                {
-                    return values[index];
-                }
-            }
-
-            throw new ArgumentException(
-                "Property '" + property + "' is not conversion-read.",
-                nameof(property));
+                depthTestDivergence);
         }
     }
 }

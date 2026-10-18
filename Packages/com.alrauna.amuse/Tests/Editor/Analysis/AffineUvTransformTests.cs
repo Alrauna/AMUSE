@@ -51,7 +51,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             TriangleAlphaInput transformed;
             AlphaUvEnvelope envelope;
             Assert.That(AffineUvTransform.TryTransform(
-                Mapping(F26Value, 0f, F26Offset, 0f),
+                AffineUvTransform.Decode(Mapping(F26Value, 0f, F26Offset, 0f)),
                 Triangle(F26Value, F26Value, F26Value, 1f, 1f, 1f),
                 out transformed,
                 out envelope), Is.True);
@@ -74,7 +74,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             TriangleAlphaInput transformed;
             AlphaUvEnvelope envelope;
             Assert.That(AffineUvTransform.TryTransform(
-                Mapping(2f, 3f, 0.5f, 0.25f),
+                AffineUvTransform.Decode(Mapping(2f, 3f, 0.5f, 0.25f)),
                 Triangle(0.25f, 0.5f, 0.75f, 0.125f, 0.25f, 0.375f),
                 out transformed,
                 out envelope), Is.True);
@@ -100,7 +100,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             TriangleAlphaInput transformed;
             AlphaUvEnvelope envelope;
             Assert.That(AffineUvTransform.TryTransform(
-                Mapping(-2f, -4f, 0f, 0f),
+                AffineUvTransform.Decode(Mapping(-2f, -4f, 0f, 0f)),
                 Triangle(0.25f, 0.5f, 0.75f, 0.25f, 0.5f, 0.75f),
                 out transformed,
                 out envelope), Is.True);
@@ -124,7 +124,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             TriangleAlphaInput transformed;
             AlphaUvEnvelope envelope;
             Assert.That(AffineUvTransform.TryTransform(
-                Mapping(-4f, -0.5f, 1f, 0.5f),
+                AffineUvTransform.Decode(Mapping(-4f, -0.5f, 1f, 0.5f)),
                 Triangle(0.25f, 0.5f, 0.75f, 1f, 2f, 3f),
                 out transformed,
                 out envelope), Is.True);
@@ -139,12 +139,12 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             TriangleAlphaInput transformed;
             AlphaUvEnvelope envelope;
             Assert.That(AffineUvTransform.TryTransform(
-                Mapping(2f, 0f, 0f, 0f),
+                AffineUvTransform.Decode(Mapping(2f, 0f, 0f, 0f)),
                 Triangle(FloatPow2(126), FloatPow2(126), FloatPow2(126), 0f, 0f, 0f),
                 out transformed,
                 out envelope), Is.False);
             Assert.That(AffineUvTransform.TryTransform(
-                Mapping(1f, 0f, FloatPow2(127), 0f),
+                AffineUvTransform.Decode(Mapping(1f, 0f, FloatPow2(127), 0f)),
                 Triangle(1f, 1f, 1f, 0f, 0f, 0f),
                 out transformed,
                 out envelope), Is.False);
@@ -156,7 +156,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             TriangleAlphaInput transformed;
             AlphaUvEnvelope envelope;
             Assert.That(AffineUvTransform.TryTransform(
-                Mapping(F26Value, 0f, 0f, 0f),
+                AffineUvTransform.Decode(Mapping(F26Value, 0f, 0f, 0f)),
                 Triangle(F26Value, F26Value, F26Value, 0f, 0f, 0f),
                 out transformed,
                 out envelope), Is.True);
@@ -218,7 +218,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             TriangleAlphaInput transformed;
             AlphaUvEnvelope envelope;
             Assert.That(AffineUvTransform.TryTransform(
-                Mapping(1.5f, -2.5f, 0.25f, -0.75f),
+                AffineUvTransform.Decode(Mapping(1.5f, -2.5f, 0.25f, -0.75f)),
                 input,
                 out transformed,
                 out envelope), Is.True);
@@ -239,7 +239,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             TriangleAlphaInput transformed;
             AlphaUvEnvelope envelope;
             Assert.That(AffineUvTransform.TryTransform(
-                Mapping(scale, 0f, -scale, 0f),
+                AffineUvTransform.Decode(Mapping(scale, 0f, -scale, 0f)),
                 Triangle(1f, AdjacentOne, 1f, 0f, 0f, 0f),
                 out transformed,
                 out envelope), Is.True);
@@ -253,7 +253,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             TriangleAlphaInput transformed;
             AlphaUvEnvelope envelope;
             Assert.That(AffineUvTransform.TryTransform(
-                Mapping(1f, 1f, 0f, 0f), input, out transformed, out envelope), Is.True);
+                AffineUvTransform.Decode(Mapping(1f, 1f, 0f, 0f)), input, out transformed, out envelope), Is.True);
             Assert.That(envelope.X.Numerator.Sign, Is.EqualTo(0));
             Assert.That(envelope.Y.Numerator.Sign, Is.EqualTo(0));
             Assert.That(transformed.HasUv0, Is.EqualTo(input.HasUv0));
@@ -269,7 +269,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         {
             TriangleAlphaInput transformed;
             AlphaUvEnvelope envelope;
-            Assert.That(AffineUvTransform.TryTransform(mapping, Triangle(x0, x1, x2, y0, y1, y2), out transformed, out envelope), Is.True);
+            Assert.That(AffineUvTransform.TryTransform(AffineUvTransform.Decode(mapping), Triangle(x0, x1, x2, y0, y1, y2), out transformed, out envelope), Is.True);
             Assert.That(envelope.X.Numerator.Sign, Is.EqualTo(0));
             Assert.That(envelope.Y.Numerator.Sign, Is.EqualTo(0));
         }
@@ -278,7 +278,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         {
             TriangleAlphaInput transformed;
             AlphaUvEnvelope envelope;
-            Assert.That(AffineUvTransform.TryTransform(mapping, Triangle(x0, x1, x2, y0, y1, y2), out transformed, out envelope), Is.True);
+            Assert.That(AffineUvTransform.TryTransform(AffineUvTransform.Decode(mapping), Triangle(x0, x1, x2, y0, y1, y2), out transformed, out envelope), Is.True);
             Assert.That(envelope.X.Numerator.Sign != 0 || envelope.Y.Numerator.Sign != 0, Is.True);
         }
 
@@ -286,7 +286,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         {
             TriangleAlphaInput transformed;
             AlphaUvEnvelope envelope;
-            Assert.That(AffineUvTransform.TryTransform(mapping, triangle, out transformed, out envelope), Is.True);
+            Assert.That(AffineUvTransform.TryTransform(AffineUvTransform.Decode(mapping), triangle, out transformed, out envelope), Is.True);
             AssertRational(envelope.X, expected);
         }
 

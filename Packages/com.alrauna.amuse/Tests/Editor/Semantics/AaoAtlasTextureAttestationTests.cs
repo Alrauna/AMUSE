@@ -17,7 +17,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [SetUp]
         public void ResetAttestationStateBeforeEachTest()
         {
-            AaoAtlasTextureAttestation.ResetForTests();
+            AaoAtlasTextureAttestation.Versions.ResetForTests();
             RegistryGuard = new ObjectRegistryGuard();
         }
 
@@ -33,8 +33,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
 
         private static void InstallAdmittedAaoVersion()
         {
-            AaoAtlasTextureAttestation.ResetForTests();
-            AaoAtlasTextureAttestation.ReadInstalledPackageVersionOrNull =
+            AaoAtlasTextureAttestation.Versions.ResetForTests();
+            AaoAtlasTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
                 _ => "1.9.17";
         }
 
@@ -67,15 +67,15 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         public void ShippedAdmittedSetContainsOnlyTheCharacterizedVersion()
         {
             Assert.That(
-                AaoAtlasTextureAttestation.AdmittedVersions,
+                AaoAtlasTextureAttestation.Versions.AdmittedVersions,
                 Is.EqualTo(new[] { "1.9.17" }),
                 "1.9.17 joined on 2026-10-04 through the dated " +
                 "characterization; any other version stays refused");
             Assert.That(
-                AaoAtlasTextureAttestation.IsVersionAdmitted("1.9.17"),
+                AaoAtlasTextureAttestation.Versions.IsVersionAdmitted("1.9.17"),
                 Is.True);
             Assert.That(
-                AaoAtlasTextureAttestation.IsVersionAdmitted("1.9.18"),
+                AaoAtlasTextureAttestation.Versions.IsVersionAdmitted("1.9.18"),
                 Is.False);
         }
 
@@ -124,8 +124,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [Test]
         public void AtlasShapeRefusesAnUnadmittedVersion()
         {
-            AaoAtlasTextureAttestation.ResetForTests();
-            AaoAtlasTextureAttestation.ReadInstalledPackageVersionOrNull =
+            AaoAtlasTextureAttestation.Versions.ResetForTests();
+            AaoAtlasTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
                 _ => "1.9.18";
             var atlas = NewAtlas("MainTex (AAO UV Packed)");
             try
@@ -144,8 +144,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [Test]
         public void AtlasShapeRefusesAnUnreadableVersion()
         {
-            AaoAtlasTextureAttestation.ResetForTests();
-            AaoAtlasTextureAttestation.ReadInstalledPackageVersionOrNull =
+            AaoAtlasTextureAttestation.Versions.ResetForTests();
+            AaoAtlasTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
                 _ => null;
             var atlas = NewAtlas("MainTex (AAO UV Packed)");
             try

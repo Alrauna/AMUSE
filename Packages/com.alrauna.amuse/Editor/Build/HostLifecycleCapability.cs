@@ -192,7 +192,10 @@ namespace Alrauna.Amuse.Editor.Build
                     facts.BuildPath);
             }
 
-            if (!EqualsOrdinal(facts.PlatformQualifiedName, SupportedPlatform))
+            if (!string.Equals(
+                    facts.PlatformQualifiedName,
+                    SupportedPlatform,
+                    StringComparison.Ordinal))
             {
                 return Refused(
                     HostLifecycleRefusal.UnsupportedPlatform,
@@ -253,11 +256,6 @@ namespace Alrauna.Amuse.Editor.Build
                 context.ErrorReport != null));
         }
 
-        private static bool EqualsOrdinal(string actual, string expected)
-        {
-            return string.Equals(actual, expected, StringComparison.Ordinal);
-        }
-
         private static string PackageVersion(string packageName)
         {
             try
@@ -265,7 +263,8 @@ namespace Alrauna.Amuse.Editor.Build
                 foreach (var package in UnityEditor.PackageManager.PackageInfo
                              .GetAllRegisteredPackages())
                 {
-                    if (EqualsOrdinal(package.name, packageName))
+                    if (string.Equals(
+                            package.name, packageName, StringComparison.Ordinal))
                     {
                         return package.version;
                     }

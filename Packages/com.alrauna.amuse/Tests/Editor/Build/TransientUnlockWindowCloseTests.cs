@@ -56,30 +56,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
-        /// Every material keyframe on the given clip, in binding order.
-        /// The real clip is read back after the build, so the assertion
-        /// sees what the shipped animation actually holds.
-        /// </summary>
-        private static List<Material> CurveMaterials(AnimationClip clip)
-        {
-            var materials = new List<Material>();
-            foreach (var binding in
-                     AnimationUtility.GetObjectReferenceCurveBindings(clip))
-            {
-                foreach (var keyframe in AnimationUtility
-                             .GetObjectReferenceCurve(clip, binding))
-                {
-                    if (keyframe.value is Material material)
-                    {
-                        materials.Add(material);
-                    }
-                }
-            }
-
-            return materials;
-        }
-
-        /// <summary>
         /// The primary close outcome: every slot that
         /// held the unlocked clone holds the locked original again, every
         /// committed reference remapped to the clone names L, the clone is
@@ -132,7 +108,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var clip = TransientUnlockTestLifecycle.CommittedClip(root);
             Assert.That(clip, Is.Not.Null,
                 "the committed animator must hold a clip");
-            var curveMaterials = CurveMaterials(clip);
+            var curveMaterials = TransientUnlockTestLifecycle.CurveMaterials(clip);
             Assert.That(curveMaterials, Is.Not.Empty,
                 "the material-swap curve must survive the reversion");
             Assert.That(curveMaterials, Has.All.EqualTo(locked),
@@ -246,7 +222,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(cloneRef == null, Is.True,
                 "the close destroys the clone only after every " +
                 "reference is back on L, so no reference to U survives");
-            var curveMaterials = CurveMaterials(clip);
+            var curveMaterials = TransientUnlockTestLifecycle.CurveMaterials(clip);
             Assert.That(curveMaterials, Is.Not.Empty,
                 "the material-swap curve must survive the reversion");
             Assert.That(curveMaterials, Has.All.EqualTo(locked),
@@ -304,7 +280,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(cloneRef == null, Is.True,
                 "the close destroys the clone, but only after every " +
                 "reference is back on L");
-            var curveMaterials = CurveMaterials(clip);
+            var curveMaterials = TransientUnlockTestLifecycle.CurveMaterials(clip);
             Assert.That(curveMaterials, Is.Not.Empty,
                 "the blend-tree-resident material-swap curve must " +
                 "survive the reversion");
@@ -411,7 +387,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(cloneRef == null, Is.False,
                 "the close pass must keep the clone alive when a " +
                 "committed curve may still reference it");
-            var curveMaterials = CurveMaterials(clip);
+            var curveMaterials = TransientUnlockTestLifecycle.CurveMaterials(clip);
             Assert.That(curveMaterials, Has.Some.EqualTo(cloneRef),
                 "the fixture precondition: a committed curve still " +
                 "references the clone, which is why the clone stays " +
@@ -643,7 +619,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             // build ships, so the animation the user authored keeps
             // working. The non-empty guard keeps the all-equal
             // constraint from passing vacuously.
-            var curveMaterials = CurveMaterials(clip);
+            var curveMaterials = TransientUnlockTestLifecycle.CurveMaterials(clip);
             Assert.That(curveMaterials, Is.Not.Empty,
                 "the committed animator must carry the material swap");
             Assert.That(curveMaterials, Has.All.EqualTo(shipped));

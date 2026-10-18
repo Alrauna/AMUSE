@@ -207,7 +207,7 @@ namespace Alrauna.Amuse.Editor.Build
                             PoiyomiOpaqueConversion
                                 .GatherConversionSourceEvidence(
                                     live.shader, derived);
-                        if (!PoiyomiMaterialSemantics
+                        if (!PoiyomiSourceAttestation
                                 .TryVerifyPoiyomiIdentity(
                                     sourceEvidence,
                                     out var poiIdentityDiagnostic))
@@ -309,7 +309,7 @@ namespace Alrauna.Amuse.Editor.Build
             IReadOnlyCollection<string> conversionPropertyNames,
             out CapturedMaterialEvidence derived)
         {
-            if (!AdmittedMaterialStates.TryAdmitDerivedEvidence(
+            if (!AnimatedPropertyAdmission.TryAdmitDerivedEvidence(
                     captured,
                     conversionBindings,
                     ConversionRequestForFamily(captured.Family),

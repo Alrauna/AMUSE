@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Alrauna.Amuse.Editor.Host;
 using UnityEngine;
+using static Alrauna.Amuse.Editor.Semantics.EvidenceGates;
 
 namespace Alrauna.Amuse.Editor.Semantics.LilToon
 {
@@ -356,11 +357,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 new LilToonSemanticDiagnostic(
                     LilToonSemanticOutput.Alpha, code, detail));
             return Refused(code, detail);
-        }
-
-        private static bool IsFinite(float value)
-        {
-            return !float.IsNaN(value) && !float.IsInfinity(value);
         }
     }
 }

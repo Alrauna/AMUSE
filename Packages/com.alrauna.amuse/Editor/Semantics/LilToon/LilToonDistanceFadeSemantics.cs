@@ -47,10 +47,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 return LilToonDistanceFadeAnswer.Absent;
             }
 
-            if (float.IsNaN(fade.x) || float.IsInfinity(fade.x) ||
-                float.IsNaN(fade.y) || float.IsInfinity(fade.y) ||
-                float.IsNaN(fade.z) || float.IsInfinity(fade.z) ||
-                float.IsNaN(fade.w) || float.IsInfinity(fade.w))
+            if (!EvidenceGates.IsFinite(fade))
             {
                 return LilToonDistanceFadeAnswer.NonFinite;
             }

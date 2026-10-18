@@ -196,7 +196,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     switch (family)
                     {
                         case CapturedAlphaMaterialFamily.Poiyomi:
-                            poiyomi = PoiyomiMaterialSemantics
+                            poiyomi = PoiyomiSourceAttestation
                                 .GatherAlphaSourceEvidence(
                                     shaders[index], evidence[index]);
                             break;
@@ -204,7 +204,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             // Both Poiyomi identities verify through one
                             // conjunction, so the gather is the same function
                             // the plain family uses.
-                            poiyomi = PoiyomiMaterialSemantics
+                            poiyomi = PoiyomiSourceAttestation
                                 .GatherAlphaSourceEvidence(
                                     shaders[index], evidence[index]);
                             break;
@@ -326,11 +326,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
 
             return new CapturedAlphaSemantics(
-                new MaterialSemantics(
-                    SemanticOutput<ColorSemanticValue>.Unknown(),
-                    alpha,
-                    SemanticOutput<ColorSemanticValue>.Unknown(),
-                    SemanticOutput<NormalSemanticValue>.Unknown()),
+                new MaterialSemantics(alpha),
                 unknownReason);
         }
 
@@ -428,7 +424,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var eligibility = evaluateEligibility(
                 derived, queue, renderType, allowDepthTestChange);
             // The tuple-carrying opaque stand-in is the attested target.
-            return AlphaSeparationPreparation.TryMapLilToonOutcome(
+            return AlphaSeparationMaterialConverter.TryMapLilToonOutcome(
                 eligibility,
                 () => preparedOpaque ??
                     LilToonOpaqueTarget.PrepareCanonicalOpaqueClone(

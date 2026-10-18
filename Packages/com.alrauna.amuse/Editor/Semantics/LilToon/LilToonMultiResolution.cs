@@ -406,20 +406,10 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 return false;
             }
 
-            for (var index = 0;
-                index < SpecializedContainerShaderNames.Length;
-                index++)
-            {
-                if (string.Equals(
-                        shaderName,
-                        SpecializedContainerShaderNames[index],
-                        StringComparison.Ordinal))
-                {
-                    return true;
-                }
-            }
-
-            return false;
+            return Array.Exists(
+                SpecializedContainerShaderNames,
+                name => string.Equals(
+                    name, shaderName, StringComparison.Ordinal));
         }
     }
 

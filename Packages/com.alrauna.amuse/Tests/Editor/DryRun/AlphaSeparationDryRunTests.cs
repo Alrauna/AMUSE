@@ -489,7 +489,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                     else if (family ==
                         CapturedAlphaMaterialFamily.Poiyomi)
                     {
-                        poiyomi = PoiyomiMaterialSemantics
+                        poiyomi = PoiyomiSourceAttestation
                             .GatherAlphaSourceEvidence(
                                 shaders[index], evidence[index]);
                     }
@@ -861,8 +861,8 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             atlas.Apply(false);
             atlas.filterMode = FilterMode.Point;
             atlas.wrapMode = UnityEngine.TextureWrapMode.Clamp;
-            AaoAtlasTextureAttestation.ResetForTests();
-            AaoAtlasTextureAttestation.ReadInstalledPackageVersionOrNull =
+            AaoAtlasTextureAttestation.Versions.ResetForTests();
+            AaoAtlasTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
                 _ => "1.9.17";
             try
             {
@@ -885,7 +885,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             }
             finally
             {
-                AaoAtlasTextureAttestation.ResetForTests();
+                AaoAtlasTextureAttestation.Versions.ResetForTests();
             }
         }
 

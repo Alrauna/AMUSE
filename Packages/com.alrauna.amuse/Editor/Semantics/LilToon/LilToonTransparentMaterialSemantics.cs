@@ -24,24 +24,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
     /// </summary>
     internal static class LilToonTransparentMaterialSemantics
     {
-        private const string InvisibleProperty = "_Invisible";
-        private const string UdimDiscardCompileProperty = "_UDIMDiscardCompile";
-        private const string UdimDiscardModeProperty = "_UDIMDiscardMode";
-        private const string ShiftBackfaceUvProperty = "_ShiftBackfaceUV";
-        private const string UseParallaxProperty = "_UseParallax";
-        private const string IdMask1Property = "_IDMask1";
-        private const string IdMask2Property = "_IDMask2";
-        private const string IdMask3Property = "_IDMask3";
-        private const string IdMask4Property = "_IDMask4";
-        private const string IdMask5Property = "_IDMask5";
-        private const string IdMask6Property = "_IDMask6";
-        private const string IdMask7Property = "_IDMask7";
-        private const string IdMask8Property = "_IDMask8";
-        private const string IdMaskControlsDissolveProperty =
-            "_IDMaskControlsDissolve";
-        private const string AlphaBoostFaProperty = "_AlphaBoostFA";
-        private const string SubpassCutoffProperty = "_SubpassCutoff";
-
         /// <summary>
         /// The transparent clip bound (design §9 gate 12; T1 §9.2). The
         /// transparent forward site is a plain clip(fd.col.a - _Cutoff), not
@@ -78,7 +60,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// Every runtime gate that can change transparent coverage. With any
         /// of these active the coverage is not the plain clip of the main
         /// alpha sample (design §7 clause 2), so the interpretation refuses.
-        /// <see cref="IdMaskControlsDissolveProperty"/> is the
+        /// <see cref="LilToonProperties.IdMaskControlsDissolve"/> is the
         /// adversarial-review gate: with it set, the vertex IDMask path can
         /// force the sampled alpha chain to zero even at dissolve mode zero
         /// (B2 §3.3.8, §5 clause 2). <c>_UseDither</c> is deliberately not a
@@ -88,20 +70,20 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// </summary>
         private static readonly string[] AlphaCoverageGates =
         {
-            InvisibleProperty,
-            UdimDiscardCompileProperty,
-            UdimDiscardModeProperty,
-            ShiftBackfaceUvProperty,
-            UseParallaxProperty,
-            IdMask1Property,
-            IdMask2Property,
-            IdMask3Property,
-            IdMask4Property,
-            IdMask5Property,
-            IdMask6Property,
-            IdMask7Property,
-            IdMask8Property,
-            IdMaskControlsDissolveProperty,
+            LilToonProperties.Invisible,
+            LilToonProperties.UdimDiscardCompile,
+            LilToonProperties.UdimDiscardMode,
+            LilToonProperties.ShiftBackfaceUV,
+            LilToonProperties.UseParallax,
+            LilToonProperties.IdMask1,
+            LilToonProperties.IdMask2,
+            LilToonProperties.IdMask3,
+            LilToonProperties.IdMask4,
+            LilToonProperties.IdMask5,
+            LilToonProperties.IdMask6,
+            LilToonProperties.IdMask7,
+            LilToonProperties.IdMask8,
+            LilToonProperties.IdMaskControlsDissolve,
         };
 
         /// <summary>
@@ -115,13 +97,13 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             // (5) The ForwardAdd premultiply is the identity at a = 1 only
             // when the boost saturates to at least one (T1 §5.3).
             LilToonAlphaGate.Minimum(
-                AlphaBoostFaProperty, MinProvableAlphaBoostFa),
+                LilToonProperties.AlphaBoostFA, MinProvableAlphaBoostFa),
 
             // (6) The subpass shadow clip keeps at a = 1 by the same
             // sign-preservation argument as the forward cutoff, up to the
             // measured bound (T1 §9.4).
             LilToonAlphaGate.Maximum(
-                SubpassCutoffProperty, MaxProvableSubpassCutoff),
+                LilToonProperties.SubpassCutoff, MaxProvableSubpassCutoff),
         };
 
         /// <summary>
@@ -198,11 +180,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
 
             return new LilToonSemanticResult(
                 true,
-                new MaterialSemantics(
-                    SemanticOutput<ColorSemanticValue>.Unknown(),
-                    alpha,
-                    SemanticOutput<ColorSemanticValue>.Unknown(),
-                    SemanticOutput<NormalSemanticValue>.Unknown()),
+                new MaterialSemantics(alpha),
                 diagnostics);
         }
 

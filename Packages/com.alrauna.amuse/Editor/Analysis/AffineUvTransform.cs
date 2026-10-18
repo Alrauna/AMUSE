@@ -51,19 +51,6 @@ namespace Alrauna.Amuse.Editor.Analysis
                 ExactUvGeometry.DecodeFloat(mapping.Offset.y));
         }
 
-        // Decodes and transforms in one call. A caller that classifies many
-        // triangles under one mapping decodes once and drives the record
-        // overload directly.
-        internal static bool TryTransform(
-            UvMapping mapping,
-            TriangleAlphaInput triangle,
-            out TriangleAlphaInput transformed,
-            out AlphaUvEnvelope envelope)
-        {
-            return TryTransform(
-                Decode(mapping), triangle, out transformed, out envelope);
-        }
-
         internal static bool TryTransform(
             DecodedMapping mapping,
             TriangleAlphaInput triangle,

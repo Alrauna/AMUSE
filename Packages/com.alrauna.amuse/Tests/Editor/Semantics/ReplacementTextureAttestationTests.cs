@@ -16,7 +16,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [SetUp]
         public void ResetAttestationStateBeforeEachTest()
         {
-            ReplacementTextureAttestation.ResetForTests();
+            ReplacementTextureAttestation.Versions.ResetForTests();
             RegistryGuard = new ObjectRegistryGuard();
         }
 
@@ -44,47 +44,47 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         public void ShippedAdmittedSetContainsOnlyTheCharacterizedVersion()
         {
             Assert.That(
-                ReplacementTextureAttestation.AdmittedVersions,
+                ReplacementTextureAttestation.Versions.AdmittedVersions,
                 Is.EqualTo(new[] { "0.9.0" }),
                 "0.9.0 joined on 2026-10-03 through the dated " +
                 "characterization; any other version stays refused");
             Assert.That(
-                ReplacementTextureAttestation.IsVersionAdmitted("0.9.0"),
+                ReplacementTextureAttestation.Versions.IsVersionAdmitted("0.9.0"),
                 Is.True);
             Assert.That(
-                ReplacementTextureAttestation.IsVersionAdmitted("0.1.0"),
+                ReplacementTextureAttestation.Versions.IsVersionAdmitted("0.1.0"),
                 Is.False);
         }
 
         [Test]
         public void InjectedVersionIsAdmittedAndOtherVersionIsRefused()
         {
-            ReplacementTextureAttestation.SetAdmittedVersionsForTests("0.9.0");
+            ReplacementTextureAttestation.Versions.SetAdmittedVersionsForTests("0.9.0");
             Assert.That(
-                ReplacementTextureAttestation.IsVersionAdmitted("0.9.0"),
+                ReplacementTextureAttestation.Versions.IsVersionAdmitted("0.9.0"),
                 Is.True);
             Assert.That(
-                ReplacementTextureAttestation.IsVersionAdmitted("0.1.0"),
+                ReplacementTextureAttestation.Versions.IsVersionAdmitted("0.1.0"),
                 Is.False);
         }
 
         [Test]
         public void NullOrEmptyVersionIsNeverAdmitted()
         {
-            ReplacementTextureAttestation.SetAdmittedVersionsForTests("0.9.0");
+            ReplacementTextureAttestation.Versions.SetAdmittedVersionsForTests("0.9.0");
             Assert.That(
-                ReplacementTextureAttestation.IsVersionAdmitted(null), Is.False);
+                ReplacementTextureAttestation.Versions.IsVersionAdmitted(null), Is.False);
             Assert.That(
-                ReplacementTextureAttestation.IsVersionAdmitted(""), Is.False);
+                ReplacementTextureAttestation.Versions.IsVersionAdmitted(""), Is.False);
         }
 
         [Test]
         public void ReadableProviderAnswerSatisfiesTheInstalledVersionRead()
         {
-            ReplacementTextureAttestation.ReadInstalledPackageVersionOrNull =
+            ReplacementTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
                 _ => "1.2.3";
             Assert.That(
-                ReplacementTextureAttestation.TryReadInstalledProducerVersion(
+                ReplacementTextureAttestation.Versions.TryReadInstalledProducerVersion(
                     out var version),
                 Is.True);
             Assert.That(version, Is.EqualTo("1.2.3"));
@@ -93,10 +93,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [Test]
         public void UnreadableInstalledVersionRefusesTheRead()
         {
-            ReplacementTextureAttestation.ReadInstalledPackageVersionOrNull =
+            ReplacementTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
                 _ => null;
             Assert.That(
-                ReplacementTextureAttestation.TryReadInstalledProducerVersion(
+                ReplacementTextureAttestation.Versions.TryReadInstalledProducerVersion(
                     out _),
                 Is.False,
                 "an unreadable version refuses, following the lilToon " +
@@ -107,17 +107,17 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         public void VersionReadCachesOneProviderCallPerSession()
         {
             var calls = 0;
-            ReplacementTextureAttestation.ReadInstalledPackageVersionOrNull = _ =>
+            ReplacementTextureAttestation.Versions.ReadInstalledPackageVersionOrNull = _ =>
             {
                 calls++;
                 return "0.9.0";
             };
-            ReplacementTextureAttestation.TryReadInstalledProducerVersion(out _);
-            ReplacementTextureAttestation.TryReadInstalledProducerVersion(out _);
+            ReplacementTextureAttestation.Versions.TryReadInstalledProducerVersion(out _);
+            ReplacementTextureAttestation.Versions.TryReadInstalledProducerVersion(out _);
             Assert.That(calls, Is.EqualTo(1),
                 "the read caches once per capture session");
-            ReplacementTextureAttestation.ClearVersionCacheForSession();
-            ReplacementTextureAttestation.TryReadInstalledProducerVersion(out _);
+            ReplacementTextureAttestation.Versions.ClearVersionCacheForSession();
+            ReplacementTextureAttestation.Versions.TryReadInstalledProducerVersion(out _);
             Assert.That(calls, Is.EqualTo(2),
                 "a session reset reads again");
         }
@@ -125,12 +125,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [Test]
         public void ResetForTestsRestoresTheCharacterizedSetAndTheProductionProvider()
         {
-            ReplacementTextureAttestation.SetAdmittedVersionsForTests("0.1.0");
-            ReplacementTextureAttestation.ReadInstalledPackageVersionOrNull =
+            ReplacementTextureAttestation.Versions.SetAdmittedVersionsForTests("0.1.0");
+            ReplacementTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
                 _ => "9.9.9";
-            ReplacementTextureAttestation.ResetForTests();
+            ReplacementTextureAttestation.Versions.ResetForTests();
             Assert.That(
-                ReplacementTextureAttestation.AdmittedVersions,
+                ReplacementTextureAttestation.Versions.AdmittedVersions,
                 Is.EqualTo(new[] { "0.9.0" }),
                 "the reset restores the characterized production set");
             // With the production provider restored, the delegate no
@@ -138,7 +138,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             // environment never installs LAC, so the restored provider
             // refuses the read outright.
             Assert.That(
-                ReplacementTextureAttestation.TryReadInstalledProducerVersion(
+                ReplacementTextureAttestation.Versions.TryReadInstalledProducerVersion(
                     out var version),
                 Is.False);
             Assert.That(version, Is.Null);
@@ -150,9 +150,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             // The shipped-empty admitted set refuses every copy, so this
             // fixture admits one version and points the provider at it,
             // matching the test's "with admitted version" premise.
-            ReplacementTextureAttestation.ReadInstalledPackageVersionOrNull =
+            ReplacementTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
                 _ => "0.9.0";
-            ReplacementTextureAttestation.SetAdmittedVersionsForTests("0.9.0");
+            ReplacementTextureAttestation.Versions.SetAdmittedVersionsForTests("0.9.0");
             var source = ReplacementTextureIdentityTests.ImportSourceAsset("admitted", FixtureFolder);
             var copy = MakeAdmittedCopy(source);
             try
@@ -244,16 +244,16 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             try
             {
                 ObjectRegistry.RegisterReplacedObject(source, copy);
-                ReplacementTextureAttestation.SetAdmittedVersionsForTests();
+                ReplacementTextureAttestation.Versions.SetAdmittedVersionsForTests();
                 Assert.That(
                     ReplacementTextureAttestation.TryIdentifyReplacement(
                         copy, out _),
                     Is.False,
                     "the shipped-empty set refuses every copy");
-                ReplacementTextureAttestation.ClearVersionCacheForSession();
-                ReplacementTextureAttestation.ReadInstalledPackageVersionOrNull =
+                ReplacementTextureAttestation.Versions.ClearVersionCacheForSession();
+                ReplacementTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
                     _ => null;
-                ReplacementTextureAttestation.SetAdmittedVersionsForTests("0.9.0");
+                ReplacementTextureAttestation.Versions.SetAdmittedVersionsForTests("0.9.0");
                 Assert.That(
                     ReplacementTextureAttestation.TryIdentifyReplacement(
                         copy, out _),

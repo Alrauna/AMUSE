@@ -39,17 +39,17 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             // Shared fixture seam: admission requires an injected admitted
             // version and an isolated registry, so every test starts from the
             // same admitted-session shape and nothing leaks between tests.
-            ReplacementTextureAttestation.ResetForTests();
+            ReplacementTextureAttestation.Versions.ResetForTests();
             registryGuard = new ObjectRegistryGuard();
-            ReplacementTextureAttestation.SetAdmittedVersionsForTests("0.9.0");
-            ReplacementTextureAttestation.ReadInstalledPackageVersionOrNull =
+            ReplacementTextureAttestation.Versions.SetAdmittedVersionsForTests("0.9.0");
+            ReplacementTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
                 _ => "0.9.0";
         }
 
         [TearDown]
         public void TearDown()
         {
-            ReplacementTextureAttestation.ResetForTests();
+            ReplacementTextureAttestation.Versions.ResetForTests();
             registryGuard.Dispose();
             if (AssetDatabase.LoadAssetAtPath<ScriptableObject>(TestContainerPath) != null)
             {
@@ -160,15 +160,15 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         {
             var registryGuard = new ObjectRegistryGuard();
             var previousVersion =
-                ReplacementTextureAttestation.ReadInstalledPackageVersionOrNull;
+                ReplacementTextureAttestation.Versions.ReadInstalledPackageVersionOrNull;
             var source = Import("replacement-source", sourceHasAlpha: true);
             var copy = new Texture2D(4, 4, TextureFormat.RGBA32, false);
             copy.name = source.name + "_compressed";
             try
             {
                 ObjectRegistry.RegisterReplacedObject(source, copy);
-                ReplacementTextureAttestation.SetAdmittedVersionsForTests("0.9.0");
-                ReplacementTextureAttestation.ReadInstalledPackageVersionOrNull =
+                ReplacementTextureAttestation.Versions.SetAdmittedVersionsForTests("0.9.0");
+                ReplacementTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
                     _ => "0.9.0";
                 Assert.That(
                     UnityTextureEvidence.TryGetSourceId(copy, out var id),
@@ -181,8 +181,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             finally
             {
                 UnityEngine.Object.DestroyImmediate(copy);
-                ReplacementTextureAttestation.ResetForTests();
-                ReplacementTextureAttestation.ReadInstalledPackageVersionOrNull =
+                ReplacementTextureAttestation.Versions.ResetForTests();
+                ReplacementTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
                     previousVersion;
                 registryGuard.Dispose();
             }
@@ -202,8 +202,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             try
             {
                 ObjectRegistry.RegisterReplacedObject(source, clone);
-                AaoAtlasTextureAttestation.ResetForTests();
-                AaoAtlasTextureAttestation.ReadInstalledPackageVersionOrNull =
+                AaoAtlasTextureAttestation.Versions.ResetForTests();
+                AaoAtlasTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
                     _ => "1.9.17";
 
                 var resolved = UnityTextureEvidence.TryGetSourceId(
@@ -221,7 +221,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             {
                 UnityEngine.Object.DestroyImmediate(atlas);
                 UnityEngine.Object.DestroyImmediate(clone);
-                AaoAtlasTextureAttestation.ResetForTests();
+                AaoAtlasTextureAttestation.Versions.ResetForTests();
                 registryGuard.Dispose();
             }
         }
@@ -233,8 +233,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             atlas.name = "MainTex (AAO UV Packed)";
             try
             {
-                AaoAtlasTextureAttestation.ResetForTests();
-                AaoAtlasTextureAttestation.ReadInstalledPackageVersionOrNull =
+                AaoAtlasTextureAttestation.Versions.ResetForTests();
+                AaoAtlasTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
                     _ => "1.9.17";
 
                 Assert.That(
@@ -246,7 +246,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             finally
             {
                 UnityEngine.Object.DestroyImmediate(atlas);
-                AaoAtlasTextureAttestation.ResetForTests();
+                AaoAtlasTextureAttestation.Versions.ResetForTests();
             }
         }
 
@@ -259,8 +259,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             atlas.name = "MainTex (AAO UV Packed)";
             try
             {
-                AaoAtlasTextureAttestation.ResetForTests();
-                AaoAtlasTextureAttestation.ReadInstalledPackageVersionOrNull =
+                AaoAtlasTextureAttestation.Versions.ResetForTests();
+                AaoAtlasTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
                     _ => "1.9.17";
 
                 Assert.That(
@@ -273,7 +273,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             {
                 UnityEngine.Object.DestroyImmediate(atlas);
                 UnityEngine.Object.DestroyImmediate(clone);
-                AaoAtlasTextureAttestation.ResetForTests();
+                AaoAtlasTextureAttestation.Versions.ResetForTests();
             }
         }
 
@@ -323,8 +323,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [Test]
         public void PersistedCompressedCopyResolvesOrdinaryAssetIdentityForm()
         {
-            ReplacementTextureAttestation.ResetForTests();
-            ReplacementTextureAttestation.ReadInstalledPackageVersionOrNull =
+            ReplacementTextureAttestation.Versions.ResetForTests();
+            ReplacementTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
                 _ => "0.9.0";
             var copy = new Texture2D(8, 8, TextureFormat.RGBA32, true);
             copy.name = "MainTex_compressed";
@@ -744,8 +744,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [Test]
         public void PersistedCompressedCopyColorInterpretation_ReadsTheGraphicsFormat()
         {
-            ReplacementTextureAttestation.ResetForTests();
-            ReplacementTextureAttestation.ReadInstalledPackageVersionOrNull =
+            ReplacementTextureAttestation.Versions.ResetForTests();
+            ReplacementTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
                 _ => "0.9.0";
             var copy = new Texture2D(8, 8, TextureFormat.RGBA32, true, true);
             copy.name = "MainTex_compressed";
@@ -848,8 +848,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 EditorUtility.CompressTexture(
                     atlas, TextureFormat.DXT1,
                     TextureCompressionQuality.Normal);
-                AaoAtlasTextureAttestation.ResetForTests();
-                AaoAtlasTextureAttestation.ReadInstalledPackageVersionOrNull =
+                AaoAtlasTextureAttestation.Versions.ResetForTests();
+                AaoAtlasTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
                     _ => "1.9.17";
                 Assert.That(
                     UnityTextureEvidence.TryProveSampledAlphaIsOne(atlas),
@@ -860,7 +860,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             finally
             {
                 UnityEngine.Object.DestroyImmediate(atlas);
-                AaoAtlasTextureAttestation.ResetForTests();
+                AaoAtlasTextureAttestation.Versions.ResetForTests();
             }
         }
 

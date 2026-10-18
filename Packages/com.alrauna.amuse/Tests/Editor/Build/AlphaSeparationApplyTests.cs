@@ -73,7 +73,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             _filteringPin.Dispose();
             AlphaSeparationSplitTests.DeleteSplitFolder();
             AmusePlatformFinishPluginTests.DeleteSamplingPolicyFolder();
-            DestroyTracked();
+            _scope.TearDown();
         }
 
         /// <summary>
@@ -159,11 +159,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "AMUSE production code must persist generated output only through " +
                 "BuildContext.AssetSaver, but these files call the asset database " +
                 "directly: " + string.Join(", ", offenders));
-        }
-
-        private void DestroyTracked()
-        {
-            _scope.TearDown();
         }
 
         // --- Test-local plugins, platforms and the seam probe --------------
@@ -739,7 +734,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 AlphaSeparationTestLifecycle.DestroyGenerated(state);
-                DestroyTracked();
+                _scope.TearDown();
                 UnityEngine.Object.DestroyImmediate(root);
             }
         }
@@ -807,7 +802,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 AlphaSeparationTestLifecycle.DestroyGenerated(state);
-                DestroyTracked();
+                _scope.TearDown();
                 UnityEngine.Object.DestroyImmediate(root);
             }
         }
@@ -877,7 +872,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 AlphaSeparationTestLifecycle.DestroyGenerated(state);
-                DestroyTracked();
+                _scope.TearDown();
                 UnityEngine.Object.DestroyImmediate(root);
             }
         }
@@ -941,7 +936,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 AlphaSeparationTestLifecycle.DestroyGenerated(state);
-                DestroyTracked();
+                _scope.TearDown();
                 UnityEngine.Object.DestroyImmediate(root);
             }
         }
@@ -1156,7 +1151,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 AlphaSeparationTestLifecycle.DestroyGenerated(state);
-                DestroyTracked();
+                _scope.TearDown();
                 UnityEngine.Object.DestroyImmediate(root);
                 fixtures.BaseTearDown();
             }
@@ -1354,7 +1349,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 AlphaSeparationTestLifecycle.DestroyGenerated(state);
-                DestroyTracked();
+                _scope.TearDown();
                 UnityEngine.Object.DestroyImmediate(root);
                 fixtures.BaseTearDown();
             }
@@ -1524,7 +1519,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 AmusePlatformFinishPlugin.ActiveBuildTargetForTests = original;
                 AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 AlphaSeparationTestLifecycle.DestroyGenerated(state);
-                DestroyTracked();
+                _scope.TearDown();
                 UnityEngine.Object.DestroyImmediate(root);
                 fixtures.BaseTearDown();
             }
@@ -1625,7 +1620,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 AlphaSeparationTestLifecycle.DestroyGenerated(state);
-                DestroyTracked();
+                _scope.TearDown();
                 UnityEngine.Object.DestroyImmediate(root);
             }
         }
@@ -1728,7 +1723,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 AlphaSeparationTestLifecycle.DestroyGenerated(state);
-                DestroyTracked();
+                _scope.TearDown();
                 UnityEngine.Object.DestroyImmediate(root);
             }
         }
@@ -1880,7 +1875,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 AlphaSeparationTestLifecycle.DestroyGenerated(state);
-                DestroyTracked();
+                _scope.TearDown();
                 UnityEngine.Object.DestroyImmediate(root);
             }
         }
@@ -1936,7 +1931,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 AlphaSeparationTestLifecycle.DestroyGenerated(state);
-                DestroyTracked();
+                _scope.TearDown();
                 UnityEngine.Object.DestroyImmediate(root);
             }
         }
@@ -2024,7 +2019,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 AlphaSeparationTestLifecycle.DestroyGenerated(state);
-                DestroyTracked();
+                _scope.TearDown();
                 UnityEngine.Object.DestroyImmediate(root);
             }
         }
@@ -2112,7 +2107,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 AlphaSeparationTestLifecycle.DestroyGenerated(probe?.State);
-                DestroyTracked();
+                _scope.TearDown();
                 UnityEngine.Object.DestroyImmediate(root);
             }
         }
@@ -2191,7 +2186,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 AlphaSeparationTestLifecycle.DestroyGenerated(probe?.State);
-                DestroyTracked();
+                _scope.TearDown();
                 UnityEngine.Object.DestroyImmediate(root);
             }
         }
@@ -2300,7 +2295,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 AlphaSeparationTestLifecycle.DestroyGenerated(probe?.State);
-                DestroyTracked();
+                _scope.TearDown();
                 UnityEngine.Object.DestroyImmediate(root);
             }
         }
@@ -2421,7 +2416,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 AlphaSeparationTestLifecycle.DestroyGenerated(probe?.State);
-                DestroyTracked();
+                _scope.TearDown();
                 UnityEngine.Object.DestroyImmediate(root);
             }
         }
@@ -2551,7 +2546,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 AlphaSeparationTestLifecycle.DestroyGenerated(probe?.State);
-                DestroyTracked();
+                _scope.TearDown();
                 UnityEngine.Object.DestroyImmediate(root);
             }
         }
@@ -2673,7 +2668,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 AlphaSeparationTestLifecycle.DestroyGenerated(probe?.State);
-                DestroyTracked();
+                _scope.TearDown();
                 UnityEngine.Object.DestroyImmediate(root);
             }
         }
@@ -2750,7 +2745,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 AlphaSeparationTestLifecycle.DestroyGenerated(probe?.State);
-                DestroyTracked();
+                _scope.TearDown();
                 UnityEngine.Object.DestroyImmediate(root);
             }
         }
@@ -2854,7 +2849,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 AlphaSeparationTestLifecycle.DestroyGenerated(probe?.State);
-                DestroyTracked();
+                _scope.TearDown();
                 UnityEngine.Object.DestroyImmediate(root);
             }
         }
@@ -2976,7 +2971,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 AlphaSeparationTestLifecycle.DestroyGenerated(probe?.State);
-                DestroyTracked();
+                _scope.TearDown();
                 UnityEngine.Object.DestroyImmediate(root);
             }
         }
@@ -3098,7 +3093,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 AlphaSeparationTestLifecycle.DestroyGenerated(probe?.State);
-                DestroyTracked();
+                _scope.TearDown();
                 UnityEngine.Object.DestroyImmediate(root);
             }
         }
@@ -3171,7 +3166,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 AlphaSeparationTestLifecycle.DestroyGenerated(probe?.State);
-                DestroyTracked();
+                _scope.TearDown();
                 UnityEngine.Object.DestroyImmediate(root);
             }
         }
@@ -3243,7 +3238,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 AlphaSeparationTestLifecycle.DestroyGenerated(probe?.State);
-                DestroyTracked();
+                _scope.TearDown();
                 UnityEngine.Object.DestroyImmediate(root);
             }
         }
@@ -3319,7 +3314,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 AlphaSeparationTestLifecycle.DestroyGenerated(probe?.State);
-                DestroyTracked();
+                _scope.TearDown();
                 UnityEngine.Object.DestroyImmediate(root);
             }
         }
@@ -3580,7 +3575,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 AlphaSeparationTestLifecycle.DestroyGenerated(state);
-                DestroyTracked();
+                _scope.TearDown();
                 UnityEngine.Object.DestroyImmediate(root);
             }
         }
@@ -3698,7 +3693,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 AlphaSeparationTestLifecycle.DestroyGenerated(state);
-                DestroyTracked();
+                _scope.TearDown();
                 UnityEngine.Object.DestroyImmediate(root);
             }
         }
@@ -5396,7 +5391,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 AlphaSeparationTestLifecycle.DestroyGenerated(state);
-                DestroyTracked();
+                _scope.TearDown();
                 UnityEngine.Object.DestroyImmediate(root);
                 fixtures.BaseTearDown();
             }
@@ -5544,7 +5539,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 AlphaSeparationTestLifecycle.DestroyCommittedClone(root, controller);
                 AlphaSeparationTestLifecycle.DestroyGenerated(state);
-                DestroyTracked();
+                _scope.TearDown();
                 UnityEngine.Object.DestroyImmediate(root);
                 fixtures.BaseTearDown();
             }

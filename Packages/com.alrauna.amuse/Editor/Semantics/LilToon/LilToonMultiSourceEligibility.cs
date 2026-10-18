@@ -50,24 +50,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         private const string DistanceFadeProperty = "_DistanceFade";
         private const string OutlineToneProperty = "_OutlineTexHSVG";
 
-        /// <summary>
-        /// The outline property scalars both containers declare. They ride
-        /// the conversion request and gate nothing: the 2026-10-01 ruling
-        /// pins that no outline-specific eligibility row exists, so a
-        /// captured outline value never refuses and never admits anything
-        /// the plain rows would not.
-        /// </summary>
-        private static readonly string[] OutlineScalarSchema =
-        {
-            "_OutlineWidth",
-            "_OutlineDeleteMesh",
-            "_OutlineDisableInVR",
-            "_OutlineZTest",
-            "_OutlineZWrite",
-            "_OutlineCull",
-            "_OutlineColorMask",
-        };
-
         private static readonly string[] SourcePresenceSchema =
         {
             CutoffProperty,
@@ -150,16 +132,31 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// The Multi state facts the Task 5 mode-consistency gate reads at
         /// this seam: the two gate scalars, the two keyword-feature vectors
         /// the derivation consults, the outline tone vector its outline
-        /// shader row needs, and the keyword set itself. The outline scalars
-        /// ride along and are read by no gate. The shader name is already
-        /// requested by the recipe request this combines with.
+        /// shader row needs, and the keyword set itself. The outline
+        /// property scalars both containers declare ride along and are read
+        /// by no gate: the 2026-10-01 ruling pins that no outline-specific
+        /// eligibility row exists, so a captured outline value never
+        /// refuses and never admits anything the plain rows would not. The
+        /// shader name is already requested by the recipe request this
+        /// combines with.
         /// </summary>
         private static MaterialEvidenceRequest MultiStateEvidenceRequest { get; } =
             new MaterialEvidenceRequest(
                 shaderName: false,
                 activeColorSpace: false,
                 presenceProperties: Array.Empty<string>(),
-                scalarProperties: BuildMultiStateScalarSchema(),
+                scalarProperties: new[]
+                {
+                    "_OutlineWidth",
+                    "_OutlineDeleteMesh",
+                    "_OutlineDisableInVR",
+                    "_OutlineZTest",
+                    "_OutlineZWrite",
+                    "_OutlineCull",
+                    "_OutlineColorMask",
+                    ClippingCancellerProperty,
+                    OverlayProperty,
+                },
                 colorProperties: Array.Empty<string>(),
                 vectorProperties: new[]
                 {
@@ -185,29 +182,12 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     MultiStateEvidenceRequest);
 
         /// <summary>
-        /// The Multi state scalars in one array: the outline scalars first,
-        /// then the two gate scalars.
-        /// </summary>
-        private static string[] BuildMultiStateScalarSchema()
-        {
-            var scalars = new string[OutlineScalarSchema.Length + 2];
-            var index = 0;
-            foreach (var property in OutlineScalarSchema)
-            {
-                scalars[index++] = property;
-            }
-
-            scalars[index++] = ClippingCancellerProperty;
-            scalars[index] = OverlayProperty;
-            return scalars;
-        }
-
-        /// <summary>
         /// The property names this module reads off the SOURCE material and
         /// holds to the family's strict schema discipline: absent refuses as
         /// <c>ConversionPropertyAbsent</c> and a non-finite value refuses as
         /// <c>ConversionPropertyNotFinite</c>, in a fixed order the
-        /// finiteness sweep and <see cref="Read"/> index by. There is one
+        /// finiteness sweep and <see cref="LilToonSharedEligibility.Read"/>
+        /// index by. There is one
         /// schema per mode, because the mirrored rows the two modes judge
         /// differ: the mode-1 schema names the mirrored cutout facts and the
         /// mode-2 schema the mirrored transparent facts. The gate-owned
@@ -315,34 +295,17 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 }
             }
 
-            if (float.IsNaN(dissolveParams.x) ||
-                float.IsInfinity(dissolveParams.x) ||
-                float.IsNaN(dissolveParams.y) ||
-                float.IsInfinity(dissolveParams.y) ||
-                float.IsNaN(dissolveParams.z) ||
-                float.IsInfinity(dissolveParams.z) ||
-                float.IsNaN(dissolveParams.w) ||
-                float.IsInfinity(dissolveParams.w))
+            if (!EvidenceGates.IsFinite(dissolveParams))
             {
                 return LilToonOpaqueConversionEligibility.Refused(
                     LilToonOpaqueConversionRefusal.ConversionPropertyNotFinite);
             }
 
-            if (mode == TransparentMode)
+            if (mode == TransparentMode &&
+                !EvidenceGates.IsFinite(distanceFade))
             {
-                if (float.IsNaN(distanceFade.x) ||
-                    float.IsInfinity(distanceFade.x) ||
-                    float.IsNaN(distanceFade.y) ||
-                    float.IsInfinity(distanceFade.y) ||
-                    float.IsNaN(distanceFade.z) ||
-                    float.IsInfinity(distanceFade.z) ||
-                    float.IsNaN(distanceFade.w) ||
-                    float.IsInfinity(distanceFade.w))
-                {
-                    return LilToonOpaqueConversionEligibility.Refused(
-                        LilToonOpaqueConversionRefusal
-                            .ConversionPropertyNotFinite);
-                }
+                return LilToonOpaqueConversionEligibility.Refused(
+                    LilToonOpaqueConversionRefusal.ConversionPropertyNotFinite);
             }
 
             // 3. The Task 5 mode-consistency gate, unchanged. The gate owns
@@ -380,7 +343,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             //    LilToonCutoutMaterialSemantics read the feature. The mask
             //    block is compiled in at LIL_RENDER 1 and 2 alike, so the
             //    gate runs on both arms.
-            if (Read(schema, values, AlphaMaskModeProperty) != 0f)
+            if (LilToonSharedEligibility.Read(
+                    schema, values, AlphaMaskModeProperty) != 0f)
             {
                 return LilToonOpaqueConversionEligibility.Refused(
                     LilToonOpaqueConversionRefusal
@@ -396,7 +360,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             //    nothing at mode 2, exactly as the transparent evaluator
             //    records: a gate there would be a free false negative.
             if (mode != TransparentMode &&
-                Read(schema, values, DitherProperty) != 0f)
+                LilToonSharedEligibility.Read(
+                    schema, values, DitherProperty) != 0f)
             {
                 return LilToonOpaqueConversionEligibility.Refused(
                     LilToonOpaqueConversionRefusal
@@ -439,31 +404,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                         effectiveRenderQueue,
                         effectiveRenderType,
                         allowDepthTestChange);
-        }
-
-        /// <summary>
-        /// Reads one conversion-read property from the captured values,
-        /// which are indexed by the evaluated mode's schema order.
-        /// </summary>
-        private static float Read(
-            string[] schema,
-            IReadOnlyList<float> values,
-            string property)
-        {
-            for (var index = 0; index < schema.Length; index++)
-            {
-                if (string.Equals(
-                        schema[index],
-                        property,
-                        StringComparison.Ordinal))
-                {
-                    return values[index];
-                }
-            }
-
-            throw new ArgumentException(
-                "Property '" + property + "' is not conversion-read.",
-                nameof(property));
         }
     }
 }

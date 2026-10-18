@@ -173,27 +173,15 @@ namespace Alrauna.Amuse.Editor.DryRun
             return MaterialTransformationRow.Renderer(
                 rendererPath,
                 rendererTypeName,
-                -1, -1, -1, -1, -1,
+                -1, -1, -1,
                 RowText.RendererRefusedSentence(
                     rendererPath,
                     rendererTypeName,
                     AmuseReportStrings.RendererKey(refusal),
-                    SlotCountPhrase(meshSubMeshCount),
-                    SlotCountPhrase(materialSlotCount),
+                    AmuseReports.SlotCountPhrase(meshSubMeshCount),
+                    AmuseReports.SlotCountPhrase(materialSlotCount),
                     rendererName,
                     ""));
-        }
-
-        private static string SlotCountPhrase(int count)
-        {
-            if (count < 0)
-            {
-                return "an unknown number of material slots";
-            }
-
-            return count == 1
-                ? "1 material slot"
-                : count + " material slots";
         }
     }
 }

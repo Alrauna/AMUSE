@@ -21,17 +21,12 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
         internal const byte Submaximum = 254;
 
         /// <summary>
-        /// Four quadrants with four distinct alphas, so a row flip, a column
-        /// flip and a transpose are each detectable: bottom-left 255,
-        /// bottom-right 254, top-left 0, top-right 128. Each quadrant is a
-        /// whole 4x4 block at size 8, so a block compressor encodes it exactly
-        /// and the fixture measures decode rather than encoder error. RGB is a
-        /// uniform non-white value so a channel confusion is visible.
+        /// The quadrant-alpha pixel field shared by <see cref="Quadrants"/>
+        /// and <see cref="CompressedQuadrants"/>: four whole blocks with
+        /// distinct alphas on a uniform non-white RGB.
         /// </summary>
-        internal static Texture2D Quadrants(
-            TextureFormat format, int size, bool mipChain)
+        private static Color32[] QuadrantPixels(int size)
         {
-            var texture = new Texture2D(size, size, format, mipChain, true);
             var pixels = new Color32[size * size];
             var half = size / 2;
             for (var y = 0; y < size; y++)
@@ -44,7 +39,22 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
                     pixels[y * size + x] = new Color32(64, 32, 16, alpha);
                 }
             }
-            texture.SetPixels32(pixels);
+            return pixels;
+        }
+
+        /// <summary>
+        /// Four quadrants with four distinct alphas, so a row flip, a column
+        /// flip and a transpose are each detectable: bottom-left 255,
+        /// bottom-right 254, top-left 0, top-right 128. Each quadrant is a
+        /// whole 4x4 block at size 8, so a block compressor encodes it exactly
+        /// and the fixture measures decode rather than encoder error. RGB is a
+        /// uniform non-white value so a channel confusion is visible.
+        /// </summary>
+        internal static Texture2D Quadrants(
+            TextureFormat format, int size, bool mipChain)
+        {
+            var texture = new Texture2D(size, size, format, mipChain, true);
+            texture.SetPixels32(QuadrantPixels(size));
             texture.Apply(mipChain, true);
             return texture;
         }
@@ -59,19 +69,7 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
         {
             var texture = new Texture2D(
                 size, size, TextureFormat.RGBA32, mipChain, true);
-            var pixels = new Color32[size * size];
-            var half = size / 2;
-            for (var y = 0; y < size; y++)
-            {
-                for (var x = 0; x < size; x++)
-                {
-                    byte alpha = y < half
-                        ? (x < half ? Maximum : Submaximum)
-                        : (x < half ? (byte)0 : (byte)128);
-                    pixels[y * size + x] = new Color32(64, 32, 16, alpha);
-                }
-            }
-            texture.SetPixels32(pixels);
+            texture.SetPixels32(QuadrantPixels(size));
             texture.Apply(mipChain, false);
             EditorUtility.CompressTexture(
                 texture, format, TextureCompressionQuality.Best);

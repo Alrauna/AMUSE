@@ -316,7 +316,7 @@ namespace Alrauna.Amuse.Editor.Analysis
                 var material = admittedMaterials[index];
 
                 // Each admitted material accumulates its own derivations from
-                if (!TryAdmitDerivedEvidence(
+                if (!AnimatedPropertyAdmission.TryAdmitDerivedEvidence(
                         material, slotBindings, relevance,
                         out var evidence, out var refusal,
                         scaleOffsetSuffix,
@@ -424,75 +424,5 @@ namespace Alrauna.Amuse.Editor.Analysis
                 samplingPolicy,
                 maxNoiseTexelPercent);
         }
-
-        /// <summary>
-        /// Admits every proof-relevant binding against <em>this</em> material's
-        /// own captured defaults and hands back the evidence those admissions
-        /// derive. This is exactly the per-material half of
-        /// <see cref="ResolveSlot"/>, extracted so one implementation serves
-        /// every decision-specific relevance set rather than being duplicated
-        /// per decision.
-        /// <para>
-        /// <paramref name="derived"/> is reference-equal to the material's own
-        /// evidence when no group changed anything, so a caller can still
-        /// detect "nothing was substituted" by reference.
-        /// </para>
-        /// </summary>
-        /// <param name="relevance">
-        /// MUST be the same decision-specific relevance request the supplied
-        /// bindings were resolved against, for the reason
-        /// <see cref="ResolveSlot"/> documents.
-        /// </param>
-        internal static bool TryAdmitDerivedEvidence(
-            CapturedAlphaMaterial material,
-            IReadOnlyList<(CapturedFloatBinding Binding,
-                           AnimatedPropertyRef Reference)> bindings,
-            MaterialEvidenceRequest relevance,
-            out CapturedMaterialEvidence derived,
-            out RendererAnalysisRefusal refusal,
-            string scaleOffsetSuffix,
-            IReadOnlyList<BlockStateEntry> slotBlockEntries = null,
-            IReadOnlyList<CapturedAlphaMaterial> allAdmittedMaterials = null)
-        {
-            return AnimatedPropertyAdmission.TryAdmitDerivedEvidence(
-                material,
-                bindings,
-                relevance,
-                out derived,
-                out refusal,
-                scaleOffsetSuffix,
-                slotBlockEntries,
-                allAdmittedMaterials);
-        }
-
-        internal static AdmittedPropertyOutcome AdmitScalar(
-            IReadOnlyList<CapturedFloatBinding> bindings,
-            float serializedDefault,
-            out float admittedValue)
-        {
-            return AnimatedPropertyAdmission.AdmitScalar(
-                bindings, serializedDefault, out admittedValue);
-        }
-
-        internal static AdmittedPropertyOutcome AdmitColor(
-            IReadOnlyDictionary<
-                int, IReadOnlyList<CapturedFloatBinding>> componentBindings,
-            Color serializedDefault,
-            out Color admittedValue)
-        {
-            return AnimatedPropertyAdmission.AdmitColor(
-                componentBindings, serializedDefault, out admittedValue);
-        }
-
-        internal static AdmittedPropertyOutcome AdmitVector(
-            IReadOnlyDictionary<
-                int, IReadOnlyList<CapturedFloatBinding>> componentBindings,
-            Vector4 serializedDefault,
-            out Vector4 admittedValue)
-        {
-            return AnimatedPropertyAdmission.AdmitVector(
-                componentBindings, serializedDefault, out admittedValue);
-        }
-
     }
 }

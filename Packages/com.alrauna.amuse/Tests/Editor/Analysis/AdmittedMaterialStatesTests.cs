@@ -12,6 +12,7 @@ using Alrauna.Amuse.Tests.Editor.Shared;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.Rendering;
+using static Alrauna.Amuse.Tests.Editor.Analysis.AlphaSemanticsResolverTests;
 
 namespace Alrauna.Amuse.Tests.Editor.Analysis
 {
@@ -48,7 +49,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         [Test]
         public void AgreeingSourcesAndDefaultAdmitTheSingleValue()
         {
-            var outcome = AdmittedMaterialStates.AdmitScalar(
+            var outcome = AnimatedPropertyAdmission.AdmitScalar(
                 new[] { Binding(true, 1f), Binding(true, 1f) },
                 1f,
                 out var admitted);
@@ -61,7 +62,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         public void DisagreeingAnimationSourcesRefuse()
         {
             Assert.That(
-                AdmittedMaterialStates.AdmitScalar(
+                AnimatedPropertyAdmission.AdmitScalar(
                     new[] { Binding(true, 1f), Binding(true, 0f) },
                     1f,
                     out _),
@@ -72,7 +73,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         public void AnimationDoesNotOverrideADifferentSerializedDefault()
         {
             Assert.That(
-                AdmittedMaterialStates.AdmitScalar(
+                AnimatedPropertyAdmission.AdmitScalar(
                     new[] { Binding(true, 1f) },
                     0f,
                     out _),
@@ -83,7 +84,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         public void AnyNonFiniteExactBindingRefuses()
         {
             Assert.That(
-                AdmittedMaterialStates.AdmitScalar(
+                AnimatedPropertyAdmission.AdmitScalar(
                     new[]
                     {
                         Binding(true, 1f),
@@ -98,7 +99,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         public void MultipleValuesInOneFiniteExactBindingRefuse()
         {
             Assert.That(
-                AdmittedMaterialStates.AdmitScalar(
+                AnimatedPropertyAdmission.AdmitScalar(
                     new[] { Binding(true, 0f, 1f) },
                     1f,
                     out _),
@@ -109,7 +110,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         public void RepeatedIdenticalValuesAdmit()
         {
             Assert.That(
-                AdmittedMaterialStates.AdmitScalar(
+                AnimatedPropertyAdmission.AdmitScalar(
                     new[] { Binding(true, 1f, 1f, 1f) },
                     1f,
                     out var admitted),
@@ -121,7 +122,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         public void SerializedDefaultAloneAdmits()
         {
             Assert.That(
-                AdmittedMaterialStates.AdmitScalar(
+                AnimatedPropertyAdmission.AdmitScalar(
                     Array.Empty<CapturedFloatBinding>(),
                     0.25f,
                     out var admitted),
@@ -137,7 +138,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
 
             Assert.That(adjacent, Is.Not.EqualTo(1f));
             Assert.That(
-                AdmittedMaterialStates.AdmitScalar(
+                AnimatedPropertyAdmission.AdmitScalar(
                     new[] { Binding(true, adjacent) },
                     1f,
                     out _),
@@ -148,7 +149,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         public void NaNDoesNotBecomeASingletonThroughFloatEqualsSemantics()
         {
             Assert.That(
-                AdmittedMaterialStates.AdmitScalar(
+                AnimatedPropertyAdmission.AdmitScalar(
                     new[] { Binding(true, float.NaN) },
                     float.NaN,
                     out _),
@@ -160,7 +161,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         {
             var serialized = new Color(0.1f, 0.2f, 0.3f, 0.4f);
 
-            var outcome = AdmittedMaterialStates.AdmitColor(
+            var outcome = AnimatedPropertyAdmission.AdmitColor(
                 Components((3, 0.4f)), serialized, out var admitted);
 
             Assert.That(outcome, Is.EqualTo(AdmittedPropertyOutcome.Singleton));
@@ -171,7 +172,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         public void AnimatedAlphaDoesNotOverrideADifferentDefault()
         {
             Assert.That(
-                AdmittedMaterialStates.AdmitColor(
+                AnimatedPropertyAdmission.AdmitColor(
                     Components((3, 1f)),
                     new Color(0.1f, 0.2f, 0.3f, 0.4f),
                     out _),
@@ -188,7 +189,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             };
 
             Assert.That(
-                AdmittedMaterialStates.AdmitColor(
+                AnimatedPropertyAdmission.AdmitColor(
                     components,
                     new Color(0.1f, 0.2f, 0.3f, 0.4f),
                     out _),
@@ -198,7 +199,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         [Test]
         public void ComponentThreePreservesUnanimatedRgbComponents()
         {
-            var outcome = AdmittedMaterialStates.AdmitColor(
+            var outcome = AnimatedPropertyAdmission.AdmitColor(
                 Components((3, 1f)),
                 new Color(0.25f, 0.5f, 0.75f, 1f),
                 out var admitted);
@@ -214,7 +215,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         {
             var serialized = new Vector4(1f, 1f, 0f, 0f);
 
-            var outcome = AdmittedMaterialStates.AdmitVector(
+            var outcome = AnimatedPropertyAdmission.AdmitVector(
                 Components((0, 1f), (1, 1f)),
                 serialized,
                 out var admitted);
@@ -227,7 +228,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         public void AnimatedVectorComponentDoesNotOverrideADifferentDefault()
         {
             Assert.That(
-                AdmittedMaterialStates.AdmitVector(
+                AnimatedPropertyAdmission.AdmitVector(
                     Components((0, 2f)),
                     new Vector4(1f, 1f, 0f, 0f),
                     out _),
@@ -244,7 +245,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             };
 
             Assert.That(
-                AdmittedMaterialStates.AdmitVector(
+                AnimatedPropertyAdmission.AdmitVector(
                     components, new Vector4(1f, 2f, 3f, 4f), out _),
                 Is.EqualTo(AdmittedPropertyOutcome.NotFiniteExact));
         }
@@ -252,7 +253,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         [Test]
         public void UnanimatedVectorComponentsPreserveSerializedValues()
         {
-            var outcome = AdmittedMaterialStates.AdmitVector(
+            var outcome = AnimatedPropertyAdmission.AdmitVector(
                 Components((0, 1f)),
                 new Vector4(1f, 2f, 3f, 4f),
                 out var admitted);
@@ -266,7 +267,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         public void InvalidComponentIndexIsAProgrammingDefect(int component)
         {
             Assert.Throws<ArgumentOutOfRangeException>(() =>
-                AdmittedMaterialStates.AdmitVector(
+                AnimatedPropertyAdmission.AdmitVector(
                     Components((component, 1f)), Vector4.one, out _));
         }
 
@@ -288,11 +289,11 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             var serialized = new Vector4(1f, 2f, 3f, 4f);
 
             Assert.That(
-                AdmittedMaterialStates.AdmitVector(
+                AnimatedPropertyAdmission.AdmitVector(
                     disagreementFirst, serialized, out _),
                 Is.EqualTo(AdmittedPropertyOutcome.NotFiniteExact));
             Assert.That(
-                AdmittedMaterialStates.AdmitVector(
+                AnimatedPropertyAdmission.AdmitVector(
                     nonFiniteFirst, serialized, out _),
                 Is.EqualTo(AdmittedPropertyOutcome.NotFiniteExact));
         }
@@ -332,11 +333,8 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         {
             return new CapturedAlphaSemantics(
                 new MaterialSemantics(
-                    SemanticOutput<ColorSemanticValue>.Unknown(),
                     PoiyomiMaterialSemantics.InterpretVerifiedAlpha(
-                        material.Evidence, out _),
-                    SemanticOutput<ColorSemanticValue>.Unknown(),
-                    SemanticOutput<NormalSemanticValue>.Unknown()),
+                        material.Evidence, out _)),
                 null);
         }
 
@@ -732,11 +730,8 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     ? VerifiedAlphaOnly(material)
                     : new CapturedAlphaSemantics(
                         new MaterialSemantics(
-                            SemanticOutput<ColorSemanticValue>.Unknown(),
                             SemanticOutput<ScalarSemanticValue>.Complete(
-                                ScalarSemanticValue.Constant(1f)),
-                            SemanticOutput<ColorSemanticValue>.Unknown(),
-                            SemanticOutput<NormalSemanticValue>.Unknown()),
+                                ScalarSemanticValue.Constant(1f))),
                         null));
 
             Assert.That(result.IsResolved, Is.True);
@@ -1253,12 +1248,9 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                     TextureFilterMode.Point, TextureWrapMode.Clamp));
             return new CapturedAlphaSemantics(
                 new MaterialSemantics(
-                    SemanticOutput<ColorSemanticValue>.Unknown(),
                     SemanticOutput<ScalarSemanticValue>.Complete(
                         ScalarSemanticValue.Texture(
-                            sample, TextureChannel.Alpha)),
-                    SemanticOutput<ColorSemanticValue>.Unknown(),
-                    SemanticOutput<NormalSemanticValue>.Unknown()),
+                            sample, TextureChannel.Alpha))),
                 null);
         }
 
@@ -1287,13 +1279,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                         sourceA, TextureChannel.Alpha, 1f,
                         AlphaPolicyBounds.Inert)] = chain,
                 });
-            var corner = TriangleAlphaInput.WithUv0(
-                Vector3.zero,
-                Vector3.right,
-                Vector3.up,
-                new Vector2(0.05f, 0.05f),
-                new Vector2(0.45f, 0.05f),
-                new Vector2(0.05f, 0.45f));
+            var corner = CornerTriangle();
             var cases = new[]
             {
                 (AlphaSamplingPolicy.ConservativeDesktop,

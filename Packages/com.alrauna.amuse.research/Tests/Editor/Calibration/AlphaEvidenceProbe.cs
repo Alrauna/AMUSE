@@ -174,6 +174,47 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
             var support = ProbeSupport();
             if (!support.IsUsable) return null;
 
+            return TryCapture(
+                texture, mip, PredicateTarget, DecodePredicateLevel);
+        }
+
+        private static AlphaProbeLevel DecodePredicateLevel(
+            AsyncGPUReadbackRequest request, int width, int height)
+        {
+            var data = request.GetData<byte>();
+            if (data.Length != width * height) return null;
+
+            var exactlyOne = new bool[data.Length];
+            for (var index = 0; index < data.Length; index++)
+            {
+                var value = data[index];
+
+                // The shader emits only 0 or 1, which an R8_UNorm target
+                // stores as 0 or 255. Anything between means the value was
+                // filtered, rescaled, or transfer-converted on the way out,
+                // and the predicate would no longer be the predicate.
+                if (value != 0 && value != byte.MaxValue) return null;
+
+                exactlyOne[index] = value == byte.MaxValue;
+            }
+
+            return new AlphaProbeLevel(width, height, exactlyOne);
+        }
+
+        /// <summary>
+        /// The one blit/readback core behind both capture routes: shader
+        /// load, render-texture descriptor, exact-format guard, Blit,
+        /// AsyncGPUReadback, and the finally cleanup. The decoder turns the
+        /// finished readback into the caller's result; a null return refuses
+        /// the capture.
+        /// </summary>
+        private static T TryCapture<T>(
+            Texture2D texture,
+            int mip,
+            GraphicsFormat format,
+            Func<AsyncGPUReadbackRequest, int, int, T> decode)
+            where T : class
+        {
             var shader = AssetDatabase.LoadAssetAtPath<Shader>(UnityAlphaFieldEvidence.ShaderAssetPath);
             if (shader == null || !shader.isSupported) return null;
 
@@ -186,7 +227,7 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
                 material.SetInt("_Mip", mip);
 
                 var descriptor =
-                    new RenderTextureDescriptor(width, height, PredicateTarget, 0);
+                    new RenderTextureDescriptor(width, height, format, 0);
                 descriptor.sRGB = false;
                 descriptor.useMipMap = false;
                 descriptor.autoGenerateMips = false;
@@ -196,7 +237,7 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
                 // Unity may substitute a format it prefers. A substituted
                 // target would silently change what the readback means, so an
                 // inexact match is a refusal rather than something to tolerate.
-                if (target.graphicsFormat != PredicateTarget) return null;
+                if (target.graphicsFormat != format) return null;
                 if (target.width != width || target.height != height) return null;
 
                 var previous = RenderTexture.active;
@@ -209,8 +250,7 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
                     RenderTexture.active = previous;
                 }
 
-                var request =
-                    AsyncGPUReadback.Request(target, 0, PredicateTarget);
+                var request = AsyncGPUReadback.Request(target, 0, format);
                 request.WaitForCompletion();
                 if (request.hasError) return null;
 
@@ -218,24 +258,7 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
                 // describe the destination this code allocated.
                 if (request.width != width || request.height != height) return null;
 
-                var data = request.GetData<byte>();
-                if (data.Length != width * height) return null;
-
-                var exactlyOne = new bool[data.Length];
-                for (var index = 0; index < data.Length; index++)
-                {
-                    var value = data[index];
-
-                    // The shader emits only 0 or 1, which an R8_UNorm target
-                    // stores as 0 or 255. Anything between means the value was
-                    // filtered, rescaled, or transfer-converted on the way out,
-                    // and the predicate would no longer be the predicate.
-                    if (value != 0 && value != byte.MaxValue) return null;
-
-                    exactlyOne[index] = value == byte.MaxValue;
-                }
-
-                return new AlphaProbeLevel(width, height, exactlyOne);
+                return decode(request, width, height);
             }
             finally
             {
@@ -258,54 +281,22 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
             if (texture == null) throw new ArgumentNullException(nameof(texture));
             if (mip < 0 || mip >= texture.mipmapCount) return null;
 
-            var shader = AssetDatabase.LoadAssetAtPath<Shader>(UnityAlphaFieldEvidence.ShaderAssetPath);
-            if (shader == null || !shader.isSupported) return null;
+            return TryCapture(
+                texture, mip, DiagnosticTarget, DecodeRawAlphaDiagnostic);
+        }
 
-            ExpectedSize(texture, mip, out var width, out var height);
+        private static float[] DecodeRawAlphaDiagnostic(
+            AsyncGPUReadbackRequest request, int width, int height)
+        {
+            var data = request.GetData<Color>();
+            if (data.Length != width * height) return null;
 
-            var material = new Material(shader);
-            RenderTexture target = null;
-            try
+            var alpha = new float[data.Length];
+            for (var index = 0; index < data.Length; index++)
             {
-                material.SetInt("_Mip", mip);
-
-                var descriptor =
-                    new RenderTextureDescriptor(width, height, DiagnosticTarget, 0);
-                descriptor.sRGB = false;
-                descriptor.useMipMap = false;
-                descriptor.autoGenerateMips = false;
-
-                target = RenderTexture.GetTemporary(descriptor);
-                var previous = RenderTexture.active;
-                try
-                {
-                    Graphics.Blit(texture, target, material);
-                }
-                finally
-                {
-                    RenderTexture.active = previous;
-                }
-
-                var request =
-                    AsyncGPUReadback.Request(target, 0, DiagnosticTarget);
-                request.WaitForCompletion();
-                if (request.hasError) return null;
-
-                var data = request.GetData<Color>();
-                if (data.Length != width * height) return null;
-
-                var alpha = new float[data.Length];
-                for (var index = 0; index < data.Length; index++)
-                {
-                    alpha[index] = data[index].g;
-                }
-                return alpha;
+                alpha[index] = data[index].g;
             }
-            finally
-            {
-                if (target != null) RenderTexture.ReleaseTemporary(target);
-                UnityEngine.Object.DestroyImmediate(material);
-            }
+            return alpha;
         }
 
         /// <summary>

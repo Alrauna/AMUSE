@@ -68,6 +68,32 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             return texture;
         }
 
+        /// <summary>
+        /// Builds a white RGBA32 texture with one alpha byte per mip level
+        /// and adds it to the container. The last alpha repeats for deeper
+        /// levels, so a single alpha fills every mip.
+        /// </summary>
+        private static Texture2D AddContainerTexture(
+            string name, int size, bool mipChain, params byte[] mipAlphas)
+        {
+            var texture = new Texture2D(size, size, TextureFormat.RGBA32, mipChain);
+            for (var m = 0; m < texture.mipmapCount; m++)
+            {
+                var dim = Mathf.Max(1, size >> m);
+                var px = new Color32[dim * dim];
+                var alpha = mipAlphas[Mathf.Min(m, mipAlphas.Length - 1)];
+                for (var i = 0; i < px.Length; i++)
+                {
+                    px[i] = new Color32(255, 255, 255, alpha);
+                }
+
+                texture.SetPixels32(px, m);
+            }
+
+            texture.Apply(false, false);
+            return AddContainerTexture(texture, name);
+        }
+
         [Test]
         public void StreamingGeneratedSubAsset_CapturesAlphaChainDirectlyFromLiveObject()
         {
@@ -181,17 +207,9 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         [Test]
         public void CutoffThreshold_AppliesThresholdCorrectly()
         {
-            var halfAlphaTexture = new Texture2D(4, 4, TextureFormat.RGBA32, false);
-            var pixels = new Color32[16];
-            for (var i = 0; i < pixels.Length; i++)
-            {
-                // Alpha is 128 (approximately 0.502).
-                pixels[i] = new Color32(255, 255, 255, 128);
-            }
-
-            halfAlphaTexture.SetPixels32(pixels);
-            halfAlphaTexture.Apply(false, false);
-            AddContainerTexture(halfAlphaTexture, "AlphaMask (AAO UV Packed)");
+            // Alpha is 128 (approximately 0.502).
+            var halfAlphaTexture = AddContainerTexture(
+                "AlphaMask (AAO UV Packed)", 4, false, 128);
 
             // Threshold 0.6 is higher than 0.502 -> texels become transparent.
             var okHigh = UnityGeneratedTextureEvidence.TryCapture(
@@ -219,23 +237,9 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         [Test]
         public void DistinctMipLevels_AreCapturedWithoutCrossContamination()
         {
-            var multiMipTex = new Texture2D(8, 8, TextureFormat.RGBA32, true);
-            for (var m = 0; m < multiMipTex.mipmapCount; m++)
-            {
-                var dim = Mathf.Max(1, 8 >> m);
-                var px = new Color32[dim * dim];
-                // Even mips are fully opaque 255. Odd mips are transparent 0.
-                var alpha = (byte)(m % 2 == 0 ? 255 : 0);
-                for (var i = 0; i < px.Length; i++)
-                {
-                    px[i] = new Color32(255, 255, 255, alpha);
-                }
-
-                multiMipTex.SetPixels32(px, m);
-            }
-
-            multiMipTex.Apply(false, false);
-            AddContainerTexture(multiMipTex, "MipIsolation (AAO UV Packed)");
+            // Even mips are fully opaque 255. Odd mips are transparent 0.
+            var multiMipTex = AddContainerTexture(
+                "MipIsolation (AAO UV Packed)", 8, true, 255, 0, 255, 0);
 
             var ok = UnityGeneratedTextureEvidence.TryCapture(
                 multiMipTex,
@@ -265,23 +269,9 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         [Test]
         public void ALimitedGeneratedCaptureSkipsNonResidentLevelsAndFlagsThem()
         {
-            var multiMipTex = new Texture2D(8, 8, TextureFormat.RGBA32, true);
-            for (var m = 0; m < multiMipTex.mipmapCount; m++)
-            {
-                var dim = Mathf.Max(1, 8 >> m);
-                var px = new Color32[dim * dim];
-                // Even mips are fully opaque 255. Odd mips are transparent 0.
-                var alpha = (byte)(m % 2 == 0 ? 255 : 0);
-                for (var i = 0; i < px.Length; i++)
-                {
-                    px[i] = new Color32(255, 255, 255, alpha);
-                }
-
-                multiMipTex.SetPixels32(px, m);
-            }
-
-            multiMipTex.Apply(false, false);
-            AddContainerTexture(multiMipTex, "MipResidency (AAO UV Packed)");
+            // Even mips are fully opaque 255. Odd mips are transparent 0.
+            var multiMipTex = AddContainerTexture(
+                "MipResidency (AAO UV Packed)", 8, true, 255, 0, 255, 0);
 
             var ok = UnityGeneratedTextureEvidence.TryCapture(
                 multiMipTex,
@@ -320,21 +310,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         [Test]
         public void DifferentLimitsDoNotShareTheGeneratedSessionCache()
         {
-            var texture = new Texture2D(8, 8, TextureFormat.RGBA32, true);
-            for (var m = 0; m < texture.mipmapCount; m++)
-            {
-                var dim = Mathf.Max(1, 8 >> m);
-                var px = new Color32[dim * dim];
-                for (var i = 0; i < px.Length; i++)
-                {
-                    px[i] = new Color32(255, 255, 255, 255);
-                }
-
-                texture.SetPixels32(px, m);
-            }
-
-            texture.Apply(false, false);
-            AddContainerTexture(texture, "CacheKey (AAO UV Packed)");
+            var texture = AddContainerTexture(
+                "CacheKey (AAO UV Packed)", 8, true, 255);
 
             var limitedOk = UnityGeneratedTextureEvidence.TryCapture(
                 texture,
@@ -365,17 +342,9 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         [Test]
         public void CutoffBoundary_StrictlyRefusesBelowCutoffByte()
         {
-            var boundaryTex = new Texture2D(4, 4, TextureFormat.RGBA32, false);
-            var pixels = new Color32[16];
-            for (var i = 0; i < pixels.Length; i++)
-            {
-                // Byte 128 has normalized value 128 / 255 = 0.50196...
-                pixels[i] = new Color32(255, 255, 255, 128);
-            }
-
-            boundaryTex.SetPixels32(pixels);
-            boundaryTex.Apply(false, false);
-            AddContainerTexture(boundaryTex, "BoundaryCutoff (AAO UV Packed)");
+            // Byte 128 has normalized value 128 / 255 = 0.50196...
+            var boundaryTex = AddContainerTexture(
+                "BoundaryCutoff (AAO UV Packed)", 4, false, 128);
             // Threshold 0.502f is strictly greater than 128 / 255f.
             // Texels must be non-opaque.
             var okAbove = UnityGeneratedTextureEvidence.TryCapture(
@@ -475,17 +444,9 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         [Test]
         public void SessionCache_DoesNotReturnStaleResultAcrossSlightlyDifferentCutoffs()
         {
-            var deltaTex = new Texture2D(4, 4, TextureFormat.RGBA32, false);
-            var pixels = new Color32[16];
-            for (var i = 0; i < pixels.Length; i++)
-            {
-                // Byte 128 has normalized value 128 / 255 = 0.50196078...
-                pixels[i] = new Color32(255, 255, 255, 128);
-            }
-
-            deltaTex.SetPixels32(pixels);
-            deltaTex.Apply(false, false);
-            AddContainerTexture(deltaTex, "DeltaCutoff (AAO UV Packed)");
+            // Byte 128 has normalized value 128 / 255 = 0.50196078...
+            var deltaTex = AddContainerTexture(
+                "DeltaCutoff (AAO UV Packed)", 4, false, 128);
 
             // Cutoff 0.501960f is slightly below 128/255. Texels must be opaque.
             var okBelow = UnityGeneratedTextureEvidence.TryCapture(
@@ -631,28 +592,19 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         [Test]
         public void SessionCache_DoesNotServeInertEvidenceUnderGateOnBounds()
         {
-            var strayTex = new Texture2D(4, 4, TextureFormat.RGBA32, true);
-            for (var m = 0; m < strayTex.mipmapCount; m++)
+            var strayTex = AddContainerTexture(
+                "AlphaMask (AAO UV Packed)", 4, true, 255);
+            var witness = new Color32[16];
+            for (var i = 0; i < witness.Length; i++)
             {
-                var dim = Mathf.Max(1, 4 >> m);
-                var px = new Color32[dim * dim];
-                for (var i = 0; i < px.Length; i++)
-                {
-                    px[i] = new Color32(255, 255, 255, 255);
-                }
-
-                // One stray at byte 3: a witness under the inert
-                // bounds, noise under a 2 percent gate.
-                if (m == 0)
-                {
-                    px[0] = new Color32(255, 255, 255, 3);
-                }
-
-                strayTex.SetPixels32(px, m);
+                witness[i] = new Color32(255, 255, 255, 255);
             }
 
+            // One stray at byte 3: a witness under the inert
+            // bounds, noise under a 2 percent gate.
+            witness[0] = new Color32(255, 255, 255, 3);
+            strayTex.SetPixels32(witness, 0);
             strayTex.Apply(false, false);
-            AddContainerTexture(strayTex, "AlphaMask (AAO UV Packed)");
 
             var okInert = UnityGeneratedTextureEvidence.TryCapture(
                 strayTex,
@@ -696,19 +648,11 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         [Test]
         public void AnActiveNoisePolicyKeepsMidBandTexelsWitnessesOnTheGeneratedRoute()
         {
-            var midTex = new Texture2D(4, 4, TextureFormat.RGBA32, false);
-            var pixels = new Color32[16];
-            for (var i = 0; i < pixels.Length; i++)
-            {
-                // Alpha 128 sits above the noise byte 26 of a 10 percent
-                // gate and below the opaque byte 255, so the policy calls
-                // it a witness.
-                pixels[i] = new Color32(255, 255, 255, 128);
-            }
-
-            midTex.SetPixels32(pixels);
-            midTex.Apply(false, false);
-            AddContainerTexture(midTex, "AlphaMask (AAO UV Packed)");
+            // Alpha 128 sits above the noise byte 26 of a 10 percent
+            // gate and below the opaque byte 255, so the policy calls
+            // it a witness.
+            var midTex = AddContainerTexture(
+                "AlphaMask (AAO UV Packed)", 4, false, 128);
 
             var ok = UnityGeneratedTextureEvidence.TryCapture(
                 midTex,
@@ -736,16 +680,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         [Test]
         public void AnActiveOpaqueBoundLowersTheOpaqueBarOnTheGeneratedRoute()
         {
-            var nearTex = new Texture2D(4, 4, TextureFormat.RGBA32, false);
-            var pixels = new Color32[16];
-            for (var i = 0; i < pixels.Length; i++)
-            {
-                pixels[i] = new Color32(255, 255, 255, 240);
-            }
-
-            nearTex.SetPixels32(pixels);
-            nearTex.Apply(false, false);
-            AddContainerTexture(nearTex, "AlphaMask (AAO UV Packed)");
+            var nearTex = AddContainerTexture(
+                "AlphaMask (AAO UV Packed)", 4, false, 240);
 
             var ok = UnityGeneratedTextureEvidence.TryCapture(
                 nearTex,
@@ -764,8 +700,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         [Test]
         public void AdmittedAtlasShape_CapturesDirectlyThroughTheRoute()
         {
-            AaoAtlasTextureAttestation.ResetForTests();
-            AaoAtlasTextureAttestation.ReadInstalledPackageVersionOrNull =
+            AaoAtlasTextureAttestation.Versions.ResetForTests();
+            AaoAtlasTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
                 _ => "1.9.17";
             var atlas = new Texture2D(16, 16, TextureFormat.RGBA32, false);
             atlas.name = "MainTex (AAO UV Packed)";
@@ -793,7 +729,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             finally
             {
                 Object.DestroyImmediate(atlas);
-                AaoAtlasTextureAttestation.ResetForTests();
+                AaoAtlasTextureAttestation.Versions.ResetForTests();
             }
         }
     }

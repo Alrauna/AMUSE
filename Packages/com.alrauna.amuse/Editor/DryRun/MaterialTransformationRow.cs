@@ -64,8 +64,6 @@ namespace Alrauna.Amuse.Editor.DryRun
             int movedTriangles,
             int provenTriangles,
             int totalTriangles,
-            int refusedSlots,
-            int slotCount,
             string sentence,
             string sourceMaterialPath = null)
         {
@@ -85,8 +83,6 @@ namespace Alrauna.Amuse.Editor.DryRun
             MovedTriangles = movedTriangles;
             ProvenTriangles = provenTriangles;
             TotalTriangles = totalTriangles;
-            RefusedSlots = refusedSlots;
-            SlotCount = slotCount;
             Sentence = sentence;
             SourceMaterialPath = sourceMaterialPath;
         }
@@ -99,15 +95,13 @@ namespace Alrauna.Amuse.Editor.DryRun
         internal int MovedTriangles { get; }
         internal int ProvenTriangles { get; }
         internal int TotalTriangles { get; }
-        internal int RefusedSlots { get; }
-        internal int SlotCount { get; }
         internal string Sentence { get; }
 
         internal static MaterialTransformationRow Banner(string sentence)
         {
             return new MaterialTransformationRow(
                 MaterialTransformationRowKind.Banner,
-                null, null, -1, -1, -1, -1, -1, -1,
+                null, null, -1, -1, -1, -1,
                 sentence);
         }
 
@@ -115,7 +109,7 @@ namespace Alrauna.Amuse.Editor.DryRun
         {
             return new MaterialTransformationRow(
                 MaterialTransformationRowKind.Note,
-                null, null, -1, -1, -1, -1, -1, -1,
+                null, null, -1, -1, -1, -1,
                 sentence);
         }
 
@@ -124,18 +118,18 @@ namespace Alrauna.Amuse.Editor.DryRun
         {
             return new MaterialTransformationRow(
                 MaterialTransformationRowKind.Errored,
-                rendererPath, rendererTypeName, -1, -1, -1, -1, -1, -1,
+                rendererPath, rendererTypeName, -1, -1, -1, -1,
                 sentence);
         }
 
         internal static MaterialTransformationRow Renderer(
             string path, string typeName, int moved, int proven, int total,
-            int refusedSlots, int slotCount, string sentence)
+            string sentence)
         {
             return new MaterialTransformationRow(
                 MaterialTransformationRowKind.Renderer,
                 path, typeName, -1,
-                moved, proven, total, refusedSlots, slotCount,
+                moved, proven, total,
                 sentence);
         }
 
@@ -147,7 +141,7 @@ namespace Alrauna.Amuse.Editor.DryRun
             return new MaterialTransformationRow(
                 MaterialTransformationRowKind.Slot,
                 path, typeName, slotIndex,
-                -1, proven, total, -1, -1,
+                -1, proven, total,
                 sentence,
                 sourceMaterialPath);
         }
@@ -163,8 +157,6 @@ namespace Alrauna.Amuse.Editor.DryRun
                 row.movedTriangles,
                 row.provenTriangles,
                 row.totalTriangles,
-                row.refusedSlots,
-                row.slotCount,
                 row.sentence,
                 row.sourceMaterialPath);
         }

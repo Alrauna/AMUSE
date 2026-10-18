@@ -7,73 +7,58 @@ namespace Alrauna.Amuse.Editor.Presets
     /// type. The inspector compares it against the live component and
     /// applies it through the serialized object.
     /// </summary>
-    internal sealed class OptimizerPreset
+    internal sealed record OptimizerPreset(
+        string Name,
+        string Description,
+        bool AlphaSeparatorEnabled,
+        int PreserveTransparencyMaxMipLevel,
+        int CutoutPreserveTransparencyMaxMipLevel,
+        int PreserveTransparencyMinTextureSize,
+        int CutoutPreserveTransparencyMinTextureSize,
+        int MinimumOpaqueCoveragePercent,
+        int CutoutMinimumOpaqueCoveragePercent,
+        int MinimumOpaqueCoverageToPreservePercent,
+        int CutoutMinimumOpaqueCoverageToPreservePercent,
+        int MinimumOpaqueAlphaPercent,
+        int PolygonAlphaUpperClampPercent,
+        int PolygonMinimumOpaqueCoveragePercent,
+        bool AllowDepthTestChange,
+        bool IgnoreOutOfRangeMaterialSlots,
+        bool AcceptDesktopAnisotropyDifferences,
+        bool AcceptMobileAnisotropyDifferences)
     {
-        internal string Name { get; }
-        internal string Description { get; }
-        internal bool AlphaSeparatorEnabled { get; }
-        internal int PreserveTransparencyMaxMipLevel { get; }
-        internal int CutoutPreserveTransparencyMaxMipLevel { get; }
-        internal int PreserveTransparencyMinTextureSize { get; }
-        internal int CutoutPreserveTransparencyMinTextureSize { get; }
-        internal int MinimumOpaqueCoveragePercent { get; }
-        internal int CutoutMinimumOpaqueCoveragePercent { get; }
-        internal int MinimumOpaqueCoverageToPreservePercent { get; }
-        internal int CutoutMinimumOpaqueCoverageToPreservePercent { get; }
-        internal int MinimumOpaqueAlphaPercent { get; }
-        internal int PolygonAlphaUpperClampPercent { get; }
-        internal int PolygonMinimumOpaqueCoveragePercent { get; }
-        internal bool AllowDepthTestChange { get; }
-        internal bool IgnoreOutOfRangeMaterialSlots { get; }
-        internal bool AcceptDesktopAnisotropyDifferences { get; }
-        internal bool AcceptMobileAnisotropyDifferences { get; }
-
-        internal OptimizerPreset(
-            string name,
-            string description,
-            bool alphaSeparatorEnabled,
-            int preserveTransparencyMaxMipLevel,
-            int cutoutPreserveTransparencyMaxMipLevel,
-            int preserveTransparencyMinTextureSize,
-            int cutoutPreserveTransparencyMinTextureSize,
-            int minimumOpaqueCoveragePercent,
-            int cutoutMinimumOpaqueCoveragePercent,
-            int minimumOpaqueCoverageToPreservePercent,
-            int cutoutMinimumOpaqueCoverageToPreservePercent,
-            int minimumOpaqueAlphaPercent,
-            int polygonAlphaUpperClampPercent,
-            int polygonMinimumOpaqueCoveragePercent,
-            bool allowDepthTestChange,
-            bool ignoreOutOfRangeMaterialSlots,
-            bool acceptDesktopAnisotropyDifferences,
-            bool acceptMobileAnisotropyDifferences)
-        {
-            Name = name;
-            Description = description;
-            AlphaSeparatorEnabled = alphaSeparatorEnabled;
-            PreserveTransparencyMaxMipLevel = preserveTransparencyMaxMipLevel;
-            CutoutPreserveTransparencyMaxMipLevel =
-                cutoutPreserveTransparencyMaxMipLevel;
-            PreserveTransparencyMinTextureSize = preserveTransparencyMinTextureSize;
-            CutoutPreserveTransparencyMinTextureSize =
-                cutoutPreserveTransparencyMinTextureSize;
-            MinimumOpaqueCoveragePercent = minimumOpaqueCoveragePercent;
-            CutoutMinimumOpaqueCoveragePercent =
-                cutoutMinimumOpaqueCoveragePercent;
-            MinimumOpaqueCoverageToPreservePercent =
-                minimumOpaqueCoverageToPreservePercent;
-            CutoutMinimumOpaqueCoverageToPreservePercent =
-                cutoutMinimumOpaqueCoverageToPreservePercent;
-            MinimumOpaqueAlphaPercent = minimumOpaqueAlphaPercent;
-            PolygonAlphaUpperClampPercent = polygonAlphaUpperClampPercent;
-            PolygonMinimumOpaqueCoveragePercent = polygonMinimumOpaqueCoveragePercent;
-            AllowDepthTestChange = allowDepthTestChange;
-            IgnoreOutOfRangeMaterialSlots = ignoreOutOfRangeMaterialSlots;
-            AcceptDesktopAnisotropyDifferences =
-                acceptDesktopAnisotropyDifferences;
-            AcceptMobileAnisotropyDifferences =
-                acceptMobileAnisotropyDifferences;
-        }
+        internal string Name { get; } = Name;
+        internal string Description { get; } = Description;
+        internal bool AlphaSeparatorEnabled { get; } = AlphaSeparatorEnabled;
+        internal int PreserveTransparencyMaxMipLevel { get; } =
+            PreserveTransparencyMaxMipLevel;
+        internal int CutoutPreserveTransparencyMaxMipLevel { get; } =
+            CutoutPreserveTransparencyMaxMipLevel;
+        internal int PreserveTransparencyMinTextureSize { get; } =
+            PreserveTransparencyMinTextureSize;
+        internal int CutoutPreserveTransparencyMinTextureSize { get; } =
+            CutoutPreserveTransparencyMinTextureSize;
+        internal int MinimumOpaqueCoveragePercent { get; } =
+            MinimumOpaqueCoveragePercent;
+        internal int CutoutMinimumOpaqueCoveragePercent { get; } =
+            CutoutMinimumOpaqueCoveragePercent;
+        internal int MinimumOpaqueCoverageToPreservePercent { get; } =
+            MinimumOpaqueCoverageToPreservePercent;
+        internal int CutoutMinimumOpaqueCoverageToPreservePercent { get; } =
+            CutoutMinimumOpaqueCoverageToPreservePercent;
+        internal int MinimumOpaqueAlphaPercent { get; } =
+            MinimumOpaqueAlphaPercent;
+        internal int PolygonAlphaUpperClampPercent { get; } =
+            PolygonAlphaUpperClampPercent;
+        internal int PolygonMinimumOpaqueCoveragePercent { get; } =
+            PolygonMinimumOpaqueCoveragePercent;
+        internal bool AllowDepthTestChange { get; } = AllowDepthTestChange;
+        internal bool IgnoreOutOfRangeMaterialSlots { get; } =
+            IgnoreOutOfRangeMaterialSlots;
+        internal bool AcceptDesktopAnisotropyDifferences { get; } =
+            AcceptDesktopAnisotropyDifferences;
+        internal bool AcceptMobileAnisotropyDifferences { get; } =
+            AcceptMobileAnisotropyDifferences;
 
         /// <summary>
         /// True when the component equals this preset on all sixteen

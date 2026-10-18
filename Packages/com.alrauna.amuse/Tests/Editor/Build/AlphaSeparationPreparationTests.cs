@@ -1017,11 +1017,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         {
                             return new CapturedAlphaSemantics(
                                 new MaterialSemantics(
-                                    SemanticOutput<ColorSemanticValue>.Unknown(),
                                     SemanticOutput<ScalarSemanticValue>.Complete(
-                                        ScalarSemanticValue.Constant(1f)),
-                                    SemanticOutput<ColorSemanticValue>.Unknown(),
-                                    SemanticOutput<NormalSemanticValue>.Unknown()),
+                                        ScalarSemanticValue.Constant(1f))),
                                 null);
                         }
 
@@ -1125,16 +1122,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             {
                                 return new CapturedAlphaSemantics(
                                     new MaterialSemantics(
-                                        SemanticOutput<ColorSemanticValue>
-                                            .Unknown(),
                                         SemanticOutput<ScalarSemanticValue>
                                             .Complete(
                                                 ScalarSemanticValue
-                                                    .Constant(1f)),
-                                        SemanticOutput<ColorSemanticValue>
-                                            .Unknown(),
-                                        SemanticOutput<NormalSemanticValue>
-                                            .Unknown()),
+                                                    .Constant(1f))),
                                     null);
                             }
 
@@ -3418,7 +3409,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "contrast proves nothing");
             Assert.That(
                 AffineUvTransform.TryTransform(
-                    mapping, triangle, out var transformed, out var envelope),
+                    AffineUvTransform.Decode(mapping), triangle, out var transformed, out var envelope),
                 Is.True);
             Assert.That(
                 TriangleAlphaClassifier.Classify(
@@ -4948,8 +4939,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     32,
                     mip => mip >= 2 ? (byte)0 : (byte)255);
 
-                var moved = RunMipPolicyArm(
-                    tailHole, "tail default cap", null);
+                var moved = RunPolicyArm(
+                    PolicyArmKind.Mip, "tail default cap", null,
+                    mainTex: tailHole);
                 Assert.That(
                     moved.SemanticallyRefusedRendererCount, Is.Zero,
                     "fixture precondition: the capped arm must resolve");
@@ -4960,8 +4952,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     moved.Separation, Is.Not.Null,
                     "the capped proof must prepare a conversion");
 
-                var strict = RunMipPolicyArm(
-                    tailHole, "tail all levels", -1);
+                var strict = RunPolicyArm(
+                    PolicyArmKind.Mip, "tail all levels",
+                    WriteMipPolicy(-1, null), mainTex: tailHole);
                 Assert.That(
                     strict.OpaqueCandidateTriangleCount, Is.Zero,
                     "the all-mips policy must consult the faded tail");
@@ -4969,8 +4962,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     strict.Separation, Is.Null,
                     "the faded tail must stop the conversion");
 
-                var inside = RunMipPolicyArm(
-                    earlyHole, "early fade default cap", null);
+                var inside = RunPolicyArm(
+                    PolicyArmKind.Mip, "early fade default cap", null,
+                    mainTex: earlyHole);
                 Assert.That(
                     inside.OpaqueCandidateTriangleCount, Is.Zero,
                     "a fade inside the mip cap must still stop the proof");
@@ -5019,8 +5013,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 // A minimum size of 9 consults the 32x32 and 16x16
                 // levels only. The fade at mip 2 leaves the proof
                 // scope, so the triangle moves.
-                var capped = RunMipPolicyArm(
-                    earlyHole, "size cap 9", null, 9);
+                var capped = RunPolicyArm(
+                    PolicyArmKind.Mip, "size cap 9",
+                    WriteMipPolicy(null, 9), mainTex: earlyHole);
                 Assert.That(
                     capped.SemanticallyRefusedRendererCount, Is.Zero,
                     "fixture precondition: the capped arm must resolve");
@@ -5034,8 +5029,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
                 // A minimum size of 8 also consults the faded 8x8
                 // level, so the proof must stop.
-                var consulted = RunMipPolicyArm(
-                    earlyHole, "size cap 8", null, 8);
+                var consulted = RunPolicyArm(
+                    PolicyArmKind.Mip, "size cap 8",
+                    WriteMipPolicy(null, 8), mainTex: earlyHole);
                 Assert.That(
                     consulted.OpaqueCandidateTriangleCount, Is.Zero,
                     "a fade inside the consulted levels must stop " +
@@ -5047,8 +5043,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
                 // The 32x32 texture is below a 33 minimum on every
                 // level. Nothing is consulted and nothing converts.
-                var below = RunMipPolicyArm(
-                    earlyHole, "size below minimum", null, 33);
+                var below = RunPolicyArm(
+                    PolicyArmKind.Mip, "size below minimum",
+                    WriteMipPolicy(null, 33), mainTex: earlyHole);
                 Assert.That(
                     below.OpaqueCandidateTriangleCount, Is.Zero,
                     "a texture below the minimum size must not " +
@@ -5060,9 +5057,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
                 // All Sizes restores the full chain: the fade is
                 // consulted and the proof stops.
-                var allSizes = RunMipPolicyArm(
-                    earlyHole, "size all sizes", null,
-                    FixtureProofScope.AllSizes);
+                var allSizes = RunPolicyArm(
+                    PolicyArmKind.Mip, "size all sizes",
+                    WriteMipPolicy(null, FixtureProofScope.AllSizes),
+                    mainTex: earlyHole);
                 Assert.That(
                     allSizes.OpaqueCandidateTriangleCount, Is.Zero,
                     "All Sizes must consult the faded level");
@@ -5098,8 +5096,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             // arm stores desktop acceptance in its own fixture body: the
             // stray-texel proof resolves against the narrow authored
             // footprint, and only the accepted policy projects it.
-            var converting = RunAlphaPolicyArm(
-                100, 2, 50, "gate on", acceptDesktopDifferences: true);
+            var converting = RunPolicyArm(
+                PolicyArmKind.Alpha, "gate on",
+                WriteAlphaGate(100, 2, 50),
+                acceptDesktopDifferences: true);
             Assert.That(
                 converting.SemanticallyRefusedRendererCount, Is.Zero,
                 "fixture precondition: the gated arm must resolve");
@@ -5112,8 +5112,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             // The gate off keeps the stray a witness: nothing proves,
             // nothing is prepared, and the slot keeps its material.
-            var refusing = RunAlphaPolicyArm(
-                100, 0, 50, "gate off");
+            var refusing = RunPolicyArm(
+                PolicyArmKind.Alpha, "gate off",
+                WriteAlphaGate(100, 0, 50));
             Assert.That(
                 refusing.SemanticallyRefusedRendererCount, Is.Zero,
                 "a witnessing stray is an analysis outcome, not a " +
@@ -5138,7 +5139,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         [Test]
         public void ShaderCutoffSourcesStayPolicyInertEndToEnd()
         {
-            var inert = RunCutoutPolicyArm(100, 0, 2, "cutout inert");
+            var inert = RunPolicyArm(
+                PolicyArmKind.Cutout, "cutout inert",
+                WriteAlphaGate(100, 0, 2));
             Assert.That(
                 inert.SemanticallyRefusedRendererCount, Is.Zero,
                 "fixture precondition: the inert cutout arm must resolve");
@@ -5150,7 +5153,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 inert.Separation, Is.Null,
                 "the unproven cutout slot must stay on its material");
 
-            var active = RunCutoutPolicyArm(99, 2, 50, "cutout policy");
+            var active = RunPolicyArm(
+                PolicyArmKind.Cutout, "cutout policy",
+                WriteAlphaGate(99, 2, 50));
             Assert.That(
                 active.SemanticallyRefusedRendererCount, Is.Zero,
                 "policy inertness is not a refusal");
@@ -5174,7 +5179,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         [Test]
         public void AlphaOpaqueBoundScalesTheProofEndToEnd()
         {
-            var widened = RunAlphaPolicyArm(99, 0, 2, "bound 99", 254);
+            var widened = RunPolicyArm(
+                PolicyArmKind.Alpha, "bound 99",
+                WriteAlphaGate(99, 0, 2), uniformAlpha: 254);
             Assert.That(
                 widened.SemanticallyRefusedRendererCount, Is.Zero,
                 "fixture precondition: the widened arm must resolve");
@@ -5185,7 +5192,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 widened.Separation, Is.Not.Null,
                 "the widened proof must prepare a conversion");
 
-            var exact = RunAlphaPolicyArm(100, 0, 2, "bound 100", 254);
+            var exact = RunPolicyArm(
+                PolicyArmKind.Alpha, "bound 100",
+                WriteAlphaGate(100, 0, 2), uniformAlpha: 254);
             Assert.That(
                 exact.SemanticallyRefusedRendererCount, Is.Zero,
                 "a witnessing texel is an analysis outcome, not a " +
@@ -5199,41 +5208,96 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// Which route the parameterized policy arm drives: the arm's
+        /// material route, its fixture texture naming, and its fixture
+        /// scope.
+        /// </summary>
+        private enum PolicyArmKind
+        {
+            Cutout,
+            Mip,
+            Alpha,
+        }
+
+        /// <summary>
         /// One parameterized single-triangle policy arm over one optimizer
-        /// component. The serialized policy hook writes the arm's fields
-        /// before the shared apply, the material factory builds the arm's
-        /// material and its main texture (importing from the cutout
-        /// conversion fixtures when the arm owns the fixture scope), and
-        /// the barrier runs through the production entry over the given
-        /// verified seams. Arms with the fixture scope also run under the
-        /// temporary-directory override and tear the fixtures down with
-        /// the arm.
+        /// component. The kind picks the arm's material route and the
+        /// fixture texture it imports when the caller gives no main
+        /// texture, the serialized hook writes the arm's optimizer field
+        /// assignments before the shared apply, and the barrier runs
+        /// through the production entry over the verified seams. Arms with
+        /// the fixture scope also run under the temporary-directory
+        /// override and tear the fixtures down with the arm.
         /// <para>
         /// The serialized writes must land before the acceptance helper
         /// runs. This SerializedObject caches the component as it was
         /// before that helper stores its acceptance, so applying it
         /// afterwards replays the stale cache and restores the stored
-        /// acceptance to false. The optional post-serialized hook is where
-        /// an arm grants that acceptance.
+        /// acceptance to false. The alpha arm grants that acceptance
+        /// through <c>acceptDesktopDifferences</c>.
         /// </para>
         /// </summary>
         private static AmusePlatformFinishState RunPolicyArm(
-            string rootName,
-            Func<LilToonCutoutConversionFixtures, Material> createMaterial,
-            Action<SerializedObject> writeSerializedPolicy = null,
-            Action<GameObject> postSerializedPolicy = null,
-            bool withFixtureScope = false,
-            AlphaMaterialRequestSelector selectRequest = null,
-            ClosedAlphaMaterialCapturer capturer = null,
-            CapturedAlphaMaterialSemanticsResolver resolveSemantics = null,
-            VerifiedLilToonConversion lilToonConversion = null)
+            PolicyArmKind kind,
+            string armName,
+            Action<SerializedObject> writeFields,
+            Texture2D mainTex = null,
+            byte? uniformAlpha = null,
+            bool acceptDesktopDifferences = false)
         {
-            using var assets = withFixtureScope
-                ? new OverrideTemporaryDirectoryScope(null)
-                : null;
-            var fixtures = withFixtureScope
-                ? new LilToonCutoutConversionFixtures()
-                : null;
+            string rootName;
+            Func<LilToonCutoutConversionFixtures, Material> createMaterial;
+            switch (kind)
+            {
+                case PolicyArmKind.Cutout:
+                    rootName = "AMUSE cutout policy " + armName;
+                    createMaterial = fixtures =>
+                    {
+                        var texture = fixtures.ImportStrayTexelTexture(
+                            "cutout_policy_stray_" + armName);
+                        var material =
+                            LilToonFixtureTestBase
+                                .CreateCutoutConversionMaterial();
+                        material.SetTexture("_MainTex", texture);
+                        return material;
+                    };
+                    break;
+                case PolicyArmKind.Mip:
+                    rootName = "AMUSE mip policy " + armName;
+                    createMaterial = _ =>
+                    {
+                        var material =
+                            LilToonFixtureTestBase
+                                .CreateCutoutConversionMaterial();
+                        material.SetTexture("_MainTex", mainTex);
+                        return material;
+                    };
+                    break;
+                default:
+                    rootName = "AMUSE alpha policy " + armName;
+                    createMaterial = fixtures =>
+                    {
+                        var texture = uniformAlpha.HasValue
+                            ? fixtures.ImportUniformAlphaTexture(
+                                "alpha_policy_uniform_" + armName,
+                                uniformAlpha.Value)
+                            : fixtures.ImportStrayTexelTexture(
+                                "alpha_policy_stray_" + armName);
+                        var material =
+                            LilToonFixtureTestBase
+                                .CreateTransparentConversionMaterial();
+                        material.SetTexture("_MainTex", texture);
+                        return material;
+                    };
+                    break;
+            }
+
+            using var assets = kind == PolicyArmKind.Mip
+                ? null
+                : new OverrideTemporaryDirectoryScope(null);
+            var fixtures = kind == PolicyArmKind.Mip
+                ? null
+                : new LilToonCutoutConversionFixtures();
             fixtures?.BaseSetUp();
             var root = new GameObject(rootName);
             FixtureAvatarIdentity.AttachVrcDescriptor(root);
@@ -5241,14 +5305,21 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             var serialized = new SerializedObject(component);
-            writeSerializedPolicy?.Invoke(serialized);
+            writeFields?.Invoke(serialized);
             // These numeric writes must land before the acceptance helper
             // runs. This SerializedObject caches the component as it was
             // before that helper stores its acceptance, so applying it
             // afterwards replays the stale cache and restores the stored
             // acceptance to false.
             serialized.ApplyModifiedProperties();
-            postSerializedPolicy?.Invoke(root);
+            if (kind == PolicyArmKind.Alpha && acceptDesktopDifferences)
+            {
+                // The arm's local footprint proof resolves only
+                // under the accepted non-anisotropic policy; the
+                // caller states that per arm, and no default
+                // grants it.
+                FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
+            }
 
             Material material = null;
             Mesh mesh = null;
@@ -5266,10 +5337,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
                 amuse = RunBarrier(
                     root,
-                    selectRequest: selectRequest,
-                    capturer: capturer,
-                    resolveSemantics: resolveSemantics,
-                    lilToonConversion: lilToonConversion);
+                    selectRequest: VerifiedLilToonTestSeams
+                        .SelectVerifiedFixtureRequest,
+                    capturer: VerifiedLilToonTestSeams
+                        .CaptureVerifiedFixtureMaterials,
+                    resolveSemantics: VerifiedLilToonTestSeams
+                        .VerifiedAlphaOnly,
+                    lilToonConversion: kind == PolicyArmKind.Alpha
+                        ? VerifiedFamilyConversion
+                        : null);
             }
             finally
             {
@@ -5287,160 +5363,54 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
-        /// One single-triangle cutout arm over the stray chain, with the
-        /// optimizer component's three alpha policy fields set through
-        /// serialized properties. Uses the cutout fixture material, whose
-        /// shader cutoff the capture declares.
+        /// Serialized writes for the arm's three alpha noise-gate policy
+        /// fields.
         /// </summary>
-        private static AmusePlatformFinishState RunCutoutPolicyArm(
+        private static Action<SerializedObject> WriteAlphaGate(
             int opaquePercent,
             int polygonClampPercent,
-            int polygonCoveragePercent,
-            string armName)
+            int polygonCoveragePercent)
         {
-            return RunPolicyArm(
-                "AMUSE cutout policy " + armName,
-                fixtures =>
-                {
-                    var texture = fixtures.ImportStrayTexelTexture(
-                        "cutout_policy_stray_" + armName);
-                    var material =
-                        LilToonFixtureTestBase
-                            .CreateCutoutConversionMaterial();
-                    material.SetTexture("_MainTex", texture);
-                    return material;
-                },
-                serialized =>
-                {
-                    serialized.FindProperty("_minimumOpaqueAlphaPercent")
-                        .intValue = opaquePercent;
-                    serialized.FindProperty("_polygonAlphaUpperClampPercent")
-                        .intValue = polygonClampPercent;
-                    serialized.FindProperty(
-                            "_polygonMinimumOpaqueCoveragePercent")
-                        .intValue = polygonCoveragePercent;
-                },
-                withFixtureScope: true,
-                selectRequest: VerifiedLilToonTestSeams
-                    .SelectVerifiedFixtureRequest,
-                capturer: VerifiedLilToonTestSeams
-                    .CaptureVerifiedFixtureMaterials,
-                resolveSemantics: VerifiedLilToonTestSeams
-                    .VerifiedAlphaOnly);
+            return serialized =>
+            {
+                serialized.FindProperty("_minimumOpaqueAlphaPercent")
+                    .intValue = opaquePercent;
+                serialized.FindProperty("_polygonAlphaUpperClampPercent")
+                    .intValue = polygonClampPercent;
+                serialized.FindProperty(
+                        "_polygonMinimumOpaqueCoveragePercent")
+                    .intValue = polygonCoveragePercent;
+            };
         }
 
         /// <summary>
-        /// One single-triangle cutout arm over the given main texture, with
-        /// the optimizer component's serialized mip cap and minimum
-        /// size set when requested.
+        /// Serialized writes for the arm's preserve-transparency mip cap
+        /// and minimum size. A null leaves that field unwritten. The
+        /// arm's material is cutout-recorded, so its proof reads the
+        /// cutout arm's own policy fields since the arm-scoped field
+        /// selection. The Task 5 follow-up the review adjudicated writes
+        /// those fields here.
         /// </summary>
-        private static AmusePlatformFinishState RunMipPolicyArm(
-            Texture2D mainTex,
-            string armName,
+        private static Action<SerializedObject> WriteMipPolicy(
             int? maxMipLevel,
-            int? minTextureSize = null)
+            int? minTextureSize)
         {
-            return RunPolicyArm(
-                "AMUSE mip policy " + armName,
-                _ =>
+            return serialized =>
+            {
+                if (maxMipLevel.HasValue)
                 {
-                    var material =
-                        LilToonFixtureTestBase
-                            .CreateCutoutConversionMaterial();
-                    material.SetTexture("_MainTex", mainTex);
-                    return material;
-                },
-                serialized =>
-                {
-                    // The arm's material is cutout-recorded, so its proof
-                    // reads the cutout arm's own policy fields since the
-                    // arm-scoped field selection. The Task 5 follow-up the
-                    // review adjudicated writes those fields here.
-                    if (maxMipLevel.HasValue)
-                    {
-                        serialized.FindProperty(
-                                "_cutoutPreserveTransparencyMaxMipLevel")
-                            .intValue = maxMipLevel.Value;
-                    }
-
-                    if (minTextureSize.HasValue)
-                    {
-                        serialized.FindProperty(
-                                "_cutoutPreserveTransparencyMinTextureSize")
-                            .intValue = minTextureSize.Value;
-                    }
-                },
-                selectRequest: VerifiedLilToonTestSeams
-                    .SelectVerifiedFixtureRequest,
-                capturer: VerifiedLilToonTestSeams
-                    .CaptureVerifiedFixtureMaterials,
-                resolveSemantics: VerifiedLilToonTestSeams
-                    .VerifiedAlphaOnly);
-        }
-
-        /// <summary>
-        /// One single-triangle transparent (fade-eligible) arm over a
-        /// procedural 4x4 chain whose alpha bytes are all 255 except one
-        /// texel at 3, with the optimizer component's three alpha policy
-        /// fields set through serialized properties. The chain is
-        /// authored at runtime and stored as an asset, so it carries a
-        /// project identity and capture routes through the direct GPU
-        /// path and its policy-aware predicate shader.
-        /// </summary>
-        private static AmusePlatformFinishState RunAlphaPolicyArm(
-            int opaquePercent,
-            int polygonClampPercent,
-            int polygonCoveragePercent,
-            string armName,
-            byte? uniformAlpha = null,
-            bool acceptDesktopDifferences = false)
-        {
-            return RunPolicyArm(
-                "AMUSE alpha policy " + armName,
-                fixtures =>
-                {
-                    var texture = uniformAlpha.HasValue
-                        ? fixtures.ImportUniformAlphaTexture(
-                            "alpha_policy_uniform_" + armName,
-                            uniformAlpha.Value)
-                        : fixtures.ImportStrayTexelTexture(
-                            "alpha_policy_stray_" + armName);
-                    var material =
-                        LilToonFixtureTestBase
-                            .CreateTransparentConversionMaterial();
-                    material.SetTexture("_MainTex", texture);
-                    return material;
-                },
-                serialized =>
-                {
-                    serialized.FindProperty("_minimumOpaqueAlphaPercent")
-                        .intValue = opaquePercent;
-                    serialized.FindProperty("_polygonAlphaUpperClampPercent")
-                        .intValue = polygonClampPercent;
                     serialized.FindProperty(
-                            "_polygonMinimumOpaqueCoveragePercent")
-                        .intValue = polygonCoveragePercent;
-                },
-                root =>
+                            "_cutoutPreserveTransparencyMaxMipLevel")
+                        .intValue = maxMipLevel.Value;
+                }
+
+                if (minTextureSize.HasValue)
                 {
-                    if (acceptDesktopDifferences)
-                    {
-                        // The arm's local footprint proof resolves only
-                        // under the accepted non-anisotropic policy; the
-                        // caller states that per arm, and no default
-                        // grants it.
-                        FixtureProofScope
-                            .AcceptDesktopAnisotropyDifferences(root);
-                    }
-                },
-                withFixtureScope: true,
-                selectRequest: VerifiedLilToonTestSeams
-                    .SelectVerifiedFixtureRequest,
-                capturer: VerifiedLilToonTestSeams
-                    .CaptureVerifiedFixtureMaterials,
-                resolveSemantics: VerifiedLilToonTestSeams
-                    .VerifiedAlphaOnly,
-                lilToonConversion: VerifiedFamilyConversion);
+                    serialized.FindProperty(
+                            "_cutoutPreserveTransparencyMinTextureSize")
+                        .intValue = minTextureSize.Value;
+                }
+            };
         }
 
 
@@ -9078,11 +9048,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 case CapturedAlphaMaterialFamily.LilToon:
                     return new CapturedAlphaSemantics(
                         new MaterialSemantics(
-                            SemanticOutput<ColorSemanticValue>.Unknown(),
                             LilToonMaterialSemantics.InterpretVerifiedAlpha(
-                                captured.Evidence, out _),
-                            SemanticOutput<ColorSemanticValue>.Unknown(),
-                            SemanticOutput<NormalSemanticValue>.Unknown()),
+                                captured.Evidence, out _)),
                         null);
                 default:
                     return VerifiedPoiyomiTestSeams.VerifiedAlphaOnly(captured);
@@ -11612,7 +11579,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             out Material opaque,
             out string detail)
         {
-            return AlphaSeparationPreparation.ConvertAdmittedMaterial(
+            return AlphaSeparationMaterialConverter.ConvertAdmittedMaterial(
                 captured,
                 live,
                 Array.Empty<(CapturedFloatBinding, AnimatedPropertyRef)>(),

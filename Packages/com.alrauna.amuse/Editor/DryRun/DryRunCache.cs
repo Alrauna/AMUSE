@@ -18,15 +18,13 @@ namespace Alrauna.Amuse.Editor.DryRun
             BuildTarget activeTarget,
             string policyFingerprint,
             string controllerFingerprint,
-            string graphFingerprint,
-            string rendererFingerprintBody)
+            string graphFingerprint)
         {
             AvatarRootInstanceId = avatarRootInstanceId;
             ActiveTarget = activeTarget;
             PolicyFingerprint = policyFingerprint;
             ControllerFingerprint = controllerFingerprint;
             GraphFingerprint = graphFingerprint;
-            RendererFingerprintBody = rendererFingerprintBody;
         }
 
         internal int AvatarRootInstanceId { get; }
@@ -40,9 +38,6 @@ namespace Alrauna.Amuse.Editor.DryRun
 
         /// <summary>The structural graph outcome.</summary>
         internal string GraphFingerprint { get; }
-
-        /// <summary>Renderer path, type, mesh, materials, and textures.</summary>
-        internal string RendererFingerprintBody { get; }
     }
 
     /// <summary>

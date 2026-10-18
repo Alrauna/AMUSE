@@ -155,45 +155,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         }
 
         [Test]
-        public void ColorSupportsConstantTextureAndTextureTimesConstant()
-        {
-            var sample = Sample(
-                "texture:shirt",
-                0,
-                TextureFilterMode.Bilinear,
-                TextureWrapMode.Clamp);
-            var constant = ColorSemanticValue.Constant(
-                new Vector3(1f, 0f, 0f));
-            var texture = ColorSemanticValue.Texture(
-                sample,
-                TextureColorInterpretation.Srgb);
-            var multiplied = ColorSemanticValue.TextureTimesConstant(
-                sample,
-                TextureColorInterpretation.Srgb,
-                new Vector3(1f, 0f, 0f));
-
-            Assert.That(
-                constant.Kind,
-                Is.EqualTo(ColorSemanticValueKind.Constant));
-            Assert.That(
-                texture.Kind,
-                Is.EqualTo(ColorSemanticValueKind.TextureSample));
-            Assert.That(
-                multiplied.Kind,
-                Is.EqualTo(ColorSemanticValueKind.TextureSampleTimesConstant));
-            Assert.That(
-                constant.GetConstantValue(),
-                Is.EqualTo(new Vector3(1f, 0f, 0f)));
-            Assert.That(texture.GetTextureSample(), Is.SameAs(sample));
-            Assert.That(
-                texture.GetColorInterpretation(),
-                Is.EqualTo(TextureColorInterpretation.Srgb));
-            Assert.That(
-                multiplied.GetMultiplier(),
-                Is.EqualTo(new Vector3(1f, 0f, 0f)));
-        }
-
-        [Test]
         public void ScalarSupportsConstantTextureAndTextureTimesConstant()
         {
             var sample = Sample(
@@ -220,37 +181,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 multiplied.Kind,
                 Is.EqualTo(ScalarSemanticValueKind.TextureSampleTimesConstant));
             Assert.That(multiplied.GetMultiplier(), Is.EqualTo(0.5f));
-        }
-
-        [Test]
-        public void ColorWrongKindPayloadAccessThrows()
-        {
-            var sample = Sample(
-                "texture:color",
-                0,
-                TextureFilterMode.Bilinear,
-                TextureWrapMode.Clamp);
-            var constant = ColorSemanticValue.Constant(Vector3.one);
-            var texture = ColorSemanticValue.Texture(
-                sample,
-                TextureColorInterpretation.Srgb);
-            var multiplied = ColorSemanticValue.TextureTimesConstant(
-                sample,
-                TextureColorInterpretation.Srgb,
-                Vector3.one);
-
-            Assert.Throws<InvalidOperationException>(
-                () => constant.GetTextureSample());
-            Assert.Throws<InvalidOperationException>(
-                () => constant.GetColorInterpretation());
-            Assert.Throws<InvalidOperationException>(
-                () => constant.GetMultiplier());
-            Assert.Throws<InvalidOperationException>(
-                () => texture.GetConstantValue());
-            Assert.Throws<InvalidOperationException>(
-                () => texture.GetMultiplier());
-            Assert.Throws<InvalidOperationException>(
-                () => multiplied.GetConstantValue());
         }
 
         [Test]
@@ -482,22 +412,22 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [Test]
         public void IndependentlyConstructedValuesCompareStructurally()
         {
-            var first = ColorSemanticValue.TextureTimesConstant(
+            var first = ScalarSemanticValue.TextureTimesConstant(
                 Sample(
-                    "texture:shirt",
+                    "texture:alpha",
                     0,
                     TextureFilterMode.Bilinear,
                     TextureWrapMode.Clamp),
-                TextureColorInterpretation.Srgb,
-                new Vector3(1f, 0.25f, 0.5f));
-            var second = ColorSemanticValue.TextureTimesConstant(
+                TextureChannel.Alpha,
+                0.25f);
+            var second = ScalarSemanticValue.TextureTimesConstant(
                 Sample(
-                    "texture:shirt",
+                    "texture:alpha",
                     0,
                     TextureFilterMode.Bilinear,
                     TextureWrapMode.Clamp),
-                TextureColorInterpretation.Srgb,
-                new Vector3(1f, 0.25f, 0.5f));
+                TextureChannel.Alpha,
+                0.25f);
 
             Assert.That(first, Is.EqualTo(second));
             Assert.That(ReferenceEquals(first, second), Is.False);
@@ -513,22 +443,11 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 TextureWrapMode.Clamp);
 
             Assert.Throws<ArgumentException>(() =>
-                ColorSemanticValue.Constant(
-                    new Vector3(float.NaN, 0f, 0f)));
-            Assert.Throws<ArgumentException>(() =>
                 ScalarSemanticValue.Constant(float.PositiveInfinity));
-            Assert.Throws<ArgumentOutOfRangeException>(() =>
-                ColorSemanticValue.Texture(
-                    sample,
-                    (TextureColorInterpretation)99));
             Assert.Throws<ArgumentOutOfRangeException>(() =>
                 ScalarSemanticValue.Texture(
                     sample,
                     (TextureChannel)99));
-            Assert.Throws<ArgumentNullException>(() =>
-                ColorSemanticValue.Texture(
-                    null,
-                    TextureColorInterpretation.Linear));
             Assert.Throws<ArgumentException>(() =>
                 new TextureSample(
                     default,
@@ -536,28 +455,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                     new TextureSampling(
                         TextureFilterMode.Point,
                         TextureWrapMode.Clamp)));
-        }
-
-        [Test]
-        public void NormalSupportsOnlyUnmodifiedAndCanonicalTangentMap()
-        {
-            var unmodified = NormalSemanticValue.Unmodified();
-            var mapped = NormalSemanticValue.TangentSpaceNormalMap(
-                Sample(
-                    "texture:normal",
-                    0,
-                    TextureFilterMode.Bilinear,
-                    TextureWrapMode.Clamp));
-
-            Assert.That(
-                unmodified.Kind,
-                Is.EqualTo(NormalSemanticValueKind.Unmodified));
-            Assert.That(
-                mapped.Kind,
-                Is.EqualTo(NormalSemanticValueKind.TangentSpaceNormalMap));
-            Assert.Throws<InvalidOperationException>(
-                () => unmodified.GetTextureSample());
-            Assert.That(mapped.GetTextureSample(), Is.Not.Null);
         }
 
         [Test]
@@ -584,28 +481,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         }
 
         [Test]
-        public void MaterialSupportsIndependentPartialKnowledge()
-        {
-            var semantics = new MaterialSemantics(
-                SemanticOutput<ColorSemanticValue>.Complete(
-                    ColorSemanticValue.Constant(Vector3.one)),
-                SemanticOutput<ScalarSemanticValue>.Complete(
-                    ScalarSemanticValue.Constant(1f)),
-                SemanticOutput<ColorSemanticValue>.Unknown(),
-                SemanticOutput<NormalSemanticValue>.Complete(
-                    NormalSemanticValue.Unmodified()));
-
-            Assert.That(semantics.BaseColor.IsComplete, Is.True);
-            Assert.That(semantics.Alpha.IsComplete, Is.True);
-            Assert.That(semantics.Emission.IsComplete, Is.False);
-            Assert.That(semantics.Normal.IsComplete, Is.True);
-        }
-
-        [Test]
         public void CompleteOutputRejectsNullReferenceValue()
         {
             Assert.Throws<ArgumentNullException>(() =>
-                SemanticOutput<ColorSemanticValue>.Complete(null));
+                SemanticOutput<ScalarSemanticValue>.Complete(null));
         }
 
         [Test]
@@ -618,41 +497,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             Assert.That(first, Is.EqualTo(same));
             Assert.That(ReferenceEquals(first, same), Is.False);
             Assert.That(first, Is.Not.EqualTo(animatedAlternate));
-        }
-
-        [Test]
-        public void TintDifferenceIsRepresentedWithoutABakingDecision()
-        {
-            var shirt = ColorSemanticValue.TextureTimesConstant(
-                Sample(
-                    "texture:shirt",
-                    0,
-                    TextureFilterMode.Bilinear,
-                    TextureWrapMode.Clamp),
-                TextureColorInterpretation.Srgb,
-                new Vector3(1f, 0f, 0f));
-            var pants = ColorSemanticValue.TextureTimesConstant(
-                Sample(
-                    "texture:pants",
-                    0,
-                    TextureFilterMode.Bilinear,
-                    TextureWrapMode.Clamp),
-                TextureColorInterpretation.Srgb,
-                new Vector3(0f, 0f, 1f));
-
-            Assert.That(
-                shirt.Kind,
-                Is.EqualTo(ColorSemanticValueKind.TextureSampleTimesConstant));
-            Assert.That(
-                pants.Kind,
-                Is.EqualTo(ColorSemanticValueKind.TextureSampleTimesConstant));
-            Assert.That(
-                shirt.GetTextureSample().Source,
-                Is.EqualTo(new TextureSourceId("texture:shirt")));
-            Assert.That(
-                pants.GetTextureSample().Source,
-                Is.EqualTo(new TextureSourceId("texture:pants")));
-            Assert.That(shirt, Is.Not.EqualTo(pants));
         }
 
         [Test]
@@ -689,55 +533,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         }
 
         [Test]
-        public void TextureOutputsExposeSharedUvCoupling()
-        {
-            var coordinates = new UvMapping(
-                0,
-                new Vector2(2f, 2f),
-                new Vector2(0.1f, 0.2f));
-            var sampling = new TextureSampling(
-                TextureFilterMode.Bilinear,
-                TextureWrapMode.Clamp);
-            var baseSample = new TextureSample(
-                new TextureSourceId("texture:base"),
-                coordinates,
-                sampling);
-            var emissionSample = new TextureSample(
-                new TextureSourceId("texture:emission"),
-                coordinates,
-                sampling);
-            var normalSample = new TextureSample(
-                new TextureSourceId("texture:normal"),
-                coordinates,
-                sampling);
-
-            var semantics = new MaterialSemantics(
-                SemanticOutput<ColorSemanticValue>.Complete(
-                    ColorSemanticValue.Texture(
-                        baseSample,
-                        TextureColorInterpretation.Srgb)),
-                SemanticOutput<ScalarSemanticValue>.Complete(
-                    ScalarSemanticValue.Constant(1f)),
-                SemanticOutput<ColorSemanticValue>.Complete(
-                    ColorSemanticValue.Texture(
-                        emissionSample,
-                        TextureColorInterpretation.Srgb)),
-                SemanticOutput<NormalSemanticValue>.Complete(
-                    NormalSemanticValue.TangentSpaceNormalMap(normalSample)));
-
-            Assert.That(
-                semantics.BaseColor.GetCompleteValue()
-                    .GetTextureSample().Coordinates,
-                Is.EqualTo(semantics.Emission.GetCompleteValue()
-                    .GetTextureSample().Coordinates));
-            Assert.That(
-                semantics.BaseColor.GetCompleteValue()
-                    .GetTextureSample().Coordinates,
-                Is.EqualTo(semantics.Normal.GetCompleteValue()
-                    .GetTextureSample().Coordinates));
-        }
-
-        [Test]
         public void UvChannelOrTransformDifferenceBreaksV1CouplingEquality()
         {
             var uv0 = new UvMapping(0, Vector2.one, Vector2.zero);
@@ -754,34 +549,16 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [Test]
         public void MissingTextureIsAProvenFallbackOrUnknownNeverNull()
         {
-            var provenFallback = SemanticOutput<ColorSemanticValue>.Complete(
-                ColorSemanticValue.Constant(Vector3.one));
+            var provenFallback = SemanticOutput<ScalarSemanticValue>.Complete(
+                ScalarSemanticValue.Constant(1f));
             var unsupportedMissingBehavior =
-                SemanticOutput<ColorSemanticValue>.Unknown();
+                SemanticOutput<ScalarSemanticValue>.Unknown();
 
             Assert.That(
                 provenFallback.GetCompleteValue().Kind,
-                Is.EqualTo(ColorSemanticValueKind.Constant));
+                Is.EqualTo(ScalarSemanticValueKind.Constant));
             Assert.Throws<InvalidOperationException>(() =>
                 unsupportedMissingBehavior.GetCompleteValue());
-        }
-
-        [Test]
-        public void UnknownModifierCanInvalidateOnlyProvenAffectedOutput()
-        {
-            var semantics = new MaterialSemantics(
-                SemanticOutput<ColorSemanticValue>.Complete(
-                    ColorSemanticValue.Constant(Vector3.one)),
-                SemanticOutput<ScalarSemanticValue>.Unknown(),
-                SemanticOutput<ColorSemanticValue>.Complete(
-                    ColorSemanticValue.Constant(Vector3.zero)),
-                SemanticOutput<NormalSemanticValue>.Complete(
-                    NormalSemanticValue.Unmodified()));
-
-            Assert.That(semantics.BaseColor.IsComplete, Is.True);
-            Assert.That(semantics.Alpha.IsComplete, Is.False);
-            Assert.That(semantics.Emission.IsComplete, Is.True);
-            Assert.That(semantics.Normal.IsComplete, Is.True);
         }
 
         [Test]
@@ -810,14 +587,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         private static MaterialSemantics ConstantMaterial(float alpha)
         {
             return new MaterialSemantics(
-                SemanticOutput<ColorSemanticValue>.Complete(
-                    ColorSemanticValue.Constant(Vector3.one)),
                 SemanticOutput<ScalarSemanticValue>.Complete(
-                    ScalarSemanticValue.Constant(alpha)),
-                SemanticOutput<ColorSemanticValue>.Complete(
-                    ColorSemanticValue.Constant(Vector3.zero)),
-                SemanticOutput<NormalSemanticValue>.Complete(
-                    NormalSemanticValue.Unmodified()));
+                    ScalarSemanticValue.Constant(alpha)));
         }
 
         private static TextureSample Sample(
