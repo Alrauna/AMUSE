@@ -54,36 +54,49 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         private const string MainTextureProperty = "_MainTex";
         private const string AlphaMaskProperty = "_AlphaMask";
         private const string OutlineTextureProperty = "_OutlineTexture";
-        private const string AlphaMaskExpressionDetail = "alpha mask expression";
+        private const string AlphaMaskExpressionDetail =
+            AlphaMaskBlendStrengthProperty + " + " + AlphaMaskValueProperty;
 
         private static readonly string[] AlphaCoverageGates =
         {
-            "_DitherAlphaMode",
-            "_AlphaDitherFadeFloor",
-            "_AlphaModDistanceFadeFloor",
-            "_DissolveType",
-            "_AlphaModAngleFadeFloor",
+            "_AlphaToCoverage",
+            "_AlphaSharpenedA2C",
+            "_AlphaDithering",
+            "_EnableDissolve",
+            "_EnableUDIMDiscardOptions",
+            "_BSSEnabled",
         };
 
         private static readonly string[] AlphaFeatureGates =
         {
-            "_ClearCoatEnable",
-            "_VoronoiEnable",
-            "_RefractionEnabled",
-            "_FlipbookEnable",
-            "_GlitterEnable",
+            "_AlphaMod",
+            "_AlphaDistanceFade",
+            "_AlphaFresnel",
+            "_AlphaAngular",
+            "_AlphaAudioLinkEnabled",
+            "_EnableAudioLink",
+            "_AlphaGlobalMask",
+            "_BackFaceEnabled",
+            "_RGBMaskEnabled",
+            "_ALDecalControlsAlpha",
+            "_EnableFlipbook",
+            "_RimApplyAlpha",
+            "_EnableDepthRimLighting",
+            "_EnableEnvironmentalRim",
+            "_VideoEffectsEnable",
+            "_EnableTouchGlow",
+            "_MainVertexColoringEnabled",
         };
 
         private static readonly string[] TextureBackedAlphaGates =
         {
             "_PoiParallax",
-            "_ParallaxInternalMap",
         };
 
         private static readonly string[] MainSamplingModeGates =
         {
-            "_MainTextureMode",
-            "_MainTexMipMapLevel",
+            "_MainPixelMode",
+            "_MainTexStochastic",
         };
 
         private static readonly string[] AlphaDecalSlotEnables =
