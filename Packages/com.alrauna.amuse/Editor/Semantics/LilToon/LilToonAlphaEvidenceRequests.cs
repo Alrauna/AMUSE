@@ -17,36 +17,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
     /// </summary>
     internal static class LilToonAlphaEvidenceRequests
     {
-        private const string InvisibleProperty = "_Invisible";
-        private const string UdimDiscardCompileProperty = "_UDIMDiscardCompile";
-        private const string UdimDiscardModeProperty = "_UDIMDiscardMode";
-        private const string ShiftBackfaceUvProperty = "_ShiftBackfaceUV";
-        private const string UseParallaxProperty = "_UseParallax";
-        private const string UseMain2ndTexProperty = "_UseMain2ndTex";
-        private const string UseMain3rdTexProperty = "_UseMain3rdTex";
-        private const string AlphaMaskModeProperty = "_AlphaMaskMode";
-        private const string AlphaMaskScaleProperty = "_AlphaMaskScale";
-        private const string AlphaMaskValueProperty = "_AlphaMaskValue";
-        private const string UseDitherProperty = "_UseDither";
-        private const string IdMask1Property = "_IDMask1";
-        private const string IdMask2Property = "_IDMask2";
-        private const string IdMask3Property = "_IDMask3";
-        private const string IdMask4Property = "_IDMask4";
-        private const string IdMask5Property = "_IDMask5";
-        private const string IdMask6Property = "_IDMask6";
-        private const string IdMask7Property = "_IDMask7";
-        private const string IdMask8Property = "_IDMask8";
-        private const string IdMaskControlsDissolveProperty =
-            "_IDMaskControlsDissolve";
-        private const string CutoffProperty = "_Cutoff";
-        private const string ColorProperty = "_Color";
-        private const string MainTextureProperty = "_MainTex";
-        private const string DissolveParamsProperty = "_DissolveParams";
-        private const string MainTexScrollRotateProperty =
-            "_MainTex_ScrollRotate";
-        private const string AlphaBoostFaProperty = "_AlphaBoostFA";
-        private const string SubpassCutoffProperty = "_SubpassCutoff";
-
         // --- The per-family delta table ---------------------------------
         //
         // The shared scalar base of both families is the cutout list, split
@@ -63,14 +33,14 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         private static readonly string[] ScalarsThroughAlphaMaskMode =
         {
             LilToonSourceAttestation.ShaderFormatVersionProperty,
-            InvisibleProperty,
-            UdimDiscardCompileProperty,
-            UdimDiscardModeProperty,
-            ShiftBackfaceUvProperty,
-            UseParallaxProperty,
-            UseMain2ndTexProperty,
-            UseMain3rdTexProperty,
-            AlphaMaskModeProperty,
+            LilToonProperties.Invisible,
+            LilToonProperties.UdimDiscardCompile,
+            LilToonProperties.UdimDiscardMode,
+            LilToonProperties.ShiftBackfaceUV,
+            LilToonProperties.UseParallax,
+            LilToonProperties.UseMain2ndTex,
+            LilToonProperties.UseMain3rdTex,
+            LilToonProperties.AlphaMaskMode,
         };
 
         /// <summary>
@@ -79,8 +49,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// </summary>
         private static readonly string[] AlphaMaskPairScalars =
         {
-            AlphaMaskScaleProperty,
-            AlphaMaskValueProperty,
+            LilToonProperties.AlphaMaskScale,
+            LilToonProperties.AlphaMaskValue,
         };
 
         /// <summary>
@@ -89,17 +59,17 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// </summary>
         private static readonly string[] CutoutScalarsAfterMaskPair =
         {
-            UseDitherProperty,
-            IdMask1Property,
-            IdMask2Property,
-            IdMask3Property,
-            IdMask4Property,
-            IdMask5Property,
-            IdMask6Property,
-            IdMask7Property,
-            IdMask8Property,
-            IdMaskControlsDissolveProperty,
-            CutoffProperty,
+            LilToonProperties.UseDither,
+            LilToonProperties.IdMask1,
+            LilToonProperties.IdMask2,
+            LilToonProperties.IdMask3,
+            LilToonProperties.IdMask4,
+            LilToonProperties.IdMask5,
+            LilToonProperties.IdMask6,
+            LilToonProperties.IdMask7,
+            LilToonProperties.IdMask8,
+            LilToonProperties.IdMaskControlsDissolve,
+            LilToonProperties.Cutoff,
         };
 
         /// <summary>
@@ -108,16 +78,16 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// </summary>
         private static readonly string[] TransparentScalarsAfterMaskPair =
         {
-            IdMask1Property,
-            IdMask2Property,
-            IdMask3Property,
-            IdMask4Property,
-            IdMask5Property,
-            IdMask6Property,
-            IdMask7Property,
-            IdMask8Property,
-            IdMaskControlsDissolveProperty,
-            CutoffProperty,
+            LilToonProperties.IdMask1,
+            LilToonProperties.IdMask2,
+            LilToonProperties.IdMask3,
+            LilToonProperties.IdMask4,
+            LilToonProperties.IdMask5,
+            LilToonProperties.IdMask6,
+            LilToonProperties.IdMask7,
+            LilToonProperties.IdMask8,
+            LilToonProperties.IdMaskControlsDissolve,
+            LilToonProperties.Cutoff,
         };
 
         /// <summary>
@@ -125,8 +95,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// </summary>
         private static readonly string[] TransparentAddedScalars =
         {
-            AlphaBoostFaProperty,
-            SubpassCutoffProperty,
+            LilToonProperties.AlphaBoostFA,
+            LilToonProperties.SubpassCutoff,
         };
 
         /// <summary>
@@ -217,12 +187,12 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 scalarProperties: scalarProperties,
                 colorProperties: new[]
                 {
-                    ColorProperty, "_Color2nd", "_Color3rd",
+                    LilToonProperties.Color, "_Color2nd", "_Color3rd",
                 },
                 vectorProperties: new[]
                 {
-                    DissolveParamsProperty,
-                    MainTexScrollRotateProperty,
+                    LilToonProperties.DissolveParams,
+                    LilToonProperties.MainTexScrollRotate,
                     LilToonDistanceFadeSemantics.DistanceFadeProperty,
                     "_Main2ndTex_ScrollRotate",
                     "_Main3rdTex_ScrollRotate",
@@ -245,7 +215,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             // _MainTex sample (T1 §9.1 clause 5), so the exact-255 arm is
             // this family's capture arm and the alpha policy applies to it.
             var mainTexCutoffProperty =
-                declaresMainTexCutoff ? CutoffProperty : null;
+                declaresMainTexCutoff ? LilToonProperties.Cutoff : null;
 
             return new[]
             {
@@ -272,7 +242,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     TextureEvidenceKinds.SourceIdentity |
                     TextureEvidenceKinds.RedChannel),
                 new TexturePropertyEvidenceRequest(
-                    MainTextureProperty,
+                    LilToonProperties.MainTex,
                     TextureEvidenceKinds.ScaleOffset |
                     TextureEvidenceKinds.SourceIdentity |
                     TextureEvidenceKinds.Sampling |

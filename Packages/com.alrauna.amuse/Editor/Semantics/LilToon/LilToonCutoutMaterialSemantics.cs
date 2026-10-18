@@ -22,23 +22,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
     /// </summary>
     internal static class LilToonCutoutMaterialSemantics
     {
-        private const string InvisibleProperty = "_Invisible";
-        private const string UdimDiscardCompileProperty = "_UDIMDiscardCompile";
-        private const string UdimDiscardModeProperty = "_UDIMDiscardMode";
-        private const string ShiftBackfaceUvProperty = "_ShiftBackfaceUV";
-        private const string UseParallaxProperty = "_UseParallax";
-        private const string UseDitherProperty = "_UseDither";
-        private const string IdMask1Property = "_IDMask1";
-        private const string IdMask2Property = "_IDMask2";
-        private const string IdMask3Property = "_IDMask3";
-        private const string IdMask4Property = "_IDMask4";
-        private const string IdMask5Property = "_IDMask5";
-        private const string IdMask6Property = "_IDMask6";
-        private const string IdMask7Property = "_IDMask7";
-        private const string IdMask8Property = "_IDMask8";
-        private const string IdMaskControlsDissolveProperty =
-            "_IDMaskControlsDissolve";
-
         /// <summary>
         /// The controller-fixed twice-margin cutoff bound (spec §8.1 clause 2
         /// and §9.3 gate 12; B2 §3.4). At or below it the shadow and forward
@@ -54,7 +37,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// Every runtime gate that can change cutout coverage. With any of
         /// these active the coverage is not the plain cutout transform of the
         /// main alpha sample (spec §8.1 clause 2), so the interpretation
-        /// refuses. <see cref="IdMaskControlsDissolveProperty"/> is the
+        /// refuses. <see cref="LilToonProperties.IdMaskControlsDissolve"/> is the
         /// adversarial-review gate: with it set, the vertex IDMask path can
         /// force the sampled alpha chain to zero even at dissolve mode zero
         /// (B2 §3.3.8, §5 clause 2). <c>_UseDither</c> is a gate here, unlike
@@ -64,21 +47,21 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// </summary>
         private static readonly string[] AlphaCoverageGates =
         {
-            InvisibleProperty,
-            UdimDiscardCompileProperty,
-            UdimDiscardModeProperty,
-            ShiftBackfaceUvProperty,
-            UseParallaxProperty,
-            UseDitherProperty,
-            IdMask1Property,
-            IdMask2Property,
-            IdMask3Property,
-            IdMask4Property,
-            IdMask5Property,
-            IdMask6Property,
-            IdMask7Property,
-            IdMask8Property,
-            IdMaskControlsDissolveProperty,
+            LilToonProperties.Invisible,
+            LilToonProperties.UdimDiscardCompile,
+            LilToonProperties.UdimDiscardMode,
+            LilToonProperties.ShiftBackfaceUV,
+            LilToonProperties.UseParallax,
+            LilToonProperties.UseDither,
+            LilToonProperties.IdMask1,
+            LilToonProperties.IdMask2,
+            LilToonProperties.IdMask3,
+            LilToonProperties.IdMask4,
+            LilToonProperties.IdMask5,
+            LilToonProperties.IdMask6,
+            LilToonProperties.IdMask7,
+            LilToonProperties.IdMask8,
+            LilToonProperties.IdMaskControlsDissolve,
         };
 
         /// <summary>

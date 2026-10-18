@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Alrauna.Amuse.Editor.Host;
 using UnityEngine;
 
@@ -336,7 +337,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     continue;
                 }
 
-                if (!KeywordIsPresent(keywords, row.Keyword))
+                if (!keywords.Contains(row.Keyword, StringComparer.Ordinal))
                 {
                     refusal = LilToonMultiResolutionRefusal.KeywordModeMismatch;
                     return false;
@@ -425,21 +426,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 }
 
                 return row.Tolerated || RowProduces(row, evidence, mode);
-            }
-
-            return false;
-        }
-
-        private static bool KeywordIsPresent(
-            IReadOnlyList<string> keywords,
-            string keyword)
-        {
-            for (var index = 0; index < keywords.Count; index++)
-            {
-                if (string.Equals(keywords[index], keyword, StringComparison.Ordinal))
-                {
-                    return true;
-                }
             }
 
             return false;

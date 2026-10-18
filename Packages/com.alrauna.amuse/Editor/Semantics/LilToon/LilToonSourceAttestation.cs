@@ -704,6 +704,56 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 OnePassTransparentOutlineProfile,
                 TwoPassTransparentOutlineProfile,
             };
+
+        /// <summary>
+        /// The pinned opaque family: the plain source and its outline
+        /// wrapper (S8), over the same pinned opaque pass asset.
+        /// </summary>
+        private static readonly LilToonSourceProfile[] OpaqueFamilyProfiles =
+        {
+            OpaqueProfile,
+            OutlineOpaqueProfile,
+        };
+
+        /// <summary>
+        /// The pinned cutout family: the plain source and its outline
+        /// wrapper (S8), over the same pinned cutout pass asset.
+        /// </summary>
+        private static readonly LilToonSourceProfile[] CutoutFamilyProfiles =
+        {
+            CutoutProfile,
+            OutlineCutoutProfile,
+        };
+
+        /// <summary>
+        /// The literal name-to-family-set dispatch, the one mapping both
+        /// profile lookup and identity verification read: each admitted
+        /// shader name maps to its own family's profile set. Opaque names
+        /// map to the opaque set, cutout names to the cutout set, and every
+        /// transparent-family name to the transparent set. Dictionary
+        /// lookup is ordinal, so the mapping matches exactly the string
+        /// comparisons it replaced.
+        /// </summary>
+        private static readonly IReadOnlyDictionary<string, LilToonSourceProfile[]>
+            ShaderNameFamilySets =
+                new Dictionary<string, LilToonSourceProfile[]>
+                {
+                    [SupportedShaderName] = OpaqueFamilyProfiles,
+                    [OutlineShaderName] = OpaqueFamilyProfiles,
+                    [CutoutShaderName] = CutoutFamilyProfiles,
+                    [OutlineCutoutShaderName] = CutoutFamilyProfiles,
+                    [TransparentShaderName] = TransparentFamilyProfiles,
+                    [OutlineTransparentShaderName] =
+                        TransparentFamilyProfiles,
+                    [OnePassTransparentShaderName] =
+                        TransparentFamilyProfiles,
+                    [TwoPassTransparentShaderName] =
+                        TransparentFamilyProfiles,
+                    [OnePassTransparentOutlineShaderName] =
+                        TransparentFamilyProfiles,
+                    [TwoPassTransparentOutlineShaderName] =
+                        TransparentFamilyProfiles,
+                };
         // D1: a valueless define the *LIL_SHADER_SETTING* substitution can emit.
         // A define with a value, such as LIL_RENDER 0, never matches.
         private static readonly Regex SettingDefine = new Regex(
@@ -1282,8 +1332,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     continue;
                 }
 
-                var opens = CountCharacter(trimmed, '{');
-                var closes = CountCharacter(trimmed, '}');
+                var opens = trimmed.Count(character => character == '{');
+                var closes = trimmed.Count(character => character == '}');
                 for (var open = 0; open < opens; open++)
                 {
                     var opensSubShader = open == 0 &&
@@ -1320,20 +1370,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             }
 
             return eligible;
-        }
-
-        private static int CountCharacter(string text, char character)
-        {
-            var count = 0;
-            foreach (var candidate in text)
-            {
-                if (candidate == character)
-                {
-                    count++;
-                }
-            }
-
-            return count;
         }
 
         /// <summary>
@@ -1717,7 +1753,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         {
             return VerifyFamily(
                 evidence,
-                new[] { OpaqueProfile, OutlineOpaqueProfile },
+                OpaqueFamilyProfiles,
                 out diagnostic);
         }
 
@@ -1733,7 +1769,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         {
             return VerifyFamily(
                 evidence,
-                new[] { CutoutProfile, OutlineCutoutProfile },
+                CutoutFamilyProfiles,
                 out diagnostic);
         }
 
@@ -1798,79 +1834,22 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             out LilToonSourceProfile profile)
         {
             profile = null;
-            if (string.Equals(
-                    shaderName, SupportedShaderName, StringComparison.Ordinal))
+            if (shaderName == null ||
+                !ShaderNameFamilySets.TryGetValue(shaderName, out var family))
             {
-                profile = OpaqueProfile;
-                return true;
+                return false;
             }
-            if (string.Equals(
-                    shaderName, OutlineShaderName, StringComparison.Ordinal))
+
+            foreach (var candidate in family)
             {
-                profile = OutlineOpaqueProfile;
-                return true;
-            }
-            if (string.Equals(
-                    shaderName,
-                    OutlineCutoutShaderName,
-                    StringComparison.Ordinal))
-            {
-                profile = OutlineCutoutProfile;
-                return true;
-            }
-            if (string.Equals(
-                    shaderName,
-                    OutlineTransparentShaderName,
-                    StringComparison.Ordinal))
-            {
-                profile = OutlineTransparentProfile;
-                return true;
-            }
-            if (string.Equals(
-                    shaderName, CutoutShaderName, StringComparison.Ordinal))
-            {
-                profile = CutoutProfile;
-                return true;
-            }
-            if (string.Equals(
-                    shaderName,
-                    OnePassTransparentShaderName,
-                    StringComparison.Ordinal))
-            {
-                profile = OnePassTransparentProfile;
-                return true;
-            }
-            if (string.Equals(
-                    shaderName,
-                    TwoPassTransparentShaderName,
-                    StringComparison.Ordinal))
-            {
-                profile = TwoPassTransparentProfile;
-                return true;
-            }
-            if (string.Equals(
-                    shaderName,
-                    OnePassTransparentOutlineShaderName,
-                    StringComparison.Ordinal))
-            {
-                profile = OnePassTransparentOutlineProfile;
-                return true;
-            }
-            if (string.Equals(
-                    shaderName,
-                    TwoPassTransparentOutlineShaderName,
-                    StringComparison.Ordinal))
-            {
-                profile = TwoPassTransparentOutlineProfile;
-                return true;
-            }
-            if (string.Equals(
-                    shaderName,
-                    TransparentShaderName,
-                    StringComparison.Ordinal))
-            {
-                profile = TransparentProfile;
-                return true;
+                if (string.Equals(
+                        shaderName,
+                        candidate.ShaderName,
+                        StringComparison.Ordinal))
+                {
+                    profile = candidate;
+                    return true;
+                }
             }
 
             return false;
@@ -1909,8 +1888,11 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
 
         /// <summary>
         /// Verifies identity evidence with the family the evidence's shader
-        /// name selects, across every admitted lilToon shader. An
-        /// unrecognized name refuses as an unsupported shader.
+        /// name selects, across every admitted lilToon shader. Opaque names
+        /// verify against the opaque family set, cutout names against the
+        /// cutout family set, and every other name falls through to the
+        /// transparent family set, whose name loop refuses it as an
+        /// unsupported shader.
         /// </summary>
         internal static bool TryVerifyIdentityForShaderName(
             LilToonSourceEvidence evidence,
@@ -1921,39 +1903,12 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 throw new ArgumentNullException(nameof(evidence));
             }
 
-            if (string.Equals(
-                    evidence.ShaderName,
-                    SupportedShaderName,
-                    StringComparison.Ordinal) ||
-                string.Equals(
-                    evidence.ShaderName,
-                    OutlineShaderName,
-                    StringComparison.Ordinal))
-            {
-                return VerifyFamily(
-                    evidence,
-                    new[] { OpaqueProfile, OutlineOpaqueProfile },
-                    out diagnostic);
-            }
-            if (string.Equals(
-                    evidence.ShaderName,
-                    CutoutShaderName,
-                    StringComparison.Ordinal) ||
-                string.Equals(
-                    evidence.ShaderName,
-                    OutlineCutoutShaderName,
-                    StringComparison.Ordinal))
-            {
-                return VerifyFamily(
-                    evidence,
-                    new[] { CutoutProfile, OutlineCutoutProfile },
-                    out diagnostic);
-            }
-
-            return VerifyFamily(
-                evidence,
-                TransparentFamilyProfiles,
-                out diagnostic);
+            var family = evidence.ShaderName != null &&
+                         ShaderNameFamilySets.TryGetValue(
+                             evidence.ShaderName, out var matched)
+                ? matched
+                : TransparentFamilyProfiles;
+            return VerifyFamily(evidence, family, out diagnostic);
         }
 
         /// <summary>

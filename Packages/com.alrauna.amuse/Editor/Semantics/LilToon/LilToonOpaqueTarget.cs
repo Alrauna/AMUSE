@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Linq;
 using Alrauna.Amuse.Editor.Host;
 using UnityEngine;
 
@@ -95,7 +96,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// this was the tuple plus a nineteenth source-eligibility property;
         /// the schema is now an identity on the tuple, not a concatenation.
         /// </summary>
-        private static readonly string[] RecipeSchema = BuildRecipeSchema();
+        private static readonly string[] RecipeSchema =
+            CanonicalOpaqueTuple.Select(tuple => tuple.Property).ToArray();
 
         internal static IReadOnlyCollection<string>
             RecipeSchemaProperties { get; } =
@@ -115,17 +117,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 colorProperties: Array.Empty<string>(),
                 vectorProperties: Array.Empty<string>(),
                 textureProperties: Array.Empty<TexturePropertyEvidenceRequest>());
-
-        private static string[] BuildRecipeSchema()
-        {
-            var schema = new string[CanonicalOpaqueTuple.Length];
-            for (var index = 0; index < CanonicalOpaqueTuple.Length; index++)
-            {
-                schema[index] = CanonicalOpaqueTuple[index].Property;
-            }
-
-            return schema;
-        }
 
         // --- Effective render state and canonical-fact comparison -----------
 
@@ -346,40 +337,14 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// <summary>
         /// Order-insensitive ordinal set comparison for the keyword
         /// read-back. The written set holds no duplicates - one table row
-        /// per keyword - so counts plus one-directional containment is an
-        /// exact set equality.
+        /// per keyword - so the comparison is an exact set equality.
         /// </summary>
         private static bool KeywordSetReadsBack(
             string[] readBack,
             string[] written)
         {
-            if (readBack.Length != written.Length)
-            {
-                return false;
-            }
-
-            for (var index = 0; index < written.Length; index++)
-            {
-                var found = false;
-                for (var probe = 0; probe < readBack.Length; probe++)
-                {
-                    if (string.Equals(
-                            readBack[probe],
-                            written[index],
-                            StringComparison.Ordinal))
-                    {
-                        found = true;
-                        break;
-                    }
-                }
-
-                if (!found)
-                {
-                    return false;
-                }
-            }
-
-            return true;
+            return new HashSet<string>(written, StringComparer.Ordinal)
+                .SetEquals(readBack);
         }
 
         internal delegate bool TargetIdentityVerifier(
