@@ -91,6 +91,8 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             // provider selects the accepted policy the fixtures assume.
             serialized.FindProperty("_preserveTransparencyMinTextureSize")
                 .intValue = -1;
+            serialized.FindProperty("_cutoutPreserveTransparencyMinTextureSize")
+                .intValue = -1;
             serialized.FindProperty("_acceptDesktopAnisotropyDifferences")
                 .boolValue = true;
             serialized.ApplyModifiedPropertiesWithoutUndo();
