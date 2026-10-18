@@ -2,52 +2,58 @@
 
 ## Project Overview
 
-AMUSE (Alrauna's Material Understanding & Simplification Engine) is a nondestructive build-time optimizer for VRChat avatars. It ships as a Unity Editor package, `Packages/com.alrauna.amuse`, hosted by NDMF. During an avatar build it classifies mesh triangles as proven-opaque, must-stay-transparent, or unknown. Proven-opaque triangles may move to AMUSE-generated canonical opaque materials. Unproven triangles always keep their original material.
+AMUSE (Alrauna's Material Understanding & Simplification Engine) is a nondestructive build-time optimizer for VRChat avatars. It ships as a Unity package, `Packages/com.alrauna.amuse`, hosted by NDMF. During an avatar build it classifies mesh triangles as proven-opaque, must-stay-transparent, or unknown. Proven-opaque triangles may move to AMUSE-generated canonical opaque materials. Unproven triangles always keep their original material.
+
+The avatar root carries the `AmuseAvatarOptimizer` component. Presets Safe, Normal, and Aggressive set aggressiveness. The first build that meets an unverified shader or host version shows one consent dialog. Accepting treats that source with the nearest verified version rules. Declining is a total no-op for that build. PC builds only. Android and Quest builds get a named refusal. Supported shader sources: Poiyomi Toon 9.3.64 including Two Pass, and lilToon 2.3.0 to 2.3.4. See `README.md` for product behavior.
 
 A second package, `Packages/com.alrauna.amuse.research`, holds read-only research tooling (Census collection and calibration). It must never ship in the product or the VPM listing.
 
 Public fixtures must be minimal, deterministic, redistributable, and legally publishable. Private avatars, vendor assets, consent and identity data, and raw Census observations may not be public.
 
-The correctness policy, the optimization policy, and the session rules live in the policy sections at the end of this file.
-
 ## Architecture & Data Flow
 
-One NDMF plugin, `AmusePlatformFinishPlugin` (`Packages/com.alrauna.amuse/Editor/Build/AmusePlatformFinishPlugin.cs`), registers five PlatformFinish passes:
+One NDMF plugin, `AmusePlatformFinishPlugin` (`Packages/com.alrauna.amuse/Editor/Build/AmusePlatformFinishPlugin.cs`), registers five passes in `BuildPhase.PlatformFinish`:
 
-1. `AmuseStructuralGraphCheck` runs extension-free on real authored clips before animator virtualization, stores the enumerated graph and its structural refusal in state, and reports nothing itself.
-2. `AmuseAnimatorBindingsCapture` retains `IPlatformAnimatorBindings` from the active `AnimatorServicesContext` into `BuildContext` state before the extension deactivates.
+1. `AmuseStructuralGraphCheck` runs extension-free on real authored clips before animator virtualization, stores the enumerated controller graph and its structural refusal in state, and reports nothing itself.
+2. `AmuseAnimatorBindingsCapture` retains `IPlatformAnimatorBindings` from the active `AnimatorServicesContext` into build state before the extension deactivates.
 3. `AmusePlatformFinishPass` runs extension-free, so NDMF commits the animator graph first. It gates on `HostLifecycleCapability.Evaluate` (versions, platform, build path, build services). Per renderer it captures closed animation and material evidence, resolves per-slot runtime states, classifies triangle alpha exactly, plans mesh separation, and retains `PreparedAlphaSeparation`.
 4. `AlphaSeparationApply` revalidates every candidate against live state, finalizes, sweeps unreferenced AMUSE-owned clones, and performs the single mutation: animation curves, then `sharedMesh`, then `sharedMaterials`.
 5. `TransientUnlockWindowClose` runs extension-free after the animator scope closes, reverts every open pair to its locked original, re-asserts apply's recorded writes, and destroys the unlocked clone last.
 
-Module layering, dependency direction:
+Module layering and dependency direction:
 
 - `Build/` owns the NDMF lifecycle and mutation. It calls every other module.
 - `Host/` is the only module that touches live Unity objects. It captures immutable evidence: renderer snapshots, animation closure, and GPU alpha readback through an R8_UNorm blit (`UnityAlphaFieldEvidence.cs`). The Semantics conversion recipes are sanctioned exceptions that mutate only AMUSE-owned transients.
-- `Analysis/` is the pure proof core: exact rational-interval triangle classification (`TriangleAlphaClassifier.cs`), UV envelopes (`ExactUvGeometry.cs`, `AffineUvTransform.cs`), runtime-state resolution, and mesh planning. It never mutates Unity state.
+- `Analysis/` is the pure proof core: exact rational-interval triangle classification (`TriangleAlphaClassifier.cs`), exact UV envelopes (`ExactUvGeometry.cs`, `AffineUvTransform.cs`), runtime-state resolution, and mesh planning. It never mutates Unity state.
 - `Semantics/` holds the shader frontends. `Poiyomi/` and `LilToon/` attest shader identity first (pinned GUIDs, package versions, SHA-256 canonical digests), then answer alpha semantics. `MaterialSemantics.cs` defines the shader-independent value algebra.
+- `DryRun/` is the EditMode preview. It reruns the same proof pipeline over the scene avatar, strictly read-only, and emits display rows (`DryRunRowBuilder.cs`).
+- `Runtime/` (assembly `Alrauna.Amuse.Runtime`, all platforms) holds the `AmuseAvatarOptimizer` component. It implements `INDMFEditorOnly`, so NDMF strips it from uploads.
 
-Data flow: live avatar, then immutable captured evidence, then exact classification, then plan, then revalidation, then minimal apply. Source assets are never mutated. Only the NDMF build copy and AMUSE-generated transients change.
+Data flow: live avatar, then immutable captured evidence, then exact classification, then plan, then revalidation, then minimal Apply. Source assets are never mutated. Only the NDMF build copy and AMUSE-generated transients change. Never modify source meshes, materials, textures, import settings, animation assets, prefabs, or scenes to make AMUSE succeed. Treat Unity assets and `.meta` files as one unit. Never churn GUIDs.
+
+Correctness policy: a false positive violates the declared transformation contract. A false negative is safer, but an unnecessary refusal remains a coverage defect. Unknown information invalidates only the conclusions that depend on it. Do not expand a local unsupported fact into renderer-wide or avatar-wide refusal unless the dependency requires that scope. Programming and invariant failures throw and block the build. Never blanket-catch them into "unsupported."
 
 ## Key Directories
 
-| Path | Purpose |
-| --- | --- |
-| `Packages/com.alrauna.amuse/Editor/` | All production code. One editor-only assembly. |
-| `Packages/com.alrauna.amuse/Editor/Build/` | NDMF plugin, passes, lifecycle gate, prepare and apply |
-| `Packages/com.alrauna.amuse/Editor/Host/` | Unity evidence capture. `Host/Shaders/` holds the alpha predicate shader. |
-| `Packages/com.alrauna.amuse/Editor/Analysis/` | Pure classification and planning |
-| `Packages/com.alrauna.amuse/Editor/Semantics/` | Value algebra plus `Poiyomi/` and `LilToon/` frontends |
-| `Packages/com.alrauna.amuse/Tests/Editor/` | Product EditMode tests. Folders mirror production. |
-| `Packages/com.alrauna.amuse.research/` | Research package. Never released. |
-| `docs/superpowers/specs/` | Dated design specs, `YYYY-MM-DD-<topic>-design.md` |
-| `docs/superpowers/plans/` | Dated implementation plans with RED/GREEN tasks |
-| `docs/superpowers/investigations/` | Dated read-only characterization notes |
-| `Tools/` | `Bootstrap-NdmfStandalone.ps1` |
+|Path|Purpose|
+|---|---|
+|`Packages/com.alrauna.amuse/Editor/`|Production editor code. Two production assemblies total, this one plus `Runtime/`.|
+|`Packages/com.alrauna.amuse/Editor/Build/`|NDMF plugin, five passes, lifecycle gate, consent, prepare and apply, reports|
+|`Packages/com.alrauna.amuse/Editor/Host/`|Unity evidence capture. `Host/Shaders/` holds the alpha predicate shader.|
+|`Packages/com.alrauna.amuse/Editor/Analysis/`|Pure classification and planning|
+|`Packages/com.alrauna.amuse/Editor/Semantics/`|Value algebra plus `Poiyomi/` and `LilToon/` frontends|
+|`Packages/com.alrauna.amuse/Editor/DryRun/`|Read-only EditMode preview of the proof pipeline|
+|`Packages/com.alrauna.amuse/Runtime/`|`AmuseAvatarOptimizer` component and preset data types|
+|`Packages/com.alrauna.amuse/Tests/Editor/`|Product EditMode tests. Folders mirror production.|
+|`Packages/com.alrauna.amuse.research/`|Research package. Public source, never released.|
+|`docs/superpowers/specs/`|Dated design specs, `YYYY-MM-DD-<topic>-design.md`|
+|`docs/superpowers/plans/`|Dated implementation plans with RED/GREEN tasks|
+|`docs/superpowers/investigations/`|Dated read-only characterization notes|
+|`Tools/`|`Bootstrap-NdmfStandalone.ps1`|
 
 ## Development Commands
 
-First-time setup, from `README.md`:
+First-time setup, from `docs/development-setup.md`:
 
 ```bash
 dotnet tool install --global vrchat.vpm.cli
@@ -58,202 +64,73 @@ pwsh -NoProfile -File ./Tools/Bootstrap-NdmfStandalone.ps1
 # then open the project in Unity 2022.3.22f1
 ```
 
-`vpm resolve` can exit 0 without resolving. Confirm `Packages/nadena.dev.ndmf/package.json` exists at version 1.14.4 afterward.
+`vpm resolve` can exit 0 without resolving. Confirm `Packages/nadena.dev.ndmf/package.json` exists at version 1.14.4 afterward. The bootstrap script materializes NDMF `Dependencies~` into `Packages/nadena.dev.ndmf/Dependencies/`, pinned to NDMF 1.14.4, and verifies the file list and digests. It is idempotent.
 
 - Tests run through the Unity Test Runner, EditMode mode. No CLI test script and no CI test job exists. In-repo practice: refresh Unity after new files, run a focused EditMode filter, then the full `Alrauna.Amuse.Tests.Editor` and `Alrauna.Amuse.Research.Tests.Editor` assemblies.
-- Release: `.github/workflows/release.yml` (manual dispatch) zips one package, hard-excludes `Tests/`, and fails the build if test content re-enters.
+- Release: `.github/workflows/release.yml` (manual dispatch) zips the single package named by the repo variable `vars.PACKAGE_NAME`, excludes `Tests/`, and fails the release if test content re-enters. `build-listing.yml` publishes the VPM listing to GitHub Pages. `pr.yml` is a deliberate no-op branch-protection gate.
 - No lint or formatter is configured. Use `git diff --check` for whitespace.
 
 ## Code Conventions & Common Patterns
 
-- C# against Unity 2022.3 APIs. Editor-only. One production assembly, `Alrauna.Amuse.Editor`.
-- File name equals type name. One public type per file. Production types are `internal` where possible. `Editor/AssemblyInfo.cs` grants `InternalsVisibleTo` to the test and research assemblies.
-- Namespaces mirror folders: `Alrauna.Amuse.Editor.Build`, `.Host`, `.Analysis`, `.Semantics`, `.Semantics.LilToon`, `.Semantics.Poiyomi`.
-- Closed refusal enums per scope, for example `HostLifecycleRefusal`, `RendererAnalysisRefusal`, `AlphaSeparationSlotRefusal`. Unsupported means a named refusal value. Programming defects throw and block the build.
-- Fail closed. Parsers reject unknown input. Classification never exits early on Unknown. `MustRemainTransparent` is absorbing.
-- Evidence discipline. Capture immutable records such as `CapturedAnimationEvidence` close to their consumer. Immutable evidence never holds live Unity references. Revalidate live state immediately before mutation.
-- Attestation is pinned data. Shader GUIDs, exact names, package versions, and measured SHA-256 digests live in `LilToonSourceAttestation.cs` and `PoiyomiMaterialSemantics.cs`. Never re-derive digests from vendor repositories. Unattested materials answer all-Unknown.
-- Test seams are production delegates, for example `VerifiedPoiyomiConversion`. Tests substitute only vendor attestation and run real production logic.
-- XML doc comments on load-bearing rules. State why, not what.
+- C# against Unity 2022.3 APIs. Editor-only except the runtime component. Assemblies: `Alrauna.Amuse.Editor`, `Alrauna.Amuse.Runtime`.
+- File name equals type name. One public type per file. A few grouped files such as `MaterialSemantics.cs` are intentional exceptions. Production types are `internal` where possible. `Editor/AssemblyInfo.cs` grants `InternalsVisibleTo` to the test and research assemblies.
+- Namespaces mirror folders: `Alrauna.Amuse.Editor.Build`, `.Host`, `.Analysis`, `.Semantics`, `.Semantics.LilToon`, `.Semantics.Poiyomi`, `.DryRun`; runtime namespace `Alrauna.Amuse.Runtime`.
+- Closed refusal enums per scope: `HostLifecycleRefusal`, `AvatarAnimationRefusal`, `RendererAnalysisRefusal`, `AlphaSeparationSlotRefusal`, `PreparationRefusal`, `TextureCaptureRefusalReason`, `AlphaUnknownKind`. Unsupported means a named refusal value. `None` is not a refusal; recorders throw on it.
+- Fail closed. Parsers reject unknown input. `TriangleAlphaOutcome.Unknown` never proves opacity. `MustRemainTransparent` is absorbing. Classification never exits early on Unknown. Degenerate triangles and missing UV0 classify as Unknown.
+- Evidence discipline. Capture immutable records such as `CapturedAnimationEvidence` and `CapturedMaterialEvidence` close to their consumer. Immutable evidence never holds live Unity references. Live capabilities stay separate on `AmusePlatformFinishState`. Revalidate live state immediately before mutation.
+- Attestation is pinned data. Shader GUIDs, exact names, package versions, and measured SHA-256 digests live in `LilToonSourceAttestation.cs`, `PoiyomiSourceAttestation.cs`, and sibling attestation files. Never re-derive digests from vendor repositories. Unattested materials answer all-Unknown.
+- Test seams are production delegates, for example `VerifiedPoiyomiConversion`, `VerifiedLilToonConversion`, `VersionConsentPresenter`. Tests substitute only vendor attestation and run real production logic.
+- XML doc comments sit on load-bearing rules and state why. They carry design-decision IDs that link to `docs/superpowers/specs/` records.
+
+### Documentation and session rules
+
+- Every English text a human reads uses simple english or ASD-STE100 Simplified Technical English: short active sentences, one idea per sentence, no semicolons, no contractions.
+- Documents never contain machine paths, host names, user names, ports, GUIDs, instance names, or private identifiers. Use `<repo-root>`-relative paths. The rules bind scratch, plans, reports, and handoff notes.
+- Date every status claim. Never write an unqualified `today` or `currently`. Records in `docs/superpowers/` speak for their date and never authorize new subsystems.
+- Before finishing document work, sweep changed files for identifiers: at sign joined to hexadecimal, drive-letter paths, home-directory paths, four-digit ports, private asset names learned in the session. Every hit is a defect. Fix the hits, then state that the sweep ran.
+- Characterize private avatars by role, never by name. Replace exact private counts with ranges. A sanitized record opens with a privacy note.
+- Never stage, commit, amend, push, open or merge a PR, delete branches, rewrite history, publish, or change remotes or settings without explicit authorization. Treat existing changes as user-owned.
+- Superpowers skills govern process (brainstorming, writing-plans, tdd, code-review, verification-before-completion). Ponytail governs implementation minimalism. Ponytail never overrides correctness or planning gates.
 
 ## Important Files
 
-- `Packages/com.alrauna.amuse/Editor/Build/AmusePlatformFinishPlugin.cs` — NDMF entry point and the five passes
-- `Packages/com.alrauna.amuse/Editor/Build/HostLifecycleCapability.cs` — version, platform, build-path, and services gate
-- `Packages/com.alrauna.amuse/Editor/Build/AlphaSeparationPreparation.cs` and `AlphaSeparationApply.cs` — prepare, then the single mutation
-- `Packages/com.alrauna.amuse/Editor/Analysis/TriangleAlphaClassifier.cs` — exact per-triangle alpha proof
-- `Packages/com.alrauna.amuse/Editor/Semantics/UnityMaterialSemantics.cs` — frontend selection by exact shader name
-- `Packages/com.alrauna.amuse/package.json` — package identity and the NDMF dependency range
-- `Packages/manifest.json` and `Packages/vpm-manifest.json` — Unity and VPM dependencies
-- `Packages/.gitignore` — the whitelist that decides which embedded packages are tracked
-- `Tools/Bootstrap-NdmfStandalone.ps1` — materializes NDMF `Dependencies~` into `Dependencies/`, pinned to NDMF 1.14.4
-- `.omp/RULES.md` — sticky session rules: no absolute paths, no private identifiers, simple-english
+|File|Role|
+|---|---|
+|`Packages/com.alrauna.amuse/Editor/Build/AmusePlatformFinishPlugin.cs`|NDMF entry point, the five passes, shared build state|
+|`Packages/com.alrauna.amuse/Editor/Build/HostLifecycleCapability.cs`|Version, platform, build-path, and services gate|
+|`Packages/com.alrauna.amuse/Editor/Build/AlphaSeparationPreparation.cs`|Evidence-gated preparation, no avatar mutation|
+|`Packages/com.alrauna.amuse/Editor/Build/AlphaSeparationApply.cs`|Revalidation and the single mutation|
+|`Packages/com.alrauna.amuse/Editor/Build/AmuseReports.cs`|Refusal and outcome reporting|
+|`Packages/com.alrauna.amuse/Editor/Analysis/TriangleAlphaClassifier.cs`|Exact per-triangle alpha proof|
+|`Packages/com.alrauna.amuse/Editor/Semantics/UnityMaterialSemantics.cs`|Frontend selection by exact shader identity|
+|`Packages/com.alrauna.amuse/Editor/Semantics/MaterialSemantics.cs`|Shader-independent value algebra|
+|`Packages/com.alrauna.amuse/Runtime/AmuseAvatarOptimizer.cs`|Avatar-root component, `INDMFEditorOnly`|
+|`Packages/com.alrauna.amuse/package.json`|Package identity and the NDMF dependency range|
+|`Packages/manifest.json` and `Packages/vpm-manifest.json`|Unity and VPM dependencies|
+|`Packages/.gitignore`|The whitelist that decides which embedded packages are tracked|
+|`Tools/Bootstrap-NdmfStandalone.ps1`|NDMF standalone bootstrap, pinned to 1.14.4|
+|`docs/development-setup.md`|Clone-to-Unity setup path|
+|`docs/architecture/vision.md`|Long-term direction. Code does not overrule it.|
+|`docs/superpowers/README.md`|Interpretation rules for dated records|
+|`.omp/RULES.md`|Sticky session rules: no absolute paths, no private identifiers, simple english|
 
 ## Runtime/Tooling Preferences
 
 - Dev environment: Unity 2022.3.22f1 (`ProjectSettings/ProjectVersion.txt`). The package declares `unity: "2022.3"`.
-- The build gate admits Unity 2022.3 patch 22 and newer f-releases, NDMF `[1.14.4, 2.0.0)`, and VRChat SDK Base and Avatars `[3.10.4, 4.0.0)`. Upload and NDMF Play mode build paths both admit. An unclassified build path refuses. Per-build consent covers certain untested host versions and recognized shader sources.
-- Compilation happens inside Unity. There is no dotnet build, no Node, no Bun. PowerShell 7 runs the one bootstrap script.
+- Compilation happens inside Unity. There is no dotnet build, no Node, no Bun. `dotnet` appears only as the VPM CLI prerequisite. PowerShell 7 runs the one bootstrap script.
 - Generated `*.csproj` and `*.sln` files are gitignored. Never commit or hand-edit them.
 - `Packages/nadena.dev.ndmf/` is intentionally untracked. A fresh clone restores it with `vpm resolve project .`. A new embedded package needs a whitelist line in `Packages/.gitignore`.
+- Unity MCP is development and observability tooling, never a product dependency or correctness oracle. Before any MCP write or broad operation: enumerate reachable instances read-only, inspect `Application.dataPath`, and require an exact match to this project root. Stop instead of guessing.
 
 ## Testing & QA
 
-- NUnit through Unity Test Framework, EditMode only. Two assemblies: `Alrauna.Amuse.Tests.Editor` (product) and `Alrauna.Amuse.Research.Tests.Editor` (research).
-- One test class per production type, named `<Type>Tests`. Test folders mirror production folders. Method names are behavior sentences, for example `MissingNdmfPackageRefusesWithNdmfReason`.
+- NUnit through Unity Test Framework, EditMode only. Two test assemblies: `Alrauna.Amuse.Tests.Editor` (product) and `Alrauna.Amuse.Research.Tests.Editor` (research).
+- One test class per production type, named `<Type>Tests`. Characterization suites use `<Subject>CharacterizationTests`. Test folders mirror production folders. Method names are behavior sentences, for example `WhollyOpaqueSlotReplacesOnlyItsMaterial` or `SchemaVersionThreeRefusesAsUnknown`.
 - Assertions use the NUnit constraint model: `Assert.That(actual, Is.EqualTo(expected))`.
 - Vendor shaders are never installed in this repository. Tests run on schema-only stand-in shaders under `Hidden/Alrauna/AmuseTests/*` through the verified seams in `Tests/Editor/Build/`.
 - `Tests/Editor/ReferenceFixtures/` holds public synthetic JSON-driven texture and mesh fixtures with independent outcome oracles: `ProvenOpaque`, `MustRemainTransparent`, `Unknown`. Determinism is tested, not assumed.
 - RED/GREEN: a behavior change needs a failing test observed first, for a named plausible wrong implementation, then a minimal fix. Never weaken a valid test. An assertion that passes on first run is recorded as characterization, never dressed up as RED.
 - Falsifiers are numbered adversarial cases, marked `--- Falsifier N: ... ---`, that a plausible wrong implementation must fail. They carry no-op guards so later changes cannot silence them.
 - A filtered run that reports 0 tests is a failure. A successful compile is never validation. Record observed counts and Console output.
-
-## Repository reality and scope
-
-Current code, tests, pinned source behavior, reproducible characterization, and real-avatar evidence have priority over old plans and summaries for questions about what exists. `docs/architecture/vision.md` defines the long-term direction. Code does not overrule that direction, and old plans do not authorize new subsystems or contract changes.
-
-Keep current work separate from discovered prerequisites, future architectural pressure, and speculative opportunities. Do not silently expand the active task.
-
-Prefer the smallest complete solution for a real consumer. Do not introduce broad infrastructure or APIs without a present requirement. This includes universal shader/compiler infrastructure, broad semantic IRs, generalized mutation frameworks, global planners, cross-host abstractions, and third-party extension APIs.
-
-Keep shader-specific behavior shader-specific unless materially different consumers justify a shared abstraction. Poiyomi and lilToon should apply pressure to shared seams independently.
-
-## Correctness and uncertainty
-
-Preserve the intended visual appearance, avatar-controlled functional behavior, supported shader/material behavior, and compatibility assumptions that the active optimization policy declares.
-
-Policy-authorized representation changes are valid. AMUSE does not require framebuffer identity under every hypothetical interaction.
-
-A false positive violates the declared transformation contract or its preconditions. False negatives are safer, but unnecessary refusal remains a coverage defect.
-
-Unknown information should invalidate only conclusions that depend on it. Do not expand a local unsupported fact into renderer-wide or avatar-wide refusal unless the dependency requires that scope. Increased uncertainty must never make a transformation more aggressive.
-
-Programming and invariant failures remain defects. Never use a blanket catch to mark them as "unsupported."
-
-## NDMF and mutation boundary
-
-Examine the effective build avatar after upstream nondestructive tools run. Use NDMF's actual lifecycle, ordering, generated-asset, and replacement facilities instead of parallel host abstractions.
-
-Do not assume mutable Unity objects stay unchanged across unrelated NDMF phases. Capture evidence sufficiently close to its consumer so it still describes the effective build state.
-
-Source meshes, materials, textures/import settings, animation assets, prefabs, and scenes are authoring evidence, not AMUSE mutation targets. Apply AMUSE-owned mutations only to the NDMF build copy and generated build assets.
-
-Preferred boundary:
-
-capture → analyze → prepare → validate → minimal Apply
-
-## Alpha and texture direction
-
-Alpha optimization is the current proving ground, not AMUSE's organizing principle.
-
-For an original AlphaTest/AlphaBlend material, triangles not proven safe remain on the original material. Triangles proven visually opaque may move to an appended submesh that uses an AMUSE-generated canonical opaque material. AlphaTest and AlphaBlend remain distinct source modes.
-
-A texture-backed triangle may still be proven opaque when its entire relevant sampled domain is opaque. Do not assume a readable texture ensures correct runtime sampling. Runtime sampling can depend on mipmaps, compression, filtering, wrapping, or color space.
-
-## Unity package and MCP safety
-
-Treat Unity assets and `.meta` files as one logical unit. Avoid GUID churn. Never commit generated/local Unity state such as `Library/`, `Temp/`, `Logs/`, `UserSettings/`, or generated IDE files.
-
-Change package manifests and lockfiles only for intentional dependency work. Before restoring suspected Unity-generated toolchain/sysroot churn, inspect the complete diff. Confirm that neither file contains an intentional edit.
-
-Unity MCP is development and observability tooling, never a product dependency or correctness oracle.
-
-Before any Unity MCP write, broad operation, or use of an MCP result as reported validation:
-
-1. enumerate reachable instances read-only;
-2. inspect `Application.dataPath`;
-3. normalize the path;
-4. require an exact match to the intended project;
-5. pin the intended instance when more than one is reachable.
-
-For this repository, the required public-project identity is:
-
-`Application.dataPath == <repo-root>/Assets`
-
-A case-only match does not confirm identity. Stop instead of guessing.
-
-## Census Lab
-
-Private root: a separate Unity project outside this repository (the Census Lab project).
-
-Authoritative scene corpus: the `!CENSUSLAB/Scenes/` folder of the Census Lab project.
-
-Test prefab corpus (Census Lab project): the `!CENSUSLAB/Prefabs/` folder of the Census Lab project.
-
-Private launcher location: `!CENSUSLAB/Scripts/Editor/` in the Census Lab project.
-
-Census Lab is for characterization and validation, not the correctness oracle. Prefer read-only use. Reduce failures to public synthetic fixtures where practical. Tests create and delete folders under `Assets/`, so they must never run in the private Lab project.
-
-Preserve the privacy tiers: Tier 1 raw observations, Tier 2 run-local anonymized intermediate, and Tier 3 privacy-reviewed aggregate output. By default, only reviewed aggregate information may leave the Lab.
-
-Never expose private names, paths, GUIDs, identifiers, per-avatar/per-renderer rows, or fingerprint-like structure. Never create publishable Census metrics without privacy review.
-
-## Private data in documents
-
-Documents never contain private identifiers, machine paths, or ports. The rules bind every file, including untracked scratch, because scratch can be committed later.
-
-Name machines and instances by role. The only allowed forms are `the dev editor instance` and `the Census Lab editor instance`. Never write an instance name, an instance hash, a port, a GUID, or a test-job identifier. Record test results as observed counts.
-
-Characterize private avatars by role. Never write an avatar, renderer, material, animation clip, controller, or hierarchy name. Replace exact triangle counts with ranges. Never write per-renderer or per-slot tables. A sanitized characterization opens with a privacy note that states the sanitization.
-
-Date every status claim in a record. Never write an unqualified `today` or `currently`. Old records speak for their date, and `docs/superpowers/README.md` states the standing interpretation.
-
-Before document work is reported complete, the changed files pass an identifier sweep. The sweep checks for an at sign joined to a hexadecimal hash, drive-letter paths, home-directory paths, four-digit ports, and every private asset name known to the session. Every hit is a defect. Fix the hits, then state that the sweep ran.
-
-## Git and evidence
-
-Treat existing changes as user-owned unless proven otherwise. Do not discard, overwrite, restage, or absorb unrelated work.
-
-Do not stage, commit, amend, push, open or merge a PR, delete branches, rewrite history, publish, or change remotes/settings without explicit authorization.
-
-Checked-out source and observed results have priority over agent reports. Never claim a test, build, reproduction, benchmark, or validation passed unless you ran and observed it.
-
-## Working discipline
-
-These rules bind every session.
-
-Brief implementation work in a written prompt. The prompt states:
-
-- the base branch and commit
-- the exact scope and the allowed mutations
-- the required RED/GREEN evidence
-- the validation steps and the expected report
-- the stop conditions and the Git authorization boundary
-
-Never hide an unresolved decision inside an implementation prompt.
-
-Stop and return evidence, options, and a recommendation when work reveals a broader abstraction, a new subsystem, a changed correctness contract, significant scope expansion, or a contradiction in the approved plan. A stop line limits production scope. It does not limit the investigation that explains the blocker.
-
-Respect approval gates. Never use another tool to bypass a denied operation.
-
-Before an important decision, test the assumptions. Name whether the assumed Unity, VRChat, NDMF, or shader behavior is verified or inferred. Check whether a mature ecosystem tool exposes a missing practical constraint. Check whether the requested guarantee is stricter than the product needs. Check whether uncertainty has too broad a scope, whether build ordering could make captured evidence stale, and whether the proposed tests fail with a plausible wrong implementation.
-
-When a plan or design is infeasible, unnecessarily strict, too general, misaligned with Unity or NDMF reality, or debt-creating, say so directly.
-
-Use the narrowest validation layer that can disprove the behavior. Then expand validation with the blast radius. Applicable layers include unit and semantic tests, characterization, Unity EditMode tests, NDMF build tests, public synthetic fixtures, source-preservation checks, and authorized Census validation. Unsupported cases must clearly show conservative refusal.
-
-Empirical evidence is not automatically universal proof. Do not demand mathematical proof when the declared product contract needs a well-characterized compatibility guarantee.
-
-When you find an independent prerequisite, do not mix it into the current work. Park the current work. Complete the prerequisite separately from fresh `main`. Resume the consumer from updated `main`.
-
-## Development Skill Governance
-
-Superpowers is the process and workflow authority. Ponytail is the implementation-minimalism authority.
-
-When both apply, Superpowers determines how the work proceeds. Ponytail constrains what is built and how simply it is implemented. Ponytail MUST NOT be used to bypass Superpowers planning, debugging, TDD, review, or verification requirements. Ponytail MUST NOT be used to weaken correctness, security, data safety, accessibility, or repository-specific requirements.
-
-Superpowers governs development workflow. Invoke applicable Superpowers skills before development actions:
-
-- Use `brainstorming` for new features or design changes.
-- Use `systematic-debugging` for bugs, test failures, and unexpected behavior.
-- Use `writing-plans` for non-trivial approved work.
-- Use `tdd` or `test-driven-development` during implementation.
-- Use `subagent-driven-development` or `executing-plans` for planned work.
-- Use `code-review` skills (`code-review`, `requesting-code-review`, `receiving-code-review`) for code review.
-- Use `verification-before-completion` before claiming success or completion.
-
-Ponytail governs implementation minimalism throughout design, implementation, bug fixes, refactors, and dependency decisions.
-
-After understanding the affected code path, apply the Ponytail ladder: YAGNI → reuse existing code → stdlib → native platform feature → existing dependency → simplest expression → minimum new implementation. Avoid speculative abstractions, unnecessary dependencies, boilerplate, and premature flexibility.
-
-When reviewing substantive diffs or suspected over-engineering, use `ponytail-review`. This review complements correctness-focused code review by finding unnecessary complexity.
+- The research test assembly runs `ResearchSourceApiBanTests`, which scans research production source for banned mutating Unity APIs. Research tooling stays read-only by construction.
+- Census Lab is a private Unity project outside this repository, used for characterization and validation. It is never the correctness oracle. Prefer read-only use. Tests create and delete folders under `Assets/`, so they must never run in the private Lab project. Preserve its privacy tiers: raw observations stay private, only reviewed aggregate output may leave. Name machines and instances by role only.
