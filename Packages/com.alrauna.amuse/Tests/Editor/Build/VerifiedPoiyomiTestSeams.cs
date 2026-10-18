@@ -49,7 +49,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var eligibility = PoiyomiOpaqueConversion
                 .EvaluateVerifiedEligibility(
                     derived, queue, renderType, allowDepthTestChange);
-            return AlphaSeparationPreparation.TryMapPoiyomiOutcome(
+            return AlphaSeparationMaterialConverter.TryMapPoiyomiOutcome(
                 eligibility, live, preparedOpaque,
                 out opaque, out refusal, out depthTestDivergence,
                 out premultiplyNormalization);

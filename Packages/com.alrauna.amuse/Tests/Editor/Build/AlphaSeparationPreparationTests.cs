@@ -11612,7 +11612,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             out Material opaque,
             out string detail)
         {
-            return AlphaSeparationPreparation.ConvertAdmittedMaterial(
+            return AlphaSeparationMaterialConverter.ConvertAdmittedMaterial(
                 captured,
                 live,
                 Array.Empty<(CapturedFloatBinding, AnimatedPropertyRef)>(),

@@ -428,7 +428,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var eligibility = evaluateEligibility(
                 derived, queue, renderType, allowDepthTestChange);
             // The tuple-carrying opaque stand-in is the attested target.
-            return AlphaSeparationPreparation.TryMapLilToonOutcome(
+            return AlphaSeparationMaterialConverter.TryMapLilToonOutcome(
                 eligibility,
                 () => preparedOpaque ??
                     LilToonOpaqueTarget.PrepareCanonicalOpaqueClone(

@@ -249,7 +249,8 @@ namespace Alrauna.Amuse.Editor.Build
                 CapturedAlphaMaterialFamily>();
             foreach (var admitted in evidence.AdmittedMaterials)
             {
-                if (ConversionRequestForFamily(admitted.Family) != null &&
+                if (AlphaSeparationMaterialConverter
+                    .ConversionRequestForFamily(admitted.Family) != null &&
                     !conversionCapableFamilies.Contains(admitted.Family))
                 {
                     conversionCapableFamilies.Add(admitted.Family);
@@ -272,7 +273,8 @@ namespace Alrauna.Amuse.Editor.Build
             {
                 var unionRequest = MaterialEvidenceRequest.Combine(
                     conversionCapableFamilies
-                        .Select(ConversionRequestForFamily)
+                        .Select(AlphaSeparationMaterialConverter
+                            .ConversionRequestForFamily)
                         .ToArray());
                 var conversionBindings = new List<(
                     CapturedFloatBinding Binding,
@@ -351,7 +353,8 @@ namespace Alrauna.Amuse.Editor.Build
                                 .ResolveProofRelevant(
                                     binding,
                                     rendererPath,
-                                    ConversionRequestForFamily(family),
+                                    AlphaSeparationMaterialConverter
+                                        .ConversionRequestForFamily(family),
                                     out var familyReference,
                                     rendererTypeName) ==
                             ProofRelevantBindingResolution.RendererWide)
@@ -538,7 +541,8 @@ namespace Alrauna.Amuse.Editor.Build
                         captured.Family, out var familyBindings);
                     conversionPropertyNamesByFamily.TryGetValue(
                         captured.Family, out var familyPropertyNames);
-                    var conversionRefusal = ConvertAdmittedMaterial(
+                    var conversionRefusal =
+                        AlphaSeparationMaterialConverter.ConvertAdmittedMaterial(
                         captured,
                         live,
                         familyBindings,
@@ -800,84 +804,6 @@ namespace Alrauna.Amuse.Editor.Build
             return null;
         }
 
-        /// <summary>
-        /// True when this build's D8 transfer consent granted exactly this
-        /// shader name, so the identity conjunction's failure is an accepted,
-        /// user-authorized risk for this build: the unverified source is
-        /// treated with the verified version's rules, exactly as the
-        /// transferred capture entry already does. A null or ungranted name
-        /// keeps the fail-closed refusal.
-        /// </summary>
-        private static bool IsGrantedShader(
-            string shaderName,
-            IReadOnlyCollection<string> grantedShaderNames)
-        {
-            return !string.IsNullOrEmpty(shaderName) &&
-                   grantedShaderNames != null &&
-                   grantedShaderNames.Contains(shaderName);
-        }
-
-        /// <summary>
-        /// Runs the shader-family conversion boundary for one admitted
-        /// material: the per-family branch, derived conversion evidence
-        /// admitted against this material's own captured defaults under its
-        /// family's own conversion request, the conversion step (the real
-        /// family route, or the verified-fixture seam), and the renderer-wide
-        /// runtime-overwrite rule against the family's own recipe. A
-        /// resolved Multi material consults its stored resolution record
-        /// instead of the family route: the Multi eligibility evaluator
-        /// judges with the captured mode, and the recipe stays the resolved
-        /// family's own. Returns
-        /// the mapped opaque result, or the slot-local refusal. A material
-        /// the depth-test policy admitted onto a mixed-split plan refuses
-        /// here, before any material is prepared for that slot.
-        /// </summary>
-        internal static AlphaSeparationSlotRefusal ConvertAdmittedMaterial(
-            CapturedAlphaMaterial captured,
-            Material live,
-            IReadOnlyList<(CapturedFloatBinding Binding,
-                           AnimatedPropertyRef Reference)> conversionBindings,
-            IReadOnlyCollection<string> conversionPropertyNames,
-            Material preparedOpaque,
-            VerifiedPoiyomiConversion poiyomiConversion,
-            VerifiedLilToonConversion lilToonConversion,
-            bool allowDepthTestChange,
-            IReadOnlyCollection<string> grantedShaderNames,
-            out Material opaque,
-            out bool depthTestDivergence,
-            out bool premultiplyNormalization,
-            out string refusedDetail) =>
-            AlphaSeparationMaterialConverter.ConvertAdmittedMaterial(
-                captured, live, conversionBindings, conversionPropertyNames,
-                preparedOpaque, poiyomiConversion, lilToonConversion,
-                allowDepthTestChange, grantedShaderNames, out opaque,
-                out depthTestDivergence, out premultiplyNormalization,
-                out refusedDetail);
-
-        internal static bool TryMapLilToonOutcome(
-            LilToonOpaqueConversionEligibility eligibility,
-            Func<Material> createClone,
-            out Material opaque,
-            out LilToonOpaqueConversionRefusal refusal,
-            out bool depthTestDivergence) =>
-            AlphaSeparationMaterialConverter.TryMapLilToonOutcome(
-                eligibility, createClone, out opaque, out refusal, out depthTestDivergence);
-
-        internal static bool TryMapPoiyomiOutcome(
-            PoiyomiOpaqueConversionEligibility eligibility,
-            Material live,
-            Material preparedOpaque,
-            out Material opaque,
-            out PoiyomiOpaqueConversionRefusal refusal,
-            out bool depthTestDivergence,
-            out bool premultiplyNormalization) =>
-            AlphaSeparationMaterialConverter.TryMapPoiyomiOutcome(
-                eligibility, live, preparedOpaque, out opaque, out refusal,
-                out depthTestDivergence, out premultiplyNormalization);
-
-        private static MaterialEvidenceRequest ConversionRequestForFamily(
-            CapturedAlphaMaterialFamily family) =>
-            AlphaSeparationMaterialConverter.ConversionRequestForFamily(family);
         /// <summary>
         /// Registers one prepared opaque result in the avatar-wide
         /// deduplicating map, creating the retained record on first use.
