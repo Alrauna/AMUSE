@@ -76,9 +76,9 @@ namespace Alrauna.Amuse.Editor.Semantics
                         ReplacementTextureAttestation.BakedOutputSuffix,
                         StringComparison.Ordinal);
                 if (isPersistedReplacement &&
-                    ReplacementTextureAttestation.TryReadInstalledProducerVersion(
+                    ReplacementTextureAttestation.Versions.TryReadInstalledProducerVersion(
                         out var version) &&
-                    ReplacementTextureAttestation.IsVersionAdmitted(version))
+                    ReplacementTextureAttestation.Versions.IsVersionAdmitted(version))
                 {
                     return true;
                 }

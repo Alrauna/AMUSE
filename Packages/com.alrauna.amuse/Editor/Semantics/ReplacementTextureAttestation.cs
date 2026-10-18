@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 
@@ -36,78 +35,35 @@ namespace Alrauna.Amuse.Editor.Semantics
             "0.9.0",
         };
 
-        private static readonly AdmittedProducerVersions Versions =
+        /// <summary>
+        /// The exposed producer-version seam of this attestation. Each
+        /// member is addressed directly through this field:
+        /// Versions.ReadInstalledPackageVersionOrNull is set by
+        /// ReplacementTextureAttestationTests,
+        /// GeneratedTextureAttestationTests, UnityTextureEvidenceTests, and
+        /// UnityAlphaFieldEvidenceTests. Versions.AdmittedVersions is
+        /// read by ReplacementTextureAttestationTests.
+        /// Versions.SetAdmittedVersionsForTests is called by
+        /// ReplacementTextureAttestationTests,
+        /// GeneratedTextureAttestationTests, UnityTextureEvidenceTests, and
+        /// UnityAlphaFieldEvidenceTests. Versions.ResetForTests is called
+        /// by ReplacementTextureAttestationTests,
+        /// GeneratedTextureAttestationTests, UnityTextureEvidenceTests, and
+        /// UnityAlphaFieldEvidenceTests.
+        /// Versions.TryReadInstalledProducerVersion is exercised by
+        /// ReplacementTextureAttestationTests and
+        /// GeneratedTextureAttestationTests.
+        /// Versions.ClearVersionCacheForSession is called by
+        /// ReplacementTextureAttestationTests and by the production session
+        /// resets in AlphaSeparationApply and AmusePlatformFinishPlugin.
+        /// Versions.IsVersionAdmitted is exercised by
+        /// ReplacementTextureAttestationTests and
+        /// GeneratedTextureAttestationTests.
+        /// </summary>
+        internal static readonly AdmittedProducerVersions Versions =
             new AdmittedProducerVersions(
                 ProducerPackageName,
                 ProductionAdmittedVersions);
-
-        /// <summary>
-        /// Forwarded seam. Addressed by ReplacementTextureAttestationTests,
-        /// GeneratedTextureAttestationTests, UnityTextureEvidenceTests, and
-        /// UnityAlphaFieldEvidenceTests.
-        /// </summary>
-        internal static Func<string, string>
-            ReadInstalledPackageVersionOrNull
-        {
-            get => Versions.ReadInstalledPackageVersionOrNull;
-            set => Versions.ReadInstalledPackageVersionOrNull = value;
-        }
-
-        /// <summary>
-        /// Forwarded seam. Addressed by ReplacementTextureAttestationTests.
-        /// </summary>
-        internal static IReadOnlyList<string> AdmittedVersions =>
-            Versions.AdmittedVersions;
-
-        /// <summary>
-        /// Forwarded seam. Addressed by ReplacementTextureAttestationTests,
-        /// GeneratedTextureAttestationTests, UnityTextureEvidenceTests, and
-        /// UnityAlphaFieldEvidenceTests.
-        /// </summary>
-        internal static void SetAdmittedVersionsForTests(
-            params string[] versions)
-        {
-            Versions.SetAdmittedVersionsForTests(versions);
-        }
-
-        /// <summary>
-        /// Forwarded seam. Addressed by ReplacementTextureAttestationTests,
-        /// GeneratedTextureAttestationTests, UnityTextureEvidenceTests, and
-        /// UnityAlphaFieldEvidenceTests.
-        /// </summary>
-        internal static void ResetForTests()
-        {
-            Versions.ResetForTests();
-        }
-
-        /// <summary>
-        /// Forwarded seam. Addressed by ReplacementTextureAttestationTests
-        /// and GeneratedTextureAttestationTests.
-        /// </summary>
-        internal static bool TryReadInstalledProducerVersion(
-            out string version)
-        {
-            return Versions.TryReadInstalledProducerVersion(out version);
-        }
-
-        /// <summary>
-        /// Forwarded seam. Addressed by ReplacementTextureAttestationTests;
-        /// the production session resets in AlphaSeparationApply and
-        /// AmusePlatformFinishPlugin call it.
-        /// </summary>
-        internal static void ClearVersionCacheForSession()
-        {
-            Versions.ClearVersionCacheForSession();
-        }
-
-        /// <summary>
-        /// Forwarded seam. Addressed by ReplacementTextureAttestationTests
-        /// and GeneratedTextureAttestationTests.
-        /// </summary>
-        internal static bool IsVersionAdmitted(string version)
-        {
-            return Versions.IsVersionAdmitted(version);
-        }
 
         internal static bool TryIdentifyReplacement(Texture texture, out Texture2D source)
         {
@@ -137,8 +93,8 @@ namespace Alrauna.Amuse.Editor.Semantics
                 return false;
             }
             // Conjunct 4: the producer is installed and its version is admitted.
-            if (!TryReadInstalledProducerVersion(out var version) ||
-                !IsVersionAdmitted(version))
+            if (!Versions.TryReadInstalledProducerVersion(out var version) ||
+                !Versions.IsVersionAdmitted(version))
             {
                 return false;
             }

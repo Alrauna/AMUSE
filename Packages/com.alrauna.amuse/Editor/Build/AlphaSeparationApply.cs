@@ -1054,8 +1054,8 @@ namespace Alrauna.Amuse.Editor.Build
             UnityGeneratedTextureEvidence.ClearCache();
             UnityAlphaFieldEvidence.ClearCache();
             ReplacementTextureIdentity.ClearSession();
-            ReplacementTextureAttestation.ClearVersionCacheForSession();
-            AaoAtlasTextureAttestation.ClearVersionCacheForSession();
+            ReplacementTextureAttestation.Versions.ClearVersionCacheForSession();
+            AaoAtlasTextureAttestation.Versions.ClearVersionCacheForSession();
             Semantics.LilToon.LilToonSourceAttestation.ClearGatherMemo();
             Semantics.Poiyomi.PoiyomiSourceAttestation.ClearSourceHashMemo();
         }

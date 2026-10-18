@@ -764,8 +764,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         [Test]
         public void AdmittedAtlasShape_CapturesDirectlyThroughTheRoute()
         {
-            AaoAtlasTextureAttestation.ResetForTests();
-            AaoAtlasTextureAttestation.ReadInstalledPackageVersionOrNull =
+            AaoAtlasTextureAttestation.Versions.ResetForTests();
+            AaoAtlasTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
                 _ => "1.9.17";
             var atlas = new Texture2D(16, 16, TextureFormat.RGBA32, false);
             atlas.name = "MainTex (AAO UV Packed)";
@@ -793,7 +793,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             finally
             {
                 Object.DestroyImmediate(atlas);
-                AaoAtlasTextureAttestation.ResetForTests();
+                AaoAtlasTextureAttestation.Versions.ResetForTests();
             }
         }
     }
