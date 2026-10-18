@@ -31,7 +31,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         UnsupportedVersion,
         ModifiedShaderSource,
         MissingSourceEvidence,
-        MissingFeatureCompilation,
         UnsupportedFeature,
         UnsupportedUv,
         UnsupportedSampling,
