@@ -5,6 +5,7 @@ using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
 using CoreWrapMode = Alrauna.Amuse.Editor.Semantics.TextureWrapMode;
+using static Alrauna.Amuse.Tests.Editor.Analysis.AlphaSemanticsResolverTests;
 
 namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 {
@@ -571,10 +572,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 });
                 return true;
             };
-            var triangle = TriangleAlphaInput.WithUv0(
-                Vector3.zero,
-                Vector3.right,
-                Vector3.up,
+            var triangle = CornerTriangle(
                 new Vector2(0.05f, 0.15f),
                 new Vector2(0.1f, 0.15f),
                 new Vector2(0.05f, 0.2f));
@@ -816,10 +814,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 RefusingFieldProvider, AlphaSamplingPolicy.ConservativeDesktop,
                 0);
             Assert.That(resolution.IsResolved, Is.True);
-            return resolution.Classify(TriangleAlphaInput.WithUv0(
-                Vector3.zero,
-                Vector3.right,
-                Vector3.up,
+            return resolution.Classify(CornerTriangle(
                 new Vector2(0.05f, 0.15f),
                 new Vector2(0.1f, 0.15f),
                 new Vector2(0.05f, 0.2f)));

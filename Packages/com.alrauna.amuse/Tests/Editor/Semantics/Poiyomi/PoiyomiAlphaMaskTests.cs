@@ -5,6 +5,7 @@ using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
 using CoreWrapMode = Alrauna.Amuse.Editor.Semantics.TextureWrapMode;
+using static Alrauna.Amuse.Tests.Editor.Analysis.AlphaSemanticsResolverTests;
 
 namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 {
@@ -485,10 +486,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 
         private static TriangleAlphaInput InteriorTriangle()
         {
-            return TriangleAlphaInput.WithUv0(
-                Vector3.zero,
-                Vector3.right,
-                Vector3.up,
+            return CornerTriangle(
                 new Vector2(0.05f, 0.15f),
                 new Vector2(0.1f, 0.15f),
                 new Vector2(0.05f, 0.2f));

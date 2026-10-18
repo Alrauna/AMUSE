@@ -144,13 +144,26 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
         /// <summary>Nondegenerate lower-left corner triangle.</summary>
         internal static TriangleAlphaInput CornerTriangle()
         {
+            return CornerTriangle(
+                new Vector2(0.05f, 0.05f),
+                new Vector2(0.45f, 0.05f),
+                new Vector2(0.05f, 0.45f));
+        }
+
+        /// <summary>
+        /// The corner fixture over a caller's UV0 triple: the nondegenerate
+        /// lower-left position triple with per-case UVs.
+        /// </summary>
+        internal static TriangleAlphaInput CornerTriangle(
+            Vector2 uv0, Vector2 uv1, Vector2 uv2)
+        {
             return TriangleAlphaInput.WithUv0(
                 Vector3.zero,
                 Vector3.right,
                 Vector3.up,
-                new Vector2(0.05f, 0.05f),
-                new Vector2(0.45f, 0.05f),
-                new Vector2(0.05f, 0.45f));
+                uv0,
+                uv1,
+                uv2);
         }
 
         private static TriangleAlphaInput OpaqueCornerTriangle() => CornerTriangle();
@@ -2462,11 +2475,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 new Vector2(0.45f, 0.05f),
                 new Vector2(0.05f, 0.45f),
             };
-            var triangle = TriangleAlphaInput.WithUv0(
-                Vector3.zero, Vector3.right, Vector3.up,
-                new Vector2(0.05f, 0.05f),
-                new Vector2(0.45f, 0.05f),
-                new Vector2(0.05f, 0.45f))
+            var triangle = CornerTriangle()
                 .WithChannels(new IReadOnlyList<Vector2>[] { uv1Set }, 0, 1, 2);
 
             Assert.That(resolution.IsResolved, Is.True);

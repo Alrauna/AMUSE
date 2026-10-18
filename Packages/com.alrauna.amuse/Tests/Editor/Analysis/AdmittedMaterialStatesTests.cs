@@ -12,6 +12,7 @@ using Alrauna.Amuse.Tests.Editor.Shared;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.Rendering;
+using static Alrauna.Amuse.Tests.Editor.Analysis.AlphaSemanticsResolverTests;
 
 namespace Alrauna.Amuse.Tests.Editor.Analysis
 {
@@ -1287,13 +1288,7 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                         sourceA, TextureChannel.Alpha, 1f,
                         AlphaPolicyBounds.Inert)] = chain,
                 });
-            var corner = TriangleAlphaInput.WithUv0(
-                Vector3.zero,
-                Vector3.right,
-                Vector3.up,
-                new Vector2(0.05f, 0.05f),
-                new Vector2(0.45f, 0.05f),
-                new Vector2(0.05f, 0.45f));
+            var corner = CornerTriangle();
             var cases = new[]
             {
                 (AlphaSamplingPolicy.ConservativeDesktop,
