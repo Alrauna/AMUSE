@@ -253,7 +253,7 @@ namespace Alrauna.Amuse.Editor.DryRun
             _policyFingerprint = BuildPolicyFingerprint();
             _controllerFingerprint = BuildControllerFingerprint();
             _graphFingerprint = BuildGraphFingerprint();
-            _avatarKey = DryRunFingerprint.Avatar(InputsFor(""));
+            _avatarKey = DryRunFingerprint.Avatar(InputsFor());
 
             // An avatar hit serves the stored avatar rows, which already
             // carry this session's banners and notes, because the avatar
@@ -637,7 +637,7 @@ namespace Alrauna.Amuse.Editor.DryRun
 
                 if (resolved.Refusal != RendererAnalysisRefusal.None)
                 {
-                    var refusalRows = BuildResolvedRefusalRows(
+                    var refusalRows = DryRunRowBuilder.BuildResolvedRefusalRows(
                         renderer, rendererPath, rendererTypeName, resolved, slots);
                     _rendererRows.AddRange(refusalRows);
                     if (!refreshOnly && _avatarKey != null)
@@ -656,7 +656,7 @@ namespace Alrauna.Amuse.Editor.DryRun
                 {
                     var refusalRows = new[]
                     {
-                        RendererRefusedRow(
+                        DryRunRowBuilder.RendererRefusedRow(
                             rendererPath, rendererTypeName, extraction.Refusal,
                             extraction.MeshSubMeshCount,
                             extraction.MaterialSlotCount,
@@ -803,7 +803,7 @@ namespace Alrauna.Amuse.Editor.DryRun
                     alreadyOpaqueBySlot,
                     coverageVectors.CoveragePercentsBySlot,
                     coverageVectors.PreservePercentsBySlot);
-                var rows = BuildRows(
+                var rows = DryRunRowBuilder.BuildRows(
                     _inFlightRenderer,
                     _inFlightRendererPath,
                     _inFlightRendererTypeName,
@@ -838,15 +838,6 @@ namespace Alrauna.Amuse.Editor.DryRun
 
             return true;
         }
-
-        private static IReadOnlyList<MaterialTransformationRow> BuildResolvedRefusalRows(
-            Renderer renderer,
-            string rendererPath,
-            string rendererTypeName,
-            RuntimeStateResolution.ResolvedRuntimeStates resolved,
-            IReadOnlyList<CapturedMaterialSlotEvidence> slots) =>
-            DryRunRowBuilder.BuildResolvedRefusalRows(
-                renderer, rendererPath, rendererTypeName, resolved, slots);
 
         // --- Capture wiring ---------------------------------------------------
 
@@ -1355,29 +1346,6 @@ namespace Alrauna.Amuse.Editor.DryRun
             return bindings;
         }
 
-        // --- Row building -----------------------------------------------------
-
-        private static IReadOnlyList<MaterialTransformationRow> BuildRows(
-            Renderer renderer,
-            string rendererPath,
-            string rendererTypeName,
-            IReadOnlyList<SlotTransformVerdict> verdicts,
-            SlotResolutionResult[] slotResults,
-            IReadOnlyList<CapturedMaterialSlotEvidence> slots,
-            string rendererName) =>
-            DryRunRowBuilder.BuildRows(
-                renderer, rendererPath, rendererTypeName, verdicts, slotResults, slots, rendererName);
-
-        private static MaterialTransformationRow RendererRefusedRow(
-            string rendererPath,
-            string rendererTypeName,
-            RendererAnalysisRefusal refusal,
-            int meshSubMeshCount,
-            int materialSlotCount,
-            string rendererName) =>
-            DryRunRowBuilder.RendererRefusedRow(
-                rendererPath, rendererTypeName, refusal, meshSubMeshCount, materialSlotCount, rendererName);
-
         private void AddBanner(BannerKind kind)
         {
             _avatarRows.Add(MaterialTransformationRow.Banner(
@@ -1397,15 +1365,14 @@ namespace Alrauna.Amuse.Editor.DryRun
 
         // --- Fingerprints -------------------------------------------------------
 
-        private DryRunFingerprintInputs InputsFor(string rendererBody)
+        private DryRunFingerprintInputs InputsFor()
         {
             return new DryRunFingerprintInputs(
                 _avatarRoot.GetInstanceID(),
                 _activeTarget,
                 _policyFingerprint,
                 _controllerFingerprint,
-                _graphFingerprint,
-                rendererBody);
+                _graphFingerprint);
         }
 
         private string BuildPolicyFingerprint()

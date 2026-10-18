@@ -31,16 +31,14 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             BuildTarget activeTarget = BuildTarget.StandaloneWindows64,
             string policy = "policy a=1 b=2 c=3 d=4 e=5 f=6 g=7 h=8 i=9 j=10 k=11 l=12 m=13",
             string controller = "controller guid-1 ticks-1",
-            string graph = "graph layer-0 state-1",
-            string rendererBody = "path Body type SkinnedMeshRenderer mesh mesh-1 slot0 mat-1 tex-1")
+            string graph = "graph layer-0 state-1")
         {
             return new DryRunFingerprintInputs(
                 avatarRootInstanceId,
                 activeTarget,
                 policy,
                 controller,
-                graph,
-                rendererBody);
+                graph);
         }
 
         private static List<MaterialTransformationRow> RowsOne()
@@ -68,7 +66,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             // share the same renderer body here.
             var avatarOneInputs = Inputs();
             var avatarOneKey = DryRunFingerprint.Avatar(avatarOneInputs);
-            var rendererKey = avatarOneInputs.RendererFingerprintBody;
+            var rendererKey = "renderer body";
             var rowsOne = RowsOne();
             DryRunCache.StoreRenderer(avatarOneKey, rendererKey, rowsOne);
 
@@ -95,7 +93,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             // computed under the old slider after the user moves it.
             var beforeInputs = Inputs();
             var beforeAvatarKey = DryRunFingerprint.Avatar(beforeInputs);
-            var rendererKey = beforeInputs.RendererFingerprintBody;
+            var rendererKey = "renderer body";
             DryRunCache.StoreRenderer(beforeAvatarKey, rendererKey, RowsOne());
 
             // Guard: the unchanged composite hits, so the miss below
