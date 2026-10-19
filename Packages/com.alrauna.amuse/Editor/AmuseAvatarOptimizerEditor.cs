@@ -806,8 +806,12 @@ namespace Alrauna.Amuse.Editor
                     using (new EditorGUI.IndentLevelScope())
                     {
                         var previousWidth = EditorGUIUtility.labelWidth;
-                        EditorGUIUtility.labelWidth =
-                            AlphaSeparatorLabelWidth(widest);
+                        EditorGUI.indentLevel++;
+                        var deepestRowIndent = EditorGUI.IndentedRect(new Rect(0f, 0f, 0f, 0f)).x;
+                        var deepestRowWidth = EditorGUIUtility.currentViewWidth - deepestRowIndent;
+                        EditorGUI.indentLevel--;
+                        EditorGUIUtility.labelWidth = AlphaSeparatorLabelWidth(
+                            widest, deepestRowIndent, deepestRowWidth);
                         DrawTransparentSubmenu();
                         DrawCutoutSubmenu();
                         DrawAcceptanceControls();
@@ -820,21 +824,39 @@ namespace Alrauna.Amuse.Editor
 
         /// <summary>
         /// The label width for one Alpha Separator Settings row. The widest
-        /// label text sets the base width, and each indent level subtracts
-        /// its 15-pixel offset, so the value column keeps its share of the
-        /// row at every depth.
+        /// label text plus the deepest row indent sets the text term, so the
+        /// longest label never truncates while the row affords it. The row
+        /// width minus the popup minimum caps that term, so the slider box
+        /// and the dropdown keep their minimum on a narrow inspector, and a
+        /// 1 pixel floor keeps the cap honored, because a non-positive label
+        /// width resets Unity's override. (Row sizing design, 2026-10-18,
+        /// decisions 1 and 5.)
         /// </summary>
-        internal static float AlphaSeparatorLabelWidth(float widestLabelWidth)
+        internal static float AlphaSeparatorLabelWidth(
+            float widestLabelWidth, float deepestRowIndent, float deepestRowWidth)
         {
-            return Mathf.Ceil(widestLabelWidth) + 2f
-                - EditorGUI.indentLevel * 15f;
+            var controlBudget = Mathf.Max(
+                deepestRowWidth - AlphaPopupMinimum - 2f, 1f);
+            // ponytail: the budget reads the row width from the view width and
+            // leaves the few pixels of view inset unmodeled, so the popup floor
+            // lands a few pixels under 72 at docked widths. Measure the level-4
+            // row rect if that gap ever matters.
+            return Mathf.Min(
+                Mathf.Ceil(widestLabelWidth) + 2f + deepestRowIndent,
+                controlBudget);
         }
+
+        // ponytail: AlphaPopupMinimum is sized for "All Sizes" plus the arrow
+        // at the default font. Measure the option strings at draw time when a
+        // larger editor font clips it.
+        internal const float AlphaPopupMinimum = 72f;
 
         /// <summary>
         /// The Transparent submenu. It holds the seven policy rows
         /// that moved under it. The rows draw through the existing
-        /// methods with their existing arguments. A closed submenu
-        /// draws nothing.
+        /// methods with their existing arguments. The rows draw one
+        /// indent level deeper than the submenu header. A closed
+        /// submenu draws nothing.
         /// </summary>
         private void DrawTransparentSubmenu()
         {
@@ -847,22 +869,26 @@ namespace Alrauna.Amuse.Editor
                 return;
             }
 
-            DrawMipCapPopup(
-                "_preserveTransparencyMaxMipLevel", MipCapRowContent);
-            DrawMinTextureSizePopup(
-                "_preserveTransparencyMinTextureSize",
-                MinTextureRowContent);
-            DrawCoverageSlider();
-            PercentSlider("_minimumOpaqueCoverageToPreservePercent",
-                PreserveCoverageRowContent);
-            DrawAlphaPolicyControls();
+            using (new EditorGUI.IndentLevelScope())
+            {
+                DrawMipCapPopup(
+                    "_preserveTransparencyMaxMipLevel", MipCapRowContent);
+                DrawMinTextureSizePopup(
+                    "_preserveTransparencyMinTextureSize",
+                    MinTextureRowContent);
+                DrawCoverageSlider();
+                PercentSlider("_minimumOpaqueCoverageToPreservePercent",
+                    PreserveCoverageRowContent);
+                DrawAlphaPolicyControls();
+            }
         }
 
         /// <summary>
         /// The Cutout submenu. It holds the four cutout rows. The
         /// popups share the transparent draw helpers with the cutout
         /// property paths and contents. The coverage rows call
-        /// PercentSlider directly.
+        /// PercentSlider directly. The rows draw one indent level
+        /// deeper than the submenu header.
         /// </summary>
         private void DrawCutoutSubmenu()
         {
@@ -875,16 +901,19 @@ namespace Alrauna.Amuse.Editor
                 return;
             }
 
-            DrawMipCapPopup(
-                "_cutoutPreserveTransparencyMaxMipLevel",
-                CutoutMipCapRowContent);
-            DrawMinTextureSizePopup(
-                "_cutoutPreserveTransparencyMinTextureSize",
-                CutoutMinTextureRowContent);
-            PercentSlider("_cutoutMinimumOpaqueCoveragePercent",
-                CutoutMaterialCoverageRowContent);
-            PercentSlider("_cutoutMinimumOpaqueCoverageToPreservePercent",
-                CutoutPreserveCoverageRowContent);
+            using (new EditorGUI.IndentLevelScope())
+            {
+                DrawMipCapPopup(
+                    "_cutoutPreserveTransparencyMaxMipLevel",
+                    CutoutMipCapRowContent);
+                DrawMinTextureSizePopup(
+                    "_cutoutPreserveTransparencyMinTextureSize",
+                    CutoutMinTextureRowContent);
+                PercentSlider("_cutoutMinimumOpaqueCoveragePercent",
+                    CutoutMaterialCoverageRowContent);
+                PercentSlider("_cutoutMinimumOpaqueCoverageToPreservePercent",
+                    CutoutPreserveCoverageRowContent);
+            }
         }
 
         /// <summary>
