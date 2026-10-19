@@ -26,7 +26,7 @@ Evidence base: `docs/superpowers/investigations/2026-10-19-liltoon-2-4-0-attesta
 
 ### M1. Align the project manifest
 
-Set the four `dependencies` entries in `Packages/vpm-manifest.json` to the locked values: lilToon 2.4.0, d4rkAvatarOptimizer 4.6.0, Avatar Optimizer 1.9.20, NDMF 1.14.4 per the locked block. Owner approved on 2026-10-19.
+Set the four `dependencies` entries in `Packages/vpm-manifest.json` to the locked values: lilToon 2.4.0, d4rkAvatarOptimizer 4.6.0, Avatar Optimizer 1.9.20, NDMF 1.14.8. Owner approved on 2026-10-19.
 
 Rationale: the mismatch is the trigger condition for the VPM resolver's once-per-session dialog (`Packages/com.vrchat.core.vpm-resolver/Editor/Resolver/Resolver.cs:89`) and the revert hazard the investigation records in section 1. Alignment disarms both. Own commit, first in sequence.
 
