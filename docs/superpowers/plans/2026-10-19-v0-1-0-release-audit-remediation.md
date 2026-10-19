@@ -626,9 +626,9 @@ fileFormatVersion: 2
 guid: 8e5f2a1b3c4d5e6f7a8b9c0d1e2f3a4b
 TextScriptImporter:
   externalObjects: {}
-  userData: 
-  assetBundleName: 
-  assetBundleVariant: 
+  userData:
+  assetBundleName:
+  assetBundleVariant:
 ```
 
 Create `Packages/com.alrauna.amuse/LICENSE.meta`:
@@ -637,9 +637,9 @@ fileFormatVersion: 2
 guid: 9a6b3c2d4e5f6a7b8c9d0e1f2a3b4c5d
 TextScriptImporter:
   externalObjects: {}
-  userData: 
-  assetBundleName: 
-  assetBundleVariant: 
+  userData:
+  assetBundleName:
+  assetBundleVariant:
 ```
 
 - [ ] **Step 3: Create CHANGELOG.md with release notes and companion .meta file**
@@ -677,9 +677,9 @@ fileFormatVersion: 2
 guid: a1b2c3d4e5f67890123456789abcdef0
 TextScriptImporter:
   externalObjects: {}
-  userData: 
-  assetBundleName: 
-  assetBundleVariant: 
+  userData:
+  assetBundleName:
+  assetBundleVariant:
 ```
 
 - [ ] **Step 4: Verify files and companion .meta files exist**
