@@ -168,6 +168,27 @@ namespace Alrauna.Amuse.Editor.Build
             return state;
         }
 
+        /// <summary>
+        /// Test seam for headless EditMode runs. Null in production. When set,
+        /// the consent gate consults it before the native dialog. Tests must
+        /// answer decline through this seam; acceptance keeps flowing through
+        /// the explicit presenter parameter. (H1, spec
+        /// docs/superpowers/specs/2026-10-19-liltoon-2-4-0-admission-and-headless-tests-design.md)
+        /// </summary>
+        internal static VersionConsentPresenter PresenterForTests = null;
+
+        /// <summary>
+        /// The gate's presenter chain: an explicit presenter wins, then the
+        /// test seam, then the native dialog. Factored so lightweight tests
+        /// can pin that the chain reads the seam without a full build.
+        /// </summary>
+        internal static VersionConsentPresenter ResolveConsentPresenter(
+            VersionConsentPresenter consentPresenter)
+        {
+            return consentPresenter ?? PresenterForTests
+                ?? VersionConsentDialog.Present;
+        }
+
         private static void Execute(
             BuildContext context,
             AmusePlatformFinishState state,
@@ -322,7 +343,7 @@ namespace Alrauna.Amuse.Editor.Build
                 && !VersionConsentDialog.ShouldProceed(
                     subjects,
                     UnityEngine.Application.isBatchMode,
-                    consentPresenter ?? VersionConsentDialog.Present))
+                    ResolveConsentPresenter(consentPresenter)))
             {
                 AmuseReports.ConsentDeclined(subjects);
                 if (lifecycle.BuildPath == AmuseBuildPath.ApplyOnPlay)

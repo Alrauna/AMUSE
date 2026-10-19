@@ -119,16 +119,20 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         private AnisotropicFilteringPin _filteringPin;
+        private RecordingDeclineConsentPresenter _consentSeam;
 
         [SetUp]
         public void PinPerTextureAnisotropicFiltering()
         {
             _filteringPin = new AnisotropicFilteringPin();
+            _consentSeam = new RecordingDeclineConsentPresenter();
+            AmusePlatformFinishPass.PresenterForTests = _consentSeam.Present;
         }
 
         [TearDown]
         public void TearDown()
         {
+            AmusePlatformFinishPass.PresenterForTests = null;
             _filteringPin.Dispose();
             OptimizerMergeObservation.Reset();
             _scope.TearDown();
@@ -886,6 +890,21 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             return parts.Count == 0
                 ? "none"
                 : string.Join(", ", parts);
+        }
+    }
+
+    /// <summary>
+    /// Decline-only consent presenter for headless runs (H1). Records every
+    /// subject it was asked about so tests can assert on real subjects.
+    /// </summary>
+    internal sealed class RecordingDeclineConsentPresenter
+    {
+        internal readonly List<string> SubjectsSeen = new List<string>();
+
+        internal bool Present(IReadOnlyList<string> subjects)
+        {
+            SubjectsSeen.AddRange(subjects);
+            return false;
         }
     }
 }
