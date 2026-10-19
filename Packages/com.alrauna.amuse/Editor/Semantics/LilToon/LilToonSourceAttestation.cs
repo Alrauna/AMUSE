@@ -210,17 +210,16 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
     }
 
     /// <summary>
-    /// One pinned Multi container identity. A row carries the container
-    /// shader name, its asset GUID, and the canonical digest of the measured
-    /// installed shape. The package version, the shader-format stamp, and the
-    /// include-tree digest stay class constants on
-    /// <see cref="LilToonSourceAttestation"/>: one lilToon 2.3.4 frontend and
-    /// one <c>Shader/Includes</c> tree are shared by every row, exactly as
-    /// the regular profiles treat them. A row carries no render-mode field.
-    /// The mode half of a Multi material is decided by the
-    /// keyword-derivation mode-consistency gate, never by a LIL_RENDER scan.
-    /// A Multi container also declares no pass asset, so no pass identity
-    /// exists to pin.
+    /// One Multi container row presented to the verify conjunction: the
+    /// container shader name, its asset GUID, and the canonical source
+    /// digest the resolution point bound to the identified version. The
+    /// production resolver builds the row from the admitted Multi table;
+    /// the test seam injects its own row, which is why the digest is a
+    /// constructor argument and not a table lookup. A row carries no
+    /// render-mode field. The mode half of a Multi material is decided by
+    /// the keyword-derivation mode-consistency gate, never by a LIL_RENDER
+    /// scan. A Multi container also declares no pass asset, so no pass
+    /// identity exists to pin.
     /// </summary>
     internal sealed class LilToonMultiContainerProfile
     {
@@ -343,7 +342,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
     }
 
     /// <summary>
-    /// Attestation for lilToon 2.3.4. lilToon regenerates its shader assets from
+    /// Attestation for the admitted lilToon versions, 2.3.0 through 2.4.0.
+    /// lilToon regenerates its shader assets from
     /// per-project settings, so a whole-file hash would refuse legitimate
     /// installs. Instead the two generated assets are hashed after
     /// canonicalizing exactly the regions the generator is proven to vary, the
@@ -359,8 +359,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         internal const string PassShaderGuid =
             "61b4f98a5d78b4a4a9d89180fac793fc";
         internal const string PackageName = "jp.lilxyzw.liltoon";
-        internal const string PackageVersion = "2.3.4"; // newest admitted; the set is AdmittedPackageVersions (S11)
-        internal const float ShaderFormatVersion = 45f;
+        internal const string PackageVersion = "2.4.0"; // newest admitted; the set is AdmittedPackageVersions (S11)
+        internal const float ShaderFormatVersion = 45f; // re-confirmed on installed 2.4.0, 2026-10-19
         internal const int OpaqueRenderMode = 0;
 
         // Measured by Task 0 on 2026-08-18 from a scratch
@@ -377,19 +377,28 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         // of the two shapes agree on one digest per file.
         internal const string PassCanonicalDigest =
             "aee1ea0c1fd0ae26f561fbade4c23309bb62ed8aff0c9221d1cba7c74a31d9d1";
+        // The newest admitted tree digest (2.4.0). The 2.3.4 anchor lives
+        // in the AdmittedPackageVersions row literal and the S11 tests.
         internal const string IncludeTreeDigest =
-            "6e2dce6cb3073d5e04b569a14df8e0944c93ca408999fb42d7c717050c48fd46";
+            "549c3b552f8f001f2a2f6059acf4c8f0df6e9475f80b8d155784dabb68e7b670";
 
         // Admitted package versions and the include-tree digest each ships
-        // (S11). The Shader and ltspass files are byte-identical across
-        // 2.3.0-2.3.4 - per-tag raw sha256 and .meta GUID comparison on the
-        // official tag artifacts - so the include tree is the only
-        // per-version bytes the identity conjunction checks. 2.3.1, 2.3.2,
-        // and 2.3.3 ship identical trees and share a row. The 2.3.4 digest
-        // reproduces the pinned IncludeTreeDigest above, which anchors the
-        // measurement method; the include diffs against 2.3.4 (an
-        // additional-light mode constant, an APV light-direction helper)
-        // touch nothing the alpha proofs cite.
+        // (S11). Three evidence sources, named per the file's comment
+        // discipline: 2.3.0-2.3.4 shader and pass identity rests on the
+        // per-tag raw sha256 comparison of the official tag artifacts
+        // (inherited from the original measurement); the 2.4.0 shader and
+        // pass digests reproduce the pinned constants on two installed 2.4.0
+        // shapes (2026-10-19); the three alpha-cited includes are identical
+        // between the 2.3.4 tag tree and the installed 2.4.0 shape under
+        // the pinned source normalization, which ignores CRLF versus LF
+        // line endings only (2026-10-19, licensed by reproducing the pinned
+        // 2.3.4 tree digest from that tree). The include tree is the only
+        // per-version bytes the identity conjunction checks. 2.3.1-2.3.3
+        // ship identical trees and share a row. The 2.4.0 tree differs by
+        // the VRC Light Volumes 3 rewrite and the APV sampling refactor.
+        // Never re-derive these from the lilToon repository, whose
+        // committed generated shaders are stale relative to their own tag's
+        // generator.
         private static readonly (string Version, string IncludeDigest)[]
             AdmittedPackageVersions =
             {
@@ -401,6 +410,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     "154aa68f85633b643f27a82309dc9d755e1955f0e8de7d21c9f62120c6628416"),
                 ("2.3.3",
                     "154aa68f85633b643f27a82309dc9d755e1955f0e8de7d21c9f62120c6628416"),
+                ("2.3.4",
+                    "6e2dce6cb3073d5e04b569a14df8e0944c93ca408999fb42d7c717050c48fd46"),
                 (PackageVersion, IncludeTreeDigest),
             };
 
@@ -2215,40 +2226,79 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 return false;
             }
 
-            // 3. Package identity, when installed as a package. 2.3.4 is the
-            //    only admitted Multi version row; earlier versions stay on
-            //    the consent path. A loose install carries no version label,
-            //    so the pinned include tree below identifies the version.
+            // 3. Package identity, when installed as a package. The version
+            //    must be an admitted one that carries an admitted Multi row
+            //    (A2); versions without a Multi row stay on the consent
+            //    path. A loose install carries no version label, so an
+            //    admitted tree alone identifies the shipped version below.
             if (evidence.HasPackage &&
                 (!string.Equals(
                         evidence.PackageName, PackageName,
                         StringComparison.Ordinal) ||
-                 !string.Equals(
-                        evidence.PackageVersion, PackageVersion,
-                        StringComparison.Ordinal)))
+                 !IsAdmittedPackageVersion(evidence.PackageVersion) ||
+                 !TryMultiColumnDigest(
+                     evidence.PackageVersion,
+                     LilToonMultiContainerColumn.Base,
+                     out _)))
             {
                 refusal = LilToonMultiResolutionRefusal.AttestationFailed;
                 return false;
             }
 
-            // 4. The include tree. One 2.3.4 tree is shared with the regular
-            //    rows, and it is the only tree a Multi container admits.
-            if (string.IsNullOrEmpty(evidence.IncludeTreeDigest) ||
-                !string.Equals(
-                    evidence.IncludeTreeDigest,
-                    IncludeTreeDigest,
-                    StringComparison.Ordinal))
+            // 4. The include tree. A packaged install must present the
+            //    tree its own version ships; a loose install carries no
+            //    version label, so an admitted tree alone identifies the
+            //    shipped version and anything else fails closed. The
+            //    identified row binds the digest term below.
+            string multiRowVersion;
+            if (evidence.HasPackage)
             {
-                refusal = LilToonMultiResolutionRefusal.AttestationFailed;
-                return false;
+                if (!TryVerifyIncludeTreeForVersion(
+                        evidence.PackageVersion,
+                        evidence.IncludeTreeDigest,
+                        out _))
+                {
+                    refusal = LilToonMultiResolutionRefusal.AttestationFailed;
+                    return false;
+                }
+
+                multiRowVersion = evidence.PackageVersion;
+            }
+            else
+            {
+                if (!TryIdentifyMultiVersionByTree(
+                        evidence.IncludeTreeDigest,
+                        out multiRowVersion))
+                {
+                    refusal = LilToonMultiResolutionRefusal.AttestationFailed;
+                    return false;
+                }
             }
 
             // 5. The container canonical digest, over the Task 1
-            //    canonicalization. Missing or mismatched source refuses.
-            if (string.IsNullOrEmpty(evidence.ShaderCanonicalDigest) ||
-                !string.Equals(
+            //    canonicalization. A packaged install compares against the
+            //    row the resolver injected, which the resolution point
+            //    bound to the identified version. A loose install has no
+            //    version label, so the digest compares against the
+            //    tree-identified row's column for this container. Missing
+            //    or mismatched source refuses.
+            if (string.IsNullOrEmpty(evidence.ShaderCanonicalDigest))
+            {
+                refusal = LilToonMultiResolutionRefusal.AttestationFailed;
+                return false;
+            }
+
+            var expectedDigest = evidence.HasPackage
+                ? profile.ShaderCanonicalDigest
+                : (TryMultiColumnDigest(
+                        multiRowVersion,
+                        ColumnForProfile(profile),
+                        out var rowDigest)
+                    ? rowDigest
+                    : null);
+            if (!string.Equals(
                     evidence.ShaderCanonicalDigest,
-                    profile.ShaderCanonicalDigest,
+                    expectedDigest,
                     StringComparison.Ordinal))
             {
                 refusal = LilToonMultiResolutionRefusal.AttestationFailed;
@@ -2263,13 +2313,17 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// <summary>
         /// Resolves one live shader's Multi container row and gathers its
         /// source evidence. The row must match the live shader's name and
-        /// asset GUID exactly. Fail-closed: the row table ships empty until
-        /// the Task 2 digest measurement lands, so this entry refuses every
-        /// Multi container with
-        /// <see cref="LilToonMultiResolutionRefusal.AttestationFailed"/>
-        /// until then. The verify itself is the parameterized conjunction,
-        /// so the resolution point can store the verified gather without a
-        /// second canonicalization pass.
+        /// asset GUID exactly, and the gathered evidence must identify one
+        /// admitted Multi version - by its package version when the package
+        /// is installed, by its include tree alone when the install is
+        /// loose. The container digest the row carries is the identified
+        /// version's column from the admitted Multi table, so the verify
+        /// binds version, tree, and digest as a unit. Fail-closed: an
+        /// unidentified version refuses every Multi container with
+        /// <see cref="LilToonMultiResolutionRefusal.AttestationFailed"/>.
+        /// The verify itself is the parameterized conjunction, so the
+        /// resolution point can store the verified gather without a second
+        /// canonicalization pass.
         /// </summary>
         internal static bool TryResolveMultiContainer(
             Shader shader,
@@ -2300,9 +2354,19 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 {
                     sourceEvidence =
                         GatherMultiContainerEvidence(shader, evidence);
-                    profile = row;
-                    refusal = default;
-                    return true;
+                    if (TryResolveMultiRowDigest(
+                            sourceEvidence, row.Column, out var digest))
+                    {
+                        profile = new LilToonMultiContainerProfile(
+                            row.ShaderName, row.ShaderGuid, digest);
+                        refusal = default;
+                        return true;
+                    }
+
+                    sourceEvidence = null;
+                    profile = null;
+                    refusal = LilToonMultiResolutionRefusal.AttestationFailed;
+                    return false;
                 }
             }
 
@@ -2313,14 +2377,79 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         }
 
         /// <summary>
-        /// The pinned Multi container rows: the base container and its
-        /// outline wrapper, one row each. The table stays empty until the
-        /// Task 2 digest measurement lands, and the entry point above
-        /// refuses every Multi container while it stays empty. Each row
-        /// needs a digest measured from installed shapes across at least two
-        /// real settings shapes; no placeholder digest ships here.
+        /// The container digest for one resolved container: the package
+        /// version names the admitted Multi row when the package is
+        /// installed; a loose install carries no version label, so its
+        /// include tree identifies the shipped version.
         /// </summary>
-        private static readonly LilToonMultiContainerProfile[]
+        private static bool TryResolveMultiRowDigest(
+            LilToonSourceEvidence sourceEvidence,
+            LilToonMultiContainerColumn column,
+            out string digest)
+        {
+            if (sourceEvidence.HasPackage &&
+                IsAdmittedPackageVersion(sourceEvidence.PackageVersion) &&
+                TryMultiColumnDigest(
+                    sourceEvidence.PackageVersion, column, out digest))
+            {
+                return true;
+            }
+
+            digest = null;
+            return TryIdentifyMultiVersionByTree(
+                    sourceEvidence.IncludeTreeDigest, out var version) &&
+                TryMultiColumnDigest(version, column, out digest);
+        }
+
+        // Which admit column a container row reads: the base container's
+        // digest column or the outline wrapper's.
+        private enum LilToonMultiContainerColumn
+        {
+            Base,
+            Outline,
+        }
+
+        // (A2) Version-aware Multi admission. Version, tree, and container
+        // digest bind as a unit. No cross combination attests. The 2.4.0
+        // outline digest differs from 2.3.4 because upstream fix 435 changed
+        // the ltsmulti_o queue tag; measured 2026-10-19 from installed shapes
+        // per the two-shape rule. The 2.3.4 row carries the 2026-10-01 pins
+        // unchanged.
+        private static readonly
+            (string Version, string MultiDigest, string MultiOutlineDigest)[]
+            AdmittedMultiVersions =
+            {
+                ("2.3.4",
+                    "346528b53eaa04b495b87e3faf583a79d6e0cbb1d35d7f3881c442b0a39ddf8f",
+                    "225af2c6eba7a017593ca8a0f38114a98580ed67844a4d8465fed2c96f7cb75f"),
+                ("2.4.0",
+                    "346528b53eaa04b495b87e3faf583a79d6e0cbb1d35d7f3881c442b0a39ddf8f",
+                    "f33e846c45eca0c62d343526fc9c3ee72d0e8585cc42b372c0fde9460ef18c85"),
+            };
+
+        /// <summary>
+        /// Read-only snapshot of the admitted Multi version rows for
+        /// first-party test and research consumers, with the same copy
+        /// discipline as <see cref="AdmittedRows"/>. Returns a copy, so a
+        /// caller can never observe or cause in-place mutation.
+        /// </summary>
+        internal static IReadOnlyList<(string Version, string MultiDigest, string MultiOutlineDigest)>
+            AdmittedMultiRows()
+        {
+            return AdmittedMultiVersions.ToArray();
+        }
+
+        /// <summary>
+        /// The pinned Multi container rows: the base container and its
+        /// outline wrapper, one row each. Each row resolves by container
+        /// name and asset GUID and maps the container to its digest column;
+        /// the digests themselves live in <see cref="AdmittedMultiVersions"/>,
+        /// one column value per admitted version. Every digest there was
+        /// measured from installed shapes across at least two real settings
+        /// shapes; no placeholder digest ships here.
+        /// </summary>
+        private static readonly
+            (string ShaderName, string ShaderGuid, LilToonMultiContainerColumn Column)[]
             MultiContainerProfiles =
             {
                 // Measured on 2026-10-01 through the production
@@ -2332,15 +2461,85 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 // pin above byte-for-byte. Never re-derive these from the
                 // lilToon repository, whose committed generated shaders
                 // are stale relative to their own tag's generator.
-                new LilToonMultiContainerProfile(
-                    "_lil/lilToonMulti",
+                ("_lil/lilToonMulti",
                     "9294844b15dca184d914a632279b24e1",
-                    "346528b53eaa04b495b87e3faf583a79d6e0cbb1d35d7f3881c442b0a39ddf8f"),
-                new LilToonMultiContainerProfile(
-                    "Hidden/lilToonMultiOutline",
+                    LilToonMultiContainerColumn.Base),
+                ("Hidden/lilToonMultiOutline",
                     "51b2dee0ab07bd84d8147601ff89e511",
-                    "225af2c6eba7a017593ca8a0f38114a98580ed67844a4d8465fed2c96f7cb75f"),
+                    LilToonMultiContainerColumn.Outline),
             };
+
+        /// <summary>
+        /// Loose installs carry no version label, so an admitted Multi
+        /// version's tree alone identifies the shipped version: the row
+        /// whose include-tree digest the evidence presents. Mirrors the
+        /// regular path's include-tree wording. The digest comparison then
+        /// runs against that identified row's column.
+        /// </summary>
+        private static bool TryIdentifyMultiVersionByTree(
+            string includeTreeDigest,
+            out string version)
+        {
+            foreach (var row in AdmittedMultiVersions)
+            {
+                if (string.Equals(
+                        includeTreeDigest,
+                        IncludeDigestForVersion(row.Version),
+                        StringComparison.Ordinal))
+                {
+                    version = row.Version;
+                    return true;
+                }
+            }
+
+            version = null;
+            return false;
+        }
+
+        /// <summary>
+        /// The admitted digest for one version and one container column;
+        /// false for a version with no admitted Multi row.
+        /// </summary>
+        private static bool TryMultiColumnDigest(
+            string version,
+            LilToonMultiContainerColumn column,
+            out string digest)
+        {
+            foreach (var row in AdmittedMultiVersions)
+            {
+                if (string.Equals(
+                        row.Version, version,
+                        StringComparison.Ordinal))
+                {
+                    digest = column == LilToonMultiContainerColumn.Outline
+                        ? row.MultiOutlineDigest
+                        : row.MultiDigest;
+                    return true;
+                }
+            }
+
+            digest = null;
+            return false;
+        }
+
+        private static LilToonMultiContainerColumn ColumnForProfile(
+            LilToonMultiContainerProfile profile)
+        {
+            foreach (var row in MultiContainerProfiles)
+            {
+                if (string.Equals(
+                        profile.ShaderName, row.ShaderName,
+                        StringComparison.Ordinal))
+                {
+                    return row.Column;
+                }
+            }
+
+            // An unknown name maps to the base column; the name and GUID
+            // terms already refuse unknown containers before the digest
+            // term reads the column.
+            return LilToonMultiContainerColumn.Base;
+        }
 
         /// <summary>
         /// Reads identity evidence from a live shader and already-captured

@@ -20,7 +20,10 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
     /// <para>
     /// The recipe below is a transcription of B1 §9: the eighteen scalar
     /// writes were measured 2026-08-30 from the installed jp.lilxyzw.liltoon
-    /// 2.3.4 package with exact read-back (spec §9.1). lilToon regenerates its
+    /// 2.3.4 package with exact read-back (spec §9.1). The tuple, the render
+    /// queue, and the RenderType tag were re-measured on the installed 2.4.0
+    /// package on 2026-10-19 and reproduced exactly, including on a second
+    /// settings shape. lilToon regenerates its
     /// shader assets from per-project settings, so the measurements came from
     /// the installed package, not from an upstream checkout.
     /// <strong>Never re-derive this tuple from the upstream git tag.</strong>

@@ -243,7 +243,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             float version = 45f,
             bool hasPackage = true,
             string packageName = "jp.lilxyzw.liltoon",
-            string packageVersion = "2.3.4",
+            string packageVersion = LilToonSourceAttestation.PackageVersion,
             string passGuid = "61b4f98a5d78b4a4a9d89180fac793fc",
             string shaderDigest = UsePin,
             string passDigest = UsePin,
@@ -1763,11 +1763,35 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
 
             Assert.That(rows.Select(row => row.Version).ToList(), Is.Unique);
             Assert.That(rows.Select(row => row.Version).ToList(), Is.EqualTo(
-                new[] { "2.3.0", "2.3.1", "2.3.2", "2.3.3", "2.3.4" }));
+                new[] { "2.3.0", "2.3.1", "2.3.2", "2.3.3", "2.3.4", "2.4.0" }));
             Assert.That(rows[1].IncludeDigest, Is.EqualTo(rows[2].IncludeDigest),
                 "2.3.1 through 2.3.3 ship one shared tree");
             Assert.That(rows[3].IncludeDigest, Is.EqualTo(rows[2].IncludeDigest),
                 "2.3.1 through 2.3.3 ship one shared tree");
+            Assert.That(rows[4].IncludeDigest,
+                Is.Not.EqualTo(rows[3].IncludeDigest),
+                "2.3.4 anchors its own tree");
+            Assert.That(
+                rows.Take(5).Select(row => row.IncludeDigest),
+                Has.None.EqualTo(rows[5].IncludeDigest),
+                "the 2.4.0 tree matches no earlier row");
+
+            var multiRows = LilToonSourceAttestation.AdmittedMultiRows();
+            Assert.That(
+                multiRows.Select(row => row.Version).ToList(), Is.Unique);
+            Assert.That(
+                multiRows.ToArray(),
+                Is.EqualTo(new[]
+                {
+                    ("2.3.4",
+                        "346528b53eaa04b495b87e3faf583a79d6e0cbb1d35d7f3881c442b0a39ddf8f",
+                        "225af2c6eba7a017593ca8a0f38114a98580ed67844a4d8465fed2c96f7cb75f"),
+                    ("2.4.0",
+                        "346528b53eaa04b495b87e3faf583a79d6e0cbb1d35d7f3881c442b0a39ddf8f",
+                        "f33e846c45eca0c62d343526fc9c3ee72d0e8585cc42b372c0fde9460ef18c85"),
+                }),
+                "Multi admission is exactly the two version rows with " +
+                "their per-version digests");
         }
 
         [Test]
@@ -1879,7 +1903,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             var gathered = GatheredStandInIncludeDigest();
 
             // The stand-in tree reproduces no admitted row's bytes, so it
-            // plays the older row's tree under the newest version's label.
+            // plays an older row's tree under an admitted version's label.
             Assert.That(
                 LilToonSourceAttestation.AdmittedRows()
                     .Any(row => row.IncludeDigest == gathered),
@@ -2055,10 +2079,27 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 LilToonSourceAttestation.PassCanonicalDigest,
                 Is.EqualTo(
                     "aee1ea0c1fd0ae26f561fbade4c23309bb62ed8aff0c9221d1cba7c74a31d9d1"));
+            // The flip moved the include-tree pin to the newest admitted
+            // tree (2.4.0). The 2.3.4 anchor lives in the
+            // AdmittedPackageVersions row literal and in the S11 tests.
             Assert.That(
                 LilToonSourceAttestation.IncludeTreeDigest,
                 Is.EqualTo(
-                    "6e2dce6cb3073d5e04b569a14df8e0944c93ca408999fb42d7c717050c48fd46"));
+                    "549c3b552f8f001f2a2f6059acf4c8f0df6e9475f80b8d155784dabb68e7b670"));
+
+            // Both admitted Multi version rows, verbatim: a transcription
+            // error in either Multi row fails this audit independently of
+            // the rows themselves.
+            var multiRows = LilToonSourceAttestation.AdmittedMultiRows();
+            Assert.That(multiRows.Count, Is.EqualTo(2));
+            Assert.That(multiRows[0], Is.EqualTo(
+                ("2.3.4",
+                    "346528b53eaa04b495b87e3faf583a79d6e0cbb1d35d7f3881c442b0a39ddf8f",
+                    "225af2c6eba7a017593ca8a0f38114a98580ed67844a4d8465fed2c96f7cb75f")));
+            Assert.That(multiRows[1], Is.EqualTo(
+                ("2.4.0",
+                    "346528b53eaa04b495b87e3faf583a79d6e0cbb1d35d7f3881c442b0a39ddf8f",
+                    "f33e846c45eca0c62d343526fc9c3ee72d0e8585cc42b372c0fde9460ef18c85")));
         }
 
         // --- cutout profile: Task 1 Step 2 RED tests ---
@@ -2076,7 +2117,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             float version = 45f,
             bool hasPackage = true,
             string packageName = "jp.lilxyzw.liltoon",
-            string packageVersion = "2.3.4",
+            string packageVersion = LilToonSourceAttestation.PackageVersion,
             string passGuid = "ad219df2a46e841488aee6a013e84e36",
             string shaderDigest = UsePin,
             string passDigest = UsePin,
@@ -2161,7 +2202,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             float version = 45f,
             bool hasPackage = true,
             string packageName = "jp.lilxyzw.liltoon",
-            string packageVersion = "2.3.4",
+            string packageVersion = LilToonSourceAttestation.PackageVersion,
             string passGuid = "2683fad669f20ec49b8e9656954a33a8",
             string shaderDigest = UsePin,
             string passDigest = UsePin,
@@ -2532,15 +2573,18 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 Is.EqualTo(LilToonSemanticDiagnosticCode.UnsupportedVersion));
         }
 
-        // --- S11: admitted patch versions 2.3.0-2.3.3 ----------------------
+        // --- S11: admitted versions 2.3.0 through 2.4.0 --------------------
 
         /// <summary>
-        /// Shader and pass bytes are byte-identical across 2.3.0-2.3.4, so
-        /// each admitted patch version verifies against the shared digests
-        /// with its own include-tree digest. Digests were computed by the
-        /// production ComputeIncludeTreeDigest over each official tag's
-        /// Shader/Includes tree (37 files each), anchored by reproducing the
-        /// pinned 2.3.4 digest exactly.
+        /// Shader and pass bytes are byte-identical across 2.3.0-2.4.0 (the
+        /// 2.4.0 digests reproduce the pinned constants on two installed
+        /// 2.4.0 shapes, 2026-10-19), so each admitted version verifies
+        /// against the shared digests with its own include-tree digest.
+        /// Digests were computed by the production ComputeIncludeTreeDigest
+        /// over each official tag's Shader/Includes tree (37 files each),
+        /// anchored by reproducing the pinned 2.3.4 digest exactly; the
+        /// 2.4.0 digest was measured over the installed tree (38 files) and
+        /// reproduced on a second settings shape.
         /// </summary>
         [TestCase("2.3.0",
             "bba3205a08b2bd56b4d2c69b8de3144377ec0b4ca4c44cc9d71b1341e62c94a0")]
@@ -2550,6 +2594,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             "154aa68f85633b643f27a82309dc9d755e1955f0e8de7d21c9f62120c6628416")]
         [TestCase("2.3.3",
             "154aa68f85633b643f27a82309dc9d755e1955f0e8de7d21c9f62120c6628416")]
+        [TestCase("2.4.0",
+            "549c3b552f8f001f2a2f6059acf4c8f0df6e9475f80b8d155784dabb68e7b670")]
         public void Verify_AcceptsAdmittedPatchVersionWithItsOwnTree(
             string version,
             string includeDigest)

@@ -7,7 +7,7 @@ All notable changes to AMUSE are documented in this file.
 ### Added
 - Exact rational polygon alpha classification proving opacity across UV coordinates.
 - Non-destructive mesh splitting separating proven-opaque triangles to canonical opaque materials.
-- Shader frontends for lilToon (versions 2.3.0 to 2.3.4) and Poiyomi Toon Shader (version 9.3.64, including Two Pass).
+- Shader frontends for lilToon (versions 2.3.0 to 2.4.0, with version-aware Multi container rows) and Poiyomi Toon Shader (version 9.3.64, including Two Pass).
 - EditMode DryRun preview inspecting avatar materials and expected polygon splits.
 - PlayMode build record store caching transformation results for inspection.
 - Optimization presets: Safe, Normal, and Aggressive.
