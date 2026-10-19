@@ -1146,6 +1146,12 @@ namespace Alrauna.Amuse.Editor.Build
                         row.movedTriangles = row.provenTriangles;
                         state.PlayModeRendererRows[i] = row;
                     }
+                    else
+                    {
+                        row.movedTriangles = 0;
+                        row.sentence = DryRun.RowText.UntouchableSlotSentence(row.totalTriangles);
+                        state.PlayModeRendererRows[i] = row;
+                    }
                 }
             }
         }
@@ -1206,7 +1212,11 @@ namespace Alrauna.Amuse.Editor.Build
                             }
 
                             string sentence;
-                            if (total > 0 && proven == total)
+                            if (!isApplied)
+                            {
+                                sentence = DryRun.RowText.UntouchableSlotSentence(total);
+                            }
+                            else if (total > 0 && proven == total)
                             {
                                 sentence = DryRun.RowText.ConvertableSlotSentence(total);
                             }

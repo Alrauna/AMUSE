@@ -8,6 +8,7 @@ using System.Reflection;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.Host;
+using Alrauna.Amuse.Editor.DryRun;
 using Alrauna.Amuse.Editor.Semantics.LilToon;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
 using Alrauna.Amuse.Tests.Editor.Semantics.LilToon;
@@ -6079,7 +6080,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 slotIndex = 1,
                 movedTriangles = 0,
                 provenTriangles = 50,
-                totalTriangles = 50
+                totalTriangles = 50,
+                sentence = RowText.ConvertableSlotSentence(50)
             });
 
             var appliedSlots = new HashSet<(string path, int slot)>
@@ -6091,6 +6093,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             Assert.That(state.PlayModeRendererRows[0].movedTriangles, Is.EqualTo(100));
             Assert.That(state.PlayModeRendererRows[1].movedTriangles, Is.EqualTo(0));
+            Assert.That(
+                state.PlayModeRendererRows[1].sentence,
+                Is.EqualTo(RowText.UntouchableSlotSentence(50)));
         }
 
         /// <summary>
@@ -6416,6 +6421,118 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(state.AppliedOpaqueTriangleCount, Is.EqualTo(3),
                 "the summary counts the converted slot's triangles and " +
                 "the Split's appended triangle, so the rows must agree");
+        }
+
+        /// <summary>
+        /// A candidate slot that does not apply receives zero moved triangles.
+        /// It also receives an untouchable sentence in the Play mode record.
+        /// </summary>
+        [Test]
+        public void CaptureAndSavePlayModeBuildRecordAssignsUntouchableSentenceToUnappliedCandidate()
+        {
+            var source = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+            var clone = Track(new Material(source.shader));
+            var selfMapped = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+            var rendererObj = Track(new GameObject(
+                "AMUSE unapplied candidate renderer"));
+            var renderer = rendererObj.AddComponent<SkinnedMeshRenderer>();
+            var mesh = Track(AlphaSeparationTestLifecycle.SingleTriangleMesh());
+            renderer.sharedMesh = mesh;
+            renderer.sharedMaterials = new[] { source, selfMapped };
+
+            var convertingMapping = new Dictionary<Material, Material>
+            {
+                [source] = clone,
+            };
+            var selfMapping = new Dictionary<Material, Material>
+            {
+                [selfMapped] = selfMapped,
+            };
+            var plan = new MeshSeparationPlan(
+                null,
+                new[]
+                {
+                    new SubmeshSeparationPlan(
+                        0, 0,
+                        new[] { 0, 1 }, Array.Empty<int>(),
+                        SubmeshSeparationDisposition.WhollyOpaqueCandidate),
+                    new SubmeshSeparationPlan(
+                        1, 1,
+                        new[] { 0, 1 }, Array.Empty<int>(),
+                        SubmeshSeparationDisposition.WhollyOpaqueCandidate),
+                },
+                true, false, 4, 0);
+            var candidates = new[]
+            {
+                new PreparedSlotSeparation(
+                    plan.Submeshes[0], convertingMapping, false, false),
+                new PreparedSlotSeparation(
+                    plan.Submeshes[1], selfMapping, false, false),
+            };
+            var evidence = new CapturedAnimationEvidence(
+                new MaterialEvidenceRequest(
+                    false, false,
+                    Array.Empty<string>(),
+                    Array.Empty<string>(),
+                    Array.Empty<string>(),
+                    Array.Empty<string>(),
+                    Array.Empty<TexturePropertyEvidenceRequest>()),
+                Array.Empty<CapturedClipEvidence>(),
+                Array.Empty<Alrauna.Amuse.Editor.Semantics
+                    .CapturedAlphaMaterial>(),
+                new[] { 0 },
+                false);
+            const string rendererPath = "Avatar/UnappliedCandidateRenderer";
+            var prepared = new PreparedRendererSeparation(
+                new UnityRendererMutationTarget(renderer, mesh, 1),
+                rendererPath,
+                plan,
+                evidence,
+                candidates,
+                Array.Empty<BlockStateEntry>(),
+                Array.Empty<int>());
+            var state = new AmusePlatformFinishState();
+            var separation = new PreparedAlphaSeparation();
+            separation.Add(prepared);
+            state.Separation = separation;
+            state.SeparationSurvivingCandidates =
+                new List<List<PreparedSlotSeparation>>
+                {
+                    new List<PreparedSlotSeparation>
+                    {
+                        candidates[0],
+                        candidates[1],
+                    },
+                };
+
+            var finalization = new AlphaSeparationFinalization(new[]
+            {
+                new AlphaSeparationRendererWrite(
+                    renderer,
+                    null,
+                    new[] { clone, selfMapped },
+                    Array.Empty<AlphaSeparationCurveEdit>()),
+            });
+            AlphaSeparationApply.ApplyFinalization(finalization, state);
+            state.AppliedFinalization = finalization;
+
+            var root = Track(new GameObject("AMUSE unapplied candidate avatar"));
+            var context = new BuildContext(root, null);
+            var avatarKey = PlayModeBuildStore.ComputeAvatarKey(root.transform);
+            try
+            {
+                AlphaSeparationApply.CaptureAndSavePlayModeBuildRecord(context, state);
+
+                var unappliedRow = state.PlayModeRendererRows.Single(r => r.slotIndex == 1);
+                Assert.That(unappliedRow.movedTriangles, Is.EqualTo(0));
+                Assert.That(
+                    unappliedRow.sentence,
+                    Is.EqualTo(RowText.UntouchableSlotSentence(2)));
+            }
+            finally
+            {
+                PlayModeBuildStore.Clear(avatarKey);
+            }
         }
     }
 }
