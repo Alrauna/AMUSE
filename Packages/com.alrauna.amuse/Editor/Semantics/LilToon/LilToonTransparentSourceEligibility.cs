@@ -76,37 +76,20 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// </summary>
         internal const float MaxProvableSubpassCutoff = 1f;
 
-        /// <summary>
-        /// The three properties outside the canonical recipe that conversion
-        /// reads, plus the one vector. The transparent shader clips the
-        /// forward pass with <c>clip(alpha - _Cutoff)</c>, scales additive
-        /// light by <c>saturate(a * _AlphaBoostFA)</c>, and clips the
-        /// shadow-caster subpass against <c>_SubpassCutoff</c>, so only
-        /// thresholds and a boost that keep alpha 1 alive authorize a clone.
-        /// The distance-fade vector drives the one post-clip alpha writer,
-        /// and only an all-zero strength component leaves it an identity.
-        /// The recipe never writes any of them, so they are
-        /// eligibility-read and never written.
-        /// </summary>
-        private const string CutoffProperty = "_Cutoff";
-        private const string AlphaBoostFaProperty = "_AlphaBoostFA";
-        private const string SubpassCutoffProperty = "_SubpassCutoff";
-        private const string DistanceFadeProperty = "_DistanceFade";
-
         private static readonly string[] SourcePresenceSchema =
         {
-            CutoffProperty, AlphaBoostFaProperty, SubpassCutoffProperty,
+            LilToonProperties.Cutoff, LilToonProperties.AlphaBoostFA, LilToonProperties.SubpassCutoff,
         };
 
         private static readonly string[] SourceSchema =
         {
             LilToonSourceAttestation.ShaderFormatVersionProperty,
-            CutoffProperty, AlphaBoostFaProperty, SubpassCutoffProperty,
+            LilToonProperties.Cutoff, LilToonProperties.AlphaBoostFA, LilToonProperties.SubpassCutoff,
         };
 
         private static readonly string[] SourceVectorSchema =
         {
-            DistanceFadeProperty,
+            LilToonProperties.DistanceFade,
         };
 
         /// <summary>
@@ -203,7 +186,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 }
             }
 
-            if (!evidence.TryGetVector(DistanceFadeProperty, out var distanceFade))
+            if (!evidence.TryGetVector(LilToonProperties.DistanceFade, out var distanceFade))
             {
                 return LilToonOpaqueConversionEligibility.Refused(
                     LilToonOpaqueConversionRefusal.ConversionPropertyAbsent);
@@ -285,7 +268,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             //     boost saturates to at least 1; below that the additive
             //     pass composites a darker colour than the opaque target.
             if (LilToonSharedEligibility.Read(
-                    EligibilitySchema, values, AlphaBoostFaProperty) <
+                    EligibilitySchema, values, LilToonProperties.AlphaBoostFA) <
                 MinProvableAlphaBoostFa)
             {
                 return LilToonOpaqueConversionEligibility.Refused(
@@ -311,7 +294,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             //     The target casts shadows unconditionally, so a source that
             //     clips its shadow here is not convertible.
             if (LilToonSharedEligibility.Read(
-                    EligibilitySchema, values, SubpassCutoffProperty) >
+                    EligibilitySchema, values, LilToonProperties.SubpassCutoff) >
                 MaxProvableSubpassCutoff)
             {
                 return LilToonOpaqueConversionEligibility.Refused(

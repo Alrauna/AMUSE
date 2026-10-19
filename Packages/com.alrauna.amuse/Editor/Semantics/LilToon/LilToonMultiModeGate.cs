@@ -70,13 +70,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         private const int TransparentMode = 2;
         private const int MaxAdmittedMode = TransparentMode;
 
-        private const string ClippingCancellerProperty = "_UseClippingCanceller";
-        private const string OverlayProperty = "_AsOverlay";
-        private const string DitherProperty = "_UseDither";
-        private const string AlphaMaskModeProperty = "_AlphaMaskMode";
-        private const string DissolveParamsProperty = "_DissolveParams";
-        private const string DistanceFadeProperty = "_DistanceFade";
-        private const string OutlineToneProperty = "_OutlineTexHSVG";
         private const string UseShadowProperty = "_UseShadow";
         private const string UseRimShadeProperty = "_UseRimShade";
         private const string UseEmissionProperty = "_UseEmission";
@@ -98,14 +91,11 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         private const string UseAudioLinkProperty = "_UseAudioLink";
         private const string AudioLinkAsLocalProperty = "_AudioLinkAsLocal";
         private const string UseBacklightProperty = "_UseBacklight";
-        private const string UseParallaxProperty = "_UseParallax";
         private const string UsePomProperty = "_UsePOM";
         private const string UseReflectionProperty = "_UseReflection";
         private const string MainGradationStrengthProperty =
             "_MainGradationStrength";
         private const string MainTexHsvgProperty = "_MainTexHSVG";
-        private const string UseMain2ndTexProperty = "_UseMain2ndTex";
-        private const string UseMain3rdTexProperty = "_UseMain3rdTex";
         private const string Main2ndTexDecalAnimationProperty =
             "_Main2ndTexDecalAnimation";
         private const string Main3rdTexDecalAnimationProperty =
@@ -143,10 +133,10 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// </summary>
         internal static readonly string[] ConsultedScalarProperties =
         {
-            ClippingCancellerProperty,
-            OverlayProperty,
-            DitherProperty,
-            AlphaMaskModeProperty,
+            LilToonProperties.UseClippingCanceller,
+            LilToonProperties.AsOverlay,
+            LilToonProperties.UseDither,
+            LilToonProperties.AlphaMaskMode,
             UseShadowProperty,
             UseRimShadeProperty,
             UseEmissionProperty,
@@ -164,19 +154,19 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             UseAudioLinkProperty,
             AudioLinkAsLocalProperty,
             UseBacklightProperty,
-            UseParallaxProperty,
+            LilToonProperties.UseParallax,
             UsePomProperty,
             UseReflectionProperty,
             MainGradationStrengthProperty,
-            UseMain2ndTexProperty,
-            UseMain3rdTexProperty,
+            LilToonProperties.UseMain2ndTex,
+            LilToonProperties.UseMain3rdTex,
         };
 
         internal static readonly string[] ConsultedVectorProperties =
         {
-            DissolveParamsProperty,
-            DistanceFadeProperty,
-            OutlineToneProperty,
+            LilToonProperties.DissolveParams,
+            LilToonProperties.DistanceFade,
+            LilToonProperties.OutlineTexHsvg,
             MainTexHsvgProperty,
             Main2ndTexDecalAnimationProperty,
             Main3rdTexDecalAnimationProperty,
@@ -267,9 +257,9 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             // :432, with the local audio link feature read at :381.
             ("_SUNDISK_HIGH_QUALITY", false, null, ProducesAudioLinkAsLocal),
             // :448, with the main second feature read at :381.
-            ("_COLORADDSUBDIFF_ON", false, UseMain2ndTexProperty, null),
+            ("_COLORADDSUBDIFF_ON", false, LilToonProperties.UseMain2ndTex, null),
             // :449, with the main third feature read at :382.
-            ("_COLORCOLOR_ON", false, UseMain3rdTexProperty, null),
+            ("_COLORCOLOR_ON", false, LilToonProperties.UseMain3rdTex, null),
             // :450, with the main second feature read at :381 and the
             // decal animation vectors read at :389-390 through
             // IsFeatureOnDecalAnimation.
@@ -280,7 +270,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             // :453, with the feature read at :384.
             ("ANTI_FLICKER", false, UseBacklightProperty, null),
             // :454, with the feature read at :385.
-            ("_PARALLAXMAP", false, UseParallaxProperty, null),
+            ("_PARALLAXMAP", false, LilToonProperties.UseParallax, null),
             // :455, with the POM feature read at :386.
             ("PIXELSNAP_ON", false, null, ProducesParallaxOcclusion),
             // :456, with the feature read at :387.
@@ -307,13 +297,13 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 return false;
             }
 
-            if (FeatureIsOn(evidence, ClippingCancellerProperty))
+            if (FeatureIsOn(evidence, LilToonProperties.UseClippingCanceller))
             {
                 refusal = LilToonMultiResolutionRefusal.ClippingCancellerEnabled;
                 return false;
             }
 
-            if (FeatureIsOn(evidence, OverlayProperty))
+            if (FeatureIsOn(evidence, LilToonProperties.AsOverlay))
             {
                 refusal = LilToonMultiResolutionRefusal.OverlayPassEnableUnsupported;
                 return false;
@@ -472,7 +462,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             int mode)
         {
             return mode == CutoutMode
-                && TryReadScalar(evidence, DitherProperty, out var dither)
+                && TryReadScalar(evidence, LilToonProperties.UseDither, out var dither)
                 && dither == 1f;
         }
 
@@ -485,7 +475,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             int mode)
         {
             return mode != OpaqueMode
-                && FeatureIsOn(evidence, AlphaMaskModeProperty);
+                && FeatureIsOn(evidence, LilToonProperties.AlphaMaskMode);
         }
 
         // Editor/lilMaterialUtils.cs:433 at the pin, with the dissolve
@@ -494,7 +484,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             CapturedMaterialEvidence evidence,
             int mode)
         {
-            return TryReadVector(evidence, DissolveParamsProperty, out var dissolve)
+            return TryReadVector(evidence, LilToonProperties.DissolveParams, out var dissolve)
                 && dissolve.x != 0f;
         }
 
@@ -506,7 +496,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             CapturedMaterialEvidence evidence,
             int mode)
         {
-            return TryReadVector(evidence, DistanceFadeProperty, out var fade)
+            return TryReadVector(evidence, LilToonProperties.DistanceFade, out var fade)
                 && fade.z != 0f;
         }
 
@@ -539,7 +529,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 return false;
             }
 
-            return TryReadVector(evidence, OutlineToneProperty, out var tone)
+            return TryReadVector(evidence, LilToonProperties.OutlineTexHsvg, out var tone)
                 && tone != DefaultHsvgColor;
         }
 
@@ -586,12 +576,12 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             CapturedMaterialEvidence evidence,
             int mode)
         {
-            return (FeatureIsOn(evidence, UseMain2ndTexProperty)
+            return (FeatureIsOn(evidence, LilToonProperties.UseMain2ndTex)
                     && VectorDiffers(
                         evidence,
                         Main2ndTexDecalAnimationProperty,
                         DefaultDecalAnim))
-                || (FeatureIsOn(evidence, UseMain3rdTexProperty)
+                || (FeatureIsOn(evidence, LilToonProperties.UseMain3rdTex)
                     && VectorDiffers(
                         evidence,
                         Main3rdTexDecalAnimationProperty,
@@ -604,10 +594,10 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             CapturedMaterialEvidence evidence,
             int mode)
         {
-            return (FeatureIsOn(evidence, UseMain2ndTexProperty)
+            return (FeatureIsOn(evidence, LilToonProperties.UseMain2ndTex)
                     && VectorComponentIsNonZero(
                         evidence, Main2ndDissolveParamsProperty))
-                || (FeatureIsOn(evidence, UseMain3rdTexProperty)
+                || (FeatureIsOn(evidence, LilToonProperties.UseMain3rdTex)
                     && VectorComponentIsNonZero(
                         evidence, Main3rdDissolveParamsProperty));
         }
@@ -618,7 +608,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             CapturedMaterialEvidence evidence,
             int mode)
         {
-            return FeatureIsOn(evidence, UseParallaxProperty)
+            return FeatureIsOn(evidence, LilToonProperties.UseParallax)
                 && FeatureIsOn(evidence, UsePomProperty);
         }
 

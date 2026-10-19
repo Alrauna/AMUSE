@@ -23,14 +23,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
     /// </summary>
     internal static class LilToonAlphaInterpreter
     {
-        private const string DissolveParamsProperty = "_DissolveParams";
-        private const string MainTexScrollRotateProperty =
-            "_MainTex_ScrollRotate";
-        private const string CutoffProperty = "_Cutoff";
-        private const string ColorProperty = "_Color";
-        private const string MainTextureProperty = "_MainTex";
         private const string MainTexStProperty = "_MainTex_ST";
-        private const string AlphaMaskModeProperty = "_AlphaMaskMode";
 
         /// <summary>
         /// Interprets the alpha of evidence already admitted against the
@@ -111,7 +104,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             // before branching; the proof cannot, so anything but exact zero
             // — and any non-finite component — refuses (B2 §10).
             if (!evidence.TryGetVector(
-                    DissolveParamsProperty, out var dissolveParams) ||
+                    LilToonProperties.DissolveParams, out var dissolveParams) ||
                 !IsFinite(dissolveParams) ||
                 dissolveParams.x != 0f)
             {
@@ -119,7 +112,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     diagnostics,
                     LilToonSemanticOutput.Alpha,
                     LilToonSemanticDiagnosticCode.UnsupportedFeature,
-                    DissolveParamsProperty);
+                    LilToonProperties.DissolveParams);
             }
 
             // (3) Main UV scroll/rotate must be the exact identity; any
@@ -131,7 +124,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             // where no nonzero value is inert. -0.0f stays admitted:
             // -0.0f != 0f is false.
             if (!evidence.TryGetVector(
-                    MainTexScrollRotateProperty, out var scrollRotate) ||
+                    LilToonProperties.MainTexScrollRotate, out var scrollRotate) ||
                 !IsFinite(scrollRotate) ||
                 scrollRotate.x != 0f ||
                 scrollRotate.y != 0f ||
@@ -142,7 +135,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     diagnostics,
                     LilToonSemanticOutput.Alpha,
                     LilToonSemanticDiagnosticCode.UnsupportedFeature,
-                    MainTexScrollRotateProperty);
+                    LilToonProperties.MainTexScrollRotate);
             }
 
             // (4) Cutoff: non-finite refuses, and above the family's pinned
@@ -151,7 +144,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             // carries the twice-margin bound (B2 §10), the transparent
             // plain clip proves up to one by sign preservation (T1 §9.2);
             // each family's MaxProvableCutoff doc carries its own argument.
-            if (!evidence.TryGetScalar(CutoffProperty, out var cutoff) ||
+            if (!evidence.TryGetScalar(LilToonProperties.Cutoff, out var cutoff) ||
                 !IsFinite(cutoff) ||
                 cutoff > maxProvableCutoff)
             {
@@ -159,7 +152,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     diagnostics,
                     LilToonSemanticOutput.Alpha,
                     LilToonSemanticDiagnosticCode.UnsupportedFeature,
-                    CutoffProperty);
+                    LilToonProperties.Cutoff);
             }
 
             // (4a) The family's bounded gates past the cutoff, in pinned
@@ -201,28 +194,28 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                         diagnostics,
                         LilToonSemanticOutput.Alpha,
                         LilToonSemanticDiagnosticCode.FeatureRetention,
-                        LilToonDistanceFadeSemantics.DistanceFadeProperty);
+                        LilToonProperties.DistanceFade);
                 default:
                     // Absent and NonFinite keep today's refusal wording.
                     return RecordUnknown<ScalarSemanticValue>(
                         diagnostics,
                         LilToonSemanticOutput.Alpha,
                         LilToonSemanticDiagnosticCode.UnsupportedFeature,
-                        LilToonDistanceFadeSemantics.DistanceFadeProperty);
+                        LilToonProperties.DistanceFade);
             }
 
             // (8) The tint multiplier must be present with a finite alpha.
             // A non-finite multiplier is an interpretation refusal, never the
             // resolver's uniform-transparent fallthrough (mirrors the
             // Poiyomi frontend's finite check).
-            if (!evidence.TryGetColor(ColorProperty, out var color) ||
+            if (!evidence.TryGetColor(LilToonProperties.Color, out var color) ||
                 !IsFinite(color.a))
             {
                 return RecordUnknown<ScalarSemanticValue>(
                     diagnostics,
                     LilToonSemanticOutput.Alpha,
                     LilToonSemanticDiagnosticCode.UnsupportedFeature,
-                    ColorProperty);
+                    LilToonProperties.Color);
             }
             var colorAlpha = color.a;
 
@@ -245,13 +238,13 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             // coordinate, and the mask rides _MainTex's sampler.
             var hasMainSampler = false;
             ScalarSemanticValue alphaChain;
-            if (!evidence.TryGetTexture(MainTextureProperty, out var assignment))
+            if (!evidence.TryGetTexture(LilToonProperties.MainTex, out var assignment))
             {
                 return RecordUnknown<ScalarSemanticValue>(
                     diagnostics,
                     LilToonSemanticOutput.Alpha,
                     LilToonSemanticDiagnosticCode.UnsupportedFeature,
-                    MainTextureProperty);
+                    LilToonProperties.MainTex);
             }
 
             if (!assignment.IsAssigned)
@@ -279,7 +272,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                         diagnostics,
                         LilToonSemanticOutput.Alpha,
                         LilToonSemanticDiagnosticCode.UnsupportedSampling,
-                        MainTextureProperty);
+                        LilToonProperties.MainTex);
                 }
 
                 if (!assignment.HasScaleOffset)
@@ -288,7 +281,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                         diagnostics,
                         LilToonSemanticOutput.Alpha,
                         LilToonSemanticDiagnosticCode.UnsupportedFeature,
-                        MainTextureProperty);
+                        LilToonProperties.MainTex);
                 }
 
                 // Identity is tested exactly, per binary32 component. Unity's
@@ -335,7 +328,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                             LilToonSemanticOutput.Alpha,
                             LilToonSemanticDiagnosticCode
                                 .UnstableTextureIdentity,
-                            MainTextureProperty);
+                            LilToonProperties.MainTex);
                     }
 
                     if (requiresExactMainField &&
@@ -345,7 +338,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                             diagnostics,
                             LilToonSemanticOutput.Alpha,
                             LilToonSemanticDiagnosticCode.UnsupportedFeature,
-                            CutoffProperty);
+                            LilToonProperties.Cutoff);
                     }
 
                     // uvMain is UV0 under the identity gates above.
@@ -375,7 +368,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                         diagnostics,
                         LilToonSemanticOutput.Alpha,
                         LilToonSemanticDiagnosticCode.UnsupportedSampling,
-                        MainTextureProperty);
+                        LilToonProperties.MainTex);
                 }
 
                 maskSample = new TextureSample(
@@ -426,7 +419,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 alphaChain = ScalarProductFold.Fold(
                     alphaChain,
                     ScalarSemanticValue.Constant(maskTerm.Constant),
-                    AlphaMaskModeProperty,
+                    LilToonProperties.AlphaMaskMode,
                     property => diagnostics.Add(
                         new LilToonSemanticDiagnostic(
                             LilToonSemanticOutput.Alpha,
@@ -452,7 +445,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 var multiplied = ScalarProductFold.Fold(
                     alphaChain,
                     maskFactor,
-                    AlphaMaskModeProperty,
+                    LilToonProperties.AlphaMaskMode,
                     property => diagnostics.Add(
                         new LilToonSemanticDiagnostic(
                             LilToonSemanticOutput.Alpha,
