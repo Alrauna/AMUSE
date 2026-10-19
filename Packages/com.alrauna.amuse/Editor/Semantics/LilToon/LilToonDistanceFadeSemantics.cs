@@ -32,7 +32,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
     /// </summary>
     internal static class LilToonDistanceFadeSemantics
     {
-        internal const string DistanceFadeProperty = "_DistanceFade";
+        internal const string DistanceFadeProperty =
+            LilToonProperties.DistanceFade;
 
         internal static LilToonDistanceFadeAnswer Evaluate(
             CapturedMaterialEvidence evidence)

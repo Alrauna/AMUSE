@@ -60,9 +60,6 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         internal const string TwoPassCanonicalNormalizedSourceHash =
             "b1d9ecd3072d21db97001dd23f88d089996b809e4039891a05f64d2ffcd4df67";
 
-        private const string ShaderOptimizerEnabledProperty =
-            "_ShaderOptimizerEnabled";
-
         private static readonly Dictionary<string, (DateTime LastWriteUtc, string Hash)>
             SourceHashMemo = new(StringComparer.Ordinal);
 
@@ -120,7 +117,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             {
                 diagnostic = PoiyomiMaterialSemantics.MaterialDiagnostic(
                     PoiyomiSemanticDiagnosticCode.UnsupportedShader,
-                    ShaderOptimizerEnabledProperty);
+                    PoiyomiProperties.ShaderOptimizerEnabled);
                 return false;
             }
 
@@ -214,7 +211,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 ? evidence.ShaderName
                 : null;
             var isLocked = evidence.TryGetScalar(
-                ShaderOptimizerEnabledProperty, out var optimizerEnabled) &&
+                PoiyomiProperties.ShaderOptimizerEnabled, out var optimizerEnabled) &&
                 optimizerEnabled != 0f;
 
             var assetPath = AssetDatabase.GetAssetPath(shader);

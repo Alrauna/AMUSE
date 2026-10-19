@@ -37,5 +37,26 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         internal const string MainTexScrollRotate = "_MainTex_ScrollRotate";
         internal const string AlphaBoostFA = "_AlphaBoostFA";
         internal const string SubpassCutoff = "_SubpassCutoff";
+        internal const string DistanceFade = "_DistanceFade";
+        internal const string TransparentMode = "_TransparentMode";
+        internal const string UseClippingCanceller = "_UseClippingCanceller";
+        internal const string AsOverlay = "_AsOverlay";
+        internal const string OutlineTexHsvg = "_OutlineTexHSVG";
+        internal const string AlphaMask = "_AlphaMask";
+        internal const string ZTest = "_ZTest";
+        internal const string ZWrite = "_ZWrite";
+        internal const string ColorMask = "_ColorMask";
+        internal const string BlendOp = "_BlendOp";
+        internal const string SrcBlend = "_SrcBlend";
+        internal const string DstBlend = "_DstBlend";
+        internal const string BlendOpAlpha = "_BlendOpAlpha";
+        internal const string SrcBlendAlpha = "_SrcBlendAlpha";
+        internal const string DstBlendAlpha = "_DstBlendAlpha";
+        internal const string OffsetFactor = "_OffsetFactor";
+        internal const string OffsetUnits = "_OffsetUnits";
+        internal const string SrcBlendFa = "_SrcBlendFA";
+        internal const string DstBlendFa = "_DstBlendFA";
+        internal const string BlendOpFa = "_BlendOpFA";
+        internal const string BlendOpAlphaFa = "_BlendOpAlphaFA";
     }
 }

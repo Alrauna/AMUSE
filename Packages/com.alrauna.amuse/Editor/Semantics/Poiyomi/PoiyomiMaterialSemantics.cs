@@ -33,29 +33,18 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         internal const string PoiyomiTwoPassShaderName = PoiyomiSourceAttestation.PoiyomiTwoPassShaderName;
         internal const string TwoPassCanonicalShaderGuid = PoiyomiSourceAttestation.TwoPassCanonicalShaderGuid;
 
-        private const string ShaderOptimizerEnabledProperty =
-            "_ShaderOptimizerEnabled";
-
-        private const string MainTextureProperty = "_MainTex";
-        private const string ColorProperty = "_Color";
-        internal const string OutlineEnabledProperty = "_EnableOutlines";
-        internal const string OutlineOverrideAlphaProperty = "_OutlineOverrideAlpha";
-        internal const string LineColorProperty = "_LineColor";
-        internal const string OutlineTextureProperty = "_OutlineTexture";
-        internal const string OutlineTextureUvProperty = "_OutlineTextureUV";
-        internal const string OutlineTexturePanProperty = "_OutlineTexturePan";
-
-        private const string MainTexUvProperty = "_MainTexUV";
-        private const string MainTexPanProperty = "_MainTexPan";
-
-        // The _Mode preset selector of the pinned source, and the second
-        // family's own selector on the Two Pass shader (note 4.4, Two Pass
-        // source line 68110). The vendor branches on these values per pass:
-        // the cutout value forces the family's alpha to 1 after the shared
-        // clip (note 4.5), so the cutout preset is what admits the split
-        // route for that family's claim.
-        private const string ModeProperty = "_Mode";
-        private const string TwoPassModeProperty = "_ModeTwoPass";
+        internal const string OutlineEnabledProperty =
+            PoiyomiProperties.EnableOutlines;
+        internal const string OutlineOverrideAlphaProperty =
+            PoiyomiProperties.OutlineOverrideAlpha;
+        internal const string LineColorProperty =
+            PoiyomiProperties.LineColor;
+        internal const string OutlineTextureProperty =
+            PoiyomiProperties.OutlineTexture;
+        internal const string OutlineTextureUvProperty =
+            PoiyomiProperties.OutlineTextureUv;
+        internal const string OutlineTexturePanProperty =
+            PoiyomiProperties.OutlineTexturePan;
 
         // Minimum property schema the pinned source must expose. Later outputs
         // read more properties; each is added here as its interpreter needs it,
@@ -64,9 +53,9 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         private static readonly string[] RequiredSchemaProperties =
         {
             "shader_master_label",
-            "_ShaderOptimizerEnabled",
-            "_MainTex",
-            "_Color",
+            PoiyomiProperties.ShaderOptimizerEnabled,
+            PoiyomiProperties.MainTex,
+            PoiyomiProperties.Color,
             "_BumpMap",
             "_EmissionMap",
             "_EnableEmission",
@@ -78,9 +67,9 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         internal static readonly string[] AlphaRequiredSchemaProperties =
         {
             "shader_master_label",
-            ShaderOptimizerEnabledProperty,
-            MainTextureProperty,
-            ColorProperty,
+            PoiyomiProperties.ShaderOptimizerEnabled,
+            PoiyomiProperties.MainTex,
+            PoiyomiProperties.Color,
         };
 
         // _MainTex sampling-mode flags whose enabled state changes sampling
@@ -268,7 +257,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     diagnostics,
                     output,
                     PoiyomiSemanticDiagnosticCode.UnsupportedUv,
-                    MainTexUvProperty);
+                    PoiyomiProperties.MainTexUv);
                 return false;
             }
 
@@ -285,7 +274,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
 
             if (!evidence.TryGetTexture(
-                    MainTextureProperty, out var assignment) ||
+                    PoiyomiProperties.MainTex, out var assignment) ||
                 !assignment.IsAssigned ||
                 assignment.Texture == null ||
                 !assignment.Texture.HasSourceIdentity)
@@ -294,7 +283,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     diagnostics,
                     output,
                     PoiyomiSemanticDiagnosticCode.UnstableTextureIdentity,
-                    MainTextureProperty);
+                    PoiyomiProperties.MainTex);
                 return false;
             }
 
@@ -304,7 +293,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     diagnostics,
                     output,
                     PoiyomiSemanticDiagnosticCode.UnsupportedSampling,
-                    MainTextureProperty);
+                    PoiyomiProperties.MainTex);
                 return false;
             }
 
@@ -315,7 +304,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     diagnostics,
                     output,
                     PoiyomiSemanticDiagnosticCode.UnsupportedTextureImport,
-                    MainTextureProperty);
+                    PoiyomiProperties.MainTex);
                 return false;
             }
 
@@ -333,7 +322,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         {
             mapping = default;
             if (!evidence.TryGetScalar(
-                    MainTexUvProperty, out var rawChannel) ||
+                    PoiyomiProperties.MainTexUv, out var rawChannel) ||
                 !IsFinite(rawChannel))
             {
                 return false;
@@ -345,7 +334,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 return false;
             }
 
-            if (!evidence.TryGetVector(MainTexPanProperty, out var pan) ||
+            if (!evidence.TryGetVector(PoiyomiProperties.MainTexPan, out var pan) ||
                 !IsFinite(pan) ||
                 pan.x != 0f || pan.y != 0f || pan.z != 0f || pan.w != 0f)
             {
@@ -353,7 +342,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
 
             if (!evidence.TryGetTexture(
-                    MainTextureProperty, out var assignment) ||
+                    PoiyomiProperties.MainTex, out var assignment) ||
                 !assignment.HasScaleOffset ||
                 !IsFinite(assignment.Scale) ||
                 !IsFinite(assignment.Offset))
@@ -381,8 +370,8 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// </summary>
         internal static bool DeclaresCutoutPreset(Material material)
         {
-            return ReadsCutoutPreset(material, ModeProperty) ||
-                ReadsCutoutPreset(material, TwoPassModeProperty);
+            return ReadsCutoutPreset(material, PoiyomiProperties.Mode) ||
+                ReadsCutoutPreset(material, PoiyomiProperties.TwoPassMode);
         }
 
         private static bool ReadsCutoutPreset(
@@ -521,8 +510,8 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         {
             // "The sampler always comes from _MainTex" is Poiyomi-specific
             // knowledge and stays here; only the texture-level fact is shared.
-            var mainTexture = material.HasProperty(MainTextureProperty)
-                ? material.GetTexture(MainTextureProperty)
+            var mainTexture = material.HasProperty(PoiyomiProperties.MainTex)
+                ? material.GetTexture(PoiyomiProperties.MainTex)
                 : null;
             return UnityTextureEvidence.TryGetSampling(mainTexture, out sampling);
         }

@@ -97,11 +97,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
     /// </summary>
     internal readonly struct LilToonAlphaMaskTerm
     {
-        internal const string ModeProperty = "_AlphaMaskMode";
-        internal const string ScaleProperty = "_AlphaMaskScale";
-        internal const string ValueProperty = "_AlphaMaskValue";
-        internal const string MaskProperty = "_AlphaMask";
-
         internal LilToonAlphaMaskTermKind Kind { get; }
         internal float Constant { get; }
         internal TextureSourceId Source { get; }
@@ -218,13 +213,13 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 throw new ArgumentNullException(nameof(diagnostics));
             }
 
-            if (!evidence.TryGetScalar(ModeProperty, out var mode) ||
+            if (!evidence.TryGetScalar(LilToonProperties.AlphaMaskMode, out var mode) ||
                 !IsFinite(mode))
             {
                 return Refuse(
                     diagnostics,
                     LilToonSemanticDiagnosticCode.UnsupportedFeature,
-                    ModeProperty);
+                    LilToonProperties.AlphaMaskMode);
             }
 
             if (mode == 0f)
@@ -237,34 +232,34 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 return Refuse(
                     diagnostics,
                     LilToonSemanticDiagnosticCode.UnsupportedFeature,
-                    ModeProperty);
+                    LilToonProperties.AlphaMaskMode);
             }
 
-            if (!evidence.TryGetScalar(ScaleProperty, out var scale) ||
+            if (!evidence.TryGetScalar(LilToonProperties.AlphaMaskScale, out var scale) ||
                 !IsFinite(scale))
             {
                 return Refuse(
                     diagnostics,
                     LilToonSemanticDiagnosticCode.UnsupportedFeature,
-                    ScaleProperty);
+                    LilToonProperties.AlphaMaskScale);
             }
 
-            if (!evidence.TryGetScalar(ValueProperty, out var value) ||
+            if (!evidence.TryGetScalar(LilToonProperties.AlphaMaskValue, out var value) ||
                 !IsFinite(value))
             {
                 return Refuse(
                     diagnostics,
                     LilToonSemanticDiagnosticCode.UnsupportedFeature,
-                    ValueProperty);
+                    LilToonProperties.AlphaMaskValue);
             }
 
             if (!evidence.TryGetTexture(
-                    MaskProperty, out var assignment))
+                    LilToonProperties.AlphaMask, out var assignment))
             {
                 return Refuse(
                     diagnostics,
                     LilToonSemanticDiagnosticCode.UnsupportedFeature,
-                    MaskProperty);
+                    LilToonProperties.AlphaMask);
             }
 
             if (!assignment.IsAssigned)
@@ -315,7 +310,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     diagnostics,
                     LilToonSemanticDiagnosticCode
                         .UnstableTextureIdentity,
-                    MaskProperty);
+                    LilToonProperties.AlphaMask);
             }
 
             if (!assignment.HasScaleOffset ||
@@ -327,7 +322,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 return Refuse(
                     diagnostics,
                     LilToonSemanticDiagnosticCode.UnsupportedFeature,
-                    MaskProperty);
+                    LilToonProperties.AlphaMask);
             }
 
             if (scale == 1f && value == 0f)

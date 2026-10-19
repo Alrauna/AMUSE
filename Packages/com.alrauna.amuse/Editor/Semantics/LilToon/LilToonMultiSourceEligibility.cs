@@ -38,23 +38,12 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// at the transparent rows.
         /// </summary>
         private const int TransparentMode = 2;
-        private const string CutoffProperty = "_Cutoff";
-        private const string AlphaMaskModeProperty = "_AlphaMaskMode";
-        private const string DitherProperty = "_UseDither";
-        private const string AlphaBoostFaProperty = "_AlphaBoostFA";
-        private const string SubpassCutoffProperty = "_SubpassCutoff";
-        private const string DissolveParamsProperty = "_DissolveParams";
-        private const string ClippingCancellerProperty =
-            "_UseClippingCanceller";
-        private const string OverlayProperty = "_AsOverlay";
-        private const string DistanceFadeProperty = "_DistanceFade";
-        private const string OutlineToneProperty = "_OutlineTexHSVG";
 
         private static readonly string[] SourcePresenceSchema =
         {
-            CutoffProperty,
-            AlphaBoostFaProperty,
-            SubpassCutoffProperty,
+            LilToonProperties.Cutoff,
+            LilToonProperties.AlphaBoostFA,
+            LilToonProperties.SubpassCutoff,
         };
 
         /// <summary>
@@ -65,9 +54,9 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         private static readonly string[] CutoutSourceSchema =
         {
             LilToonSourceAttestation.ShaderFormatVersionProperty,
-            CutoffProperty,
-            AlphaMaskModeProperty,
-            DitherProperty,
+            LilToonProperties.Cutoff,
+            LilToonProperties.AlphaMaskMode,
+            LilToonProperties.UseDither,
         };
 
         /// <summary>
@@ -82,10 +71,10 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         private static readonly string[] TransparentSourceSchema =
         {
             LilToonSourceAttestation.ShaderFormatVersionProperty,
-            CutoffProperty,
-            AlphaMaskModeProperty,
-            AlphaBoostFaProperty,
-            SubpassCutoffProperty,
+            LilToonProperties.Cutoff,
+            LilToonProperties.AlphaMaskMode,
+            LilToonProperties.AlphaBoostFA,
+            LilToonProperties.SubpassCutoff,
         };
 
         /// <summary>
@@ -97,16 +86,16 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         private static readonly string[] SourceSchema =
         {
             LilToonSourceAttestation.ShaderFormatVersionProperty,
-            CutoffProperty,
-            AlphaMaskModeProperty,
-            DitherProperty,
-            AlphaBoostFaProperty,
-            SubpassCutoffProperty,
+            LilToonProperties.Cutoff,
+            LilToonProperties.AlphaMaskMode,
+            LilToonProperties.UseDither,
+            LilToonProperties.AlphaBoostFA,
+            LilToonProperties.SubpassCutoff,
         };
 
         private static readonly string[] SourceVectorSchema =
         {
-            DissolveParamsProperty,
+            LilToonProperties.DissolveParams,
         };
 
         /// <summary>
@@ -154,15 +143,15 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     "_OutlineZWrite",
                     "_OutlineCull",
                     "_OutlineColorMask",
-                    ClippingCancellerProperty,
-                    OverlayProperty,
+                    LilToonProperties.UseClippingCanceller,
+                    LilToonProperties.AsOverlay,
                 },
                 colorProperties: Array.Empty<string>(),
                 vectorProperties: new[]
                 {
-                    DissolveParamsProperty,
-                    DistanceFadeProperty,
-                    OutlineToneProperty,
+                    LilToonProperties.DissolveParams,
+                    LilToonProperties.DistanceFade,
+                    LilToonProperties.OutlineTexHsvg,
                 },
                 textureProperties: Array.Empty<TexturePropertyEvidenceRequest>(),
                 captureKeywords: true);
@@ -261,14 +250,14 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             }
 
             if (!evidence.TryGetVector(
-                    DissolveParamsProperty, out var dissolveParams))
+                    LilToonProperties.DissolveParams, out var dissolveParams))
             {
                 return LilToonOpaqueConversionEligibility.Refused(
                     LilToonOpaqueConversionRefusal.ConversionPropertyAbsent);
             }
 
             var hasDistanceFade = evidence.TryGetVector(
-                DistanceFadeProperty, out var distanceFade);
+                LilToonProperties.DistanceFade, out var distanceFade);
             if (mode == TransparentMode && !hasDistanceFade)
             {
                 return LilToonOpaqueConversionEligibility.Refused(
@@ -344,7 +333,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             //    block is compiled in at LIL_RENDER 1 and 2 alike, so the
             //    gate runs on both arms.
             if (LilToonSharedEligibility.Read(
-                    schema, values, AlphaMaskModeProperty) != 0f)
+                    schema, values, LilToonProperties.AlphaMaskMode) != 0f)
             {
                 return LilToonOpaqueConversionEligibility.Refused(
                     LilToonOpaqueConversionRefusal
@@ -361,7 +350,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             //    records: a gate there would be a free false negative.
             if (mode != TransparentMode &&
                 LilToonSharedEligibility.Read(
-                    schema, values, DitherProperty) != 0f)
+                    schema, values, LilToonProperties.UseDither) != 0f)
             {
                 return LilToonOpaqueConversionEligibility.Refused(
                     LilToonOpaqueConversionRefusal

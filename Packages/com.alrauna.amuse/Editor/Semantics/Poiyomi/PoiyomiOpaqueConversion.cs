@@ -169,20 +169,20 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// </summary>
         private static readonly (string Property, float Value)[] CanonicalOpaqueTuple =
         {
-            ("_Mode", 0f),
-            ("_AlphaForceOpaque", 1f),
-            ("_BlendOp", 0f),
-            ("_BlendOpAlpha", 4f),
-            ("_Cutoff", 0f),
-            ("_SrcBlend", 1f),
-            ("_DstBlend", 0f),
-            ("_SrcBlendAlpha", 1f),
-            ("_DstBlendAlpha", 1f),
+            (PoiyomiProperties.Mode, 0f),
+            (PoiyomiProperties.AlphaForceOpaque, 1f),
+            (PoiyomiProperties.BlendOp, 0f),
+            (PoiyomiProperties.BlendOpAlpha, 4f),
+            (PoiyomiProperties.Cutoff, 0f),
+            (PoiyomiProperties.SrcBlend, 1f),
+            (PoiyomiProperties.DstBlend, 0f),
+            (PoiyomiProperties.SrcBlendAlpha, 1f),
+            (PoiyomiProperties.DstBlendAlpha, 1f),
             ("_AddSrcBlend", 1f),
             ("_AddDstBlend", 1f),
             ("_AddSrcBlendAlpha", 0f),
             ("_AddDstBlendAlpha", 1f),
-            ("_AlphaToCoverage", 0f),
+            (PoiyomiProperties.AlphaToCoverage, 0f),
             ("_ZWrite", 1f),
             ("_ZTest", 4f),
             ("_AlphaPremultiply", 0f),
@@ -210,9 +210,6 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             CanonicalOpaqueVerification.CanonicalOpaqueRenderType;
 
         // --- Conversion evidence -------------------------------------------
-
-        private const string ShaderOptimizerEnabledProperty =
-            "_ShaderOptimizerEnabled";
 
         /// <summary>
         /// The 23 properties conversion reads: the canonical recipe
@@ -330,7 +327,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             var premultiplied = Read(values, "_AlphaPremultiply") != 0f;
 
             // 5. Coverage.
-            if (Read(values, "_AlphaToCoverage") != 0f)
+            if (Read(values, PoiyomiProperties.AlphaToCoverage) != 0f)
             {
                 return PoiyomiOpaqueConversionEligibility.Refused(
                     PoiyomiOpaqueConversionRefusal.AlphaToCoverageEnabled);
@@ -363,12 +360,12 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             //    evaluate to 1 and both accepted destination factors to 0, so
             //    the blend degenerates to `dst := src` and normalizing to
             //    One/Zero is an identity there.
-            if (Read(values, "_BlendOp") !=
+            if (Read(values, PoiyomiProperties.BlendOp) !=
                     OpaqueConversionFactors.BlendOpAdd ||
                 !OpaqueConversionFactors.IsUnitSourceFactorAtAlphaOne(
-                    Read(values, "_SrcBlend")) ||
+                    Read(values, PoiyomiProperties.SrcBlend)) ||
                 !OpaqueConversionFactors.IsZeroDestinationFactorAtAlphaOne(
-                    Read(values, "_DstBlend")))
+                    Read(values, PoiyomiProperties.DstBlend)))
             {
                 return PoiyomiOpaqueConversionEligibility.Refused(
                     PoiyomiOpaqueConversionRefusal.UnsupportedBlendEquation);
@@ -429,7 +426,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             //     therefore survives precisely when _Cutoff <= 1. Only once
             //     this holds is writing _Cutoff = 0 justified: it is a
             //     consequence of the proof, not a premise of it.
-            if (Read(values, "_Cutoff") > 1f)
+            if (Read(values, PoiyomiProperties.Cutoff) > 1f)
             {
                 return PoiyomiOpaqueConversionEligibility.Refused(
                     PoiyomiOpaqueConversionRefusal.ClipThresholdDiscardsOpaqueAlpha);
@@ -470,27 +467,27 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             int effectiveRenderQueue,
             string effectiveRenderType)
         {
-            var mode = Read(values, "_Mode");
-            var alphaForceOpaque = Read(values, "_AlphaForceOpaque");
+            var mode = Read(values, PoiyomiProperties.Mode);
+            var alphaForceOpaque = Read(values, PoiyomiProperties.AlphaForceOpaque);
             if (mode != 0f && alphaForceOpaque != 1f)
             {
                 return false;
             }
 
-            if (Read(values, "_BlendOp") != 0f ||
-                Read(values, "_SrcBlend") != 1f ||
-                Read(values, "_DstBlend") != 0f ||
+            if (Read(values, PoiyomiProperties.BlendOp) != 0f ||
+                Read(values, PoiyomiProperties.SrcBlend) != 1f ||
+                Read(values, PoiyomiProperties.DstBlend) != 0f ||
                 Read(values, "_ZWrite") != 1f ||
                 Read(values, "_ZTest") != 4f ||
                 Read(values, "_AddSrcBlend") != 1f ||
                 Read(values, "_AddDstBlend") != 1f ||
-                Read(values, "_AlphaToCoverage") != 0f ||
+                Read(values, PoiyomiProperties.AlphaToCoverage) != 0f ||
                 Read(values, "_AlphaPremultiply") != 0f)
             {
                 return false;
             }
 
-            if (Read(values, "_Cutoff") > 1f)
+            if (Read(values, PoiyomiProperties.Cutoff) > 1f)
             {
                 return false;
             }
@@ -621,7 +618,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         {
             var scalars = new string[ConversionSchema.Length + 1];
             Array.Copy(ConversionSchema, scalars, ConversionSchema.Length);
-            scalars[ConversionSchema.Length] = ShaderOptimizerEnabledProperty;
+            scalars[ConversionSchema.Length] = PoiyomiProperties.ShaderOptimizerEnabled;
             return scalars;
         }
     }

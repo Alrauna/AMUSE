@@ -55,24 +55,24 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// </summary>
         private static readonly (string Property, float Value)[] CanonicalOpaqueTuple =
         {
-            ("_SrcBlend", 1f),
-            ("_DstBlend", 0f),
+            (LilToonProperties.SrcBlend, 1f),
+            (LilToonProperties.DstBlend, 0f),
             ("_AlphaToMask", 0f),
-            ("_ZWrite", 1f),
-            ("_ZTest", 4f),
-            ("_OffsetFactor", 0f),
-            ("_OffsetUnits", 0f),
-            ("_ColorMask", 15f),
-            ("_SrcBlendAlpha", 1f),
-            ("_DstBlendAlpha", 10f),
-            ("_BlendOp", 0f),
-            ("_BlendOpAlpha", 0f),
-            ("_SrcBlendFA", 1f),
-            ("_DstBlendFA", 1f),
+            (LilToonProperties.ZWrite, 1f),
+            (LilToonProperties.ZTest, 4f),
+            (LilToonProperties.OffsetFactor, 0f),
+            (LilToonProperties.OffsetUnits, 0f),
+            (LilToonProperties.ColorMask, 15f),
+            (LilToonProperties.SrcBlendAlpha, 1f),
+            (LilToonProperties.DstBlendAlpha, 10f),
+            (LilToonProperties.BlendOp, 0f),
+            (LilToonProperties.BlendOpAlpha, 0f),
+            (LilToonProperties.SrcBlendFa, 1f),
+            (LilToonProperties.DstBlendFa, 1f),
             ("_SrcBlendAlphaFA", 0f),
             ("_DstBlendAlphaFA", 1f),
-            ("_BlendOpFA", 4f),
-            ("_BlendOpAlphaFA", 4f),
+            (LilToonProperties.BlendOpFa, 4f),
+            (LilToonProperties.BlendOpAlphaFa, 4f),
         };
 
         internal static IReadOnlyList<(string Property, float Value)>
@@ -139,10 +139,10 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 return true;
             }
 
-            if (candidate.HasProperty("_TransparentMode") &&
-                candidate.GetFloat("_TransparentMode") != 0f)
+            if (candidate.HasProperty(LilToonProperties.TransparentMode) &&
+                candidate.GetFloat(LilToonProperties.TransparentMode) != 0f)
             {
-                factName = "_TransparentMode";
+                factName = LilToonProperties.TransparentMode;
                 return true;
             }
 
@@ -265,7 +265,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     // shape with container stand-ins.
                     if (attestedTarget == source.shader)
                     {
-                        clone.SetFloat("_TransparentMode", 0f);
+                        clone.SetFloat(LilToonProperties.TransparentMode, 0f);
                         WriteMultiModeZeroKeywordSet(clone);
                     }
                     else
@@ -277,9 +277,9 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     }
                 },
                 clone =>
-                    clone.HasProperty("_TransparentMode") &&
-                        clone.GetFloat("_TransparentMode") != 0f
-                        ? "_TransparentMode"
+                    clone.HasProperty(LilToonProperties.TransparentMode) &&
+                        clone.GetFloat(LilToonProperties.TransparentMode) != 0f
+                        ? LilToonProperties.TransparentMode
                         : null,
                 "Generated opaque material did not take the attested " +
                 "opaque target shader.");

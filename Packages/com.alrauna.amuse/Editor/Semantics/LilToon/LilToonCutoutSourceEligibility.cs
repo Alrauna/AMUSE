@@ -36,25 +36,16 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// </summary>
         internal const float MaxProvableCutoff = 0.9999f;
 
-        /// <summary>
-        /// The one property outside the canonical recipe that conversion
-        /// reads. The cutout shader clips with <c>clip(alpha - _Cutoff)</c>,
-        /// so only a threshold that keeps alpha 1 alive authorizes a clone;
-        /// the recipe never writes the property, so it is eligibility-read
-        /// and never written.
-        /// </summary>
-        private const string CutoffProperty = "_Cutoff";
-
         private static readonly string[] SourcePresenceSchema =
         {
-            CutoffProperty,
-            "_DistanceFade",
+            LilToonProperties.Cutoff,
+            LilToonProperties.DistanceFade,
         };
 
         private static readonly string[] SourceSchema =
         {
             LilToonSourceAttestation.ShaderFormatVersionProperty,
-            CutoffProperty,
+            LilToonProperties.Cutoff,
         };
 
         /// <summary>
@@ -210,7 +201,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             //     as ConversionPropertyAbsent, exactly like the transparent
             //     family.
             if (!evidence.TryGetVector(
-                    LilToonDistanceFadeSemantics.DistanceFadeProperty,
+                    LilToonProperties.DistanceFade,
                     out var distanceFade))
             {
                 return LilToonOpaqueConversionEligibility.Refused(

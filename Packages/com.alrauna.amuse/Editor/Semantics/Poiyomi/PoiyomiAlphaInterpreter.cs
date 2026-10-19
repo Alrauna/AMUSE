@@ -10,10 +10,6 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 {
     internal static class PoiyomiAlphaInterpreter
     {
-        private const string ShaderOptimizerEnabledProperty =
-            "_ShaderOptimizerEnabled";
-        private const string MainTexUvProperty = "_MainTexUV";
-        private const string AlphaForceOpaqueProperty = "_AlphaForceOpaque";
         private const string AlphaForceOpaque2Property = "_AlphaForceOpaque2";
         private const string IgnoreMainTexAlphaProperty = "_MainIgnoreTexAlpha";
         private const string MainAlphaMaskModeProperty = "_MainAlphaMaskMode";
@@ -22,44 +18,25 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         private const string AlphaMaskValueProperty = "_AlphaMaskValue";
         private const string AlphaMaskInvertProperty = "_AlphaMaskInvert";
         private const string AlphaMaskUvProperty = "_AlphaMaskUV";
-        private const string ModeProperty = "_Mode";
-        private const string TwoPassModeProperty = "_ModeTwoPass";
-        private const string CutoffProperty = "_Cutoff";
-        private const string SrcBlendProperty = "_SrcBlend";
-        private const string DstBlendProperty = "_DstBlend";
-        private const string BlendOpProperty = "_BlendOp";
-        private const string SrcBlendAlphaProperty = "_SrcBlendAlpha";
-        private const string DstBlendAlphaProperty = "_DstBlendAlpha";
-        private const string BlendOpAlphaProperty = "_BlendOpAlpha";
         private const string SrcBlend2Property = "_SrcBlend2";
         private const string DstBlend2Property = "_DstBlend2";
         private const string BlendOp2Property = "_BlendOp2";
         private const string BlendOpAlpha2Property = "_BlendOpAlpha2";
         private const string SrcBlendAlpha2Property = "_SrcBlendAlpha2";
         private const string DstBlendAlpha2Property = "_DstBlendAlpha2";
-        private const string OutlineEnabledProperty = "_EnableOutlines";
-        private const string OutlineOverrideAlphaProperty =
-            "_OutlineOverrideAlpha";
         private const string OutlineAlphaDistanceFadeProperty =
             "_OutlineAlphaDistanceFade";
         private const string OutlineAudioLinkColorProperty =
             "_OutlineALColorEnabled";
-        private const string OutlineTextureUvProperty = "_OutlineTextureUV";
-        private const string ColorProperty = "_Color";
         private const string TwoPassColorProperty = "_TwoPassColor";
-        private const string LineColorProperty = "_LineColor";
-        private const string MainTexPanProperty = "_MainTexPan";
         private const string AlphaMaskPanProperty = "_AlphaMaskPan";
-        private const string OutlineTexturePanProperty = "_OutlineTexturePan";
-        private const string MainTextureProperty = "_MainTex";
         private const string AlphaMaskProperty = "_AlphaMask";
-        private const string OutlineTextureProperty = "_OutlineTexture";
         private const string AlphaMaskExpressionDetail =
             AlphaMaskBlendStrengthProperty + " + " + AlphaMaskValueProperty;
 
         private static readonly string[] AlphaCoverageGates =
         {
-            "_AlphaToCoverage",
+            PoiyomiProperties.AlphaToCoverage,
             "_AlphaSharpenedA2C",
             "_AlphaDithering",
             "_EnableDissolve",
@@ -134,12 +111,12 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 ["_AlphaMaskInvert"] = "Alpha mask",
                 ["_Mode"] = "Rendering mode preset",
                 ["_ModeTwoPass"] = "Second pass rendering mode preset",
-                ["_EnableOutlines"] = "Outline",
-                ["_OutlineOverrideAlpha"] = "Outline",
-                ["_LineColor"] = "Outline",
-                ["_OutlineTexture"] = "Outline",
-                ["_OutlineTexturePan"] = "Outline",
-                ["_OutlineTextureUV"] = "Outline",
+                [PoiyomiProperties.EnableOutlines] = "Outline",
+                [PoiyomiProperties.OutlineOverrideAlpha] = "Outline",
+                [PoiyomiProperties.LineColor] = "Outline",
+                [PoiyomiProperties.OutlineTexture] = "Outline",
+                [PoiyomiProperties.OutlineTexturePan] = "Outline",
+                [PoiyomiProperties.OutlineTextureUv] = "Outline",
                 ["_OutlineAlphaDistanceFade"] = "Outline",
                 ["_OutlineALColorEnabled"] = "Outline",
             };
@@ -168,7 +145,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     presenceProperties: Array.Empty<string>(),
                     scalarProperties: new[]
                     {
-                        TwoPassModeProperty,
+                        PoiyomiProperties.TwoPassMode,
                         AlphaForceOpaque2Property,
                     },
                     colorProperties: new[]
@@ -185,34 +162,34 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         {
             var scalars = new HashSet<string>(StringComparer.Ordinal)
             {
-                ShaderOptimizerEnabledProperty,
-                MainTexUvProperty,
-                AlphaForceOpaqueProperty,
+                PoiyomiProperties.ShaderOptimizerEnabled,
+                PoiyomiProperties.MainTexUv,
+                PoiyomiProperties.AlphaForceOpaque,
                 IgnoreMainTexAlphaProperty,
                 MainAlphaMaskModeProperty,
                 AlphaMaskBlendStrengthProperty,
                 AlphaMaskValueProperty,
                 AlphaMaskInvertProperty,
                 AlphaMaskUvProperty,
-                ModeProperty,
-                CutoffProperty,
-                SrcBlendProperty,
-                DstBlendProperty,
-                BlendOpProperty,
-                BlendOpAlphaProperty,
-                SrcBlendAlphaProperty,
-                DstBlendAlphaProperty,
+                PoiyomiProperties.Mode,
+                PoiyomiProperties.Cutoff,
+                PoiyomiProperties.SrcBlend,
+                PoiyomiProperties.DstBlend,
+                PoiyomiProperties.BlendOp,
+                PoiyomiProperties.BlendOpAlpha,
+                PoiyomiProperties.SrcBlendAlpha,
+                PoiyomiProperties.DstBlendAlpha,
                 SrcBlend2Property,
                 DstBlend2Property,
                 BlendOp2Property,
                 BlendOpAlpha2Property,
                 SrcBlendAlpha2Property,
                 DstBlendAlpha2Property,
-                OutlineEnabledProperty,
-                OutlineOverrideAlphaProperty,
+                PoiyomiProperties.EnableOutlines,
+                PoiyomiProperties.OutlineOverrideAlpha,
                 OutlineAlphaDistanceFadeProperty,
                 OutlineAudioLinkColorProperty,
-                OutlineTextureUvProperty,
+                PoiyomiProperties.OutlineTextureUv,
             };
             scalars.UnionWith(MainSamplingModeGates);
             scalars.UnionWith(AlphaCoverageGates);
@@ -226,29 +203,29 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 activeColorSpace: false,
                 presenceProperties: PoiyomiMaterialSemantics.AlphaRequiredSchemaProperties,
                 scalarProperties: scalars,
-                colorProperties: new[] { ColorProperty, LineColorProperty },
+                colorProperties: new[] { PoiyomiProperties.Color, PoiyomiProperties.LineColor },
                 vectorProperties: new[]
                 {
-                    MainTexPanProperty,
+                    PoiyomiProperties.MainTexPan,
                     AlphaMaskPanProperty,
-                    OutlineTexturePanProperty,
+                    PoiyomiProperties.OutlineTexturePan,
                 },
                 textureProperties: new[]
                 {
                     new TexturePropertyEvidenceRequest(
-                        MainTextureProperty,
+                        PoiyomiProperties.MainTex,
                         TextureEvidenceKinds.ScaleOffset |
                         TextureEvidenceKinds.SourceIdentity |
                         TextureEvidenceKinds.Sampling |
                         TextureEvidenceKinds.AlphaChannel,
-                        declareCutoutCutoff ? CutoffProperty : null),
+                        declareCutoutCutoff ? PoiyomiProperties.Cutoff : null),
                     new TexturePropertyEvidenceRequest(
                         AlphaMaskProperty,
                         TextureEvidenceKinds.ScaleOffset |
                         TextureEvidenceKinds.SourceIdentity |
                         TextureEvidenceKinds.RedChannel),
                     new TexturePropertyEvidenceRequest(
-                        OutlineTextureProperty,
+                        PoiyomiProperties.OutlineTexture,
                         TextureEvidenceKinds.ScaleOffset |
                         TextureEvidenceKinds.SourceIdentity |
                         TextureEvidenceKinds.SampledAlphaIsOne |
@@ -354,18 +331,18 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
             if (!IsProvenOpaqueBlend(
                     evidence,
-                    SrcBlendProperty,
-                    DstBlendProperty,
-                    BlendOpProperty,
-                    BlendOpAlphaProperty,
-                    SrcBlendAlphaProperty,
-                    DstBlendAlphaProperty))
+                    PoiyomiProperties.SrcBlend,
+                    PoiyomiProperties.DstBlend,
+                    PoiyomiProperties.BlendOp,
+                    PoiyomiProperties.BlendOpAlpha,
+                    PoiyomiProperties.SrcBlendAlpha,
+                    PoiyomiProperties.DstBlendAlpha))
             {
                 return PoiyomiMaterialSemantics.RecordUnknown<ScalarSemanticValue>(
                     diagnostics,
                     PoiyomiSemanticOutput.Alpha,
                     PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                    SrcBlendProperty);
+                    PoiyomiProperties.SrcBlend);
             }
 
             if (evidence.TryGetScalar(SrcBlend2Property, out _) &&
@@ -385,21 +362,21 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     SrcBlend2Property);
             }
 
-            if (evidence.TryGetScalar(CutoffProperty, out var cutoff) &&
+            if (evidence.TryGetScalar(PoiyomiProperties.Cutoff, out var cutoff) &&
                 (!IsFinite(cutoff) || cutoff > 1f))
             {
                 return PoiyomiMaterialSemantics.RecordUnknown<ScalarSemanticValue>(
                     diagnostics,
                     PoiyomiSemanticOutput.Alpha,
                     PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                    CutoffProperty);
+                    PoiyomiProperties.Cutoff);
             }
 
             var first = InterpretSingleFamilyAlpha(
                 evidence,
-                AlphaForceOpaqueProperty,
-                ColorProperty,
-                ModeProperty,
+                PoiyomiProperties.AlphaForceOpaque,
+                PoiyomiProperties.Color,
+                PoiyomiProperties.Mode,
                 diagnostics);
             if (!interpretSecondAlphaFamily)
             {
@@ -414,7 +391,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                         diagnostics,
                         PoiyomiSemanticOutput.Alpha,
                         PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                        ColorProperty);
+                        PoiyomiProperties.Color);
                 }
 
                 return SemanticOutput<ScalarSemanticValue>.Unknown();
@@ -424,7 +401,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 evidence,
                 AlphaForceOpaque2Property,
                 TwoPassColorProperty,
-                TwoPassModeProperty,
+                PoiyomiProperties.TwoPassMode,
                 diagnostics);
             if (!IsCompletedExactlyOne(second))
             {
@@ -505,13 +482,13 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 mode == 1f;
 
             if (isCutout &&
-                !evidence.TryGetScalar(CutoffProperty, out var cutoutCutoff))
+                !evidence.TryGetScalar(PoiyomiProperties.Cutoff, out var cutoutCutoff))
             {
                 return PoiyomiMaterialSemantics.RecordUnknown<ScalarSemanticValue>(
                     diagnostics,
                     PoiyomiSemanticOutput.Alpha,
                     PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                    CutoffProperty);
+                    PoiyomiProperties.Cutoff);
             }
 
             var featureGate = FirstFailedZeroGate(evidence, AlphaFeatureGates);
@@ -572,13 +549,13 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
                 var colorAlpha = color.a;
                 if (!evidence.TryGetTexture(
-                        MainTextureProperty, out var mainTexture))
+                        PoiyomiProperties.MainTex, out var mainTexture))
                 {
                     return PoiyomiMaterialSemantics.RecordUnknown<ScalarSemanticValue>(
                         diagnostics,
                         PoiyomiSemanticOutput.Alpha,
                         PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                        MainTextureProperty);
+                        PoiyomiProperties.MainTex);
                 }
 
                 ScalarSemanticValue baseChain;
@@ -595,7 +572,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                             diagnostics,
                             PoiyomiSemanticOutput.Alpha,
                             PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                            CutoffProperty);
+                            PoiyomiProperties.Cutoff);
                     }
 
                     var samplingGate =
@@ -651,14 +628,14 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
 
             if (!evidence.TryGetScalar(
-                    OutlineEnabledProperty, out var enableOutlines) ||
+                    PoiyomiProperties.EnableOutlines, out var enableOutlines) ||
                 !IsFinite(enableOutlines))
             {
                 return PoiyomiMaterialSemantics.RecordUnknown<ScalarSemanticValue>(
                     diagnostics,
                     PoiyomiSemanticOutput.Alpha,
                     PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                    OutlineEnabledProperty);
+                    PoiyomiProperties.EnableOutlines);
             }
 
             if (enableOutlines <= 0f)
@@ -667,18 +644,18 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
 
             if (!evidence.TryGetScalar(
-                    OutlineOverrideAlphaProperty, out var overrideAlpha) ||
+                    PoiyomiProperties.OutlineOverrideAlpha, out var overrideAlpha) ||
                 !IsFinite(overrideAlpha))
             {
                 return PoiyomiMaterialSemantics.RecordUnknown<ScalarSemanticValue>(
                     diagnostics,
                     PoiyomiSemanticOutput.Alpha,
                     PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                    OutlineOverrideAlphaProperty);
+                    PoiyomiProperties.OutlineOverrideAlpha);
             }
 
             if (!evidence.TryGetColor(
-                    LineColorProperty, out var lineColor) ||
+                    PoiyomiProperties.LineColor, out var lineColor) ||
                 !IsFinite(lineColor.a) ||
                 lineColor.a != 1f)
             {
@@ -686,7 +663,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     diagnostics,
                     PoiyomiSemanticOutput.Alpha,
                     PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                    LineColorProperty);
+                    PoiyomiProperties.LineColor);
             }
 
             if (!evidence.TryGetScalar(
@@ -714,13 +691,13 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
 
             if (!evidence.TryGetTexture(
-                    OutlineTextureProperty, out var outlineTexture))
+                    PoiyomiProperties.OutlineTexture, out var outlineTexture))
             {
                 return PoiyomiMaterialSemantics.RecordUnknown<ScalarSemanticValue>(
                     diagnostics,
                     PoiyomiSemanticOutput.Alpha,
                     PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                    OutlineTextureProperty);
+                    PoiyomiProperties.OutlineTexture);
             }
 
             ScalarSemanticValue outlineFactor;
@@ -733,14 +710,14 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             else
             {
                 if (!evidence.TryGetScalar(
-                        OutlineTextureUvProperty, out var rawChannel) ||
+                        PoiyomiProperties.OutlineTextureUv, out var rawChannel) ||
                     !IsFinite(rawChannel))
                 {
                     return PoiyomiMaterialSemantics.RecordUnknown<ScalarSemanticValue>(
                         diagnostics,
                         PoiyomiSemanticOutput.Alpha,
                         PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                        OutlineTextureUvProperty);
+                        PoiyomiProperties.OutlineTextureUv);
                 }
 
                 var channel = Mathf.RoundToInt(rawChannel);
@@ -750,11 +727,11 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                         diagnostics,
                         PoiyomiSemanticOutput.Alpha,
                         PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                        OutlineTextureUvProperty);
+                        PoiyomiProperties.OutlineTextureUv);
                 }
 
                 if (!evidence.TryGetVector(
-                        OutlineTexturePanProperty, out var pan) ||
+                        PoiyomiProperties.OutlineTexturePan, out var pan) ||
                     !IsFinite(pan) ||
                     pan.x != 0f || pan.y != 0f)
                 {
@@ -762,7 +739,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                         diagnostics,
                         PoiyomiSemanticOutput.Alpha,
                         PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                        OutlineTexturePanProperty);
+                        PoiyomiProperties.OutlineTexturePan);
                 }
 
                 if (!outlineTexture.HasScaleOffset ||
@@ -773,7 +750,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                         diagnostics,
                         PoiyomiSemanticOutput.Alpha,
                         PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                        OutlineTextureProperty);
+                        PoiyomiProperties.OutlineTexture);
                 }
 
                 if (outlineTexture.Texture == null ||
@@ -785,11 +762,11 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                         diagnostics,
                         PoiyomiSemanticOutput.Alpha,
                         PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                        OutlineTextureProperty);
+                        PoiyomiProperties.OutlineTexture);
                 }
 
                 if (!evidence.TryGetTexture(
-                        MainTextureProperty, out var main) ||
+                        PoiyomiProperties.MainTex, out var main) ||
                     main.Texture == null ||
                     !main.Texture.HasSampling)
                 {
@@ -797,7 +774,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                         diagnostics,
                         PoiyomiSemanticOutput.Alpha,
                         PoiyomiSemanticDiagnosticCode.UnsupportedFeature,
-                        MainTextureProperty);
+                        PoiyomiProperties.MainTex);
                 }
 
                 var mapping = new UvMapping(
@@ -813,7 +790,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             var folded = ScalarProductFold.Fold(
                 baseAlpha,
                 outlineFactor,
-                OutlineEnabledProperty,
+                PoiyomiProperties.EnableOutlines,
                 property => PoiyomiMaterialSemantics.AddDiagnostic(
                     diagnostics,
                     PoiyomiSemanticOutput.Alpha,
@@ -1062,7 +1039,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             if (blendStrength == 1f && value == 0f)
             {
                 if (!evidence.TryGetTexture(
-                        MainTextureProperty, out var main) ||
+                        PoiyomiProperties.MainTex, out var main) ||
                     main.Texture == null ||
                     !main.Texture.HasSampling)
                 {
@@ -1070,7 +1047,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                         diagnostics,
                         PoiyomiSemanticOutput.Alpha,
                         PoiyomiSemanticDiagnosticCode.UnsupportedSampling,
-                        MainTextureProperty);
+                        PoiyomiProperties.MainTex);
                     return false;
                 }
 
@@ -1142,7 +1119,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             if (blendStrength == 1f && !invert && value < 1f)
             {
                 if (!evidence.TryGetTexture(
-                        MainTextureProperty, out var main) ||
+                        PoiyomiProperties.MainTex, out var main) ||
                     main.Texture == null ||
                     !main.Texture.HasSampling)
                 {
@@ -1150,7 +1127,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                         diagnostics,
                         PoiyomiSemanticOutput.Alpha,
                         PoiyomiSemanticDiagnosticCode.UnsupportedSampling,
-                        MainTextureProperty);
+                        PoiyomiProperties.MainTex);
                     return false;
                 }
 
