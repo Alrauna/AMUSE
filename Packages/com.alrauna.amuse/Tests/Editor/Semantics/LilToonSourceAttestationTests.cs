@@ -194,6 +194,17 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         private const string PriorVersionIncludeDigest =
             "154aa68f85633b643f27a82309dc9d755e1955f0e8de7d21c9f62120c6628416";
 
+        // Test-only profile row for the outline wrapper, shaped exactly like
+        // the base container's: the real container name with synthetic GUID
+        // and digest vocabulary. Task 8's measured per-version rows replace
+        // the digest pin, and no fixture value moves there.
+        private const string OutlineContainerName = "Hidden/lilToonMultiOutline";
+        private const string OutlineContainerGuid =
+            "0f19e2a4b7c8d6051324a5b6c7d8e9f1";
+        private const string OutlineContainerCanonicalDigest =
+            "1029384756afbccddeeff0123456789a" +
+            "fedcba98765432100123456789abcdee";
+
         private static LilToonCanonicalizationAnalysis AnalyzeMulti(
             string source)
         {
@@ -385,6 +396,63 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 Is.False);
             Assert.That(
                 refusal,
+                Is.EqualTo(LilToonMultiResolutionRefusal.AttestationFailed));
+        }
+
+        /// <summary>
+        /// Runs the Multi verify conjunction once against the injected
+        /// outline wrapper row, the way
+        /// <see cref="VerifyAgainstBaseContainerProfile"/> runs it against
+        /// the base container's row.
+        /// </summary>
+        private static bool VerifyAgainstOutlineContainerProfile(
+            LilToonSourceEvidence evidence,
+            out LilToonMultiResolutionRefusal refusal)
+        {
+            var profile = new LilToonMultiContainerProfile(
+                OutlineContainerName,
+                OutlineContainerGuid,
+                OutlineContainerCanonicalDigest);
+            return LilToonSourceAttestation.TryVerifyMultiContainer(
+                evidence, profile, out refusal);
+        }
+
+        // --- Falsifier: a container verify that pairs one version's label with another version's digest admits a cross-combination. ---
+        [Test]
+        public void MultiContainer_VersionAndOutlineDigestFromDifferentVersions_Refuse()
+        {
+            // Evidence A: the pre-flip newest admitted version presents the
+            // outline wrapper, but the outline digest slot carries an
+            // impossible value. The digest term refuses.
+            Assert.That(
+                VerifyAgainstOutlineContainerProfile(
+                    MultiEvidence(
+                        shaderName: OutlineContainerName,
+                        assetGuid: OutlineContainerGuid,
+                        shaderDigest: new string('0', 64)),
+                    out var digestRefusal),
+                Is.False,
+                "the outline digest slot does not accept a foreign value");
+            Assert.That(
+                digestRefusal,
+                Is.EqualTo(LilToonMultiResolutionRefusal.AttestationFailed));
+
+            // Evidence B: the fully correct pre-flip outline digest under an
+            // unadmitted version label. The version term refuses before any
+            // digest work. Pre-flip the const gate refuses both shapes;
+            // post-flip the correct per-version pairing verifies and every
+            // swapped pairing refuses.
+            Assert.That(
+                VerifyAgainstOutlineContainerProfile(
+                    MultiEvidence(
+                        shaderName: OutlineContainerName,
+                        assetGuid: OutlineContainerGuid,
+                        packageVersion: "2.3.5"),
+                    out var versionRefusal),
+                Is.False,
+                "an unadmitted version label refuses outright");
+            Assert.That(
+                versionRefusal,
                 Is.EqualTo(LilToonMultiResolutionRefusal.AttestationFailed));
         }
 

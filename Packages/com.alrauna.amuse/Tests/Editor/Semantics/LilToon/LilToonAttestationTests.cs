@@ -1754,12 +1754,49 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 Is.EqualTo(LilToonSemanticDiagnosticCode.UnsupportedShader));
         }
 
+        // --- admitted set (T1) ---
+
+        [Test]
+        public void AdmittedVersionRows_AreTheMeasuredSet()
+        {
+            var rows = LilToonSourceAttestation.AdmittedRows();
+
+            Assert.That(rows.Select(row => row.Version).ToList(), Is.Unique);
+            Assert.That(rows.Select(row => row.Version).ToList(), Is.EqualTo(
+                new[] { "2.3.0", "2.3.1", "2.3.2", "2.3.3", "2.3.4" }));
+            Assert.That(rows[1].IncludeDigest, Is.EqualTo(rows[2].IncludeDigest),
+                "2.3.1 through 2.3.3 ship one shared tree");
+            Assert.That(rows[3].IncludeDigest, Is.EqualTo(rows[2].IncludeDigest),
+                "2.3.1 through 2.3.3 ship one shared tree");
+        }
+
         [Test]
         public void Verify_WrongPackageVersion_IsRefused()
         {
             Assert.That(
                 LilToonSourceAttestation.TryVerifyLilToonIdentity(
                     Evidence(packageVersion: "2.3.5"), out var diagnostic),
+                Is.False);
+            Assert.That(
+                diagnostic.Code,
+                Is.EqualTo(LilToonSemanticDiagnosticCode.UnsupportedVersion));
+        }
+
+        [TestCase("2.4.1")]
+        [TestCase("2.5.0")]
+        [TestCase("2.3.10")]
+        [TestCase("2.4")]
+        [TestCase("02.4.0")]
+        public void Verify_NonAdmittedVersionForms_Refuse(string version)
+        {
+            // Evidence exactly as Verify_WrongPackageVersion_IsRefused
+            // builds it, with only the case version substituted. The
+            // comparison is ordinal, so every nearby but non-admitted
+            // spelling refuses as an unsupported version and never
+            // normalizes into an admitted row.
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                    Evidence(packageVersion: version), out var diagnostic),
                 Is.False);
             Assert.That(
                 diagnostic.Code,
@@ -1783,6 +1820,123 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             Assert.That(
                 LilToonSourceAttestation.TryVerifyLilToonIdentity(
                     Evidence(includeDigest: new string('0', 64)), out var diagnostic),
+                Is.False);
+            Assert.That(
+                diagnostic.Code,
+                Is.EqualTo(LilToonSemanticDiagnosticCode.ModifiedShaderSource));
+            Assert.That(diagnostic.Detail, Does.Contain("Includes"));
+        }
+
+        // --- real gathers over a stand-in tree on disk (G2). The mismatch
+        // tests above feed synthetic evidence; these drive the production
+        // gather path and pin the diagnostic code it reports. ---
+
+        /// <summary>
+        /// Builds a stand-in include tree on disk and runs the production
+        /// gather over it: <see cref="LilToonIncludeTree.Enumerate"/> with the
+        /// production hash, then
+        /// <see cref="LilToonSourceAttestation.ComputeIncludeTreeDigest"/> —
+        /// exactly the two steps the gather front half runs over a live
+        /// project's include folder. The admitted row digests are SHA-256
+        /// over the official tag artifacts, whose bytes no test can
+        /// reconstruct, so the stand-in tree stands in for any tree that is
+        /// not the claimed version's — the drift case itself. The scratch
+        /// folder is the test's own and goes away on return.
+        /// </summary>
+        private static string GatheredStandInIncludeDigest()
+        {
+            var includeFolder = Path.Combine(
+                Path.GetTempPath(), "AmuseTests_StandInIncludes");
+            if (Directory.Exists(includeFolder))
+            {
+                Directory.Delete(includeFolder, recursive: true);
+            }
+
+            Directory.CreateDirectory(Path.Combine(includeFolder, "Sub"));
+            File.WriteAllText(
+                Path.Combine(includeFolder, "lil_common.hlsl"),
+                "// stand-in\nfloat lil StandInCommon();\n");
+            File.WriteAllText(
+                Path.Combine(includeFolder, "Sub", "lil_extra.hlsl"),
+                "// stand-in extra\nvoid lil StandInExtra();\n");
+
+            var tree = LilToonIncludeTree.Enumerate(
+                includeFolder,
+                fullPath => File.Exists(fullPath)
+                    ? File.ReadAllText(fullPath)
+                    : null,
+                LilToonSourceAttestation.ComputeNormalizedSourceHash);
+            var digest =
+                LilToonSourceAttestation.ComputeIncludeTreeDigest(tree.Files);
+
+            Directory.Delete(includeFolder, recursive: true);
+            return digest;
+        }
+
+        [Test]
+        public void GatheredTreeMatchingAnOlderRowWhileVersionIsNewer_IsModifiedSource()
+        {
+            var gathered = GatheredStandInIncludeDigest();
+
+            // The stand-in tree reproduces no admitted row's bytes, so it
+            // plays the older row's tree under the newest version's label.
+            Assert.That(
+                LilToonSourceAttestation.AdmittedRows()
+                    .Any(row => row.IncludeDigest == gathered),
+                Is.False,
+                "the stand-in gather must not reproduce an admitted tree");
+
+            // The claimed version is admitted on purpose: the version gate
+            // must pass and the include gate must be the one that fires.
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                    Evidence(packageVersion: "2.3.4", includeDigest: gathered),
+                    out var diagnostic),
+                Is.False);
+            Assert.That(
+                diagnostic.Code,
+                Is.EqualTo(LilToonSemanticDiagnosticCode.ModifiedShaderSource),
+                "an admitted version over a foreign tree is modified " +
+                "source, never UnsupportedVersion");
+            Assert.That(diagnostic.Detail, Does.Contain("Includes"));
+        }
+
+        [Test]
+        public void MutatedProfileDigestInput_OpaqueFamily_ReportsModifiedSource()
+        {
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                    Evidence(includeDigest: GatheredStandInIncludeDigest()),
+                    out var diagnostic),
+                Is.False);
+            Assert.That(
+                diagnostic.Code,
+                Is.EqualTo(LilToonSemanticDiagnosticCode.ModifiedShaderSource));
+            Assert.That(diagnostic.Detail, Does.Contain("Includes"));
+        }
+
+        [Test]
+        public void MutatedProfileDigestInput_CutoutFamily_ReportsModifiedSource()
+        {
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonCutoutIdentity(
+                    CutoutEvidence(includeDigest: GatheredStandInIncludeDigest()),
+                    out var diagnostic),
+                Is.False);
+            Assert.That(
+                diagnostic.Code,
+                Is.EqualTo(LilToonSemanticDiagnosticCode.ModifiedShaderSource));
+            Assert.That(diagnostic.Detail, Does.Contain("Includes"));
+        }
+
+        [Test]
+        public void MutatedProfileDigestInput_TransparentFamily_ReportsModifiedSource()
+        {
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonTransparentIdentity(
+                    TransparentEvidence(
+                        includeDigest: GatheredStandInIncludeDigest()),
+                    out var diagnostic),
                 Is.False);
             Assert.That(
                 diagnostic.Code,

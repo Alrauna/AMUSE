@@ -404,6 +404,16 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 (PackageVersion, IncludeTreeDigest),
             };
 
+        /// <summary>
+        /// Read-only snapshot of the admitted version rows for first-party
+        /// test and research consumers (T1, R1). Returns a copy, so a caller
+        /// can never observe or cause in-place mutation.
+        /// </summary>
+        internal static IReadOnlyList<(string Version, string IncludeDigest)> AdmittedRows()
+        {
+            return AdmittedPackageVersions.ToArray();
+        }
+
         private static bool IsAdmittedPackageVersion(string packageVersion)
         {
             foreach (var row in AdmittedPackageVersions)
