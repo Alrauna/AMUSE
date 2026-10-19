@@ -50,6 +50,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             return _scope.Track(obj);
         }
 
+        /// <summary>Creates the shared temp folder through the held scope
+        /// when it is absent.</summary>
+        internal void EnsureSharedTempFolder() => _scope.EnsureTempFolder();
+
         protected Material NewFixtureMaterial()
         {
             return Track(CreateVerifiedMaterial());

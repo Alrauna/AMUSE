@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using Alrauna.Amuse.Editor.Semantics;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
+using Alrauna.Amuse.Tests.Editor.Shared;
 using NUnit.Framework;
 using UnityEngine;
 
@@ -16,6 +17,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
     public sealed class PoiyomiAttestationTests
     {
         private const string TempFolder = "Assets/AmuseTests_Temp";
+
+        private readonly TestTransientScope _scope =
+            new TestTransientScope(TempFolder);
 
         // A synthetic Poiyomi-shaped source. The memo hashes raw file text,
         // so the fixture needs no installed Poiyomi package.
@@ -46,7 +50,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void TheSourceHashMemoClearsAtTheBuildBoundary()
         {
-            Directory.CreateDirectory(TempFolder);
+            _scope.EnsureTempFolder();
             var fixturePath = Path.Combine(
                 TempFolder,
                 "attestation_memo_" + Guid.NewGuid().ToString("N") + ".shader");
@@ -92,6 +96,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             finally
             {
                 File.Delete(fixturePath);
+                _scope.TearDown();
             }
         }
     }
