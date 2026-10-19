@@ -2594,6 +2594,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             "154aa68f85633b643f27a82309dc9d755e1955f0e8de7d21c9f62120c6628416")]
         [TestCase("2.3.3",
             "154aa68f85633b643f27a82309dc9d755e1955f0e8de7d21c9f62120c6628416")]
+        [TestCase("2.3.4",
+            "6e2dce6cb3073d5e04b569a14df8e0944c93ca408999fb42d7c717050c48fd46")]
         [TestCase("2.4.0",
             "549c3b552f8f001f2a2f6059acf4c8f0df6e9475f80b8d155784dabb68e7b670")]
         public void Verify_AcceptsAdmittedPatchVersionWithItsOwnTree(

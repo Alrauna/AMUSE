@@ -171,8 +171,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     // shared batch request carries. The verdict order, the
                     // stored record, and the family rewrite are the
                     // production ones; only the row source is injected,
-                    // because the production table stays empty until the
-                    // Task 2 digest measurement.
+                    // so the synthetic identity stays isolated from the
+                    // production AdmittedMultiVersions rows (2.3.4
+                    // measured 2026-10-01, 2.4.0 measured 2026-10-19).
                     multiResolution = ResolveMultiThroughProfileSeam(
                         evidence[index],
                         request.CaptureKeywords,

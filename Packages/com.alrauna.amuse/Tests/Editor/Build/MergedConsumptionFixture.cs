@@ -133,13 +133,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         [TearDown]
         public void TearDown()
         {
+            AmusePlatformFinishPass.PresenterForTests = null;
             Assert.That(
                 RecordingDeclineConsentPresenter.SubjectLog,
                 Is.Empty,
                 "a merged-consumption build must raise zero consent " +
                 "subjects now that the installed 2.4.0 attests; a " +
                 "recorded subject names what the attestation still refuses");
-            AmusePlatformFinishPass.PresenterForTests = null;
             _filteringPin.Dispose();
             OptimizerMergeObservation.Reset();
             _scope.TearDown();

@@ -29,7 +29,9 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// <summary>
         /// The two supported Multi container identities. They are live
         /// container names at the upstream pin, not measured digests: the
-        /// Task 2 row table carries the measured half of each identity.
+        /// measured half of each identity lives in the version-aware
+        /// AdmittedMultiVersions rows (2.3.4 measured 2026-10-01, 2.4.0
+        /// measured 2026-10-19).
         /// </summary>
         internal const string BaseContainerShaderName = "_lil/lilToonMulti";
         internal const string OutlineContainerShaderName =
@@ -122,8 +124,10 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// <summary>
         /// The profile injection seam, shaped for the Task 6 verify
         /// fixtures: the gathered identity evidence and one injected
-        /// container row, so the admit path runs without the Task 2
-        /// measured digests. The verdict order is the resolver's own.
+        /// container row, so the synthetic fixtures run beside the shipped
+        /// AdmittedMultiVersions rows (2.3.4 measured 2026-10-01, 2.4.0
+        /// measured 2026-10-19) without touching them. The verdict order
+        /// is the resolver's own.
         /// </summary>
         internal static bool Resolve(
             CapturedMaterialEvidence evidence,
