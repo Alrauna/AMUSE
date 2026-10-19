@@ -256,7 +256,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 // from the _MainTex assignment. The red field, not
                 // alpha, is the mask channel.
                 new TexturePropertyEvidenceRequest(
-                    "_AlphaMask",
+                    LilToonProperties.AlphaMask,
                     TextureEvidenceKinds.ScaleOffset |
                     TextureEvidenceKinds.SourceIdentity |
                     TextureEvidenceKinds.RedChannel),
