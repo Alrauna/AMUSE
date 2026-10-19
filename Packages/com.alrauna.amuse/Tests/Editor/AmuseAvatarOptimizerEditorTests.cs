@@ -970,38 +970,39 @@ namespace Alrauna.Amuse.Tests.Editor
         }
 
         /// <summary>
-        /// --- Falsifier 3: an implementation of AlphaSeparatorLabelWidth
-        /// that ignores EditorGUI.indentLevel and always returns
-        /// ceil(widest) + 2. The depth-3 assertion fails. ---
+        /// --- Falsifier 1: an implementation that keeps the subtract rule,
+        /// `ceil(widest) + 2 - indentLevel * 15`. It produced the truncation
+        /// the owner reported, and it ignores the budget and the floor, so
+        /// every assertion fails against it. An implementation that ignores
+        /// the budget returns the text term everywhere and fails the last
+        /// three. An implementation that drops the 1 pixel floor fails the
+        /// third and fourth assertions with a zero or negative result. ---
         /// </summary>
         [Test]
-        public void AlphaSeparatorLabelWidthSubtractsTheRowIndent()
+        public void AlphaSeparatorLabelWidthBalancesTextAndControlBudget()
         {
-            var original = EditorGUI.indentLevel;
-            try
-            {
-                EditorGUI.indentLevel = 0;
-                Assert.That(
-                    Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
-                        .AlphaSeparatorLabelWidth(200f),
-                    Is.EqualTo(202f));
-                EditorGUI.indentLevel = 3;
-                Assert.That(
-                    Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
-                        .AlphaSeparatorLabelWidth(200f),
-                    Is.EqualTo(157f));
-                // No-op guard: the depth-1 case pins the per-level constant,
-                // so a rewrite cannot silently redefine the helper.
-                EditorGUI.indentLevel = 1;
-                Assert.That(
-                    Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
-                        .AlphaSeparatorLabelWidth(50f),
-                    Is.EqualTo(37f));
-            }
-            finally
-            {
-                EditorGUI.indentLevel = original;
-            }
+            Assert.That(
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                    .AlphaSeparatorLabelWidth(200f, 60f, 500f),
+                Is.EqualTo(262f),
+                "a roomy row must fit the widest label plus the indent");
+            Assert.That(
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                    .AlphaSeparatorLabelWidth(200f, 60f, 200f),
+                Is.EqualTo(126f),
+                "a narrow row must cap the label at the control budget");
+            Assert.That(
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                    .AlphaSeparatorLabelWidth(200f, 60f, 0f),
+                Is.EqualTo(1f),
+                "a starved row must keep the floor, so the width stays valid");
+            // No-op guard: a negative budget must also floor, so a rewrite
+            // cannot silently drop the floor term.
+            Assert.That(
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                    .AlphaSeparatorLabelWidth(200f, 60f, -50f),
+                Is.EqualTo(1f),
+                "a negative budget must never produce an invalid width");
         }
 
         /// <summary>
