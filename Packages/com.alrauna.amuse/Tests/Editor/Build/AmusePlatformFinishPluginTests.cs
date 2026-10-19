@@ -457,6 +457,74 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// Decision V8 behavioral pin: a granted consent is never stored,
+        /// so the very next build must ask again. Two back-to-back builds
+        /// share one recording granting presenter; a consent memory
+        /// anywhere under the gate would answer the second build without
+        /// calling the presenter and collapse the ask count to one. Each
+        /// ask must also carry the subject, so a memory keyed to a bare
+        /// yes with no subject list cannot slip through.
+        /// </summary>
+        [Test]
+        public void GrantedConsentIsNeverStored_TheNextBuildAsksAgain()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var asks = new List<IReadOnlyList<string>>();
+            bool GrantAndRecord(IReadOnlyList<string> subjects)
+            {
+                asks.Add(subjects);
+                return true;
+            }
+
+            RunGrantedConsentBuild(
+                GrantAndRecord, "AMUSE consent re-ask first fixture");
+            RunGrantedConsentBuild(
+                GrantAndRecord, "AMUSE consent re-ask second fixture");
+
+            Assert.That(asks, Has.Count.EqualTo(2),
+                "a granted consent must never be remembered: the second " +
+                "build must ask again (decision V8)");
+            Assert.That(asks[0], Is.Not.Empty,
+                "the first build must have carried a consent subject");
+            foreach (var subject in asks[0])
+            {
+                Assert.That(asks[1], Does.Contain(subject),
+                    "the second ask must carry the same subject: "
+                    + subject);
+            }
+        }
+
+        /// <summary>
+        /// One granted-run build on the public Execute path, shaped like
+        /// GrantedConsentLetsThePipelineRun, with the caller's presenter.
+        /// </summary>
+        private static void RunGrantedConsentBuild(
+            VersionConsentPresenter consentPresenter, string fixtureName)
+        {
+            var root = new GameObject(fixtureName);
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            root.AddComponent<LineRenderer>();
+
+            try
+            {
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+
+                AmusePlatformFinishPass.Execute(
+                    context,
+                    SupportedFacts(unityVersion: "2022.3.23f1"),
+                    consentPresenter);
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
         /// A build target with no proof policy must name the fact before
         /// analysis runs. Arming the test-only target override keeps the
         /// editor's own build target untouched while the barrier runs on
