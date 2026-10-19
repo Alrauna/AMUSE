@@ -140,7 +140,7 @@ public void AlphaSeparatorLabelWidthBalancesTextAndControlBudget()
 }
 ```
 
-The pinned values, computed against the exact code: budget `500 - 72 - 2` = 426 beats the text term `ceil(200) + 2 + 60` = 262, so 262 wins. Budget `200 - 74` = 126 caps the label at 126. Budgets 0 and -50 floor at 1. The old subtract rule runs at the ambient level 0 in a plain test and returns 202 for all four calls, so the last three fail against it. An implementation that ignores the budget returns 262 for all four. An implementation that floors at 0 instead of 1 fails the third and fourth assertions.
+The pinned values, computed against the exact code: budget `500 - 72 - 2` = 426 beats the text term `ceil(200) + 2 + 60` = 262, so 262 wins. Budget `200 - 74` = 126 caps the label at 126. Budgets 0 and -50 floor at 1. The old subtract rule runs at the ambient level 0 in a plain test and returns 202 for all four calls, so every assertion fails against it. An implementation that ignores the budget returns 262 for all four. An implementation that floors at 0 instead of 1 fails the third and fourth assertions.
 
 After the helper test passes: run the full `Alrauna.Amuse.Tests.Editor` group and record counts. Then the owner performs a visual check at three inspector widths, roughly 700, 505, and 373 pixels, against the acceptance criteria. The 505 pixel check must show full labels, because it sits above the crossover. The 373 pixel check must show full option text in the dropdowns, full numbers in the slider boxes, and may show truncated labels and vanished tracks. The owner's eye is the oracle for the layout claim, as in the 2026-10-05 and 2026-10-06 rounds.
 
