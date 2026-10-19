@@ -1127,5 +1127,61 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(clips.Count, Is.EqualTo(1),
                 "CommittedClips must not duplicate clips from a blend tree shared across layers.");
         }
+
+        /// <summary>
+        /// An exception during reference inversion on one pair must not abort
+        /// reversion and cleanup for subsequent pairs.
+        /// </summary>
+        [Test]
+        public void ExceptionDuringPairReversionDoesNotAbortSubsequentPairs()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(
+                TransientUnlockTestLifecycle.TempFolder);
+
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE exception isolation fixture"));
+            var locked1 = Track(TransientUnlockTestLifecycle.LockedMaterial("Locked1"));
+            var clone1 = Track(Object.Instantiate(locked1));
+            clone1.name = locked1.name + "_AmuseUnlockedClone";
+
+            var locked2 = Track(TransientUnlockTestLifecycle.LockedMaterial("Locked2"));
+            var clone2 = Track(Object.Instantiate(locked2));
+            clone2.name = locked2.name + "_AmuseUnlockedClone";
+
+            var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());
+            var renderer1 = TransientUnlockTestLifecycle.AddRenderer(root, mesh, clone1);
+            var renderer2 = TransientUnlockTestLifecycle.AddRenderer(root, mesh, clone2);
+
+            var context = new BuildContext(root, TransientUnlockTestLifecycle.TempFolder);
+            var finishState = context.GetState<AmusePlatformFinishState>();
+            finishState.Lifecycle = HostLifecycleCapability.Evaluate(
+                TransientUnlockTestLifecycle.SupportedFacts());
+            finishState.AnimatorBindings = GenericPlatformAnimatorBindings.Instance;
+
+            var window = context.GetState<TransientUnlockWindowState>();
+            var pair1 = window.OpenPair(locked1);
+            pair1.UnlockedClone = clone1;
+            pair1.AddSlot(renderer1, 0);
+
+            var pair2 = window.OpenPair(locked2);
+            pair2.UnlockedClone = clone2;
+            pair2.AddSlot(renderer2, 0);
+            var holder = Track(new GameObject("AMUSE un-inverted holder"));
+            holder.transform.SetParent(root.transform, false);
+            var foreignRenderer = holder.AddComponent<MeshRenderer>();
+            foreignRenderer.sharedMaterials = new[] { clone1 };
+
+            // Destroy renderer1's gameObject to provoke an exception during renderer access
+            Object.DestroyImmediate(renderer1.gameObject);
+
+            TransientUnlockWindowClose.Execute(context);
+
+            Assert.That(clone1 != null, Is.True, "faulted pair must retain clone");
+            Assert.That(finishState.SlotRefusalCount(
+                AlphaSeparationSlotRefusal.TransientUnlockCloneRetained), Is.GreaterThan(0));
+
+            Assert.That(renderer2.sharedMaterials[0], Is.EqualTo(locked2));
+            Assert.That(clone2 == null, Is.True, "subsequent pair must complete reversion and destroy clone");
+            Assert.That(window.PairFor(locked2), Is.Null, "successful pair must be removed from window");
+        }
     }
 }

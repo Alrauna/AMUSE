@@ -123,14 +123,27 @@ namespace Alrauna.Amuse.Editor.Build
 
             foreach (var pair in window.OpenPairs.ToList())
             {
-                InvertReferences(committedClips, pair);
-
-                ReassertShippedSlots(pair, recorded);
-
-                if (DestroyPairCopiesOrNameRetention(
-                        context, finishState, pair, committedClips, graph))
+                try
                 {
-                    window.Remove(pair);
+                    InvertReferences(committedClips, pair);
+                    ReassertShippedSlots(pair, recorded);
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogException(ex);
+                }
+
+                try
+                {
+                    if (DestroyPairCopiesOrNameRetention(
+                            context, finishState, pair, committedClips, graph))
+                    {
+                        window.Remove(pair);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.LogException(ex);
                 }
             }
         }
@@ -188,36 +201,43 @@ namespace Alrauna.Amuse.Editor.Build
         {
             foreach (var slot in pair.Slots)
             {
-                var renderer = slot.Renderer;
-                if (renderer == null)
+                try
                 {
-                    continue;
-                }
+                    var renderer = slot.Renderer;
+                    if (renderer == null)
+                    {
+                        continue;
+                    }
 
-                var live = renderer.sharedMaterials;
-                if (slot.SlotIndex >= live.Length)
+                    var live = renderer.sharedMaterials;
+                    if (slot.SlotIndex >= live.Length)
+                    {
+                        continue;
+                    }
+
+                    var current = live[slot.SlotIndex];
+                    if (!NamesSwappedCopy(current, pair.LockedOriginal) &&
+                        !NamesSwappedCopy(current, pair.UnlockedClone))
+                    {
+                        continue;
+                    }
+
+                    var write = RecordedWriteMaterial(
+                        recorded, renderer, slot.SlotIndex);
+                    if (write == null || write == pair.UnlockedClone)
+                    {
+                        // No recorded write, or the write is the clone the
+                        // reversion just removed: L is the shipped state.
+                        continue;
+                    }
+
+                    live[slot.SlotIndex] = write;
+                    renderer.sharedMaterials = live;
+                }
+                catch (Exception ex)
                 {
-                    continue;
+                    Debug.LogException(ex);
                 }
-
-                var current = live[slot.SlotIndex];
-                var holdsLocked = current == pair.LockedOriginal;
-                if (!holdsLocked)
-                {
-                    continue;
-                }
-
-                var write = RecordedWriteMaterial(
-                    recorded, renderer, slot.SlotIndex);
-                if (write == null || write == pair.UnlockedClone)
-                {
-                    // No recorded write, or the write is the clone the
-                    // reversion just removed: L is the shipped state.
-                    continue;
-                }
-
-                live[slot.SlotIndex] = write;
-                renderer.sharedMaterials = live;
             }
         }
 
@@ -268,30 +288,44 @@ namespace Alrauna.Amuse.Editor.Build
 
             foreach (var slot in pair.Slots)
             {
-                var renderer = slot.Renderer;
-                if (renderer == null)
+                try
                 {
-                    continue;
-                }
-
-                var live = renderer.sharedMaterials;
-                var changed = false;
-                for (var index = 0; index < live.Length; index++)
-                {
-                    if (NamesSwappedCopy(live[index], clone))
+                    var renderer = slot.Renderer;
+                    if (renderer == null)
                     {
-                        live[index] = locked;
-                        changed = true;
+                        continue;
+                    }
+
+                    var live = renderer.sharedMaterials;
+                    var changed = false;
+                    for (var index = 0; index < live.Length; index++)
+                    {
+                        if (NamesSwappedCopy(live[index], clone))
+                        {
+                            live[index] = locked;
+                            changed = true;
+                        }
+                    }
+
+                    if (changed)
+                    {
+                        renderer.sharedMaterials = live;
                     }
                 }
-
-                if (changed)
+                catch (Exception ex)
                 {
-                    renderer.sharedMaterials = live;
+                    Debug.LogException(ex);
                 }
             }
 
-            InvertCommittedCurves(committedClips, pair);
+            try
+            {
+                InvertCommittedCurves(committedClips, pair);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogException(ex);
+            }
         }
 
         /// <summary>
