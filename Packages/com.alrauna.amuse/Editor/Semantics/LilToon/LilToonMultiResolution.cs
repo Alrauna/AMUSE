@@ -46,8 +46,6 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             "Hidden/lilToonMultiGem",
         };
 
-        private const string ModeProperty = "_TransparentMode";
-
         /// <summary>
         /// The combined Multi evidence request: the alpha facts of all three
         /// resolved regular families, plus the mode scalar and every
@@ -95,7 +93,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         {
             var consulted = LilToonMultiModeGate.ConsultedScalarProperties;
             var scalars = new string[consulted.Length + 1];
-            scalars[0] = ModeProperty;
+            scalars[0] = LilToonProperties.TransparentMode;
             Array.Copy(
                 consulted, 0, scalars, 1, consulted.Length);
             return scalars;
@@ -359,7 +357,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             out int mode,
             out LilToonMultiResolutionRefusal refusal)
         {
-            if (!evidence.TryGetScalar(ModeProperty, out var value))
+            if (!evidence.TryGetScalar(LilToonProperties.TransparentMode, out var value))
             {
                 value = 0f;
             }

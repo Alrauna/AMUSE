@@ -27,7 +27,7 @@ namespace Alrauna.Amuse.Editor.Semantics
             if (material == null) throw new ArgumentNullException(nameof(material));
 
             renderQueue = material.renderQueue;
-            renderType = material.GetTag("RenderType", false);
+            renderType = material.GetTag(CanonicalOpaqueVerification.RenderTypeTagName, false);
         }
     }
 }

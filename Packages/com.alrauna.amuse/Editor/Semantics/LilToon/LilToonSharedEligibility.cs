@@ -51,7 +51,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             //    caller learns it through DepthTestDivergence. The recipe
             //    still writes 4. Without the policy that write is a no-op.
             //    With the policy it is the reported normalization.
-            var depthComparison = Read(schema, values, "_ZTest");
+            var depthComparison = Read(schema, values, LilToonProperties.ZTest);
             if (depthComparison !=
                     OpaqueConversionFactors.LEqualDepthComparison &&
                 !(allowDepthTestChange &&
@@ -65,7 +65,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             // 6. Depth write. The canonical target writes depth; a source
             //    authored with ZWrite off expresses different visibility
             //    intent than the recipe preserves.
-            if (Read(schema, values, "_ZWrite") !=
+            if (Read(schema, values, LilToonProperties.ZWrite) !=
                 OpaqueConversionFactors.DepthWriteOn)
             {
                 return LilToonOpaqueConversionEligibility.Refused(
@@ -75,7 +75,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             // 7. Color mask. The canonical target writes all channels; a
             //    masked material deliberately suppresses channel output the
             //    recipe would restore.
-            if (Read(schema, values, "_ColorMask") !=
+            if (Read(schema, values, LilToonProperties.ColorMask) !=
                 OpaqueConversionFactors.ColorMaskAll)
             {
                 return LilToonOpaqueConversionEligibility.Refused(
@@ -85,8 +85,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             // 8. Depth offset. The canonical target applies none; a material
             //    authored with an offset expresses polygon-offset intent the
             //    recipe would erase.
-            if (Read(schema, values, "_OffsetFactor") != 0f ||
-                Read(schema, values, "_OffsetUnits") != 0f)
+            if (Read(schema, values, LilToonProperties.OffsetFactor) != 0f ||
+                Read(schema, values, LilToonProperties.OffsetUnits) != 0f)
             {
                 return LilToonOpaqueConversionEligibility.Refused(
                     LilToonOpaqueConversionRefusal.UnsupportedDepthOffset);
@@ -99,24 +99,24 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             //    Add: the accepted Max operation in ForwardAdd does not
             //    carry over here, and any other operation changes how RGB
             //    is combined, not just how factors weigh it.
-            if (Read(schema, values, "_BlendOp") !=
+            if (Read(schema, values, LilToonProperties.BlendOp) !=
                     OpaqueConversionFactors.BlendOpAdd ||
                 !OpaqueConversionFactors.IsUnitSourceFactorAtAlphaOne(
-                    Read(schema, values, "_SrcBlend")) ||
+                    Read(schema, values, LilToonProperties.SrcBlend)) ||
                 !OpaqueConversionFactors.IsZeroDestinationFactorAtAlphaOne(
-                    Read(schema, values, "_DstBlend")))
+                    Read(schema, values, LilToonProperties.DstBlend)))
             {
                 return LilToonOpaqueConversionEligibility.Refused(
                     LilToonOpaqueConversionRefusal.UnsupportedBlendEquation);
             }
 
             // 10. Base alpha blend, same degeneracy argument as gate 9.
-            if (Read(schema, values, "_BlendOpAlpha") !=
+            if (Read(schema, values, LilToonProperties.BlendOpAlpha) !=
                     OpaqueConversionFactors.BlendOpAdd ||
                 !OpaqueConversionFactors.IsUnitSourceFactorAtAlphaOne(
-                    Read(schema, values, "_SrcBlendAlpha")) ||
+                    Read(schema, values, LilToonProperties.SrcBlendAlpha)) ||
                 !OpaqueConversionFactors.IsZeroDestinationFactorAtAlphaOne(
-                    Read(schema, values, "_DstBlendAlpha")))
+                    Read(schema, values, LilToonProperties.DstBlendAlpha)))
             {
                 return LilToonOpaqueConversionEligibility.Refused(
                     LilToonOpaqueConversionRefusal
@@ -134,12 +134,12 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             //    Max into both, and an Add-kept ForwardAdd pass would
             //    double-composite against the base pass.
             if (!OpaqueConversionFactors.IsUnitSourceFactorAtAlphaOne(
-                    Read(schema, values, "_SrcBlendFA")) ||
-                Read(schema, values, "_DstBlendFA") !=
+                    Read(schema, values, LilToonProperties.SrcBlendFa)) ||
+                Read(schema, values, LilToonProperties.DstBlendFa) !=
                 OpaqueConversionFactors.BlendFactorOne ||
-                Read(schema, values, "_BlendOpFA") !=
+                Read(schema, values, LilToonProperties.BlendOpFa) !=
                 OpaqueConversionFactors.BlendOpMax ||
-                Read(schema, values, "_BlendOpAlphaFA") !=
+                Read(schema, values, LilToonProperties.BlendOpAlphaFa) !=
                 OpaqueConversionFactors.BlendOpMax)
             {
                 return LilToonOpaqueConversionEligibility.Refused(
@@ -155,7 +155,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             //     shared or widened across families (design §11; T1 §9.2).
             //     A NaN cutoff never reaches this comparison: gate 2
             //     already refused it.
-            if (Read(schema, values, "_Cutoff") > maxProvableCutoff)
+            if (Read(schema, values, LilToonProperties.Cutoff) > maxProvableCutoff)
             {
                 return LilToonOpaqueConversionEligibility.Refused(
                     LilToonOpaqueConversionRefusal
