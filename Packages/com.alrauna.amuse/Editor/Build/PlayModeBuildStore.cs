@@ -53,18 +53,23 @@ namespace Alrauna.Amuse.Editor.Build
             if (component == null) return string.Empty;
             return string.Join(";",
                 activeTarget.ToString(),
+                component.AmuseDisabled ? "1" : "0",
+                component.AlphaSeparatorEnabled ? "1" : "0",
                 component.PreserveTransparencyMaxMipLevel,
                 component.PreserveTransparencyMinTextureSize,
-                component.PolygonMinimumOpaqueCoveragePercent,
                 component.MinimumOpaqueCoveragePercent,
                 component.MinimumOpaqueCoverageToPreservePercent,
                 component.CutoutPreserveTransparencyMaxMipLevel,
                 component.CutoutPreserveTransparencyMinTextureSize,
                 component.CutoutMinimumOpaqueCoveragePercent,
                 component.CutoutMinimumOpaqueCoverageToPreservePercent,
-                component.AllowDepthTestChange,
                 component.MinimumOpaqueAlphaPercent,
-                component.PolygonAlphaUpperClampPercent);
+                component.PolygonAlphaUpperClampPercent,
+                component.PolygonMinimumOpaqueCoveragePercent,
+                component.AcceptDesktopAnisotropyDifferences ? "1" : "0",
+                component.AcceptMobileAnisotropyDifferences ? "1" : "0",
+                component.IgnoreOutOfRangeMaterialSlots ? "1" : "0",
+                component.AllowDepthTestChange ? "1" : "0");
         }
 
         public static void Save(PlayModeBuildRecord record)

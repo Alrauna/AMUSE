@@ -65,7 +65,52 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 var fingerprint = PlayModeBuildStore.ComputePolicyFingerprint(
                     component, BuildTarget.StandaloneWindows64);
                 Assert.That(fingerprint, Does.StartWith("StandaloneWindows64;"));
-                Assert.That(fingerprint.Split(';').Length, Is.EqualTo(13));
+                Assert.That(fingerprint.Split(';').Length, Is.EqualTo(18));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void ComputePolicyFingerprintChangesWhenMasterSwitchesOrAnisotropyToggle()
+        {
+            var go = new GameObject("Avatar");
+            try
+            {
+                var component = go.AddComponent<AmuseAvatarOptimizer>();
+                var baseline = PlayModeBuildStore.ComputePolicyFingerprint(
+                    component, BuildTarget.StandaloneWindows64);
+
+                SetStoredBool(component, "_amuseDisabled", true);
+                var disabledFingerprint = PlayModeBuildStore.ComputePolicyFingerprint(
+                    component, BuildTarget.StandaloneWindows64);
+                Assert.That(disabledFingerprint, Is.Not.EqualTo(baseline));
+
+                SetStoredBool(component, "_amuseDisabled", false);
+                SetStoredBool(component, "_alphaSeparatorEnabled", false);
+                var separatorOffFingerprint = PlayModeBuildStore.ComputePolicyFingerprint(
+                    component, BuildTarget.StandaloneWindows64);
+                Assert.That(separatorOffFingerprint, Is.Not.EqualTo(baseline));
+
+                SetStoredBool(component, "_alphaSeparatorEnabled", true);
+                SetStoredBool(component, "_ignoreOutOfRangeMaterialSlots", false);
+                var ignoreSlotsFingerprint = PlayModeBuildStore.ComputePolicyFingerprint(
+                    component, BuildTarget.StandaloneWindows64);
+                Assert.That(ignoreSlotsFingerprint, Is.Not.EqualTo(baseline));
+
+                SetStoredBool(component, "_ignoreOutOfRangeMaterialSlots", true);
+                SetStoredBool(component, "_acceptDesktopAnisotropyDifferences", false);
+                var desktopAnisoFingerprint = PlayModeBuildStore.ComputePolicyFingerprint(
+                    component, BuildTarget.StandaloneWindows64);
+                Assert.That(desktopAnisoFingerprint, Is.Not.EqualTo(baseline));
+
+                SetStoredBool(component, "_acceptDesktopAnisotropyDifferences", true);
+                SetStoredBool(component, "_acceptMobileAnisotropyDifferences", false);
+                var mobileAnisoFingerprint = PlayModeBuildStore.ComputePolicyFingerprint(
+                    component, BuildTarget.StandaloneWindows64);
+                Assert.That(mobileAnisoFingerprint, Is.Not.EqualTo(baseline));
             }
             finally
             {
@@ -207,6 +252,19 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var serialized = new SerializedObject(component);
             serialized.FindProperty(field).intValue = value;
             serialized.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        private static void SetStoredBool(
+            AmuseAvatarOptimizer component, string propertyName, bool value)
+        {
+            var serialized = new SerializedObject(component);
+            var prop = serialized.FindProperty(propertyName)
+                ?? serialized.FindProperty("_" + char.ToLowerInvariant(propertyName[0]) + propertyName.Substring(1));
+            if (prop != null)
+            {
+                prop.boolValue = value;
+                serialized.ApplyModifiedPropertiesWithoutUndo();
+            }
         }
 
         [Test]
