@@ -220,6 +220,94 @@ namespace Alrauna.Amuse.Tests.Editor
             }
         }
 
+        /// <summary>
+        /// Known limit, recorded: SetSwitch applies modified properties,
+        /// so the C# property and the serialized value agree in every
+        /// state these tests arrange. The spec's gate-source rule (the
+        /// master gate reads the serialized property, not the C#
+        /// property) is enforced by transcribing the spec A3 code block
+        /// verbatim. No test can discriminate the one-repaint lag
+        /// without synthesizing a click through the drawn row, which
+        /// these tests do not do. A second recorded fact: the host
+        /// window paints several IMGUI events per repaint, so the
+        /// assertions pin the distinct recorded (value, indent) tuples
+        /// instead of a fire count, like the out-of-range model test
+        /// pins Does.Contain.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator SubSwitchHooksFireWithStoredValuesWhenMasterSwitchIsOn()
+        {
+            var component = NewHiddenComponent();
+            SetSwitch(component, "_alphaSeparatorEnabled", true);
+            SetSwitch(component, "_cutoutSeparatorEnabled", true);
+            SetSwitch(component, "_transparentSeparatorEnabled", false);
+            var cutoutDrawn = new List<(bool Value, int Indent)>();
+            var transparentDrawn = new List<(bool Value, int Indent)>();
+            Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                .OnCutoutSeparatorToggleDrawnForTest = value =>
+                cutoutDrawn.Add((value, EditorGUI.indentLevel));
+            Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                .OnTransparentSeparatorToggleDrawnForTest = value =>
+                transparentDrawn.Add((value, EditorGUI.indentLevel));
+            try
+            {
+                yield return RepaintThroughHostWindow(component);
+
+                Assert.That(cutoutDrawn, Is.Not.Empty,
+                    "the cutout sub-switch hook never fired");
+                Assert.That(cutoutDrawn.Distinct(),
+                    Is.EqualTo(new[] { (true, 1) }),
+                    "every cutout firing records the stored value, one " +
+                    "indent level below the master row");
+                Assert.That(transparentDrawn, Is.Not.Empty,
+                    "the transparent sub-switch hook never fired");
+                Assert.That(transparentDrawn.Distinct(),
+                    Is.EqualTo(new[] { (false, 1) }),
+                    "every transparent firing records the stored value, " +
+                    "one indent level below the master row");
+            }
+            finally
+            {
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                    .OnCutoutSeparatorToggleDrawnForTest = null;
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                    .OnTransparentSeparatorToggleDrawnForTest = null;
+            }
+        }
+
+        [UnityTest]
+        public IEnumerator SubSwitchHooksDoNotFireWhenMasterSwitchIsOff()
+        {
+            var component = NewHiddenComponent();
+            SetSwitch(component, "_alphaSeparatorEnabled", false);
+            var cutoutDrawn = new List<(bool Value, int Indent)>();
+            var transparentDrawn = new List<(bool Value, int Indent)>();
+            Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                .OnCutoutSeparatorToggleDrawnForTest = value =>
+                cutoutDrawn.Add((value, EditorGUI.indentLevel));
+            Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                .OnTransparentSeparatorToggleDrawnForTest = value =>
+                transparentDrawn.Add((value, EditorGUI.indentLevel));
+            try
+            {
+                yield return RepaintThroughHostWindow(component);
+
+                Assert.That(cutoutDrawn, Is.Empty,
+                    "the master switch off must hide the pair and fire " +
+                    "no cutout hook");
+                Assert.That(transparentDrawn, Is.Empty,
+                    "the master switch off must hide the pair and fire " +
+                    "no transparent hook");
+            }
+            finally
+            {
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                    .OnCutoutSeparatorToggleDrawnForTest = null;
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                    .OnTransparentSeparatorToggleDrawnForTest = null;
+            }
+        }
+
         [UnityTest]
         public IEnumerator PlainRepaintDoesNotRewriteStoredMipCap()
         {
