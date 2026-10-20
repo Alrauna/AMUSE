@@ -39,16 +39,15 @@ The Multi row set stays exactly `2.3.4` and `2.4.0` (`Editor/Semantics/LilToon/L
 4. Cross-combination discipline stays intact: the tree binding is exact per row, so a 2.4.1 version with a foreign tree refuses (`Editor/Semantics/LilToon/LilToonSourceAttestation.cs:2546-2560`).
 5. Test duty: new Multi cases pin the packaged 2.4.1 pairing verifies, and a 2.4.1 version with a foreign tree refuses, built on the `MultiEvidence` fixture (`Tests/Editor/Semantics/LilToonSourceAttestationTests.cs:246-289`). The Multi row audits (`Tests/Editor/Semantics/LilToon/LilToonAttestationTests.cs:1788-1795`, `:2257-2262`) stay unchanged, which is the point.
 
-### B3. Witnesses move to the static version 2.4.2
+### B3. Witnesses derive from the admitted row list at runtime
 
-Every site that uses `"2.4.1"` as the approved, non-row witness moves to `"2.4.2"`.
+Amended 2026-10-20, after first execution. The first revision pinned a static literal witness, `"2.4.2"`, with a named re-sweep obligation. The owner judged that maintenance debt overengineering. Every witness now derives at runtime from `AdmittedRows()`: one patch past the newest admitted row, or several patches past it for the distance form. Strictly past the newest row by construction, a derived witness is never a row itself and always pairs that row. This supersedes the static literal. No test edit ships with a future admission.
 
-1. `Tests/Editor/Build/VerifiedLilToonTestSeams.cs:476` `ApprovedRangeVendorVersion` to `"2.4.2"`, with its comment updated. Nothing else in the fixture changes. Its stand-in digests mismatch every pin by construction. Drift marker: when upstream ships a real 2.4.2, or when a later admission makes 2.4.2 a row, the witness must be re-swept to a version outside the rows. Runtime derivation from the row list is the escape hatch. The comment at `:469-476` carries this obligation.
-2. `ApprovedRangePatchWithTheNearestRowTreeVerifies` (`Tests/Editor/Semantics/LilToon/LilToonAttestationTests.cs:1838-1858`): the `"2.4.1"` TestCase becomes `"2.4.2"`. Its comment now says 2.4.2 pairs the 2.4.1 row. `"2.4.9"` stays and pairs 2.4.1.
-3. `ApprovedRangeVersionWithAForeignTreeReportsModifiedSource` (`:1853-1870`): version `"2.4.1"` becomes `"2.4.2"`. The comment names the 2.4.1 row as the pairing target. The foreign tree stays the 2.3.4 digest.
-4. `Verify_AcceptsApprovedNonRowVersionWithTheNearestRowTree` and its doc comment: the test body moves automatically, because the evidence helper coalesces to the `IncludeTreeDigest` constant. The comment's "(2.4.0)" pairing target becomes the 2.4.1 row, or the comment goes version-generic.
-5. The consent-core approved witnesses in `Tests/Editor/Semantics/UnityMaterialSemanticsTests.cs` (`:965`, `:992`, `:1089`, `:1112`) keep version `"2.4.1"`. Approval is range-keyed, not row-keyed (`:460-468`), so they stay valid. This is the documented reason they do not move.
-6. `Tests/Editor/Build/AlphaSeparationPreparationTests.cs:3332-3333` and `:3673-3674` consume the fixture constant and move with it. The explicit `"2.5.0"` boundary at `:3487-3488` stays.
+1. `Tests/Editor/Build/VerifiedLilToonTestSeams.cs` `ApprovedRangeVendorVersion` is a `static readonly` field derived through the internal `ApprovedWitnessVersion` helper (`static` because derivation needs the row list at runtime; every consumer reads it as a plain value, so no call site changes). Its comment states the derivation and drops the re-sweep obligation.
+2. `ApprovedRangePatchWithTheNearestRowTreeVerifies` (`Tests/Editor/Semantics/LilToon/LilToonAttestationTests.cs`) stops using TestCase literals. One test loops over the one-patch and many-patches forms, derives each witness through the shared helper, and pins that both pair the newest row, whose digest the `IncludeTreeDigest` constant names by construction.
+3. `ApprovedRangeVersionWithAForeignTreeReportsModifiedSource` (`:1853-1870`) derives its witness and keeps the oldest row's tree digest as the foreign form. A historical row's digest is never the newest row's digest, so it stays foreign through every future admission.
+4. The consent-core approved witnesses in `Tests/Editor/Semantics/UnityMaterialSemanticsTests.cs` (`:965`, `:992`, `:1089`, `:1112`) keep version `"2.4.1"`. Approval is range-keyed, not row-keyed (`:460-468`), so they stay valid. This is the documented reason they do not move.
+5. `Tests/Editor/Build/AlphaSeparationPreparationTests.cs:3332-3333` and `:3673-3674` consume the fixture field and need no edit. The explicit `"2.5.0"` boundary at `:3487-3488` stays.
 
 ### B4. Preview note for approved-but-unverified sources
 
@@ -97,7 +96,7 @@ The preview names the cause once per avatar. It uses the existing note machinery
 | The note fires without an identity failure | The flag conjunct in B4 item 4 mirrors the D3 suppression: approval alone is not enough. A state-refused approved Multi record sets no flag. Dedicated test |
 | Note duplicates after a cache hit | Fixed sentence, exact-match rebuild at `AlphaSeparationDryRun.cs:266-277`, and a dedicated cache-hit test |
 | Note lost after an interrupted first open | Known cache limitation, accepted and stated in B4 item 6 |
-| Witness flips break fixture premises beyond the named sites | The B5 item 6 re-sweep gates the flip commit. The 2.4.2 witness carries a drift marker and a named re-sweep obligation |
+| Witness flips break fixture premises beyond the named sites | The B5 item 6 re-sweep gates the flip commit. Witnesses derive from the row list (B3), so no future admission re-breaks them |
 | Loose 2.4.1 Multi installs newly refuse | Fail-closed and pinned by B2 item 3. Packaged installs, the norm, attest through the pairing |
 | Consent behavior drift | No consent surface changes. 2.4.1 becomes attested, so the D3 arms engage less often, which is the intended effect |
 

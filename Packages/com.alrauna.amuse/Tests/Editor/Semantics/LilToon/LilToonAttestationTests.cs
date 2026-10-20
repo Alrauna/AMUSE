@@ -9,6 +9,7 @@ using Alrauna.Amuse.Editor.Semantics.LilToon;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
+using Alrauna.Amuse.Tests.Editor.Build;
 using Alrauna.Amuse.Tests.Editor.Shared;
 
 namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
@@ -1838,32 +1839,39 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 Is.EqualTo(LilToonSemanticDiagnosticCode.UnsupportedVersion));
         }
 
-        [TestCase("2.4.2")]
-        [TestCase("2.4.9")]
-        public void ApprovedRangePatchWithTheNearestRowTreeVerifies(
-            string version)
+        [Test]
+        public void ApprovedRangePatchWithTheNearestRowTreeVerifies()
         {
-            // 2.4.2 and 2.4.9 both pair the 2.4.1 row, so the evidence
-            // presents that row's tree and the whole conjunction verifies
-            // honestly.
-            Assert.That(
-                LilToonSourceAttestation.TryVerifyLilToonIdentity(
-                    Evidence(packageVersion: version), out var diagnostic),
-                Is.True,
-                version);
-            Assert.That(diagnostic, Is.Null, version);
+            // One patch and many patches past the newest admitted row both
+            // pair that row, so the evidence presents that row's tree and
+            // the whole conjunction verifies honestly. The witness derives
+            // from the row list, so a new admitted row never edits this
+            // test.
+            foreach (var patchesPast in new[] { 1, 9 })
+            {
+                var version = VerifiedLilToonTestSeams.ApprovedWitnessVersion(
+                    patchesPast);
+                Assert.That(
+                    LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                        Evidence(packageVersion: version), out var diagnostic),
+                    Is.True,
+                    version);
+                Assert.That(diagnostic, Is.Null, version);
+            }
         }
 
         [Test]
         public void ApprovedRangeVersionWithAForeignTreeReportsModifiedSource()
         {
-            // The pairing still binds version to tree: 2.4.2 pairs the
-            // 2.4.1 row, so the 2.3.4 tree is a foreign tree and the
-            // answer is modified source, never UnsupportedVersion.
+            // The pairing still binds version to tree. The witness pairs
+            // the newest admitted row, so the oldest row's tree is a
+            // foreign tree, and the answer is modified source, never
+            // UnsupportedVersion.
             Assert.That(
                 LilToonSourceAttestation.TryVerifyLilToonIdentity(
                     Evidence(
-                        packageVersion: "2.4.2",
+                        packageVersion:
+                            VerifiedLilToonTestSeams.ApprovedWitnessVersion(),
                         includeDigest:
                             "6e2dce6cb3073d5e04b569a14df8e0944c93ca408999fb42d7c717050c48fd46"),
                     out var diagnostic),

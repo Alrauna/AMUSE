@@ -468,15 +468,30 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
         /// <summary>
         /// The default declared package version: an approved, non-row
-        /// version. It pairs the 2.4.1 row for the attestation-side pins
-        /// and rides the version-keyed routing arms in the pipeline
-        /// fixtures. The scope's constructor takes another version, so a
-        /// boundary test can install the same package out of range. When
-        /// upstream ships a real 2.4.2, or when a later admission makes
-        /// 2.4.2 a row, re-sweep this witness to a version outside the
-        /// rows. Runtime derivation from the row list is the escape hatch.
+        /// version, one patch past the newest admitted row. It pairs that
+        /// row for the attestation-side pins and rides the version-keyed
+        /// routing arms in the pipeline fixtures. Deriving it from the row
+        /// list keeps it outside the rows through every future admission,
+        /// so no test edit ships with a new row (spec B3, amended
+        /// 2026-10-20). The scope's constructor takes another version, so
+        /// a boundary test can install the same package out of range.
         /// </summary>
-        internal const string ApprovedRangeVendorVersion = "2.4.2";
+        internal static readonly string ApprovedRangeVendorVersion =
+            ApprovedWitnessVersion();
+
+        /// <summary>
+        /// The version the given number of patches past the newest
+        /// admitted row. Strictly past the newest row by construction, so
+        /// it is never a row itself and always pairs that row.
+        /// </summary>
+        internal static string ApprovedWitnessVersion(int patchesPast = 1)
+        {
+            var rows = LilToonSourceAttestation.AdmittedRows();
+            var newest = Version.Parse(rows[rows.Count - 1].Version);
+            return new Version(
+                newest.Major, newest.Minor, newest.Build + patchesPast)
+                .ToString();
+        }
 
         private static string ApprovedRangeVendorFolder()
         {
