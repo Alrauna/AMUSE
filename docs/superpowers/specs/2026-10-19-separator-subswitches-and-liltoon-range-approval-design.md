@@ -265,3 +265,11 @@ Five parallel adversarial reviews of the first draft ran on 2026-10-19: accuracy
 ## Decision IDs
 
 Code comments implementing these decisions reference A1 through A5, B1 through B4, C1 through C11, D1 through D7, and point to this document.
+
+## Amendments
+
+### 2026-10-19 amendment 1: component-width cap in D1, from the Task 7 review
+
+The Task 7 review found D1 rule 2 self-contradicts the D6 boundary pins. `2.3.100` is numerically inside `[2.3.0, 2.5.0)`, because minor 3 is below 5, yet D6 pins it unapproved. Landed resolution at commit `b5b0368`: the approval range check refuses any component wider than two digits, fail-closed. The parse stays grammar-pure canonical `M.m.p`. The cap lives only in the range check. Rationale: a hypothetical three-digit patch then asks through the consent path instead of running on the build path with no identity proof. A refusal is a coverage defect. A silent no-proof analysis is a contract risk. The cap takes the safer side.
+
+Two wording corrections ride with this amendment. D1's doc comment sentence "Approval bypasses only the consent ask, never a digest comparison" understates the build path, where capturer admission and the conversion boundary skip identity checks for approved unattested members. That is the accepted cost the risk register records, and maintainers should read the comment accordingly. D6's `"2.3.100"` case reads as unapproved by the width cap. The numeric-pairing discriminator is `"2.3.10"` pairing the `2.3.4` row, which an ordinal implementation would mispair.
