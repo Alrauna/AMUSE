@@ -95,9 +95,7 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
                 if (presence.ExpectedPackageName == LilToonPins.PackageName)
                 {
                     Assert.That(
-                        admittedLilToonVersions.Contains(
-                            presence.InstalledPackageVersion,
-                            System.StringComparer.Ordinal),
+                        VersionReachable(presence.InstalledPackageVersion),
                         Is.True,
                         presence.ExpectedPackageName
                         + " is installed at version "
@@ -128,6 +126,43 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
                     "project. The version match needs an installed " +
                     "family; install one to prove this reach.");
             }
+        }
+
+        /// <summary>
+        /// The approved range, not the row set alone, answers the gate. A
+        /// row member stays reachable. An in-range version with no row is
+        /// reachable. A version below the floor is not. The bound itself is
+        /// not. This case needs no installed vendor package.
+        /// </summary>
+        [Test]
+        public void AnInRangeVersionCountsAsReachable()
+        {
+            Assert.That(VersionReachable("2.4.0"), Is.True,
+                "2.4.0 is an admitted row member");
+            Assert.That(VersionReachable("2.4.9"), Is.True,
+                "2.4.9 is inside the approved range with no row");
+            Assert.That(VersionReachable("2.2.0"), Is.False,
+                "2.2.0 is below the approved floor");
+            Assert.That(VersionReachable("2.5.0"), Is.False,
+                "2.5.0 is the excluded upper bound");
+        }
+
+        /// <summary>
+        /// The one acceptance question for the lilToon gate. An admitted
+        /// row answers true. Any other version falls to the approved
+        /// range check.
+        /// </summary>
+        private static bool VersionReachable(string installedVersion)
+        {
+            foreach (var row in LilToonPins.AdmittedRows())
+            {
+                if (row.Version == installedVersion)
+                {
+                    return true;
+                }
+            }
+
+            return LilToonPins.IsApprovedPackageVersion(installedVersion);
         }
 
         [Test]
