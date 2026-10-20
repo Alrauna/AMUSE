@@ -323,7 +323,7 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// families only — a refused in-range Multi member reaches the
         /// refused-Multi transport and reports its slot-scope
         /// UnsupportedMultiState rows. Only the build's effective capturer
-        /// passes true; the plain wrapper, the dry run's inner capturer,
+        /// passes true. The plain wrapper, the dry run's inner capturer,
         /// and the no-consent fallback keep strict attestation.
         /// </para>
         /// <paramref name="resolveRegisteredSource"/> carries registered-source
@@ -407,7 +407,7 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// <summary>
         /// The version-keyed approval read over one captured record (D3).
         /// A refused Multi member routes on the captured package facts its
-        /// resolution stored; every other family routes on its own lilToon
+        /// resolution stored. Every other family routes on its own lilToon
         /// evidence.
         /// </summary>
         private static bool CapturedVersionIsApproved(

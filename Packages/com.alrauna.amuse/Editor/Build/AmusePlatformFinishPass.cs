@@ -554,7 +554,7 @@ namespace Alrauna.Amuse.Editor.Build
                                 exactRawMipCap,
                                 // The build's effective capturer is the
                                 // one site the approval admission rides
-                                // (D3); every other capturer stays strict.
+                                // (D3). Every other capturer stays strict.
                                 admitApprovedVersions: true);
                 }
 

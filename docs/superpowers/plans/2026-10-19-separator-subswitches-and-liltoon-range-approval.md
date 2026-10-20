@@ -15,7 +15,7 @@
 - Product paths below are relative to `Packages/com.alrauna.amuse/`.
 - Tests run through the Unity Test Runner, EditMode mode, in the dev editor instance for this repository. Refresh assets and wait for compilation before running. A filtered run reporting 0 tests is a failure. Record observed counts. If the implementer has no editor access, the controller runs the stated filter and returns the counts.
 - The spec's Landing Order groups are binding, and the task boundaries below encode them: Task 3 is schema group 1, Task 4 is enum-member group 2 (member, sentence, and fingerprints in one commit), Task 6 is approval group 3 (predicate, gates, pairing, routing, and every D6 retarget in one commit). Each task is exactly one commit.
-- Never weaken a test. Re-pinning a behavior the spec changes is expected; weakening an assertion is halt point 1.
+- Never weaken a test. Re-pinning a behavior the spec changes is expected. Weakening an assertion is halt point 1.
 - Assertion style: `Assert.That(actual, Is.EqualTo(expected))`. Test classes: one per production type, `<Type>Tests`. Method names are behavior sentences.
 - Simple english in every new comment: short active sentences, one idea per sentence, no semicolons, no contractions.
 - No absolute paths, no machine identifiers, no host names anywhere in code, comments, or commit messages.
@@ -116,7 +116,7 @@ git commit -m "feat(runtime): cutout and transparent separator sub-switches"
 
 - [ ] **Step 1: Write the failing tests**
 
-The capture pattern is `[UnityTest] public IEnumerator` driving `yield return RepaintThroughHostWindow(...)` (the out-of-range toggle test at `:189-221` is the model; `SetSwitch` at `:1042-1048`; hook assign, assert, null in `finally`). Known limit, recorded: `SetSwitch` applies modified properties, so the C# property and the serialized value agree in every state these tests arrange. The spec's gate-source rule (serialized property, not the C# property) is enforced by transcribing the spec A3 code block verbatim; no test can discriminate the one-repaint lag without synthesizing a click through the drawn row, which this task does not do.
+The capture pattern is `[UnityTest] public IEnumerator` driving `yield return RepaintThroughHostWindow(...)` (the out-of-range toggle test at `:189-221` is the model, with `SetSwitch` at `:1042-1048` and hook assign, assert, null in `finally`). Known limit, recorded: `SetSwitch` applies modified properties, so the C# property and the serialized value agree in every state these tests arrange. The spec's gate-source rule (serialized property, not the C# property) is enforced by transcribing the spec A3 code block verbatim. No test can discriminate the one-repaint lag without synthesizing a click through the drawn row, which this task does not do.
 
 ```csharp
 [UnityTest]
@@ -133,7 +133,7 @@ public IEnumerator SubSwitchHooksFireWithStoredValuesWhenMasterSwitchIsOn()
 public IEnumerator SubSwitchHooksDoNotFireWhenMasterSwitchIsOff()
 {
     // SetSwitch master off.
-    // Assert: neither hook fired; indent recording unused.
+    // Assert: neither hook fired and indent recording is unused.
 }
 ```
 
@@ -177,18 +177,18 @@ git commit -m "feat(editor): separator sub-switch checkboxes under the master sw
 
 - [ ] **Step 1: Update the pins first (RED)**
 
-1. `OptimizerPresetTests.cs`: `ShippedDefaults()` (`:10-16`) gains the two members as `true`; the flip table (`:59-77`) gains two rows flipping each new member.
+1. `OptimizerPresetTests.cs`: `ShippedDefaults()` (`:10-16`) gains the two members as `true`. The flip table (`:59-77`) gains two rows flipping each new member.
 2. `PresetApplierTests.cs`: rename `ApplyWritesAllSixteenFields` (`:175`) to `ApplyWritesAllEighteenFields` and extend fixture and assertion.
-3. `PresetParserTests.cs`: `ValidSchemaParsesAllSixteenValues` (`:99`) renames to `...AllEighteenValues` and its JSON gains both keys; `ValidJson` gains both lines; the future-schema needle (`:160-161`, pinning refusal of schema 5) moves to 6. The legacy-body builders (`LegacyVersionOneBody`/`TwoBody`/`ThreeBody`, `:42-83`) need no change: they strip only settings keys, and the schema gate at `:81-86` refuses before any key check, so legacy bodies carrying the new keys still refuse with `UnknownSchemaVersion`.
+3. `PresetParserTests.cs`: `ValidSchemaParsesAllSixteenValues` (`:99`) renames to `...AllEighteenValues` and its JSON gains both keys. `ValidJson` gains both lines. The future-schema needle (`:160-161`, pinning refusal of schema 5) moves to 6. The legacy-body builders (`LegacyVersionOneBody`/`TwoBody`/`ThreeBody`, `:42-83`) need no change: they strip only settings keys, and the schema gate at `:81-86` refuses before any key check, so legacy bodies carrying the new keys still refuse with `UnknownSchemaVersion`.
 4. `PresetFileStoreTests.cs`: `ValidBody` (`:12`) gains both keys.
 
 Run the four Presets test classes. Expected: compile or assertion failures, because production does not know the keys yet. This is RED.
 
 - [ ] **Step 2: Implement (one commit)**
 
-1. `PresetParser.cs`: `CurrentSchemaVersion = 5` (`:18`); `FeatureKeys` becomes `{ "alphaSeparator", "cutoutSeparator", "transparentSeparator" }` (`:23`); two `TryRead<bool>` calls beside the `"alphaSeparator"` read (`:104-106` pattern), so a missing key refuses `MissingField` and an unknown key refuses through `EnsureClosedKeySet`.
-2. `OptimizerPreset.cs`: record gains both members beside `AlphaSeparatorEnabled` (`:10-28`); `Matches` gains both terms (`:69-102`); the `Matches` doc comment's "sixteen mapped fields" wording becomes eighteen.
-3. `PresetApplier.cs`: write both switches directly after the master switch write (`:19-20`); doc comment says eighteen mapped fields.
+1. `PresetParser.cs`: `CurrentSchemaVersion = 5` (`:18`). `FeatureKeys` becomes `{ "alphaSeparator", "cutoutSeparator", "transparentSeparator" }` (`:23`). Two `TryRead<bool>` calls go beside the `"alphaSeparator"` read (`:104-106` pattern), so a missing key refuses `MissingField` and an unknown key refuses through `EnsureClosedKeySet`.
+2. `OptimizerPreset.cs`: record gains both members beside `AlphaSeparatorEnabled` (`:10-28`). `Matches` gains both terms (`:69-102`). The `Matches` doc comment's "sixteen mapped fields" wording becomes eighteen.
+3. `PresetApplier.cs`: write both switches directly after the master switch write (`:19-20`). The doc comment says eighteen mapped fields.
 4. All three shipped JSONs gain `"cutoutSeparator": true,` and `"transparentSeparator": true,` in the `features` block.
 
 - [ ] **Step 3: Run, observe GREEN**
@@ -208,14 +208,14 @@ git commit -m "feat(presets): separator sub-switches join presets at schema 5"
 
 **Files:**
 - Modify: `Editor/Analysis/SlotTransformDecision.cs` (enum `:12-20`, ladder comment `:53-67`, `Decide` `:69+`, `CoverageVectorsBySlot` `:157-192`, `DecideSlot` `:262-317`)
-- Modify: `Editor/DryRun/AlphaSeparationDryRun.cs` (the only production `Decide` call, `:800`; captured knob fields and `BuildPolicyFingerprint` `:1379-1401`)
+- Modify: `Editor/DryRun/AlphaSeparationDryRun.cs` (the only production `Decide` call at `:800`, plus captured knob fields and `BuildPolicyFingerprint` at `:1379-1401`)
 - Modify: `Editor/DryRun/DryRunRowBuilder.cs` (`SlotSentence` `:138-163`)
 - Modify: `Editor/DryRun/MaterialTransformationRow.cs` (`RowText`, beside `:216-240`)
 - Modify: `Editor/Build/PlayModeBuildStore.cs` (`ComputePolicyFingerprint` `:50-73`)
 - Test: `Tests/Editor/Analysis/SlotTransformDecisionTests.cs`, `Tests/Editor/DryRun/AlphaSeparationDryRunTests.cs`, `Tests/Editor/Build/PlayModeBuildStoreTests.cs`
 
 **Interfaces:**
-- Produces: `SlotTransformOutcome.SeparatorOffByPolicy`; `Decide(..., IReadOnlyList<bool> alreadyOpaqueBySlot, IReadOnlyList<bool> separatorOffBySlot = null, ...)` with the new optional parameter placed directly after `alreadyOpaqueBySlot` (optional, so the ten existing positional call sites in `SlotTransformDecisionTests.cs` compile untouched); static helper `SlotTransformDecision.SeparatorOffBySlot(IReadOnlyList<bool> cutoutMembershipBySlot, bool cutoutSeparatorEnabled, bool transparentSeparatorEnabled)` returning `bool[]`; dry-run sentence "Skipped: the matching separator switch is off."; both fingerprints sensitive to both switches.
+- Produces: `SlotTransformOutcome.SeparatorOffByPolicy`. `Decide(..., IReadOnlyList<bool> alreadyOpaqueBySlot, IReadOnlyList<bool> separatorOffBySlot = null, ...)` with the new optional parameter placed directly after `alreadyOpaqueBySlot` (optional, so the ten existing positional call sites in `SlotTransformDecisionTests.cs` compile untouched). Static helper `SlotTransformDecision.SeparatorOffBySlot(IReadOnlyList<bool> cutoutMembershipBySlot, bool cutoutSeparatorEnabled, bool transparentSeparatorEnabled)` returning `bool[]`. Dry-run sentence "Skipped: the matching separator switch is off." Both fingerprints become sensitive to both switches.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -262,7 +262,7 @@ public void UnchangedSlotOutcomeMatchesItsBaselineUnderSeparatorOff()
 }
 ```
 
-In `Tests/Editor/DryRun/AlphaSeparationDryRunTests.cs`: a run with a cutout-arm slot and Cutout Separator off renders "Skipped: the matching separator switch is off." for that slot (this is also the case-removal guard: the `default:` arm would render the Untouchable sentence instead, so the test fails if the case is deleted). In `Tests/Editor/Build/PlayModeBuildStoreTests.cs`: extend `ComputePolicyFingerprintProducesConsistentString` (`:59-73`) to expect 20 `;`-separated terms (was 18), and extend the sensitivity test (`:92-97` pattern) with each new switch. In `Tests/Editor/DryRun/DryRunCacheTests.cs` the fingerprint harness reflects `BuildPolicyFingerprint` over a throwaway component with no term-count pin, so the new terms flow in; extend `FingerprintChangesWhenACutoutValueChanges` (`:115-131`) pattern with a switch case.
+In `Tests/Editor/DryRun/AlphaSeparationDryRunTests.cs`: a run with a cutout-arm slot and Cutout Separator off renders "Skipped: the matching separator switch is off." for that slot (this is also the case-removal guard: the `default:` arm would render the Untouchable sentence instead, so the test fails if the case is deleted). In `Tests/Editor/Build/PlayModeBuildStoreTests.cs`: extend `ComputePolicyFingerprintProducesConsistentString` (`:59-73`) to expect 20 `;`-separated terms (was 18), and extend the sensitivity test (`:92-97` pattern) with each new switch. In `Tests/Editor/DryRun/DryRunCacheTests.cs` the fingerprint harness reflects `BuildPolicyFingerprint` over a throwaway component with no term-count pin, so the new terms flow in. Extend `FingerprintChangesWhenACutoutValueChanges` (`:115-131`) pattern with a switch case.
 
 - [ ] **Step 2: Run, observe RED**
 
@@ -326,7 +326,7 @@ case SlotTransformOutcome.SeparatorOffByPolicy:
 
 - [ ] **Step 4: Run, observe GREEN**
 
-Run `Tests/Editor/Analysis`, `Tests/Editor/DryRun`, and `Tests/Editor/Build` folder filters. Expected: all green with the new tests passing. The build-side `Prepare` path does not consume the vector yet; that lands in Task 5, and both switches on behave identically to base in the meantime.
+Run `Tests/Editor/Analysis`, `Tests/Editor/DryRun`, and `Tests/Editor/Build` folder filters. Expected: all green with the new tests passing. The build-side `Prepare` path does not consume the vector yet. That lands in Task 5, and both switches on behave identically to base in the meantime.
 
 - [ ] **Step 5: Commit**
 
@@ -343,12 +343,12 @@ git commit -m "feat(analysis): separator-off outcome with sentence and fingerpri
 - Modify: `Editor/Build/AlphaSeparationRecords.cs` (refusal enum `:23-150`, after `AnisotropyDifferences` `:84-93`)
 - Modify: `Editor/Build/AmuseReportStrings.cs` (beside `:564-580`)
 - Modify: `Editor/Build/AlphaSeparationPreparation.cs` (`Prepare` signature `:105-119`, fold gate `:146-169`, `reportedAnisotropySlots` `:186`, the three gates `:299/:325/:336`, `RefuseEveryCandidateSlot` definition `:783-810`, candidate loop `:379+` with the Unchanged `continue` `:381-388` and the existing `var slotIndex` at `:427`)
-- Modify: `Editor/Build/AmusePlatformFinishPass.cs` (`RetainPreparedSeparation` signature `:1051-1083`, the `Prepare` call at `:1068`; the vector is built beside `CoverageVectorsBySlot` at `:771` and threaded through)
-- Test: `Tests/Editor/Build/AlphaSeparationPreparationTests.cs`; the completeness test `Tests/Editor/Build/AmuseReportsSlotTests.cs:423-447` (`EverySlotSeparationCauseHasPlainEnglishStrings`) is satisfied in-commit by the member plus its three strings and must stay green
+- Modify: `Editor/Build/AmusePlatformFinishPass.cs` (`RetainPreparedSeparation` signature `:1051-1083`, the `Prepare` call at `:1068`, with the vector built beside `CoverageVectorsBySlot` at `:771` and threaded through)
+- Test: `Tests/Editor/Build/AlphaSeparationPreparationTests.cs`. The completeness test `Tests/Editor/Build/AmuseReportsSlotTests.cs:423-447` (`EverySlotSeparationCauseHasPlainEnglishStrings`) is satisfied in-commit by the member plus its three strings and must stay green
 
 **Interfaces:**
 - Consumes: `SeparatorOffBySlot` and the component properties (Tasks 1 and 4).
-- Produces: `AlphaSeparationSlotRefusal.SeparatorOffByPolicy`; `Prepare` and `RetainPreparedSeparation` gain an optional `bool[] separatorOffBySlot = null` parameter (optional, because `cutoutMembershipBySlot = null` is already optional and a required parameter may not follow it). The report keys `amuse.slotSeparation.SeparatorOffByPolicy`, `.description`, `.hint`.
+- Produces: `AlphaSeparationSlotRefusal.SeparatorOffByPolicy`. `Prepare` and `RetainPreparedSeparation` gain an optional `bool[] separatorOffBySlot = null` parameter (optional, because `cutoutMembershipBySlot = null` is already optional and a required parameter may not follow it). The report keys `amuse.slotSeparation.SeparatorOffByPolicy`, `.description`, `.hint`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -446,7 +446,7 @@ git commit -m "feat(build): separator sub-switches suppress their arm at prepare
 ### Task 6: Summary disclosure
 
 **Files:**
-- Modify: `Editor/Build/AmusePlatformFinishPlugin.cs` (build-state fields `:43-61`; `ReachedRendererAnalysis` already exists at `:27` and stays the reach flag)
+- Modify: `Editor/Build/AmusePlatformFinishPlugin.cs` (build-state fields `:43-61`. `ReachedRendererAnalysis` already exists at `:27` and stays the reach flag)
 - Modify: `Editor/Build/AmusePlatformFinishPass.cs` (capture the two component values at the barrier policy capture, `:406-461` area)
 - Modify: `Editor/Build/AmuseReports.cs` (`AvatarSummary` `:716-782`, `PolicyActive` plumbing `:744-766`)
 - Modify: `Editor/Build/AmuseReportStrings.cs` (beside `amuse.summary.PolicyActive` `:407-419`)
@@ -455,7 +455,7 @@ git commit -m "feat(build): separator sub-switches suppress their arm at prepare
 
 **Interfaces:**
 - Consumes: the component properties (Task 1).
-- Produces: one build-state bool pair (`CutoutSeparatorOff`, `TransparentSeparatorOff`; no third flag, because `ReachedRendererAnalysis` already encodes reach) and the summary key `amuse.summary.SeparatorSwitchOff` with description "Some slots did not separate because a separator switch is off."
+- Produces: one build-state bool pair (`CutoutSeparatorOff` and `TransparentSeparatorOff`, with no third flag because `ReachedRendererAnalysis` already encodes reach) and the summary key `amuse.summary.SeparatorSwitchOff` with description "Some slots did not separate because a separator switch is off."
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -518,7 +518,7 @@ Everything in this task is one commit: predicate, gates, pairing, routing, Multi
 
 **Files:**
 - Modify: `Editor/Semantics/LilToon/LilToonSourceAttestation.cs` (constants near `:362-364`, accessors `:423-457`, `Verify` gate `:2039-2046`, `TryVerifyIncludeTreeForVersion` `:2144-2178` (no change, verify by test), `TryVerifyMultiContainer` `:2231-2243`, `TryResolveMultiRowDigest` `:2390-2395`, `TryMultiColumnDigest` `:2499-2530`)
-- Modify: `Editor/Semantics/LilToon/LilToonMultiResolution.cs` (the refused record carries the captured package version; `:447-451` area)
+- Modify: `Editor/Semantics/LilToon/LilToonMultiResolution.cs` (the refused record carries the captured package version, `:447-451` area)
 - Modify: `Editor/Semantics/UnityMaterialSemantics.cs` (`CollectTransferConsent` `:477-534` plus a new internal core overload, `TryCaptureClosedAlphaMaterialsTransferred` `:359-383`, the plain wrapper `:288-306`)
 - Modify: `Editor/Build/AmusePlatformFinishPass.cs` (`:318-330`, `:375`, `:518-536`, `:611-614`)
 - Modify: `Editor/Build/AlphaSeparationMaterialConverter.cs` (`:130-133`, `:375-386`)
@@ -526,14 +526,14 @@ Everything in this task is one commit: predicate, gates, pairing, routing, Multi
 
 **Interfaces:**
 - Consumes: nothing new.
-- Produces: `LilToonSourceAttestation.ApprovedVersionFloor`, `ApprovedVersionUpperBound`, `IsApprovedPackageVersion(string)`, `IsApprovedPackageEvidence(bool hasPackage, string packageVersion)`; `CollectTransferConsent` returns `(Subjects, GrantedShaderNames, AnyApprovedVersions)` with an internal core overload taking index-aligned captured materials; `TryCaptureClosedAlphaMaterialsTransferred` gains `bool admitApprovedVersions = false`; refused Multi records carry `CapturedHasPackage`/`CapturedPackageVersion`; the converter boundary accepts approved evidence.
+- Produces: `LilToonSourceAttestation.ApprovedVersionFloor`, `ApprovedVersionUpperBound`, `IsApprovedPackageVersion(string)`, `IsApprovedPackageEvidence(bool hasPackage, string packageVersion)`. `CollectTransferConsent` returns `(Subjects, GrantedShaderNames, AnyApprovedVersions)` with an internal core overload taking index-aligned captured materials. `TryCaptureClosedAlphaMaterialsTransferred` gains `bool admitApprovedVersions = false`. Refused Multi records carry `CapturedHasPackage`/`CapturedPackageVersion`. The converter boundary accepts approved evidence.
 
 - [ ] **Step 1: Write the failing tests and the retargets**
 
 Attestation half, in `Tests/Editor/Semantics/LilToon/LilToonAttestationTests.cs`:
 
 1. Retarget `Verify_WrongPackageVersion_IsRefused` (`:1802-1808`) and `VerifyCutout_WrongPackageVersion_IsRefused` (`:2564-2575`) from `"2.3.5"` to `"2.2.0"`, and add `"2.5.0"` cases. These stay green under old code (out-of-range refusal is base behavior) and pin the new floor and bound edges. Rewrite the body comment of `Verify_NonAdmittedVersionForms_Refuse` (`:1813-1817`), which says "The comparison is ordinal": the new text states that non-canonical and out-of-range forms refuse.
-2. `Verify_NonAdmittedVersionForms_Refuse` (`:1809-1826`): remove `"2.4.1"` and `"2.3.10"`; keep `"2.5.0"`, `"2.4"`, `"02.4.0"`.
+2. `Verify_NonAdmittedVersionForms_Refuse` (`:1809-1826`): remove `"2.4.1"` and `"2.3.10"`. Keep `"2.5.0"`, `"2.4"`, `"02.4.0"`.
 3. New tests, in the file's evidence-fixture style (`Evidence(packageVersion:)`):
 
 ```csharp
@@ -576,7 +576,7 @@ public void VersionsTheRangeCannotContainStayUnapproved(string version)
 [TestCase("2.4.0-preview")]
 public void NonCanonicalFormsStayUnapproved(string version)
 {
-    // Assert: IsApprovedPackageVersion false; identity refuses.
+    // Assert: IsApprovedPackageVersion is false and the identity refuses.
 }
 
 [Test]
@@ -647,21 +647,21 @@ public void ApprovedOnlyBuildGrantsNoShaderNames()
 }
 ```
 
-6. Pipeline tests: a full-pipeline case with a byte-changed in-range install through the verified seams (`Tests/Editor/Build/VerifiedLilToonTestSeams.cs` shapes the vendor evidence; set its package version to `"2.4.1"` and its digests to mismatch): zero subjects, no presenter call, slots separate, no `SourceIdentity` refusal. A dry-run case with the same fixture: rows stay unknown (the dry run's plain capturer must not admit the material). A build case for a byte-changed in-range Multi: zero subjects and `UnsupportedMultiState` slot rows.
+6. Pipeline tests: a full-pipeline case with a byte-changed in-range install through the verified seams (`Tests/Editor/Build/VerifiedLilToonTestSeams.cs` shapes the vendor evidence. Set its package version to `"2.4.1"` and its digests to mismatch): zero subjects, no presenter call, slots separate, no `SourceIdentity` refusal. A dry-run case with the same fixture: rows stay unknown (the dry run's plain capturer must not admit the material). A build case for a byte-changed in-range Multi: zero subjects and `UnsupportedMultiState` slot rows.
 7. The lilToon stand-in subject fixtures that exercise the version path through the seams (the single-subject tests near `UnityMaterialSemanticsTests.cs:862-877`, the D8 pre-scan fixture near `AlphaSeparationPreparationTests.cs:3097-3110`, and the plugin's swap-consent subject tests) re-pin to `"2.5.0"` so the subject path keeps a versioned witness. The Poiyomi zero-subject pins (`PoiyomiMaterials_NeverProduceTransferConsentSubjects`, `Legacy90Material_ProducesZeroTransferConsentSubjects`, `UnverifiedPoiyomi_ProducesZeroTransferConsentSubjects`) and the explanatory comment at `AlphaSeparationPreparationTests.cs:3028-3032` stay untouched: they pin family confinement, which this change must not move. `BatchModeRefusesWithoutAsking` (`VersionConsentTests.cs:190-208`) stays untouched.
 
 - [ ] **Step 2: Run, observe RED**
 
-Run the touched test classes. Expected: the new approve-path tests fail (the predicate, pairing, and routing do not exist) and the fabricating tests fail to compile. The retargeted refuse pins and the re-pinned `"2.5.0"` subject fixtures stay green through this step; they are regression guards, not red drivers.
+Run the touched test classes. Expected: the new approve-path tests fail (the predicate, pairing, and routing do not exist) and the fabricating tests fail to compile. The retargeted refuse pins and the re-pinned `"2.5.0"` subject fixtures stay green through this step. They are regression guards, not red drivers.
 
 - [ ] **Step 3: Implement (one commit)**
 
 1. `LilToonSourceAttestation.cs`:
    - Constants and `IsApprovedPackageVersion` per spec D1 with the spec's doc comment. The strict canonical parser per spec D1 with two corrections the reviews required: the digit-run guard is `digits > 9` (nine digits, at most 999,999,999, cannot overflow an int), and a component longer than one digit may not start with `'0'`. Comparison is the numeric triple against the parsed floor and bound, never ordinal.
    - `internal static bool IsApprovedPackageEvidence(bool hasPackage, string packageVersion)` beside it: `hasPackage && IsApprovedPackageVersion(packageVersion)`. All three routing sites call this one helper.
-   - Private `NearestAdmittedRow` over the regular rows and the same shape over `AdmittedMultiVersions`, both numeric-triple scans. `IncludeDigestForVersion` (`:444-457`) falls back to the nearest regular row when approved; `TryMultiColumnDigest` (`:2499-2530`) falls back over the Multi rows when approved.
-   - The three gates gain the disjunct `IsAdmittedPackageVersion(v) || IsApprovedPackageVersion(v)`: `Verify` (`:2039-2046`), `TryVerifyMultiContainer` step 3 (`:2231-2243`), `TryResolveMultiRowDigest` (`:2390-2395`). `IsAdmittedPackageVersion`, the rows, and every digest constant are unchanged. `TryVerifyIncludeTreeForVersion` needs no change; its packaged path reads the now-pairing `IncludeDigestForVersion`.
-2. `LilToonMultiResolution.cs`: the refused Multi record gains `CapturedHasPackage` and `CapturedPackageVersion`, populated at the resolution point from the gather that `TryResolveMultiContainer` currently discards on failure (`LilToonSourceAttestation.cs:2355-2371`), without touching `IsResolved`'s definition. Resolved records carry the same values from their own evidence.
+   - Private `NearestAdmittedRow` over the regular rows and the same shape over `AdmittedMultiVersions`, both numeric-triple scans. `IncludeDigestForVersion` (`:444-457`) falls back to the nearest regular row when approved. `TryMultiColumnDigest` (`:2499-2530`) falls back over the Multi rows when approved.
+   - The three gates gain the disjunct `IsAdmittedPackageVersion(v) || IsApprovedPackageVersion(v)`: `Verify` (`:2039-2046`), `TryVerifyMultiContainer` step 3 (`:2231-2243`), `TryResolveMultiRowDigest` (`:2390-2395`). `IsAdmittedPackageVersion`, the rows, and every digest constant are unchanged. `TryVerifyIncludeTreeForVersion` needs no change. Its packaged path reads the now-pairing `IncludeDigestForVersion`.
+2. `LilToonMultiResolution.cs`: the refused Multi record gains `CapturedHasPackage` and `CapturedPackageVersion`, populated at the resolution point from the gather that `TryResolveMultiContainer` discards on failure at the base commit (`LilToonSourceAttestation.cs:2355-2371`), without touching `IsResolved`'s definition. Resolved records carry the same values from their own evidence.
 3. `UnityMaterialSemantics.cs`:
    - `CollectTransferConsent` (`:477-534`) becomes a thin wrapper that captures and delegates to a new internal core `CollectTransferConsentCore(IReadOnlyList<Material> materials, IReadOnlyList<CapturedAlphaMaterial> captured)`, returning the three-tuple. The suppression in the core, after `IsAttestedAlphaMaterial` fails:
 
@@ -687,7 +687,7 @@ if (approved && identityRefused)
 
    The Multi state-refusal branch (`:515-524`) stays exactly as is. `names.Add` stays only on subject paths, so `GrantedShaderNames` is never populated by approval.
    - `TryCaptureClosedAlphaMaterialsTransferred` (`:359-383`) gains `bool admitApprovedVersions = false`. When true, after the granted-name check fails, admit a member whose evidence is approved, reading `LilToonEvidence` for regular families and `MultiResolution.CapturedPackageVersion` for refused Multi members, so a byte-changed in-range Multi reaches the refused-Multi transport and reports `UnsupportedMultiState` slot rows. The plain wrapper `TryCaptureClosedAlphaMaterials` (`:288-306`) passes false, so the dry run (`DefaultInnerCapturer`, `AlphaSeparationDryRun.cs:1027-1040`), the build's no-consent fallback, and the host capture default keep strict attestation.
-4. `AmusePlatformFinishPass.cs`: the capturer-swap condition (`:375`) becomes `grantedShaderNames != null || shaderTransfer.AnyApprovedVersions`; the `effectiveCapturer` lambda (`:518-536`) passes `admitApprovedVersions: true`; the resolver selection (`:611-614`) rides the same flag.
+4. `AmusePlatformFinishPass.cs`: the capturer-swap condition (`:375`) becomes `grantedShaderNames != null || shaderTransfer.AnyApprovedVersions`. The `effectiveCapturer` lambda (`:518-536`) passes `admitApprovedVersions: true`. The resolver selection (`:611-614`) rides the same flag.
 5. `AlphaSeparationMaterialConverter.cs` (`:130-133`): extend the boundary with `!IsApprovedSource(sourceEvidence)`, where `IsApprovedSource` calls `LilToonSourceAttestation.IsApprovedPackageEvidence(sourceEvidence.HasPackage, sourceEvidence.PackageVersion)`.
 
 - [ ] **Step 4: Run, observe GREEN**
@@ -706,7 +706,7 @@ git commit -m "feat(semantics): approve lilToon versions below 2.5 end to end"
 ### Task 8: Research gate range-awareness
 
 **Files:**
-- Modify: `Packages/com.alrauna.amuse.research/Tests/Editor/Calibration/VendorReachabilityTests.cs` (`:79-135`; the file aliases the attestation class, so the new code uses the existing alias)
+- Modify: `Packages/com.alrauna.amuse.research/Tests/Editor/Calibration/VendorReachabilityTests.cs` (`:79-135`. The file aliases the attestation class, so the new code uses the existing alias)
 
 **Interfaces:**
 - Consumes: `AdmittedRows()` and `IsApprovedPackageVersion` (Task 7), via the research assembly's `InternalsVisibleTo`.
@@ -766,7 +766,7 @@ git commit -m "test(research): census gate admits approved in-range versions"
 ### Task 9: Docs
 
 **Files:**
-- Modify: `Packages/com.alrauna.amuse/README.md` (`:42` supported sentence; `:70-84` preset schema section)
+- Modify: `Packages/com.alrauna.amuse/README.md` (`:42` supported sentence and `:70-84` preset schema section)
 - Modify: `README.md` (`:42`)
 - Modify: `Packages/com.alrauna.amuse/CHANGELOG.md`
 - Modify: `docs/architecture/vision.md` (`:55`)

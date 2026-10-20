@@ -99,7 +99,7 @@ C1. Arm mapping. A slot's arm is the arm `CoverageVectorsBySlot` already compute
 
 C2. Whole-slot rule. The gate is per slot, keyed on the slot's current material, the same key every per-arm knob uses. A slot's animated admitted swap set may contain materials of the other family. Those members keep converting when the slot's current material is in an enabled arm. This is the base-commit behavior for mixed swap sets and is documented here as the intended reading of the switches. A suppressed-arm swap member inside an enabled slot keeps the existing identity-fallback machinery for unconverted members (`Editor/Build/AlphaSeparationPreparation.cs:562-570`).
 
-C3. Consumption model: the scalar-knob pattern (investigation section 7.4). The switches are read at the barrier into build state beside the captured policy, consumed at preparation time, and their effect is baked into the prepared plan. `AlphaSeparationApply` gains no new guard, because suppressed slots never enter the prepared set; the apply guard keeps covering only the sampling target and the two acceptance toggles (`Editor/Build/AlphaSeparationApply.cs:141-181`). Both fingerprints gain both switches: `PlayModeBuildStore.ComputePolicyFingerprint` (`Editor/Build/PlayModeBuildStore.cs:50-73`) and `AlphaSeparationDryRun.BuildPolicyFingerprint` (`Editor/DryRun/AlphaSeparationDryRun.cs:1379-1401`), which also covers the inspector's live fingerprint recompute (`Editor/AmuseAvatarOptimizerEditor.cs:255-258`).
+C3. Consumption model: the scalar-knob pattern (investigation section 7.4). The switches are read at the barrier into build state beside the captured policy, consumed at preparation time, and their effect is baked into the prepared plan. `AlphaSeparationApply` gains no new guard, because suppressed slots never enter the prepared set. The apply guard keeps covering only the sampling target and the two acceptance toggles (`Editor/Build/AlphaSeparationApply.cs:141-181`). Both fingerprints gain both switches: `PlayModeBuildStore.ComputePolicyFingerprint` (`Editor/Build/PlayModeBuildStore.cs:50-73`) and `AlphaSeparationDryRun.BuildPolicyFingerprint` (`Editor/DryRun/AlphaSeparationDryRun.cs:1379-1401`), which also covers the inspector's live fingerprint recompute (`Editor/AmuseAvatarOptimizerEditor.cs:255-258`).
 
 C4. New display outcome `SlotTransformOutcome.SeparatorOffByPolicy` (`Editor/Analysis/SlotTransformDecision.cs:12-20`). It is produced in `DecideSlot` (`:259-310`), which gains a `separatorOffBySlot` vector parameter built once beside `CoverageVectorsBySlot` from `cutoutMembershipBySlot` and the two captured switches, so the build and the dry run compute the same outcome from one shared function.
 
@@ -112,25 +112,25 @@ C7. New slot refusal `AlphaSeparationSlotRefusal.SeparatorOffByPolicy` (`Editor/
 - description: "The matching separator switch is off, so this slot did not separate."
 - hint: "Enable 'Cutout Separator' or 'Transparent Separator' on the AMUSE component."
 
-One member serves both arms and the strings name both switches, a coarser disclosure than the per-checkbox hints; accepted and recorded. The hint names the checkboxes verbatim, matching the house pattern (`:552-590`). `AmuseReports.RecordRefusal` and census follow the `OpaqueCoverageBelowMinimum` precedent (`AmuseReports.cs:216-233`).
+One member serves both arms and the strings name both switches, a coarser disclosure than the per-checkbox hints. Accepted and recorded. The hint names the checkboxes verbatim, matching the house pattern (`:552-590`). `AmuseReports.RecordRefusal` and census follow the `OpaqueCoverageBelowMinimum` precedent (`AmuseReports.cs:216-233`).
 
 C8. Preparation wiring. The disabled-arm set is computed from `cutoutMembershipBySlot` and the two captured switches. In `AlphaSeparationPreparation.Prepare`:
 
 1. The preserve fold gate (`:145-169`) skips disabled-arm slots, so no `ForcedOpaque*` disclosure ever fires for a disabled arm.
-2. The anisotropy scan (`:172-206`) skips disabled-arm candidate slots; they record `SeparatorOffByPolicy` instead.
+2. The anisotropy scan (`:172-206`) reports only Unchanged-disposition slots, so it needs no exclusion. Disabled-arm candidate slots record `SeparatorOffByPolicy` at the candidate loop instead.
 3. The three renderer-wide refusal gates between the scan and the candidate loop (`ConversionBindingUnrecognized` `:296-303`, `ConversionStateUnderAdditiveLayer` `:322-331`, `ConversionStateUnderUnnormalizedDirectBlendTree` `:333-341`, each via `RefuseEveryCandidateSlot`) refuse only enabled-arm candidate slots. Disabled-arm candidate slots record `SeparatorOffByPolicy`.
 4. The candidate loop (`:379-473`, modeled on the coverage gate `:423-441`) records `SeparatorOffByPolicy` for disabled-arm slots before any coverage, marker-clip, or conversion work.
 
 The dry run computes the same outcome through the shared ladder, so build and preview cannot drift.
 
-C9. Summary disclosure. `AlphaPolicyActive` (`Editor/Build/AmusePlatformFinishPass.cs:435-438`) stays exactly what it is today: the two tolerance terms. It is not widened. A separate conditional summary sentence with a new report key names the disabled switches, appended when any switch is off and renderer analysis was reached, following the `amuse.summary.*` plumbing (`Editor/Build/AmuseReportStrings.cs:407-419`, `Editor/Build/AmuseReports.cs:744-766`). Sentence: "Some slots did not separate because a separator switch is off."
+C9. Summary disclosure. `AlphaPolicyActive` (`Editor/Build/AmusePlatformFinishPass.cs:435-438`) stays at its base-commit shape: the two tolerance terms. It is not widened. A separate conditional summary sentence with a new report key names the disabled switches, appended when any switch is off and renderer analysis was reached, following the `amuse.summary.*` plumbing (`Editor/Build/AmuseReportStrings.cs:407-419`, `Editor/Build/AmuseReports.cs:744-766`). Sentence: "Some slots did not separate because a separator switch is off."
 
 C10. Master-switch interaction. Alpha Separator off returns at the barrier before any capture (`AmusePlatformFinishPass.cs:253-256`), so stored sub-switch values are unreachable at build time. The inspector hides the pair. Both switches on reproduces the base-commit result: with both true the new checks never fire.
 
 C11. Test surface for the pair and the arm gating, new tests unless named:
 
 1. Runtime: both fields default true on a fresh component, both survive a serialize round trip, `Reset()` sets both true, and an old payload without the fields deserializes true.
-2. Editor: each hook fires once with the stored value when the master switch is on; neither fires when it is off; the pair draws at indent level 1 below the master row through the host-window harness; tooltips pinned by copy constant if the house test style pins copy, otherwise pinned by hook count only.
+2. Editor: each hook records the stored value and the draw-time indent whenever the gated rows draw with the master switch on. Neither fires when it is off. The pair draws at indent level 1 below the master row through the host-window harness. Tooltips are pinned by copy constant if the house test style pins copy, otherwise pinned by hook count only.
 3. Fingerprints: flipping either switch changes both fingerprints.
 4. Ladder: an arm-off candidate slot yields `SeparatorOffByPolicy` ahead of fold, anisotropy, and coverage outcomes. An already-opaque arm-off slot stays `AlreadyOpaque`. An unchanged slot yields no outcome change.
 5. Preparation: a cutout-arm slot with Cutout Separator off records the refusal and appears in no prepared plan. Same for the transparent arm. A disabled-arm slot inside a renderer that also trips the additive-layer gate records the policy refusal, not the additive refusal. No `ForcedOpaque*` disclosure fires for a disabled arm.
@@ -185,7 +185,7 @@ Multi limit, recorded: `IsAttestedAlphaMaterial` answers `MultiResolution.IsReso
 
 Net behavior: no dialog for any in-range version, interactive or batch, attested or not. Out-of-range unverified versions keep the base-commit subject, dialog, batch refusal, and decline-as-no-op path.
 
-D4. Decline scope. A declined out-of-range subject stays a total no-op for the whole build (base-commit behavior, `AmusePlatformFinishPass.cs:341-364`), including for in-range materials in the same build. This is today's decline contract and is left unchanged.
+D4. Decline scope. A declined out-of-range subject stays a total no-op for the whole build (base-commit behavior, `AmusePlatformFinishPass.cs:341-364`), including for in-range materials in the same build. This is the base-commit decline contract and is left unchanged.
 
 D5. Transient unlock window: no interaction. The window's admission gate attests only the locked material's original shader through the pinned Poiyomi identity (`Editor/Build/TransientUnlockAvailability.cs:66-88`, `Editor/Build/LockedMaterialIdentity.cs:190-219`, `:252-306`). The lilToon approval range neither opens nor closes the window for any version. D5 exists to record this non-interaction so no reviewer or implementer reinvents a window link.
 

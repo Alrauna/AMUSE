@@ -454,7 +454,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// <summary>
         /// True for a canonical M.m.p version inside the approved range
         /// [floor, bound). The strict parse and the numeric-triple
-        /// comparison are the D1 pins; the grammar-equivalence pin holds
+        /// comparison are the D1 pins. The grammar-equivalence pin holds
         /// the range edges to the host grammar.
         /// </summary>
         internal static bool IsApprovedPackageVersion(string packageVersion)
@@ -480,7 +480,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         }
 
         // The approved range's parsed boundaries. The string constants are
-        // literals, so the parse cannot fail; a failure would throw here
+        // literals, so the parse cannot fail. A failure would throw here
         // and fail every test that touches the class.
         private static readonly (int Major, int Minor, int Patch)
             ApprovedFloorComponents =
@@ -507,7 +507,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// numeric triple sits in [floor, bound), and every component
         /// stays two digits wide. The width rule keeps versions no real
         /// release line could ship outside the range the measured pins
-        /// could ever cover; the pin is the D1 range-grammar case
+        /// could ever cover. The pin is the D1 range-grammar case
         /// "2.3.100". The comparison itself is the numeric triple, never
         /// ordinal (spec D1).
         /// </summary>
@@ -556,7 +556,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// int accumulation cannot wrap, and a longer run is unparseable
         /// before any arithmetic happens. The host grammar's parser is
         /// private to the Build layer and accepts leading zeros, so the
-        /// attestation class carries its own; the grammar-equivalence pin
+        /// attestation class carries its own. The grammar-equivalence pin
         /// holds the two together on shared canonical forms.
         /// </summary>
         private static bool TryParseCanonicalVersion(
@@ -733,7 +733,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             }
 
             // D2 pairing: an approved non-row version borrows the nearest
-            // admitted row below it; everything else stays null exactly as
+            // admitted row below it. Everything else stays null exactly as
             // at the base commit.
             return NearestAdmittedRow(packageVersion).IncludeDigest;
         }
@@ -2818,7 +2818,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             }
 
             // D2 pairing: an approved non-row version pairs the nearest
-            // admitted Multi row below it; a version with no Multi row at
+            // admitted Multi row below it. A version with no Multi row at
             // or below it has no column, exactly as at the base commit.
             var nearest = NearestAdmittedMultiRow(version);
             if (nearest.Version == null)

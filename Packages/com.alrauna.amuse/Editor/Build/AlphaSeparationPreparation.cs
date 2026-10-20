@@ -99,7 +99,7 @@ namespace Alrauna.Amuse.Editor.Build
         /// slot selected and carries the fold cause the folded disclosures
         /// report. All three vectors cover the largest binding index plus
         /// one. The optional separator-off vector records which slot's arm
-        /// a separator sub-switch disables; a null leaves every arm
+        /// a separator sub-switch disables. A null leaves every arm
         /// enabled. A disabled arm's slots never fold and never prepare:
         /// they record
         /// <see cref="AlphaSeparationSlotRefusal.SeparatorOffByPolicy"/>
@@ -824,7 +824,7 @@ namespace Alrauna.Amuse.Editor.Build
         /// drops, so the buckets always count dropped slots, and retains
         /// nothing for the renderer. A candidate slot whose arm is
         /// disabled by a separator sub-switch records the slot's own
-        /// policy cause instead of the renderer-wide reason; only
+        /// policy cause instead of the renderer-wide reason. Only
         /// enabled-arm candidates receive that reason.
         /// </summary>
         private static PreparedRendererSeparation RefuseEveryCandidateSlot(

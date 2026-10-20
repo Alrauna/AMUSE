@@ -1873,7 +1873,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         public void TwoPointThreeTenPairsTheTwoPointThreeFourRow()
         {
             // The numeric-comparison pin. 2.3.10 pairs the 2.3.4 row,
-            // because the scan compares numeric triples; an ordinal scan
+            // because the scan compares numeric triples. An ordinal scan
             // would reach the 2.3.1 shared tree instead. With that
             // shared tree the version refuses as modified source.
             const string tree234 =
@@ -1935,7 +1935,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         {
             // Four components, a leading zero, whitespace, and a
             // prerelease suffix are all non-canonical. The predicate
-            // answers false and the identity refuses; nothing
+            // answers false and the identity refuses. Nothing
             // normalizes.
             Assert.That(
                 LilToonSourceAttestation.IsApprovedPackageVersion(version),
@@ -1959,7 +1959,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             // private members. Parse success must agree on every shared
             // canonical form, so the range edges cannot drift from the
             // host grammar. The attestation parser is stricter by design
-            // on non-canonical forms; the range tests above pin those.
+            // on non-canonical forms. The range tests above pin those.
             var host = typeof(HostLifecycleCapability).GetMethod(
                 "TryParsePackageVersion",
                 BindingFlags.NonPublic | BindingFlags.Static);

@@ -11,7 +11,7 @@ VCC and ALCOM both need two repositories, in this order:
 
 [![Add to VCC](https://img.shields.io/badge/Add%20to%20VCC-AMUSE-8A2BE2)](https://alrauna.github.io/AMUSE/)
 
-Then add the **AMUSE** package to your avatar project from the package manager. VCC shows a one-time warning for any community repository; that is expected.
+Then add the **AMUSE** package to your avatar project from the package manager. VCC shows a one-time warning for any community repository. That is expected.
 
 ## Use
 
@@ -28,7 +28,7 @@ Add the **AMUSE Avatar Optimizer** component to the avatar root and build as usu
 - The two **Accept Anisotropy Differences** toggles and the preset files
   that carry them live in the Alpha Separator Settings. See **Proof modes
   and acceptance** below.
-- The first build that meets an unverified shader or host version shows one consent dialog. Accepting treats that source with the nearest verified version's rules; declining is a total no-op for that build.
+- The first build that meets an unverified shader or host version shows one consent dialog. Accepting treats that source with the nearest verified version's rules. Declining is a total no-op for that build.
 - Every refusal is visible in the NDMF report window, with a reason and a hint.
 - PC only. Android and Quest builds get a named refusal.
 - **Disable AMUSE** on the component makes the build treat it as absent: nothing runs, nothing is reported.
@@ -37,7 +37,7 @@ Add the **AMUSE Avatar Optimizer** component to the avatar root and build as usu
 
 ## What 0.1.0 does
 
-Triangles of an AlphaTest or AlphaBlend material that are proven visually opaque move to an appended submesh with a generated canonical opaque material. Triangles that cannot be proven stay on the original material, unchanged. Tessellation, fur, and gem variants are not admitted; unsupported means a named refusal with the renderer or material untouched - never a silent guess.
+Triangles of an AlphaTest or AlphaBlend material that are proven visually opaque move to an appended submesh with a generated canonical opaque material. Triangles that cannot be proven stay on the original material, unchanged. Tessellation, fur, and gem variants are not admitted. Unsupported means a named refusal with the renderer or material untouched - never a silent guess.
 
 Supported shaders: Poiyomi Toon 9.3.64 (including Two Pass) and lilToon 2.3.0 through any version below 2.5, which are approved without a consent prompt. The build asks once per build for versions outside that range. Both support cutout, transparent, outline, and one-pass/two-pass variants.
 

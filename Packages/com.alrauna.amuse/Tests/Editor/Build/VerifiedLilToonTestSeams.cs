@@ -528,7 +528,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             /// The vendor cutout stand-in carries the plain vendor cutout
             /// name, so the production family classification admits it with
             /// no selector seam. The name is shared with the real installed
-            /// vendor asset by design; every consumer resolves the fixture
+            /// vendor asset by design. Every consumer resolves the fixture
             /// by shader instance or asset path, never by name lookup.
             /// </summary>
             internal const string CutoutShaderName = "Hidden/lilToonCutout";

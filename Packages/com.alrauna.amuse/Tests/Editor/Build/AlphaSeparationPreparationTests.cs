@@ -3251,7 +3251,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         // lilToon version and whose stand-in digests mismatch every pin: a
         // byte-changed in-range install. Everything below runs the real
         // selection, capture, consent pre-scan, transferred admission, and
-        // conversion boundary; only the vendor package is a fixture.
+        // conversion boundary. Only the vendor package is a fixture.
 
         /// <summary>
         /// Drives the real bindings-capture and barrier passes through the
@@ -3309,7 +3309,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 // The seam overload's guard demands a resolver. This run
                 // grants the shader name through its subject, so the
                 // production selection rides the transferred resolver
-                // anyway; naming it keeps the seam overload's guard fed
+                // anyway. Naming it keeps the seam overload's guard fed
                 // without changing the production answer.
                 UnityMaterialSemantics.AnalyzeAlphaMaterialTransferred,
                 consentPresenter: consentPresenter);
@@ -3686,7 +3686,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// rows and never separates, in the build like anywhere else. The
         /// production pre-scan cannot see a captured version for a stand-in
         /// Multi container (its asset GUID matches no vendor row), so this
-        /// run still asks and the fixture accepts; the ask-removal half of
+        /// run still asks and the fixture accepts. The ask-removal half of
         /// the Multi case is the consent core's pin. What this run pins:
         /// the approved version's capture admission carries the refused
         /// member into the analysis, and the transport answers the Multi
@@ -3907,7 +3907,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// transformed domain. Confirmed by mutating
         /// <c>PoiyomiMaterialSemantics.TryGetSupportedUvMapping</c>'s
         /// <c>UvMapping</c> construction to identity and observing this arm
-        /// fail; see the implementation report for the exact mutation.
+        /// fail. See the implementation report for the exact mutation.
         /// </description></item>
         /// <item><description><b>All-mip conjunction, migration proof.</b>
         /// A real imported texture cannot carry the identity-vs-transform
@@ -3990,7 +3990,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     // the same 8x8 column mask
                     // PoiyomiAlphaTests.NonForcedMainTexNonIdentityStPreservesMappingAndClassifies
                     // uses. Raw UV in [0.05,0.1]x[0.15,0.2] sits in column 0
-                    // (transparent); scale (2,2)/offset (0.5,0.25) moves it
+                    // (transparent). Scale (2,2)/offset (0.5,0.25) moves it
                     // to [0.6,0.7]x[0.55,0.65], columns 4-5 (opaque).
                     var alpha = new byte[8 * 8];
                     for (var index = 0; index < alpha.Length; index++)
@@ -12087,8 +12087,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// the cutout preserve pair folds slot 0, the cutout coverage
         /// minimum refuses slot 1, and the inert transparent pair keeps
         /// slot 2 a surviving split. When <paramref name="explicitOn"/>
-        /// is true the arm stores both separator switches as true;
-        /// otherwise the component defaults stand. The fixture tears
+        /// is true the arm stores both separator switches as true.
+        /// Otherwise the component defaults stand. The fixture tears
         /// itself down.
         /// </summary>
         private static (
