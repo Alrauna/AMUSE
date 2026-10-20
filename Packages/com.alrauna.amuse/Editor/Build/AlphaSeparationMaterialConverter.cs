@@ -130,7 +130,8 @@ namespace Alrauna.Amuse.Editor.Build
                         if (!attested &&
                             !IsGrantedShader(
                                 sourceEvidence.ShaderName,
-                                grantedShaderNames))
+                                grantedShaderNames) &&
+                            !IsApprovedSource(sourceEvidence))
                         {
                             refusedDetail =
                                 "SourceIdentity." +
@@ -373,6 +374,21 @@ namespace Alrauna.Amuse.Editor.Build
                 default:
                     return null;
             }
+        }
+
+        /// <summary>
+        /// The version-keyed conversion boundary (D3): an approved lilToon
+        /// package version passes the source-identity gate the way a
+        /// granted name does. Family confinement is structural — only the
+        /// lilToon gathers produce the evidence this reads.
+        /// </summary>
+        private static bool IsApprovedSource(
+            LilToonSourceEvidence sourceEvidence)
+        {
+            return sourceEvidence != null &&
+                LilToonSourceAttestation.IsApprovedPackageEvidence(
+                    sourceEvidence.HasPackage,
+                    sourceEvidence.PackageVersion);
         }
 
         private static bool IsGrantedShader(

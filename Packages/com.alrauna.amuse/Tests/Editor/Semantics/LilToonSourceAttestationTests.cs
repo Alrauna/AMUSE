@@ -529,6 +529,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             LilToonSourceAttestation.PackageVersion,
             LilToonSourceAttestation.IncludeTreeDigest, Multi234BaseDigest,
             BaseContainerName, BaseContainerGuid)]
+        [TestCase(
+            "2.3.10", Multi234IncludeTree, Multi234OutlineDigest,
+            OutlineContainerName, OutlineContainerGuid)]
+        [TestCase(
+            "2.3.10", Multi234IncludeTree, Multi234BaseDigest,
+            BaseContainerName, BaseContainerGuid)]
         public void MultiContainer_CorrectPerVersionPairing_Verifies(
             string packageVersion,
             string includeDigest,
@@ -550,6 +556,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             Multi234OutlineDigest, Multi240OutlineDigest)]
         [TestCase(
             "2.3.4", Multi234IncludeTree,
+            Multi240OutlineDigest, Multi234OutlineDigest)]
+        [TestCase(
+            "2.3.10", Multi234IncludeTree,
             Multi240OutlineDigest, Multi234OutlineDigest)]
         public void MultiContainer_SwappedVersionPairing_Refuses(
             string packageVersion,

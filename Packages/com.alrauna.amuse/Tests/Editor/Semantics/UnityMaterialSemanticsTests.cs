@@ -875,6 +875,246 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 "the subject must name the refusing gate in words");
         }
 
+        // --- D3 approved-range consent core ---------------------------------
+        //
+        // The production capture derives the package version from the
+        // installed package, so the version-shaped subject cases drive the
+        // internal core directly with captured materials shaped exactly the
+        // way the capture shapes them. The fabricated evidence carries no
+        // digests, so every identity refuses the way a byte-changed install
+        // refuses, whatever the captured version claims.
+
+        private static CapturedMaterialEvidence EmptyCapturedEvidence()
+        {
+            return new CapturedMaterialEvidence(
+                false, null, false, ColorSpace.Uninitialized,
+                Array.Empty<CapturedMaterialEvidence.PresenceEntry>(),
+                Array.Empty<CapturedMaterialEvidence.ScalarEntry>(),
+                Array.Empty<CapturedMaterialEvidence.ColorEntry>(),
+                Array.Empty<CapturedMaterialEvidence.VectorEntry>(),
+                Array.Empty<CapturedMaterialEvidence.TextureEntry>(),
+                Array.Empty<CapturedTextureEvidence>());
+        }
+
+        private static LilToonSourceEvidence FabricatedEvidence(
+            bool hasPackage,
+            string packageVersion)
+        {
+            return new LilToonSourceEvidence(
+                LilToonSourceAttestation.SupportedShaderName,
+                "df12117ecd77c31469c224178886498e",
+                true,
+                45f,
+                hasPackage,
+                hasPackage ? LilToonSourceAttestation.PackageName : null,
+                packageVersion,
+                null,
+                null,
+                null,
+                null,
+                false,
+                0,
+                new string[0],
+                null,
+                null);
+        }
+
+        private static CapturedAlphaMaterial RegularCaptured(
+            Material material,
+            bool hasPackage,
+            string packageVersion)
+        {
+            return new CapturedAlphaMaterial(
+                CapturedAlphaMaterialFamily.LilToon,
+                EmptyCapturedEvidence(),
+                default(PoiyomiSourceEvidence),
+                FabricatedEvidence(hasPackage, packageVersion),
+                shaderName: material.shader.name);
+        }
+
+        private static CapturedAlphaMaterial MultiCaptured(
+            Material material,
+            LilToonMultiResolutionRefusal refusal,
+            bool capturedHasPackage,
+            string capturedPackageVersion)
+        {
+            return new CapturedAlphaMaterial(
+                CapturedAlphaMaterialFamily.LilToonMulti,
+                EmptyCapturedEvidence(),
+                default(PoiyomiSourceEvidence),
+                null,
+                shaderName: material.shader.name,
+                multiResolution: LilToonMultiResolutionRecord.Refused(
+                    refusal, capturedHasPackage, capturedPackageVersion));
+        }
+
+        [Test]
+        public void ApprovedVersionProducesNoSubjectOnTheConsentCore()
+        {
+            // A lilToon-family captured material whose captured package
+            // version is approved and whose identity refuses: the ask is
+            // the only thing approval removes, so no subject and no
+            // granted name, but the version arm reports the approval.
+            var material = NewMaterial(
+                "core-approved-liltoon.shader",
+                LilToonSourceAttestation.SupportedShaderName,
+                LilToonProperties());
+
+            var consent = UnityMaterialSemantics.CollectTransferConsentCore(
+                new[] { material },
+                new[] { RegularCaptured(material, true, "2.4.1") });
+
+            Assert.That(consent.Subjects, Is.Empty);
+            Assert.That(consent.GrantedShaderNames, Is.Empty);
+            Assert.That(consent.AnyApprovedVersions, Is.True);
+        }
+
+        [Test]
+        public void ApprovedByteChangedMultiProducesNoSubject()
+        {
+            // A refused Multi record whose captured package version is
+            // approved: the identity failure is the byte-changed install's
+            // failure, so the ask is suppressed the same way the regular
+            // families suppress it.
+            var material = NewMaterial(
+                "core-approved-multi.shader",
+                "_lil/lilToonMulti",
+                MultiProperties());
+
+            var consent = UnityMaterialSemantics.CollectTransferConsentCore(
+                new[] { material },
+                new[]
+                {
+                    MultiCaptured(
+                        material,
+                        LilToonMultiResolutionRefusal.AttestationFailed,
+                        true,
+                        "2.4.1"),
+                });
+
+            Assert.That(consent.Subjects, Is.Empty);
+            Assert.That(consent.AnyApprovedVersions, Is.True);
+        }
+
+        [Test]
+        public void InRangeMultiStateRefusalStillProducesItsSubject()
+        {
+            // An in-range Multi refused on a state word, not on identity:
+            // the material is verified at the source and stopped by its
+            // state, so approval must not swallow the subject.
+            var material = NewMaterial(
+                "core-multi-state-refusal.shader",
+                "_lil/lilToonMulti",
+                MultiProperties());
+
+            var consent = UnityMaterialSemantics.CollectTransferConsentCore(
+                new[] { material },
+                new[]
+                {
+                    MultiCaptured(
+                        material,
+                        LilToonMultiResolutionRefusal.ClippingCancellerEnabled,
+                        true,
+                        "2.4.0"),
+                });
+
+            Assert.That(consent.Subjects.Count, Is.EqualTo(1));
+            Assert.That(
+                consent.Subjects[0],
+                Does.Contain(LilToonMultiResolution.RefusalFeatureWords(
+                    LilToonMultiResolutionRefusal.ClippingCancellerEnabled)));
+            Assert.That(consent.AnyApprovedVersions, Is.False);
+        }
+
+        [Test]
+        public void LooseInstallStillProducesASubject()
+        {
+            // HasPackage false never approves: a loose install keeps the
+            // base-commit subject.
+            var material = NewMaterial(
+                "core-loose-liltoon.shader",
+                LilToonSourceAttestation.SupportedShaderName,
+                LilToonProperties());
+
+            var consent = UnityMaterialSemantics.CollectTransferConsentCore(
+                new[] { material },
+                new[] { RegularCaptured(material, false, null) });
+
+            Assert.That(consent.Subjects.Count, Is.EqualTo(1));
+            Assert.That(consent.GrantedShaderNames.Count, Is.EqualTo(1));
+            Assert.That(consent.AnyApprovedVersions, Is.False);
+        }
+
+        [Test]
+        public void OutOfRangeVersionStillProducesASubject()
+        {
+            // 2.5.0 sits at the approved bound, so it is unapproved and
+            // keeps the subject with its versioned witness.
+            var material = NewMaterial(
+                "core-out-of-range-liltoon.shader",
+                LilToonSourceAttestation.SupportedShaderName,
+                LilToonProperties());
+
+            var consent = UnityMaterialSemantics.CollectTransferConsentCore(
+                new[] { material },
+                new[] { RegularCaptured(material, true, "2.5.0") });
+
+            Assert.That(consent.Subjects.Count, Is.EqualTo(1));
+            Assert.That(consent.AnyApprovedVersions, Is.False);
+        }
+
+        [Test]
+        public void ApprovedAndUnapprovedSameNamedMaterialsProduceOnlyTheOutOfRangeSubject()
+        {
+            // Approval is version-keyed and never populates the granted
+            // names, so a same-named 2.5.0 asset cannot ride an approved
+            // 2.4.1 version: exactly one subject, and the build still asks.
+            var approved = NewMaterial(
+                "core-same-name-approved.shader",
+                LilToonSourceAttestation.SupportedShaderName,
+                LilToonProperties());
+            var unapproved = NewMaterial(
+                "core-same-name-unapproved.shader",
+                LilToonSourceAttestation.SupportedShaderName,
+                LilToonProperties());
+
+            Assert.That(
+                approved.shader.name, Is.EqualTo(unapproved.shader.name),
+                "fixture precondition: one shader name, two versions");
+
+            var consent = UnityMaterialSemantics.CollectTransferConsentCore(
+                new[] { approved, unapproved },
+                new[]
+                {
+                    RegularCaptured(approved, true, "2.4.1"),
+                    RegularCaptured(unapproved, true, "2.5.0"),
+                });
+
+            Assert.That(consent.Subjects.Count, Is.EqualTo(1));
+            Assert.That(
+                consent.Subjects[0],
+                Does.Contain(unapproved.shader.name));
+            Assert.That(consent.GrantedShaderNames.Count, Is.EqualTo(1));
+            Assert.That(consent.AnyApprovedVersions, Is.True,
+                "the approved member still reports the version arm");
+        }
+
+        [Test]
+        public void ApprovedOnlyBuildGrantsNoShaderNames()
+        {
+            var material = NewMaterial(
+                "core-approved-only.shader",
+                LilToonSourceAttestation.SupportedShaderName,
+                LilToonProperties());
+
+            var consent = UnityMaterialSemantics.CollectTransferConsentCore(
+                new[] { material },
+                new[] { RegularCaptured(material, true, "2.4.1") });
+
+            Assert.That(consent.GrantedShaderNames, Is.Empty);
+            Assert.That(consent.AnyApprovedVersions, Is.True);
+        }
+
         [Test]
         public void Legacy90ShaderName_SelectsUnsupportedFamily()
         {

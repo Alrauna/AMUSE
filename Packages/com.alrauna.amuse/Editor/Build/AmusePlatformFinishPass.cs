@@ -321,7 +321,11 @@ namespace Alrauna.Amuse.Editor.Build
             // The granted transfer names compose into every gate that
             // verifies a source identity: the transferred capture skips the
             // check for a granted name, and the conversion boundary skips it
-            // for a granted name.
+            // for a granted name. Approval is the parallel version-keyed
+            // arm (D3): any approved captured version also installs the
+            // transferred capturer, which then admits members by their
+            // captured package version. Both arms stay fail-closed for
+            // everything else.
             // An unconsented build grants nothing and stays fail-closed.
             var grantedShaderNames =
                 shaderTransfer.GrantedShaderNames.Count > 0
@@ -372,7 +376,9 @@ namespace Alrauna.Amuse.Editor.Build
                 }
             }
 
-            var transferShaders = grantedShaderNames != null;
+            var transferShaders =
+                grantedShaderNames != null ||
+                shaderTransfer.AnyApprovedVersions;
 
             // Every avatar-scope gate has passed: the unlock window opens
             // here, before capture, so the whole pipeline below reads the
@@ -545,7 +551,11 @@ namespace Alrauna.Amuse.Editor.Build
                                 out transferred,
                                 RegisteredSourceIdentity.Resolve,
                                 cutoutRawMipCap,
-                                exactRawMipCap);
+                                exactRawMipCap,
+                                // The build's effective capturer is the
+                                // one site the approval admission rides
+                                // (D3); every other capturer stays strict.
+                                admitApprovedVersions: true);
                 }
 
                 var hasIndex = TryGetAnimationIndex(

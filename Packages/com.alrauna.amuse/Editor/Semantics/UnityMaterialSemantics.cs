@@ -316,6 +316,16 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// ungranted unattested member no longer fails the batch: it is named
         /// by batch position in the outcome's failing ordinals, and only its
         /// own slots refuse.
+        /// <para>
+        /// <paramref name="admitApprovedVersions"/> is the D3 version-keyed
+        /// arm: when true, a member whose captured lilToon package version
+        /// is approved is admitted the same way a granted name is, lilToon
+        /// families only — a refused in-range Multi member reaches the
+        /// refused-Multi transport and reports its slot-scope
+        /// UnsupportedMultiState rows. Only the build's effective capturer
+        /// passes true; the plain wrapper, the dry run's inner capturer,
+        /// and the no-consent fallback keep strict attestation.
+        /// </para>
         /// <paramref name="resolveRegisteredSource"/> carries registered-source
         /// naming the same way the plain overload does. The two arm caps pin
         /// each shared capture bucket to its proof arm's readback: the
@@ -332,7 +342,8 @@ namespace Alrauna.Amuse.Editor.Semantics
             out ClosedAlphaCaptureOutcome outcome,
             RegisteredSourceLookup resolveRegisteredSource,
             int cutoutRawMipCap = int.MaxValue,
-            int exactRawMipCap = int.MaxValue)
+            int exactRawMipCap = int.MaxValue,
+            bool admitApprovedVersions = false)
         {
             if (materials == null) throw new ArgumentNullException(nameof(materials));
             if (families == null) throw new ArgumentNullException(nameof(families));
@@ -374,10 +385,43 @@ namespace Alrauna.Amuse.Editor.Semantics
                     captured.Add(result[index]);
                     continue;
                 }
+
+                // D3 capture admission: an approved package version rides
+                // the version-keyed arm the way a granted name rides the
+                // name-keyed one. The read is family-confined by
+                // construction — only the lilToon families carry the
+                // lilToon evidence or a Multi resolution.
+                if (admitApprovedVersions &&
+                    CapturedVersionIsApproved(result[index]))
+                {
+                    captured.Add(result[index]);
+                    continue;
+                }
+
                 failed.Add(index);
             }
             outcome = new ClosedAlphaCaptureOutcome(captured, failed);
             return true;
+        }
+
+        /// <summary>
+        /// The version-keyed approval read over one captured record (D3).
+        /// A refused Multi member routes on the captured package facts its
+        /// resolution stored; every other family routes on its own lilToon
+        /// evidence.
+        /// </summary>
+        private static bool CapturedVersionIsApproved(
+            CapturedAlphaMaterial captured)
+        {
+            return captured.Family == CapturedAlphaMaterialFamily.LilToonMulti
+                ? captured.MultiResolution != null &&
+                  captured.MultiResolution.CapturedHasPackage &&
+                  LilToonSourceAttestation.IsApprovedPackageVersion(
+                      captured.MultiResolution.CapturedPackageVersion)
+                : captured.LilToonEvidence != null &&
+                  LilToonSourceAttestation.IsApprovedPackageEvidence(
+                      captured.LilToonEvidence.HasPackage,
+                      captured.LilToonEvidence.PackageVersion);
         }
 
         /// <summary>
@@ -473,14 +517,18 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// shader of a supported family, plus the exact shader-name set a
         /// granted build may transfer. Shaders outside every supported
         /// family produce nothing here — they refuse downstream with no
-        /// transfer target to offer.
+        /// transfer target to offer. The third tuple member reports
+        /// whether any captured member carried an approved lilToon
+        /// package version (D3), which routes the build's version-keyed
+        /// arm independently of the granted names.
         /// </summary>
         internal static (IReadOnlyList<string> Subjects,
-            IReadOnlyCollection<string> GrantedShaderNames)
+            IReadOnlyCollection<string> GrantedShaderNames,
+            bool AnyApprovedVersions)
             CollectTransferConsent(IEnumerable<Material> materials)
         {
-            var subjects = new List<string>();
-            var names = new HashSet<string>();
+            var walked = new List<Material>();
+            var captured = new List<CapturedAlphaMaterial>();
             var seen = new HashSet<Shader>();
             foreach (var material in materials)
             {
@@ -498,9 +546,62 @@ namespace Alrauna.Amuse.Editor.Semantics
                     continue;
                 }
 
-                var capturedList = CaptureAlphaMaterials(new[] { material });
-                if (IsAttestedAlphaMaterial(capturedList[0], true))
+                walked.Add(material);
+                captured.AddRange(CaptureAlphaMaterials(
+                    new[] { material }));
+            }
+
+            return CollectTransferConsentCore(walked, captured);
+        }
+
+        /// <summary>
+        /// The version-shaped consent core behind the pre-scan (D3): the
+        /// materials and their index-aligned captured records arrive
+        /// shaped by the caller, so the version path the production
+        /// capture's package read feeds can also run over captured
+        /// records a test shapes by hand. An identity-failed member whose
+        /// captured lilToon package version is approved produces no
+        /// subject and no granted name: approval removes only the ask.
+        /// State-refused Multi members keep their subjects with the
+        /// refusal words, and the subject paths stay the only
+        /// <c>names.Add</c> sites, so approval never populates
+        /// <c>GrantedShaderNames</c>.
+        /// </summary>
+        internal static (IReadOnlyList<string> Subjects,
+            IReadOnlyCollection<string> GrantedShaderNames,
+            bool AnyApprovedVersions)
+            CollectTransferConsentCore(
+                IReadOnlyList<Material> materials,
+                IReadOnlyList<CapturedAlphaMaterial> captured)
+        {
+            var subjects = new List<string>();
+            var names = new HashSet<string>();
+            var anyApproved = false;
+            for (var index = 0; index < materials.Count; index++)
+            {
+                var material = materials[index];
+                if (material == null || material.shader == null)
                 {
+                    continue;
+                }
+
+                if (IsAttestedAlphaMaterial(captured[index], true))
+                {
+                    continue;
+                }
+
+                // D3 suppression: an approved package version removes only
+                // the consent ask, and only for an identity failure. The
+                // read is family-confined by construction — only the
+                // lilToon families carry the lilToon evidence or a Multi
+                // resolution.
+                var approved = CapturedVersionIsApproved(captured[index]);
+                var identityRefused = captured[index].MultiResolution == null ||
+                    captured[index].MultiResolution.Refusal ==
+                        LilToonMultiResolutionRefusal.AttestationFailed;
+                if (approved && identityRefused)
+                {
+                    anyApproved = true;
                     continue;
                 }
 
@@ -508,7 +609,7 @@ namespace Alrauna.Amuse.Editor.Semantics
                     "' is not a verified version. AMUSE would treat it " +
                     "with the verified version's rules, which may be " +
                     "wrong.";
-                var multiResolution = capturedList[0].MultiResolution;
+                var multiResolution = captured[index].MultiResolution;
                 if (multiResolution != null && !multiResolution.IsResolved)
                 {
                     // A refused Multi material is often verified at the
@@ -524,7 +625,7 @@ namespace Alrauna.Amuse.Editor.Semantics
                 names.Add(material.shader.name);
             }
 
-            return (subjects, names);
+            return (subjects, names, anyApproved);
         }
 
         private static IReadOnlyList<CapturedAlphaMaterial>

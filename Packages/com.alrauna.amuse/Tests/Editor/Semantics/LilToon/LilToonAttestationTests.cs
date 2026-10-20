@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics.LilToon;
 using NUnit.Framework;
@@ -1794,30 +1795,16 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 "their per-version digests");
         }
 
-        [Test]
-        public void Verify_WrongPackageVersion_IsRefused()
-        {
-            Assert.That(
-                LilToonSourceAttestation.TryVerifyLilToonIdentity(
-                    Evidence(packageVersion: "2.3.5"), out var diagnostic),
-                Is.False);
-            Assert.That(
-                diagnostic.Code,
-                Is.EqualTo(LilToonSemanticDiagnosticCode.UnsupportedVersion));
-        }
-
-        [TestCase("2.4.1")]
+        /// <summary>
+        /// The wrong-package-version guard must name a version genuinely
+        /// outside the approved range: below the floor and at the bound.
+        /// The approved range is [2.3.0, 2.5.0), so 2.2.0 and 2.5.0 stay
+        /// unsupported versions even after the range goes live.
+        /// </summary>
+        [TestCase("2.2.0")]
         [TestCase("2.5.0")]
-        [TestCase("2.3.10")]
-        [TestCase("2.4")]
-        [TestCase("02.4.0")]
-        public void Verify_NonAdmittedVersionForms_Refuse(string version)
+        public void Verify_WrongPackageVersion_IsRefused(string version)
         {
-            // Evidence exactly as Verify_WrongPackageVersion_IsRefused
-            // builds it, with only the case version substituted. The
-            // comparison is ordinal, so every nearby but non-admitted
-            // spelling refuses as an unsupported version and never
-            // normalizes into an admitted row.
             Assert.That(
                 LilToonSourceAttestation.TryVerifyLilToonIdentity(
                     Evidence(packageVersion: version), out var diagnostic),
@@ -1825,6 +1812,179 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             Assert.That(
                 diagnostic.Code,
                 Is.EqualTo(LilToonSemanticDiagnosticCode.UnsupportedVersion));
+        }
+
+        [TestCase("2.5.0")]
+        [TestCase("2.4")]
+        [TestCase("02.4.0")]
+        public void Verify_NonAdmittedVersionForms_Refuse(string version)
+        {
+            // Evidence exactly as Verify_WrongPackageVersion_IsRefused
+            // builds it, with only the case version substituted.
+            // Non-canonical and out-of-range forms refuse as an
+            // unsupported version and never normalize into an admitted
+            // row or into the approved range.
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                    Evidence(packageVersion: version), out var diagnostic),
+                Is.False);
+            Assert.That(
+                diagnostic.Code,
+                Is.EqualTo(LilToonSemanticDiagnosticCode.UnsupportedVersion));
+        }
+
+        [TestCase("2.4.1")]
+        [TestCase("2.4.9")]
+        public void ApprovedRangePatchWithTheNearestRowTreeVerifies(
+            string version)
+        {
+            // An approved non-row version pairs the greatest admitted row
+            // at or below it: 2.4.1 and 2.4.9 both pair the 2.4.0 row, so
+            // the evidence presents that row's tree and the whole
+            // conjunction verifies honestly.
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                    Evidence(packageVersion: version), out var diagnostic),
+                Is.True,
+                version);
+            Assert.That(diagnostic, Is.Null, version);
+        }
+
+        [Test]
+        public void ApprovedRangeVersionWithAForeignTreeReportsModifiedSource()
+        {
+            // The pairing still binds version to tree: 2.4.1 pairs the
+            // 2.4.0 row, so the 2.3.4 tree is a foreign tree and the
+            // answer is modified source, never UnsupportedVersion.
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                    Evidence(
+                        packageVersion: "2.4.1",
+                        includeDigest:
+                            "6e2dce6cb3073d5e04b569a14df8e0944c93ca408999fb42d7c717050c48fd46"),
+                    out var diagnostic),
+                Is.False);
+            Assert.That(
+                diagnostic?.Code,
+                Is.EqualTo(LilToonSemanticDiagnosticCode.ModifiedShaderSource));
+        }
+
+        [Test]
+        public void TwoPointThreeTenPairsTheTwoPointThreeFourRow()
+        {
+            // The numeric-comparison pin. 2.3.10 pairs the 2.3.4 row,
+            // because the scan compares numeric triples; an ordinal scan
+            // would reach the 2.3.1 shared tree instead. With that
+            // shared tree the version refuses as modified source.
+            const string tree234 =
+                "6e2dce6cb3073d5e04b569a14df8e0944c93ca408999fb42d7c717050c48fd46";
+            const string sharedTree231 =
+                "154aa68f85633b643f27a82309dc9d755e1955f0e8de7d21c9f62120c6628416";
+
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                    Evidence(packageVersion: "2.3.10", includeDigest: tree234),
+                    out _),
+                Is.True,
+                "2.3.10 pairs the 2.3.4 row's tree");
+
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                    Evidence(
+                        packageVersion: "2.3.10",
+                        includeDigest: sharedTree231),
+                    out var diagnostic),
+                Is.False);
+            Assert.That(
+                diagnostic?.Code,
+                Is.EqualTo(LilToonSemanticDiagnosticCode.ModifiedShaderSource),
+                "the 2.3.1 shared tree is a foreign tree for 2.3.10");
+        }
+
+        [TestCase("2.10.0")]
+        [TestCase("2.3.100")]
+        [TestCase("2.4.4294967300")]
+        public void VersionsTheRangeCannotContainStayUnapproved(string version)
+        {
+            // 2.10.0 is numerically at or past the bound. 2.3.100 carries
+            // a component no real release line of this vendor could
+            // ship, so it stays outside the range the measured pins
+            // could cover. 2.4.4294967300 carries a run too long for the
+            // strict parse: a naive int parse would overflow the patch
+            // back into the range. All three stay unapproved and refuse
+            // as unsupported versions.
+            Assert.That(
+                LilToonSourceAttestation.IsApprovedPackageVersion(version),
+                Is.False,
+                version);
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                    Evidence(packageVersion: version), out var diagnostic),
+                Is.False);
+            Assert.That(
+                diagnostic.Code,
+                Is.EqualTo(LilToonSemanticDiagnosticCode.UnsupportedVersion),
+                version);
+        }
+
+        [TestCase("2.4.0.1")]
+        [TestCase("02.4.0")]
+        [TestCase(" 2.4.0 ")]
+        [TestCase("2.4.0-preview")]
+        public void NonCanonicalFormsStayUnapproved(string version)
+        {
+            // Four components, a leading zero, whitespace, and a
+            // prerelease suffix are all non-canonical. The predicate
+            // answers false and the identity refuses; nothing
+            // normalizes.
+            Assert.That(
+                LilToonSourceAttestation.IsApprovedPackageVersion(version),
+                Is.False,
+                version);
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                    Evidence(packageVersion: version), out var diagnostic),
+                Is.False);
+            Assert.That(
+                diagnostic.Code,
+                Is.EqualTo(LilToonSemanticDiagnosticCode.UnsupportedVersion),
+                version);
+        }
+
+        [Test]
+        public void ApprovalGrammarMatchesTheHostGrammarOnSharedCanonicalForms()
+        {
+            // Both parsers are private (the host one to the Build layer),
+            // so the drive runs by reflection, the house pattern for
+            // private members. Parse success must agree on every shared
+            // canonical form, so the range edges cannot drift from the
+            // host grammar. The attestation parser is stricter by design
+            // on non-canonical forms; the range tests above pin those.
+            var host = typeof(HostLifecycleCapability).GetMethod(
+                "TryParsePackageVersion",
+                BindingFlags.NonPublic | BindingFlags.Static);
+            var attestation = typeof(LilToonSourceAttestation).GetMethod(
+                "TryParseCanonicalVersion",
+                BindingFlags.NonPublic | BindingFlags.Static);
+
+            Assert.That(host, Is.Not.Null, "the host parser exists");
+            Assert.That(
+                attestation, Is.Not.Null, "the attestation parser exists");
+
+            foreach (var form in new[]
+            {
+                "1.2.3", "2.3.0", "2.3.4", "2.3.10", "2.4.0", "2.4.1",
+                "2.4.9", "2.4.99", "2.5.0", "2.10.0", "2.3.100",
+                "10.20.30",
+            })
+            {
+                var hostArgs = new object[] { form, null };
+                var attestationArgs = new object[] { form, null };
+                Assert.That(
+                    (bool)host.Invoke(null, hostArgs),
+                    Is.EqualTo((bool)attestation.Invoke(null, attestationArgs)),
+                    form);
+            }
         }
 
         [Test]
@@ -2557,16 +2717,17 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         /// <summary>
-        /// The wrong-package-version guard must name a version that is
-        /// genuinely outside the admitted set. 2.3.3 left the refused set in
-        /// S11; 2.3.5 stands in as the unsupported future patch.
+        /// The cutout identity shares the version gate, so the approved
+        /// edges refuse here too: below the floor and at the bound stay
+        /// unsupported versions.
         /// </summary>
-        [Test]
-        public void VerifyCutout_WrongPackageVersion_IsRefused()
+        [TestCase("2.2.0")]
+        [TestCase("2.5.0")]
+        public void VerifyCutout_WrongPackageVersion_IsRefused(string version)
         {
             Assert.That(
                 LilToonSourceAttestation.TryVerifyLilToonCutoutIdentity(
-                    CutoutEvidence(packageVersion: "2.3.5"), out var diagnostic),
+                    CutoutEvidence(packageVersion: version), out var diagnostic),
                 Is.False);
             Assert.That(
                 diagnostic.Code,
@@ -2609,6 +2770,43 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 Is.True,
                 version);
             Assert.That(diagnostic, Is.Null, version);
+        }
+
+        /// <summary>
+        /// The in-range non-row twin of the admitted-patch pin: 2.4.3 is
+        /// no admitted row, so the pairing fallback binds it to the
+        /// greatest row at or below it (2.4.0), and the evidence presents
+        /// exactly that row's tree.
+        /// </summary>
+        [Test]
+        public void Verify_AcceptsApprovedNonRowVersionWithTheNearestRowTree()
+        {
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                    Evidence(packageVersion: "2.4.3"), out var diagnostic),
+                Is.True);
+            Assert.That(diagnostic, Is.Null);
+        }
+
+        /// <summary>
+        /// The in-range non-row twin of the cross-version pin: an
+        /// approved version still pairs its own row, so a foreign row's
+        /// tree fails closed as modified source.
+        /// </summary>
+        [Test]
+        public void Verify_ApprovedNonRowVersionWithAnotherVersionsTree_IsModifiedSource()
+        {
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                    Evidence(
+                        packageVersion: "2.4.3",
+                        includeDigest:
+                            "154aa68f85633b643f27a82309dc9d755e1955f0e8de7d21c9f62120c6628416"),
+                    out var diagnostic),
+                Is.False);
+            Assert.That(
+                diagnostic?.Code,
+                Is.EqualTo(LilToonSemanticDiagnosticCode.ModifiedShaderSource));
         }
 
         /// <summary>

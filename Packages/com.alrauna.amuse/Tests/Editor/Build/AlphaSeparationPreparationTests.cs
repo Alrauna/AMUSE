@@ -1,5 +1,6 @@
 using Alrauna.Amuse.Tests.Editor.Shared;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -3236,6 +3237,446 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 if (material != null)
                 {
                     UnityEngine.Object.DestroyImmediate(material);
+                }
+
+                fixtures.BaseTearDown();
+            }
+        }
+
+        // --- D3 approved-range routing ---------------------------------------
+        //
+        // The production capture derives the package version from the
+        // installed package, so these fixtures install an embedded stand-in
+        // vendor package whose declared version is an approved, non-row
+        // lilToon version and whose stand-in digests mismatch every pin: a
+        // byte-changed in-range install. Everything below runs the real
+        // selection, capture, consent pre-scan, transferred admission, and
+        // conversion boundary; only the vendor package is a fixture.
+
+        /// <summary>
+        /// Drives the real bindings-capture and barrier passes through the
+        /// production entry with no capture, selection, or analysis seam at
+        /// all. The consent presenter arrives as the caller's spy.
+        /// </summary>
+        private static AmusePlatformFinishState RunProductionBarrier(
+            GameObject root,
+            VersionConsentPresenter consentPresenter)
+        {
+            FixtureAvatarIdentity.RequireVrcDescriptorSupport();
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            var context = AvatarProcessor.ProcessAvatar(
+                root, PreparationTestPlatform.Instance);
+            context.GetState<AmusePlatformFinishState>().AnimatorBindings =
+                GenericPlatformAnimatorBindings.Instance;
+            AmuseStructuralGraphCheck.Execute(context);
+            AmusePlatformFinishPass.Execute(
+                context,
+                SupportedFacts(),
+                consentPresenter);
+            return context.GetState<AmusePlatformFinishState>();
+        }
+
+        /// <summary>
+        /// Drives the real barrier with one capture seam (the approved-range
+        /// Multi case) and the caller's consent presenter spy. Selection
+        /// delegates to the production map.
+        /// </summary>
+        private static AmusePlatformFinishState RunProductionBarrier(
+            GameObject root,
+            ClosedAlphaMaterialCapturer capturer,
+            VersionConsentPresenter consentPresenter)
+        {
+            FixtureAvatarIdentity.RequireVrcDescriptorSupport();
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            var context = AvatarProcessor.ProcessAvatar(
+                root, PreparationTestPlatform.Instance);
+            context.GetState<AmusePlatformFinishState>().AnimatorBindings =
+                GenericPlatformAnimatorBindings.Instance;
+            AmuseStructuralGraphCheck.Execute(context);
+            AmusePlatformFinishPass.Execute(
+                context,
+                SupportedFacts(),
+                (Material material,
+                    out CapturedAlphaMaterialFamily family,
+                    out MaterialEvidenceRequest alphaRelevance,
+                    out MaterialEvidenceRequest captureSchema) =>
+                    UnityMaterialSemantics.TrySelectAlphaMaterialRequests(
+                        material,
+                        out family,
+                        out alphaRelevance,
+                        out captureSchema),
+                capturer,
+                // The seam overload's guard demands a resolver. This run
+                // grants the shader name through its subject, so the
+                // production selection rides the transferred resolver
+                // anyway; naming it keeps the seam overload's guard fed
+                // without changing the production answer.
+                UnityMaterialSemantics.AnalyzeAlphaMaterialTransferred,
+                consentPresenter: consentPresenter);
+            return context.GetState<AmusePlatformFinishState>();
+        }
+
+        /// <summary>
+        /// The D3 approved-range build case: a byte-changed in-range cutout
+        /// install through every real path, with no seam between the avatar
+        /// and the converter. The strict attestation refuses the stand-in
+        /// digests, so at the base commit the pre-scan produces a subject,
+        /// the presenter is called, and nothing separates. With the
+        /// approval routing, the ask is suppressed, the version-keyed
+        /// capture arm admits the member, and the real conversion boundary
+        /// passes it without any SourceIdentity refusal.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator ByteChangedInRangeInstallSeparatesSilentlyThroughTheRealPipeline()
+        {
+            var vendor = new VerifiedLilToonTestSeams
+                .ApprovedRangeVendorScope();
+            var installed = false;
+            try
+            {
+                vendor.InstallCutoutShader();
+                installed = true;
+                vendor.RequestRegistration();
+                var registrationGuard = 0;
+                while (!vendor.IsRegistered() &&
+                    registrationGuard++ < 600)
+                {
+                    yield return null;
+                }
+
+                Assert.That(
+                    vendor.IsRegistered(), Is.True,
+                    "the embedded vendor package must register");
+
+                var fixtures = new LilToonCutoutConversionFixtures();
+                GameObject root = null;
+                Material material = null;
+                Mesh mesh = null;
+                AmusePlatformFinishState amuse = null;
+                var asked = new List<IReadOnlyList<string>>();
+                try
+                {
+                    fixtures.BaseSetUp();
+                    root = new GameObject("AMUSE approved range candidate");
+                    FixtureAvatarIdentity.AttachVrcDescriptor(root);
+                    root.AddComponent<Alrauna.Amuse.Runtime
+                        .AmuseAvatarOptimizer>();
+                    FixtureProofScope.PinAllSizes(root);
+                    material = new Material(vendor.CutoutShader);
+                    material.SetTexture(
+                        "_MainTex",
+                        fixtures.ImportFullyOpaqueMipmap(
+                            "approved_range_cutout"));
+                    AddSingleTriangleRenderer(
+                        root, material, out mesh);
+                    // The cutout proof is texture-backed, so the candidate
+                    // triangle needs a UV0 domain over the opaque chain.
+                    mesh.uv = new[]
+                    {
+                        new Vector2(0.25f, 0.25f),
+                        new Vector2(0.75f, 0.25f),
+                        new Vector2(0.25f, 0.75f),
+                    };
+
+                    var reports = ErrorReport.CaptureErrors(
+                        () => amuse = RunProductionBarrier(
+                            root,
+                            subjects =>
+                            {
+                                asked.Add(subjects);
+                                return false;
+                            }));
+                    Assert.That(reports, Is.Not.Null,
+                        "the capture overload answered");
+
+                    Assert.That(
+                        asked, Is.Empty,
+                        "an approved version never asks, so the " +
+                        "presenter is never called");
+                    Assert.That(
+                        amuse.SemanticallyRefusedRendererCount, Is.Zero,
+                        "the approved install analyzes like any other " +
+                        "admitted member");
+                    Assert.That(
+                        amuse.Separation, Is.Not.Null,
+                        "the byte-changed in-range install separates");
+                    Assert.That(
+                        amuse.Separation.TryGetOpaque(
+                            material, out var opaque),
+                        Is.True,
+                        "the prepared record carries the source-to-opaque " +
+                        "mapping");
+                    Assert.That(opaque, Is.Not.Null);
+                    Assert.That(opaque.shader.name,
+                        Is.EqualTo(LilToonSourceAttestation
+                            .SupportedShaderName),
+                        "the real conversion path targets the vendor's " +
+                        "own opaque shader");
+                    Assert.That(
+                        amuse.SlotRefusalCount(
+                            AlphaSeparationSlotRefusal
+                                .OpaqueConversionRefused),
+                        Is.Zero,
+                        "the conversion boundary passes on the approved " +
+                        "version, so no SourceIdentity refusal exists");
+                }
+                finally
+                {
+                    // The real pipeline's generated clones can be persisted
+                    // by the build's asset saver, so this cleanup destroys
+                    // with asset destruction allowed.
+                    if (amuse?.Separation != null)
+                    {
+                        foreach (var clone in amuse.Separation.CreatedClones)
+                        {
+                            if (clone != null)
+                            {
+                                UnityEngine.Object.DestroyImmediate(
+                                    clone, true);
+                            }
+                        }
+
+                        foreach (var prepared in amuse.Separation.Renderers)
+                        {
+                            if (prepared.MeshClone != null)
+                            {
+                                UnityEngine.Object.DestroyImmediate(
+                                    prepared.MeshClone, true);
+                            }
+                        }
+                    }
+
+                    AlphaSeparationTestLifecycle.DestroyCommittedClone(
+                        root, null);
+                    if (mesh != null)
+                    {
+                        UnityEngine.Object.DestroyImmediate(mesh, true);
+                    }
+
+                    if (root != null)
+                    {
+                        UnityEngine.Object.DestroyImmediate(root, true);
+                    }
+
+                    if (material != null)
+                    {
+                        UnityEngine.Object.DestroyImmediate(material, true);
+                    }
+
+                    fixtures.BaseTearDown();
+                }
+            }
+            finally
+            {
+                if (installed)
+                {
+                    vendor.TearDown();
+                }
+            }
+        }
+
+        /// <summary>
+        /// The capture seam for the approved-range Multi case: real evidence
+        /// capture, then the Task 6 profile-injection verify with one
+        /// perturbed digest, so the container refuses exactly the way a
+        /// byte-changed in-range Multi refuses. The stored record carries
+        /// the captured package facts the production resolution point
+        /// stores for a real in-range install, whose container GUID the
+        /// stand-in cannot present. The member rides the admitted set,
+        /// because an approved version admits it through the version-keyed
+        /// capture arm.
+        /// </summary>
+        private bool CaptureApprovedRangeRefusedMulti(
+            IReadOnlyList<Material> materials,
+            IReadOnlyList<CapturedAlphaMaterialFamily> families,
+            MaterialEvidenceRequest request,
+            AlphaPolicyBounds bounds,
+            int cutoutRawMipCap,
+            int exactRawMipCap,
+            List<CapturedAlphaMaterial> refusedMembers,
+            out ClosedAlphaCaptureOutcome captured)
+        {
+            var inputs = new MaterialEvidenceCaptureInput[materials.Count];
+            for (var index = 0; index < materials.Count; index++)
+            {
+                inputs[index] = new MaterialEvidenceCaptureInput(
+                    materials[index],
+                    request,
+                    UnityMaterialSemantics.AlphaPredicateRequestFor(
+                        materials[index], families[index]));
+            }
+
+            var evidence = UnityMaterialEvidenceCapture.Capture(
+                inputs, bounds, cutoutRawMipCap, exactRawMipCap);
+            var result = new CapturedAlphaMaterial[materials.Count];
+            for (var index = 0; index < result.Length; index++)
+            {
+                var containerName =
+                    LilToonMultiResolutionTests.BaseContainerName;
+                var sourceEvidence = new LilToonSourceEvidence(
+                    containerName,
+                    LilToonMultiResolutionTests.TestContainerGuid,
+                    true,
+                    LilToonSourceAttestation.ShaderFormatVersion,
+                    true,
+                    LilToonSourceAttestation.PackageName,
+                    LilToonSourceAttestation.PackageVersion,
+                    null,
+                    new string('0', 64),
+                    null,
+                    LilToonSourceAttestation.IncludeTreeDigest,
+                    false,
+                    0,
+                    Array.Empty<string>(),
+                    null,
+                    null);
+                var resolved = LilToonMultiResolution.Resolve(
+                    evidence[index],
+                    sourceEvidence,
+                    LilToonMultiResolutionTests.MatchingProfile(
+                        containerName),
+                    request.CaptureKeywords,
+                    out _,
+                    out _,
+                    out var refusal);
+                Assert.That(resolved, Is.False,
+                    "fixture precondition: the perturbed digest refuses");
+                Assert.That(
+                    refusal,
+                    Is.EqualTo(LilToonMultiResolutionRefusal
+                        .AttestationFailed),
+                    "fixture precondition: the refusal is the identity " +
+                    "failure, not a state refusal");
+                result[index] = new CapturedAlphaMaterial(
+                    CapturedAlphaMaterialFamily.LilToonMulti,
+                    evidence[index],
+                    default(PoiyomiSourceEvidence),
+                    null,
+                    shaderName: materials[index] != null &&
+                        materials[index].shader != null
+                            ? materials[index].shader.name
+                            : null,
+                    multiResolution: LilToonMultiResolutionRecord.Refused(
+                        refusal,
+                        capturedHasPackage: true,
+                        capturedPackageVersion:
+                            VerifiedLilToonTestSeams
+                                .ApprovedRangeVendorVersion));
+            }
+
+            captured = new ClosedAlphaCaptureOutcome(
+                result, Array.Empty<int>());
+            refusedMembers.AddRange(result);
+            return true;
+        }
+
+        /// <summary>
+        /// The D3 Multi limit, in the build: an admitted byte-changed
+        /// in-range Multi member keeps its slot-scope UnsupportedMultiState
+        /// rows and never separates, in the build like anywhere else. The
+        /// production pre-scan cannot see a captured version for a stand-in
+        /// Multi container (its asset GUID matches no vendor row), so this
+        /// run still asks and the fixture accepts; the ask-removal half of
+        /// the Multi case is the consent core's pin. What this run pins:
+        /// the approved version's capture admission carries the refused
+        /// member into the analysis, and the transport answers the Multi
+        /// state refusal with nothing prepared.
+        /// </summary>
+        [Test]
+        public void ByteChangedInRangeMultiKeepsItsRowsAndNeverSeparates()
+        {
+            var fixtures = new LilToonCutoutConversionFixtures();
+            GameObject root = null;
+            Material material = null;
+            Mesh mesh = null;
+            AmusePlatformFinishState amuse = null;
+            var asked = new List<IReadOnlyList<string>>();
+            var refusedMembers = new List<CapturedAlphaMaterial>();
+            try
+            {
+                fixtures.BaseSetUp();
+                material = LilToonFixtureTestBase.CreateCutoutSchemaStandIn(
+                    LilToonCutoutConversionFixtures.FixtureTempFolder,
+                    "_lil/lilToonMulti",
+                    0f,
+                    Array.Empty<string>());
+                material.renderQueue = 2000;
+                material.SetOverrideTag("RenderType", "Opaque");
+                root = new GameObject("AMUSE approved multi candidate");
+                FixtureAvatarIdentity.AttachVrcDescriptor(root);
+                root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                FixtureProofScope.PinAllSizes(root);
+                AddSingleTriangleRenderer(root, material, out mesh);
+
+                var reports = ErrorReport.CaptureErrors(
+                    () => amuse = RunProductionBarrier(
+                        root,
+                        (System.Collections.Generic.IReadOnlyList<Material>
+                                materials,
+                            System.Collections.Generic.IReadOnlyList<
+                                CapturedAlphaMaterialFamily> families,
+                            MaterialEvidenceRequest request,
+                            AlphaPolicyBounds bounds,
+                            int cutoutRawMipCap,
+                            int exactRawMipCap,
+                            out ClosedAlphaCaptureOutcome captured) =>
+                            CaptureApprovedRangeRefusedMulti(
+                                materials, families, request, bounds,
+                                cutoutRawMipCap, exactRawMipCap,
+                                refusedMembers,
+                                out captured),
+                        subjects =>
+                        {
+                            asked.Add(subjects);
+                            return true;
+                        }));
+
+                Assert.That(asked.Count, Is.EqualTo(1),
+                    "the stand-in Multi container's production gather " +
+                    "carries no captured version, so the ask survives " +
+                    "here; the core pins its suppression");
+                Assert.That(
+                    amuse.Separation, Is.Null,
+                    "an in-range Multi refused on its bytes keeps " +
+                    "slot-scope rows and does not separate");
+                Assert.That(
+                    refusedMembers, Has.Count.EqualTo(1),
+                    "the version-keyed capture arm admitted the refused " +
+                    "member");
+                var analysis = UnityMaterialSemantics
+                    .AnalyzeAlphaMaterialTransferred(refusedMembers[0]);
+                Assert.That(
+                    analysis.AlphaUnknownReason, Is.Not.Null);
+                Assert.That(
+                    analysis.AlphaUnknownReason.Kind,
+                    Is.EqualTo(AlphaUnknownKind.UnsupportedMultiState),
+                    "the admitted refused member keeps its Multi state " +
+                    "rows");
+                Assert.That(
+                    analysis.AlphaUnknownReason.Feature,
+                    Is.EqualTo(LilToonMultiResolution.RefusalFeatureWords(
+                        LilToonMultiResolutionRefusal.AttestationFailed)));
+                Assert.That(reports, Is.Not.Null,
+                    "the capture overload answered");
+            }
+            finally
+            {
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(
+                    root, null);
+                if (mesh != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(mesh, true);
+                }
+
+                if (root != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(root, true);
+                }
+
+                if (material != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(material, true);
                 }
 
                 fixtures.BaseTearDown();
