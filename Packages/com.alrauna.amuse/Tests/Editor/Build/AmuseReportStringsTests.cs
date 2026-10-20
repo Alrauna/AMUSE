@@ -391,6 +391,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 AmuseReportStrings.Has("amuse.summary.Title:description"),
                 Is.True);
             Assert.That(
+                AmuseReportStrings.Has(
+                    "amuse.summary.SeparatorSwitchOff:description"),
+                Is.True);
+            Assert.That(
                 AmuseReportStrings.Has("amuse.slotAnalysis.CaptureRefused"),
                 Is.True);
         }

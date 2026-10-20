@@ -363,6 +363,17 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         internal const float ShaderFormatVersion = 45f; // re-confirmed on installed 2.4.0, 2026-10-19
         internal const int OpaqueRenderMode = 0;
 
+        /// <summary>
+        /// Owner decision 2026-10-19: every lilToon version from the floor up
+        /// to, but excluding, the bound is approved. Approved means the build
+        /// never asks and analysis runs under the current pins. On the build
+        /// path, capturer admission and the conversion boundary skip the
+        /// identity checks for an approved member with unattested bytes. The
+        /// attestation itself still fails closed on changed bytes.
+        /// </summary>
+        internal static readonly string ApprovedVersionFloor = "2.3.0";
+        internal static readonly string ApprovedVersionUpperBound = "2.5.0";
+
         // Measured by Task 0 on 2026-08-18 from a scratch
         // jp.lilxyzw.liltoon@2.3.4 install and cross-checked between default and
         // stripped shader settings. Never re-derive these from the lilToon
@@ -440,6 +451,275 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             return false;
         }
 
+        /// <summary>
+        /// True for a canonical M.m.p version inside the approved range
+        /// [floor, bound). The strict parse and the numeric-triple
+        /// comparison are the D1 pins. The grammar-equivalence pin holds
+        /// the range edges to the host grammar.
+        /// </summary>
+        internal static bool IsApprovedPackageVersion(string packageVersion)
+        {
+            if (!TryParseCanonicalVersion(
+                    packageVersion, out var components))
+            {
+                return false;
+            }
+
+            return IsWithinApprovedRange(components);
+        }
+
+        /// <summary>
+        /// The one approval question every routing site asks: a loose
+        /// install carries no package version, so HasPackage == false
+        /// never approves (spec D1).
+        /// </summary>
+        internal static bool IsApprovedPackageEvidence(
+            bool hasPackage, string packageVersion)
+        {
+            return hasPackage && IsApprovedPackageVersion(packageVersion);
+        }
+
+        // The approved range's parsed boundaries. The string constants are
+        // literals, so the parse cannot fail. A failure would throw here
+        // and fail every test that touches the class.
+        private static readonly (int Major, int Minor, int Patch)
+            ApprovedFloorComponents =
+                ParseApprovedBoundary(ApprovedVersionFloor);
+
+        private static readonly (int Major, int Minor, int Patch)
+            ApprovedBoundComponents =
+                ParseApprovedBoundary(ApprovedVersionUpperBound);
+
+        private static (int Major, int Minor, int Patch) ParseApprovedBoundary(
+            string boundary)
+        {
+            if (!TryParseCanonicalVersion(boundary, out var parsed))
+            {
+                throw new InvalidOperationException(
+                    "The approved range boundaries must parse.");
+            }
+
+            return parsed;
+        }
+
+        /// <summary>
+        /// The approved-range question over one parsed version: the
+        /// numeric triple sits in [floor, bound), and every component
+        /// stays two digits wide. The width rule keeps versions no real
+        /// release line could ship outside the range the measured pins
+        /// could ever cover. The pin is the D1 range-grammar case
+        /// "2.3.100". The comparison itself is the numeric triple, never
+        /// ordinal (spec D1).
+        /// </summary>
+        private static bool IsWithinApprovedRange(
+            (int Major, int Minor, int Patch) components)
+        {
+            if (components.Major > 99 ||
+                components.Minor > 99 ||
+                components.Patch > 99)
+            {
+                return false;
+            }
+
+            return CompareTriples(components, ApprovedFloorComponents) >= 0
+                && CompareTriples(components, ApprovedBoundComponents) < 0;
+        }
+
+        private static int CompareTriples(
+            (int Major, int Minor, int Patch) left,
+            (int Major, int Minor, int Patch) right)
+        {
+            if (left.Major != right.Major)
+            {
+                return left.Major < right.Major ? -1 : 1;
+            }
+
+            if (left.Minor != right.Minor)
+            {
+                return left.Minor < right.Minor ? -1 : 1;
+            }
+
+            if (left.Patch != right.Patch)
+            {
+                return left.Patch < right.Patch ? -1 : 1;
+            }
+
+            return 0;
+        }
+
+        /// <summary>
+        /// The strict canonical M.m.p parse (spec D1): exactly three
+        /// dot-separated components, each a digit run of one to nine
+        /// digits, a multi-digit run never starting with '0', and nothing
+        /// trailing the third component. The nine-digit run cap is an
+        /// overflow guard: nine digits fill at most 999,999,999, so the
+        /// int accumulation cannot wrap, and a longer run is unparseable
+        /// before any arithmetic happens. The host grammar's parser is
+        /// private to the Build layer and accepts leading zeros, so the
+        /// attestation class carries its own. The grammar-equivalence pin
+        /// holds the two together on shared canonical forms.
+        /// </summary>
+        private static bool TryParseCanonicalVersion(
+            string packageVersion,
+            out (int Major, int Minor, int Patch) components)
+        {
+            components = default;
+            if (string.IsNullOrEmpty(packageVersion))
+            {
+                return false;
+            }
+
+            var parsed = new int[3];
+            var pos = 0;
+            for (var index = 0; index < parsed.Length; index++)
+            {
+                if (index > 0 &&
+                    !TryReadExpectedDot(packageVersion, ref pos))
+                {
+                    return false;
+                }
+
+                if (!TryReadCanonicalDigitRun(
+                        packageVersion, ref pos, out parsed[index]))
+                {
+                    return false;
+                }
+            }
+
+            if (pos != packageVersion.Length)
+            {
+                return false;
+            }
+
+            components = (parsed[0], parsed[1], parsed[2]);
+            return true;
+        }
+
+        private static bool TryReadExpectedDot(string version, ref int pos)
+        {
+            if (pos < version.Length && version[pos] == '.')
+            {
+                pos++;
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool TryReadCanonicalDigitRun(
+            string version, ref int pos, out int value)
+        {
+            value = 0;
+            var start = pos;
+            var digits = 0;
+            while (pos < version.Length)
+            {
+                var digit = version[pos] - '0';
+                if (digit < 0 || digit > 9)
+                {
+                    break;
+                }
+
+                digits++;
+                if (digits > 9)
+                {
+                    return false;
+                }
+
+                value = value * 10 + digit;
+                pos++;
+            }
+
+            if (digits == 0 || (digits > 1 && version[start] == '0'))
+            {
+                pos = start;
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// The nearest-row pairing fallback (spec D2): for an approved,
+        /// in-range, non-row version, the greatest admitted row at or
+        /// below it, scanning the rows as a numeric-triple list. A version
+        /// below the floor or at or above the bound pairs nothing, exactly
+        /// as at the base commit. The fallback scans its own array, so a
+        /// future row insertion needs no pairing change.
+        /// </summary>
+        private static (string Version, string IncludeDigest)
+            NearestAdmittedRow(string packageVersion)
+        {
+            var nearest = default((string Version, string IncludeDigest));
+            var nearestComponents =
+                default((int Major, int Minor, int Patch));
+            if (!TryParseCanonicalVersion(
+                    packageVersion, out var components) ||
+                !IsWithinApprovedRange(components))
+            {
+                return nearest;
+            }
+
+            foreach (var row in AdmittedPackageVersions)
+            {
+                if (!TryParseCanonicalVersion(
+                        row.Version, out var rowComponents))
+                {
+                    continue;
+                }
+
+                if (CompareTriples(rowComponents, components) <= 0 &&
+                    (nearest.Version == null ||
+                     CompareTriples(rowComponents, nearestComponents) > 0))
+                {
+                    nearest = row;
+                    nearestComponents = rowComponents;
+                }
+            }
+
+            return nearest;
+        }
+
+        /// <summary>
+        /// The same pairing shape over the admitted Multi rows, for the
+        /// Multi column lookup.
+        /// </summary>
+        private static
+            (string Version, string MultiDigest, string MultiOutlineDigest)
+            NearestAdmittedMultiRow(string packageVersion)
+        {
+            var nearest = default(
+                (string Version, string MultiDigest,
+                    string MultiOutlineDigest));
+            var nearestComponents =
+                default((int Major, int Minor, int Patch));
+            if (!TryParseCanonicalVersion(
+                    packageVersion, out var components) ||
+                !IsWithinApprovedRange(components))
+            {
+                return nearest;
+            }
+
+            foreach (var row in AdmittedMultiVersions)
+            {
+                if (!TryParseCanonicalVersion(
+                        row.Version, out var rowComponents))
+                {
+                    continue;
+                }
+
+                if (CompareTriples(rowComponents, components) <= 0 &&
+                    (nearest.Version == null ||
+                     CompareTriples(rowComponents, nearestComponents) > 0))
+                {
+                    nearest = row;
+                    nearestComponents = rowComponents;
+                }
+            }
+
+            return nearest;
+        }
+
         private static string IncludeDigestForVersion(string packageVersion)
         {
             foreach (var row in AdmittedPackageVersions)
@@ -452,7 +732,10 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 }
             }
 
-            return null;
+            // D2 pairing: an approved non-row version borrows the nearest
+            // admitted row below it. Everything else stays null exactly as
+            // at the base commit.
+            return NearestAdmittedRow(packageVersion).IncludeDigest;
         }
 
         // Cutout source identity (spec §6 R3). Measured by the merged B1
@@ -2037,7 +2320,11 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     return false;
                 }
 
-                if (!IsAdmittedPackageVersion(evidence.PackageVersion))
+                // Admitted, or approved inside the range (D2): the
+                // disjunct keeps the row set exact and sends an approved
+                // non-row version to the tree check instead of refusing.
+                if (!(IsAdmittedPackageVersion(evidence.PackageVersion) ||
+                      IsApprovedPackageVersion(evidence.PackageVersion)))
                 {
                     diagnostic = MaterialDiagnostic(
                         LilToonSemanticDiagnosticCode.UnsupportedVersion,
@@ -2228,14 +2515,20 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
 
             // 3. Package identity, when installed as a package. The version
             //    must be an admitted one that carries an admitted Multi row
-            //    (A2); versions without a Multi row stay on the consent
-            //    path. A loose install carries no version label, so an
-            //    admitted tree alone identifies the shipped version below.
+            //    (A2), or an approved version, which pairs the nearest
+            //    admitted Multi row at or below it. A version with no Multi
+            //    row at or below it refuses right here: the container
+            //    attestation fails closed. An approved version below the
+            //    oldest Multi row gets its ask suppressed and reports
+            //    UnsupportedMultiState slot rows without separating. A
+            //    loose install carries no version label, so an admitted
+            //    tree alone identifies the shipped version below.
             if (evidence.HasPackage &&
                 (!string.Equals(
                         evidence.PackageName, PackageName,
                         StringComparison.Ordinal) ||
-                 !IsAdmittedPackageVersion(evidence.PackageVersion) ||
+                 !(IsAdmittedPackageVersion(evidence.PackageVersion) ||
+                   IsApprovedPackageVersion(evidence.PackageVersion)) ||
                  !TryMultiColumnDigest(
                      evidence.PackageVersion,
                      LilToonMultiContainerColumn.Base,
@@ -2323,7 +2616,9 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// <see cref="LilToonMultiResolutionRefusal.AttestationFailed"/>.
         /// The verify itself is the parameterized conjunction, so the
         /// resolution point can store the verified gather without a second
-        /// canonicalization pass.
+        /// canonicalization pass. When the digest term refuses, the out
+        /// evidence keeps the gathered facts (the profile stays null), so
+        /// the refused record can carry the captured package identity.
         /// </summary>
         internal static bool TryResolveMultiContainer(
             Shader shader,
@@ -2363,7 +2658,10 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                         return true;
                     }
 
-                    sourceEvidence = null;
+                    // The gather survives the refusal: the resolution point
+                    // stores its captured package facts on the refused
+                    // record, so the consent layer reads the captured
+                    // version without a second canonicalization pass (D3).
                     profile = null;
                     refusal = LilToonMultiResolutionRefusal.AttestationFailed;
                     return false;
@@ -2388,7 +2686,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             out string digest)
         {
             if (sourceEvidence.HasPackage &&
-                IsAdmittedPackageVersion(sourceEvidence.PackageVersion) &&
+                (IsAdmittedPackageVersion(sourceEvidence.PackageVersion) ||
+                 IsApprovedPackageVersion(sourceEvidence.PackageVersion)) &&
                 TryMultiColumnDigest(
                     sourceEvidence.PackageVersion, column, out digest))
             {
@@ -2518,8 +2817,20 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                 }
             }
 
-            digest = null;
-            return false;
+            // D2 pairing: an approved non-row version pairs the nearest
+            // admitted Multi row below it. A version with no Multi row at
+            // or below it has no column, exactly as at the base commit.
+            var nearest = NearestAdmittedMultiRow(version);
+            if (nearest.Version == null)
+            {
+                digest = null;
+                return false;
+            }
+
+            digest = column == LilToonMultiContainerColumn.Outline
+                ? nearest.MultiOutlineDigest
+                : nearest.MultiDigest;
+            return true;
         }
 
         private static LilToonMultiContainerColumn ColumnForProfile(

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEditor;
@@ -69,6 +70,74 @@ namespace Alrauna.Amuse.Tests.Editor
             }
         }
 
+        [Test]
+        public void DefaultSeparatorSubSwitchesAreTrue()
+        {
+            var root = new GameObject("Root");
+            try
+            {
+                var component = root.AddComponent<AmuseAvatarOptimizer>();
+                Assert.That(component.CutoutSeparatorEnabled, Is.True);
+                Assert.That(component.TransparentSeparatorEnabled, Is.True);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        public void LegacyPayloadWithoutSubSwitchFieldsDeserializesTrue()
+        {
+            var root = new GameObject("Root");
+            try
+            {
+                var component = root.AddComponent<AmuseAvatarOptimizer>();
+                var legacyJson = "{\"_alphaSeparatorEnabled\": true}";
+                EditorJsonUtility.FromJsonOverwrite(legacyJson, component);
+                Assert.That(component.CutoutSeparatorEnabled, Is.True,
+                    "a payload that predates the fields must deserialize true");
+                Assert.That(component.TransparentSeparatorEnabled, Is.True);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        public void ResetRestoresSeparatorSubSwitchesToTrue()
+        {
+            var root = new GameObject("Root");
+            try
+            {
+                var component = root.AddComponent<AmuseAvatarOptimizer>();
+                var serializedObject = new SerializedObject(component);
+                serializedObject.FindProperty("_cutoutSeparatorEnabled")
+                    .boolValue = false;
+                serializedObject.FindProperty("_transparentSeparatorEnabled")
+                    .boolValue = false;
+                serializedObject.ApplyModifiedProperties();
+                Assert.That(component.CutoutSeparatorEnabled, Is.False);
+                Assert.That(component.TransparentSeparatorEnabled, Is.False);
+
+                // Unity's context-menu Reset is a private magic method. The
+                // test calls it through reflection like the inspector does.
+                var reset = typeof(AmuseAvatarOptimizer).GetMethod(
+                    "Reset", BindingFlags.Instance | BindingFlags.NonPublic);
+                Assert.That(reset, Is.Not.Null,
+                    "AmuseAvatarOptimizer.Reset method pin");
+                reset.Invoke(component, null);
+
+                Assert.That(component.CutoutSeparatorEnabled, Is.True);
+                Assert.That(component.TransparentSeparatorEnabled, Is.True);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
         private static IEnumerable<TestCaseData> SwitchFieldRows()
         {
             // The reveal toggle stores on the component, so the engine
@@ -84,6 +153,14 @@ namespace Alrauna.Amuse.Tests.Editor
                 "_alphaSeparatorEnabled", true, false,
                 new Func<AmuseAvatarOptimizer, bool>(o =>
                     o.AlphaSeparatorEnabled));
+            yield return new TestCaseData(
+                "_cutoutSeparatorEnabled", true, false,
+                new Func<AmuseAvatarOptimizer, bool>(o =>
+                    o.CutoutSeparatorEnabled));
+            yield return new TestCaseData(
+                "_transparentSeparatorEnabled", true, false,
+                new Func<AmuseAvatarOptimizer, bool>(o =>
+                    o.TransparentSeparatorEnabled));
         }
 
         [TestCaseSource(nameof(SwitchFieldRows))]

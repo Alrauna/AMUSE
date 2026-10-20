@@ -1163,11 +1163,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 AmuseBuildStatusStore.Forget();
                 AmuseReports.AvatarSummary(
-                    root, 1, 2, 3, AmuseBuildPath.ApplyOnPlay, false,
+                    root, 1, 2, 3, AmuseBuildPath.ApplyOnPlay, false, false,
                     BuildTarget.StandaloneWindows64,
                     AlphaSamplingPolicy.ConservativeDesktop);
                 AmuseReports.AvatarSummary(
-                    root, 4, 5, 6, AmuseBuildPath.NonPlayNdmfBuild, false,
+                    root, 4, 5, 6, AmuseBuildPath.NonPlayNdmfBuild, false, false,
                     BuildTarget.StandaloneWindows64,
                     AlphaSamplingPolicy.ConservativeDesktop);
 
@@ -1193,7 +1193,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             try
             {
                 AmuseReports.AvatarSummary(
-                    root, 1, 2, 3, AmuseBuildPath.NonPlayNdmfBuild, false,
+                    root, 1, 2, 3, AmuseBuildPath.NonPlayNdmfBuild, false, false,
                     BuildTarget.StandaloneWindows64,
                     AlphaSamplingPolicy.ConservativeDesktop);
                 AmuseBuildStatusStore.Forget();
@@ -1217,7 +1217,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 AmuseBuildStatusStore.Forget();
                 AmuseReports.AvatarSummary(
-                    root, 1, 2, 3, AmuseBuildPath.ApplyOnPlay, false,
+                    root, 1, 2, 3, AmuseBuildPath.ApplyOnPlay, false, false,
                     BuildTarget.StandaloneWindows64,
                     AlphaSamplingPolicy.ConservativeDesktop);
 
@@ -1243,7 +1243,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 AmuseBuildStatusStore.Forget();
                 AmuseReports.AvatarSummary(
-                    root, 1, 2, 3, AmuseBuildPath.NonPlayNdmfBuild, true,
+                    root, 1, 2, 3, AmuseBuildPath.NonPlayNdmfBuild, true, false,
                     BuildTarget.StandaloneWindows64,
                     AlphaSamplingPolicy.ConservativeDesktop);
 
@@ -1256,7 +1256,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     "alpha policy", activeStatus);
 
                 AmuseReports.AvatarSummary(
-                    root, 1, 2, 3, AmuseBuildPath.NonPlayNdmfBuild, false,
+                    root, 1, 2, 3, AmuseBuildPath.NonPlayNdmfBuild, false, false,
                     BuildTarget.StandaloneWindows64,
                     AlphaSamplingPolicy.ConservativeDesktop);
 
@@ -1301,6 +1301,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 AmuseReports.AvatarSummary(
                     root, 1, 0, 1, AmuseBuildPath.NonPlayNdmfBuild,
                     alphaPolicyActive: false,
+                    anySeparatorSwitchOff: false,
                     BuildTarget.StandaloneWindows64,
                     AlphaSamplingPolicy.AcceptedNonAnisotropic);
 
@@ -1321,6 +1322,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     () => AmuseReports.AvatarSummary(
                         root, 1, 0, 1, AmuseBuildPath.NonPlayNdmfBuild,
                         alphaPolicyActive: false,
+                        anySeparatorSwitchOff: false,
                         BuildTarget.StandaloneWindows64,
                         AlphaSamplingPolicy.AcceptedNonAnisotropic));
                 var summaryEntries = new List<string>();
@@ -1368,6 +1370,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 AmuseReports.AvatarSummary(
                     root, 1, 0, 1, AmuseBuildPath.NonPlayNdmfBuild,
                     alphaPolicyActive: false,
+                    anySeparatorSwitchOff: false,
                     BuildTarget.StandaloneWindows64,
                     AlphaSamplingPolicy.ConservativeDesktop);
 
@@ -1412,6 +1415,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 AmuseReports.AvatarSummary(
                     root, 1, 0, 1, AmuseBuildPath.NonPlayNdmfBuild,
                     alphaPolicyActive: false,
+                    anySeparatorSwitchOff: false,
                     BuildTarget.StandaloneLinux64,
                     AlphaSamplingPolicy.ConservativeMobile);
 
@@ -1427,6 +1431,164 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     Is.False,
                     "no acceptance claim may appear for an unsupported " +
                     "target");
+            }
+            finally
+            {
+                AmuseBuildStatusStore.Forget();
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
+        /// Task 6 disclosure. A build the barrier analyzed while a
+        /// separator switch was off names the reason in its summary.
+        /// The sentence rides its own fact alone: with the tolerance
+        /// flag inert, the alpha policy sentence must not appear.
+        /// </summary>
+        [Test]
+        public void
+            SummaryNamesDisabledSeparatorSwitchesWhenAnalysisWasReached()
+        {
+            var root = new GameObject(
+                "AMUSE separator switch off fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+
+            try
+            {
+                AmuseBuildStatusStore.Forget();
+                // A reached build with a separator switch off. The
+                // reach flag is true, so the apply pass reported the
+                // summary at all.
+                AmuseReports.AvatarSummary(
+                    root, 1, 0, 1, AmuseBuildPath.NonPlayNdmfBuild,
+                    alphaPolicyActive: false,
+                    anySeparatorSwitchOff: true,
+                    BuildTarget.StandaloneWindows64,
+                    AlphaSamplingPolicy.ConservativeDesktop);
+
+                Assert.That(
+                    AmuseBuildStatusStore.TryGet(out var status), Is.True);
+                StringAssert.Contains(
+                    "separator switch",
+                    status,
+                    "a reached build with a separator switch off must " +
+                    "name the reason");
+                Assert.That(
+                    status.Contains("alpha policy"),
+                    Is.False,
+                    "the separator switch fact alone must not raise " +
+                    "the tolerance sentence");
+            }
+            finally
+            {
+                AmuseBuildStatusStore.Forget();
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
+        /// Both separator switches on means the summary stays silent
+        /// about them. No separator sentence may appear when the
+        /// captured switch facts are inert.
+        /// </summary>
+        [Test]
+        public void
+            SummaryStaysSilentAboutSeparatorSwitchesWhenBothAreOn()
+        {
+            var root = new GameObject(
+                "AMUSE separator switches on fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+
+            try
+            {
+                AmuseBuildStatusStore.Forget();
+                AmuseReports.AvatarSummary(
+                    root, 1, 0, 1, AmuseBuildPath.NonPlayNdmfBuild,
+                    alphaPolicyActive: false,
+                    anySeparatorSwitchOff: false,
+                    BuildTarget.StandaloneWindows64,
+                    AlphaSamplingPolicy.ConservativeDesktop);
+
+                Assert.That(
+                    AmuseBuildStatusStore.TryGet(out var status), Is.True);
+                Assert.That(
+                    status.Contains("separator switch"),
+                    Is.False,
+                    "a build with both separator switches on must not " +
+                    "name them");
+            }
+            finally
+            {
+                AmuseBuildStatusStore.Forget();
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
+        /// The barrier captures the separator switch facts only after
+        /// the reach gate. A build that stopped before analysis keeps
+        /// the defaults, so its state cannot claim a disabled switch.
+        /// The summary stays silent even though the component's cutout
+        /// separator switch was off.
+        /// </summary>
+        [Test]
+        public void
+            SummaryOmitsSeparatorSentenceWhenAnalysisWasNotReached()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject(
+                "AMUSE separator switch unreached fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            var component =
+                root.AddComponent<
+                    Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            root.AddComponent<LineRenderer>();
+
+            try
+            {
+                var serialized = new UnityEditor.SerializedObject(component);
+                serialized.FindProperty("_alphaSeparatorEnabled")
+                    .boolValue = false;
+                serialized.FindProperty("_cutoutSeparatorEnabled")
+                    .boolValue = false;
+                serialized.ApplyModifiedProperties();
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                AmusePlatformFinishPass.Execute(context, SupportedFacts());
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(amuse.ReachedRendererAnalysis, Is.False,
+                    "fixture precondition: the barrier stopped before " +
+                    "the capture");
+                Assert.That(amuse.CutoutSeparatorOff, Is.False,
+                    "an unreached capture must not claim the cutout " +
+                    "switch fact");
+                Assert.That(amuse.TransparentSeparatorOff, Is.False,
+                    "an unreached capture must not claim the " +
+                    "transparent switch fact");
+
+                // The apply pass summarizes only reached builds. Its
+                // caller expression on this state is false, so no
+                // summary line it could print names a separator switch.
+                AmuseBuildStatusStore.Forget();
+                AmuseReports.AvatarSummary(
+                    root, 0, 0, 0, AmuseBuildPath.NonPlayNdmfBuild,
+                    alphaPolicyActive: false,
+                    anySeparatorSwitchOff:
+                        amuse.CutoutSeparatorOff ||
+                        amuse.TransparentSeparatorOff,
+                    BuildTarget.StandaloneWindows64,
+                    AlphaSamplingPolicy.ConservativeDesktop);
+
+                Assert.That(
+                    AmuseBuildStatusStore.TryGet(out var status), Is.True);
+                Assert.That(
+                    status.Contains("separator switch"),
+                    Is.False,
+                    "an unreached build must not name a separator " +
+                    "switch");
             }
             finally
             {
@@ -6752,6 +6914,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         amuse.UntouchedRendererCount,
                         amuse.Lifecycle.BuildPath,
                         amuse.AlphaPolicyActive,
+                        amuse.CutoutSeparatorOff ||
+                            amuse.TransparentSeparatorOff,
                         amuse.SamplingTarget,
                         amuse.SamplingPolicy));
                 AmuseBuildStatusStore.Forget();

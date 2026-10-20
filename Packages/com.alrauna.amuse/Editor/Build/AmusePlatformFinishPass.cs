@@ -321,7 +321,11 @@ namespace Alrauna.Amuse.Editor.Build
             // The granted transfer names compose into every gate that
             // verifies a source identity: the transferred capture skips the
             // check for a granted name, and the conversion boundary skips it
-            // for a granted name.
+            // for a granted name. Approval is the parallel version-keyed
+            // arm (D3): any approved captured version also installs the
+            // transferred capturer, which then admits members by their
+            // captured package version. Both arms stay fail-closed for
+            // everything else.
             // An unconsented build grants nothing and stays fail-closed.
             var grantedShaderNames =
                 shaderTransfer.GrantedShaderNames.Count > 0
@@ -372,7 +376,9 @@ namespace Alrauna.Amuse.Editor.Build
                 }
             }
 
-            var transferShaders = grantedShaderNames != null;
+            var transferShaders =
+                grantedShaderNames != null ||
+                shaderTransfer.AnyApprovedVersions;
 
             // Every avatar-scope gate has passed: the unlock window opens
             // here, before capture, so the whole pipeline below reads the
@@ -440,6 +446,16 @@ namespace Alrauna.Amuse.Editor.Build
                 optimizer == null || optimizer.IgnoreOutOfRangeMaterialSlots;
             var allowDepthTestChange =
                 optimizer == null || optimizer.AllowDepthTestChange;
+            var cutoutSeparatorEnabled =
+                optimizer == null || optimizer.CutoutSeparatorEnabled;
+            var transparentSeparatorEnabled =
+                optimizer == null || optimizer.TransparentSeparatorEnabled;
+            // The separator switch facts ride the same barrier capture.
+            // A switch off at the capture means its slot family never
+            // separated. The apply pass reports the fact beside the
+            // reach flag.
+            state.CutoutSeparatorOff = !cutoutSeparatorEnabled;
+            state.TransparentSeparatorOff = !transparentSeparatorEnabled;
 
             // The proof policy is a build-wide fact. Capture the active
             // target and the selected policy exactly once, before any
@@ -535,7 +551,11 @@ namespace Alrauna.Amuse.Editor.Build
                                 out transferred,
                                 RegisteredSourceIdentity.Resolve,
                                 cutoutRawMipCap,
-                                exactRawMipCap);
+                                exactRawMipCap,
+                                // The build's effective capturer is the
+                                // one site the approval admission rides
+                                // (D3). Every other capturer stays strict.
+                                admitApprovedVersions: true);
                 }
 
                 var hasIndex = TryGetAnimationIndex(
@@ -774,6 +794,11 @@ namespace Alrauna.Amuse.Editor.Build
                                 minimumOpaqueCoverageToPreservePercent,
                                 cutoutMinimumCoverage,
                                 cutoutPreserveCoverage);
+                        var separatorOffBySlot = SlotTransformDecision
+                            .SeparatorOffBySlot(
+                                coverageVectors.CutoutMembershipBySlot,
+                                cutoutSeparatorEnabled,
+                                transparentSeparatorEnabled);
                         var prepared = RetainPreparedSeparation(
                             state,
                             extraction.MutationTarget,
@@ -786,6 +811,7 @@ namespace Alrauna.Amuse.Editor.Build
                             coverageVectors.CoveragePercentsBySlot,
                             coverageVectors.PreservePercentsBySlot,
                             coverageVectors.CutoutMembershipBySlot,
+                            separatorOffBySlot,
                             rendererTypeName,
                             allowDepthTestChange,
                             grantedShaderNames,
@@ -1060,6 +1086,7 @@ namespace Alrauna.Amuse.Editor.Build
             IReadOnlyList<int> coveragePercentsBySlot,
             IReadOnlyList<int> preservePercentsBySlot,
             IReadOnlyList<bool> cutoutMembershipBySlot,
+            bool[] separatorOffBySlot = null,
             string rendererTypeName = null,
             bool allowDepthTestChange = false,
             IReadOnlyCollection<string> grantedShaderNames = null,
@@ -1077,6 +1104,7 @@ namespace Alrauna.Amuse.Editor.Build
                 coveragePercentsBySlot,
                 preservePercentsBySlot,
                 cutoutMembershipBySlot,
+                separatorOffBySlot,
                 rendererTypeName,
                 allowDepthTestChange,
                 grantedShaderNames,

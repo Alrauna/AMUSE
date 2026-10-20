@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.Host;
@@ -452,5 +453,177 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             return fixture != null && fixture == material.shader;
         }
 
+        // --- D3 approved-range vendor fixture -------------------------------
+        //
+        // The production capture derives the package version from the
+        // installed package, so an approval routing test that runs the real
+        // capture needs a shader the package database answers for. The
+        // embedded stand-in package below declares an approved, non-row
+        // lilToon version, and its stand-in digests mismatch every measured
+        // pin by construction: a byte-changed in-range install.
+
+        /// <summary>The embedded package's own name.</summary>
+        internal const string ApprovedRangeVendorPackageName =
+            "com.alrauna.amuse.tests.vendor";
+
+        /// <summary>
+        /// The default declared package version: an approved, non-row
+        /// version. It pairs the 2.4.0 row for the attestation-side pins
+        /// and rides the version-keyed routing arms in the pipeline
+        /// fixtures. The scope's constructor takes another version, so a
+        /// boundary test can install the same package out of range.
+        /// </summary>
+        internal const string ApprovedRangeVendorVersion = "2.4.1";
+
+        private static string ApprovedRangeVendorFolder()
+        {
+            return Path.Combine(
+                Path.GetDirectoryName(Application.dataPath),
+                "Packages",
+                ApprovedRangeVendorPackageName);
+        }
+
+        private const string CheckedInCutoutConversionShaderPath =
+            "Packages/com.alrauna.amuse/Tests/Editor/Semantics/LilToon/" +
+            "LilToonCutoutConversionTest.shader";
+
+        /// <summary>
+        /// One test's embedded vendor package: the package manifest plus
+        /// any stand-in shaders the test installs. Registration rides the
+        /// package client's resolve, which completes on editor updates, so
+        /// a test yields until <see cref="IsRegistered"/> answers true.
+        /// TearDown removes the folder and re-resolves, which unregisters
+        /// the package again.
+        /// </summary>
+        internal sealed class ApprovedRangeVendorScope
+        {
+            private const string ManifestFileName = "package.json";
+            private const string CutoutShaderFileName = "VendorCutout.shader";
+
+            private readonly string manifestVersion;
+
+            /// <summary>
+            /// Uses the approved in-range default version. A boundary test
+            /// passes its own version to pin the range edge.
+            /// </summary>
+            internal ApprovedRangeVendorScope()
+                : this(ApprovedRangeVendorVersion)
+            {
+            }
+
+            /// <summary>
+            /// Uses the given manifest version, so the same embedded
+            /// package can stand in for an out-of-range install.
+            /// </summary>
+            internal ApprovedRangeVendorScope(string manifestVersion)
+            {
+                this.manifestVersion = manifestVersion;
+            }
+
+            private static string CutoutShaderProjectPath
+                => "Packages/" + ApprovedRangeVendorPackageName + "/" +
+                    CutoutShaderFileName;
+
+            /// <summary>
+            /// The vendor cutout stand-in carries the plain vendor cutout
+            /// name, so the production family classification admits it with
+            /// no selector seam. The name is shared with the real installed
+            /// vendor asset by design. Every consumer resolves the fixture
+            /// by shader instance or asset path, never by name lookup.
+            /// </summary>
+            internal const string CutoutShaderName = "Hidden/lilToonCutout";
+
+            /// <summary>
+            /// The imported cutout stand-in, or null before registration.
+            /// </summary>
+            internal Shader CutoutShader
+                => AssetDatabase.LoadAssetAtPath<Shader>(
+                    CutoutShaderProjectPath);
+
+            /// <summary>
+            /// Writes the manifest and the cutout stand-in shader into the
+            /// embedded package folder. No import happens here: the package
+            /// is not registered yet, so the database cannot import the
+            /// file. The schema is the checked-in cutout conversion
+            /// fixture's, with only the shader name substituted: one
+            /// executable specification, two assets.
+            /// </summary>
+            internal void InstallCutoutShader()
+            {
+                WriteManifest();
+                var sourceFullPath = Path.Combine(
+                    Path.GetDirectoryName(Application.dataPath),
+                    CheckedInCutoutConversionShaderPath);
+                File.WriteAllText(
+                    Path.Combine(ApprovedRangeVendorFolder(),
+                        CutoutShaderFileName),
+                    File.ReadAllText(sourceFullPath).Replace(
+                        "Hidden/Alrauna/AmuseTests/LilToonCutoutConversionTest",
+                        CutoutShaderName));
+            }
+
+            /// <summary>
+            /// True once the package database answers for the installed
+            /// fixture shader, so the production gather's package read
+            /// presents the declared version.
+            /// </summary>
+            internal bool IsRegistered()
+            {
+                return CutoutShader != null &&
+                    UnityEditor.PackageManager.PackageInfo.FindForAssetPath(
+                        CutoutShaderProjectPath) != null;
+            }
+
+            /// <summary>
+            /// Asks the package client to register the embedded package.
+            /// The resolve and the refresh complete on editor updates, so
+            /// the caller yields before asking <see cref="IsRegistered"/>.
+            /// </summary>
+            internal void RequestRegistration()
+            {
+                WriteManifest();
+                UnityEditor.PackageManager.Client.Resolve();
+                AssetDatabase.Refresh();
+            }
+
+            /// <summary>
+            /// Removes the package folder, then re-resolves so the package
+            /// database unregisters it. Safe to call when nothing exists.
+            /// </summary>
+            internal void TearDown()
+            {
+                var folder = ApprovedRangeVendorFolder();
+                if (!Directory.Exists(folder))
+                {
+                    return;
+                }
+
+                Directory.Delete(folder, true);
+                if (File.Exists(folder + ".meta"))
+                {
+                    File.Delete(folder + ".meta");
+                }
+
+                AssetDatabase.Refresh();
+                UnityEditor.PackageManager.Client.Resolve();
+            }
+
+            private void WriteManifest()
+            {
+                var folder = ApprovedRangeVendorFolder();
+                Directory.CreateDirectory(folder);
+                var manifestPath = Path.Combine(folder, ManifestFileName);
+                if (File.Exists(manifestPath))
+                {
+                    return;
+                }
+
+                File.WriteAllText(
+                    manifestPath,
+                    "{\"name\":\"" + ApprovedRangeVendorPackageName +
+                    "\",\"version\":\"" + manifestVersion +
+                    "\",\"displayName\":\"AMUSE approved-range test vendor\"}");
+            }
+        }
     }
 }

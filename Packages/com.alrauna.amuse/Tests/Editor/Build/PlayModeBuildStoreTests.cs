@@ -65,7 +65,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 var fingerprint = PlayModeBuildStore.ComputePolicyFingerprint(
                     component, BuildTarget.StandaloneWindows64);
                 Assert.That(fingerprint, Does.StartWith("StandaloneWindows64;"));
-                Assert.That(fingerprint.Split(';').Length, Is.EqualTo(18));
+                Assert.That(fingerprint.Split(';').Length, Is.EqualTo(20));
             }
             finally
             {
@@ -111,6 +111,20 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 var mobileAnisoFingerprint = PlayModeBuildStore.ComputePolicyFingerprint(
                     component, BuildTarget.StandaloneWindows64);
                 Assert.That(mobileAnisoFingerprint, Is.Not.EqualTo(baseline));
+
+                SetStoredBool(component, "_acceptMobileAnisotropyDifferences", true);
+                SetStoredBool(component, "_cutoutSeparatorEnabled", false);
+                var cutoutSeparatorFingerprint =
+                    PlayModeBuildStore.ComputePolicyFingerprint(
+                        component, BuildTarget.StandaloneWindows64);
+                Assert.That(cutoutSeparatorFingerprint, Is.Not.EqualTo(baseline));
+
+                SetStoredBool(component, "_cutoutSeparatorEnabled", true);
+                SetStoredBool(component, "_transparentSeparatorEnabled", false);
+                var transparentSeparatorFingerprint =
+                    PlayModeBuildStore.ComputePolicyFingerprint(
+                        component, BuildTarget.StandaloneWindows64);
+                Assert.That(transparentSeparatorFingerprint, Is.Not.EqualTo(baseline));
             }
             finally
             {

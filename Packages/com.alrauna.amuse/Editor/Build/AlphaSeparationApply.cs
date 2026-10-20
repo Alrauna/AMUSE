@@ -94,6 +94,8 @@ namespace Alrauna.Amuse.Editor.Build
                     state.UntouchedRendererCount,
                     lifecycle.BuildPath,
                     state.AlphaPolicyActive,
+                    state.CutoutSeparatorOff ||
+                        state.TransparentSeparatorOff,
                     state.SamplingTarget,
                     state.SamplingPolicy);
             }

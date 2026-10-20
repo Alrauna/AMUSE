@@ -4,7 +4,7 @@ using Newtonsoft.Json.Linq;
 namespace Alrauna.Amuse.Editor.Presets
 {
     /// <summary>
-    /// Parses preset text against the closed version 4 schema. The
+    /// Parses preset text against the closed version 5 schema. The
     /// parser refuses instead of guessing: an unknown key, a missing
     /// key, a wrong type, or an out-of-range value answers a named
     /// refusal and no preset, because a file must never half-apply.
@@ -15,12 +15,13 @@ namespace Alrauna.Amuse.Editor.Presets
     /// </summary>
     internal static class PresetParser
     {
-        internal const int CurrentSchemaVersion = 4;
+        internal const int CurrentSchemaVersion = 5;
 
         private static readonly string[] FileKeys =
             { "schemaVersion", "name", "description", "features", "settings" };
 
-        private static readonly string[] FeatureKeys = { "alphaSeparator" };
+        private static readonly string[] FeatureKeys =
+            { "alphaSeparator", "cutoutSeparator", "transparentSeparator" };
 
         private static readonly string[] SettingKeys =
         {
@@ -104,6 +105,12 @@ namespace Alrauna.Amuse.Editor.Presets
                 || !TryRead<bool>(
                     features, "alphaSeparator", JTokenType.Boolean, ref refusal,
                     out var alphaSeparator)
+                || !TryRead<bool>(
+                    features, "cutoutSeparator", JTokenType.Boolean,
+                    ref refusal, out var cutoutSeparator)
+                || !TryRead<bool>(
+                    features, "transparentSeparator", JTokenType.Boolean,
+                    ref refusal, out var transparentSeparator)
                 || !TryReadMipCap(
                     settings, "preserveTransparencyMaxMipLevel",
                     ref refusal, out var mipCap)
@@ -165,6 +172,7 @@ namespace Alrauna.Amuse.Editor.Presets
 
             preset = new OptimizerPreset(
                 name, description, alphaSeparator,
+                cutoutSeparator, transparentSeparator,
                 mipCap, cutoutMipCap,
                 minSize, cutoutMinSize,
                 coverage, cutoutCoverage,

@@ -172,7 +172,7 @@ namespace Alrauna.Amuse.Tests.Editor
         }
 
         [Test]
-        public void ApplyWritesAllSixteenFields()
+        public void ApplyWritesAllEighteenFields()
         {
             var go = new GameObject("Root");
             try
@@ -191,6 +191,10 @@ namespace Alrauna.Amuse.Tests.Editor
                 // so the apply must write each one back.
                 var serialized = new UnityEditor.SerializedObject(optimizer);
                 serialized.FindProperty("_alphaSeparatorEnabled")
+                    .boolValue = false;
+                serialized.FindProperty("_cutoutSeparatorEnabled")
+                    .boolValue = false;
+                serialized.FindProperty("_transparentSeparatorEnabled")
                     .boolValue = false;
                 serialized.FindProperty("_preserveTransparencyMaxMipLevel")
                     .intValue = 1;
@@ -237,6 +241,8 @@ namespace Alrauna.Amuse.Tests.Editor
                 PresetApplier.Apply(preset, serialized);
 
                 Assert.That(optimizer.AlphaSeparatorEnabled, Is.True);
+                Assert.That(optimizer.CutoutSeparatorEnabled, Is.True);
+                Assert.That(optimizer.TransparentSeparatorEnabled, Is.True);
                 Assert.That(optimizer.PreserveTransparencyMaxMipLevel,
                     Is.EqualTo(4));
                 Assert.That(optimizer.CutoutPreserveTransparencyMaxMipLevel,

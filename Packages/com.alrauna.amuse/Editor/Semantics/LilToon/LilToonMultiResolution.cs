@@ -211,7 +211,12 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     out var profile,
                     out var refusal))
             {
-                return LilToonMultiResolutionRecord.Refused(refusal);
+                // The digest refusal leaves the gather in hand, so the
+                // record carries the captured package identity (D3).
+                return LilToonMultiResolutionRecord.Refused(
+                    refusal,
+                    sourceEvidence != null && sourceEvidence.HasPackage,
+                    sourceEvidence?.PackageVersion);
             }
 
             if (!Resolve(
@@ -223,7 +228,10 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     out mode,
                     out refusal))
             {
-                return LilToonMultiResolutionRecord.Refused(refusal);
+                return LilToonMultiResolutionRecord.Refused(
+                    refusal,
+                    sourceEvidence.HasPackage,
+                    sourceEvidence.PackageVersion);
             }
 
             return LilToonMultiResolutionRecord.Admitted(sourceEvidence);
@@ -426,10 +434,14 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
     {
         private LilToonMultiResolutionRecord(
             LilToonSourceEvidence sourceEvidence,
-            LilToonMultiResolutionRefusal refusal)
+            LilToonMultiResolutionRefusal refusal,
+            bool capturedHasPackage,
+            string capturedPackageVersion)
         {
             SourceEvidence = sourceEvidence;
             Refusal = refusal;
+            CapturedHasPackage = capturedHasPackage;
+            CapturedPackageVersion = capturedPackageVersion;
         }
 
         /// <summary>
@@ -442,6 +454,18 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// <summary>The closed refusal value. Meaningful only when the
         /// record did not resolve.</summary>
         internal LilToonMultiResolutionRefusal Refusal { get; }
+
+        /// <summary>
+        /// The package facts the capture gathered for this material,
+        /// whatever the verdict: the consent layer reads the captured
+        /// version off a refused record without a second gather, so the
+        /// approved-version suppression and the transferred capture
+        /// admission can route on it (D3). A resolved record carries the
+        /// same values from its own evidence.
+        /// </summary>
+        internal bool CapturedHasPackage { get; }
+
+        internal string CapturedPackageVersion { get; }
 
         /// <summary>True when the resolver admitted the material and
         /// mapped its mode onto the regular family.</summary>
@@ -456,13 +480,31 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             }
 
             return new LilToonMultiResolutionRecord(
-                sourceEvidence, default);
+                sourceEvidence,
+                default,
+                sourceEvidence.HasPackage,
+                sourceEvidence.PackageVersion);
         }
 
         internal static LilToonMultiResolutionRecord Refused(
             LilToonMultiResolutionRefusal refusal)
         {
-            return new LilToonMultiResolutionRecord(null, refusal);
+            return new LilToonMultiResolutionRecord(
+                null, refusal, false, null);
+        }
+
+        /// <summary>
+        /// The refused-record shape the resolution point stores when the
+        /// gather survived the refusal: the closed refusal value beside
+        /// the captured package identity (D3).
+        /// </summary>
+        internal static LilToonMultiResolutionRecord Refused(
+            LilToonMultiResolutionRefusal refusal,
+            bool capturedHasPackage,
+            string capturedPackageVersion)
+        {
+            return new LilToonMultiResolutionRecord(
+                null, refusal, capturedHasPackage, capturedPackageVersion);
         }
     }
 }

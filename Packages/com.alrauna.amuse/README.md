@@ -11,7 +11,7 @@ VCC and ALCOM both need two repositories, in this order:
 
 [![Add to VCC](https://img.shields.io/badge/Add%20to%20VCC-AMUSE-8A2BE2)](https://alrauna.github.io/AMUSE/)
 
-Then add the **AMUSE** package to your avatar project from the package manager. VCC shows a one-time warning for any community repository; that is expected.
+Then add the **AMUSE** package to your avatar project from the package manager. VCC shows a one-time warning for any community repository. That is expected.
 
 ## Use
 
@@ -28,7 +28,7 @@ Add the **AMUSE Avatar Optimizer** component to the avatar root and build as usu
 - The two **Accept Anisotropy Differences** toggles and the preset files
   that carry them live in the Alpha Separator Settings. See **Proof modes
   and acceptance** below.
-- The first build that meets an unverified shader or host version shows one consent dialog. Accepting treats that source with the nearest verified version's rules; declining is a total no-op for that build.
+- The first build that meets an unverified shader or host version shows one consent dialog. Accepting treats that source with the nearest verified version's rules. Declining is a total no-op for that build.
 - Every refusal is visible in the NDMF report window, with a reason and a hint.
 - PC only. Android and Quest builds get a named refusal.
 - **Disable AMUSE** on the component makes the build treat it as absent: nothing runs, nothing is reported.
@@ -37,9 +37,9 @@ Add the **AMUSE Avatar Optimizer** component to the avatar root and build as usu
 
 ## What 0.1.0 does
 
-Triangles of an AlphaTest or AlphaBlend material that are proven visually opaque move to an appended submesh with a generated canonical opaque material. Triangles that cannot be proven stay on the original material, unchanged. Tessellation, fur, and gem variants are not admitted; unsupported means a named refusal with the renderer or material untouched - never a silent guess.
+Triangles of an AlphaTest or AlphaBlend material that are proven visually opaque move to an appended submesh with a generated canonical opaque material. Triangles that cannot be proven stay on the original material, unchanged. Tessellation, fur, and gem variants are not admitted. Unsupported means a named refusal with the renderer or material untouched - never a silent guess.
 
-Supported shaders: Poiyomi Toon 9.3.64 (including Two Pass) and lilToon 2.3.0-2.3.4 with their cutout, transparent, outline, and one-pass/two-pass variants.
+Supported shaders: Poiyomi Toon 9.3.64 (including Two Pass) and lilToon 2.3.0 through any version below 2.5, which are approved without a consent prompt. The build asks once per build for versions outside that range. Both support cutout, transparent, outline, and one-pass/two-pass variants.
 
 ## Proof modes and acceptance
 
@@ -70,18 +70,22 @@ build reports the missing policy and keeps the conservative output.
 The last build status and the build report name the selected proof mode.
 They name it even when no triangle moves.
 
-Custom preset files use schema version 4. To migrate a version 3 file, set
-`"schemaVersion": 4` and add the four cutout keys to its settings:
-`cutoutPreserveTransparencyMaxMipLevel`,
+Custom preset files use schema version 5. A schema 4 file refuses with
+the schema version message. To migrate a version 4 file, set
+`"schemaVersion": 5` and add `"cutoutSeparator": true` and
+`"transparentSeparator": true` to its features. To migrate a version 3
+file, set `"schemaVersion": 4` and add the four cutout keys to its
+settings: `cutoutPreserveTransparencyMaxMipLevel`,
 `cutoutPreserveTransparencyMinTextureSize`,
 `cutoutMinimumOpaqueCoveragePercent`, and
-`cutoutMinimumOpaqueCoverageToPreservePercent`. To migrate a version 2
-file, first make it version 3: set `"schemaVersion": 3` and add
-`"minimumOpaqueCoverageToPreservePercent"`. Then make it version 4. To
-migrate a version 1 file, first make it version 2: set
-`"schemaVersion": 2` and add `"acceptDesktopAnisotropyDifferences"` and
+`cutoutMinimumOpaqueCoverageToPreservePercent`. Then make it version 5.
+To migrate a version 2 file, first make it version 3: set
+`"schemaVersion": 3` and add `"minimumOpaqueCoverageToPreservePercent"`.
+Then make it version 4. Then make it version 5. To migrate a version 1
+file, first make it version 2: set `"schemaVersion": 2` and add
+`"acceptDesktopAnisotropyDifferences"` and
 `"acceptMobileAnisotropyDifferences"`. Then make it version 3. Then make
-it version 4.
+it version 4. Then make it version 5.
 
 A brand-new component's first cutout edit in the session that adds it is
 replaced once by the transparent values. Every later edit sticks.

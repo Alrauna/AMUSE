@@ -6,10 +6,10 @@ namespace Alrauna.Amuse.Tests.Editor
     public sealed class PresetParserTests
     {
         private const string ValidJson = @"{
-  ""schemaVersion"": 4,
+  ""schemaVersion"": 5,
   ""name"": ""Safe"",
   ""description"": ""Shipped defaults."",
-  ""features"": { ""alphaSeparator"": true },
+  ""features"": { ""alphaSeparator"": true, ""cutoutSeparator"": true, ""transparentSeparator"": true },
   ""settings"": {
     ""preserveTransparencyMaxMipLevel"": 4,
     ""preserveTransparencyMinTextureSize"": 128,
@@ -39,7 +39,7 @@ namespace Alrauna.Amuse.Tests.Editor
         private static string LegacyVersionTwoBody()
         {
             return WithSettings(
-                    "\"schemaVersion\": 4", "\"schemaVersion\": 2")
+                    "\"schemaVersion\": 5", "\"schemaVersion\": 2")
                 .Replace(
                     "    \"minimumOpaqueCoverageToPreservePercent\": 0,\n",
                     "")
@@ -57,7 +57,7 @@ namespace Alrauna.Amuse.Tests.Editor
         private static string LegacyVersionOneBody()
         {
             return WithSettings(
-                    "\"schemaVersion\": 4", "\"schemaVersion\": 1")
+                    "\"schemaVersion\": 5", "\"schemaVersion\": 1")
                 .Replace(
                     "    \"minimumOpaqueCoverageToPreservePercent\": 0,\n",
                     "")
@@ -79,7 +79,7 @@ namespace Alrauna.Amuse.Tests.Editor
         private static string LegacyVersionThreeBody()
         {
             return WithSettings(
-                    "\"schemaVersion\": 4", "\"schemaVersion\": 3")
+                    "\"schemaVersion\": 5", "\"schemaVersion\": 3")
                 .Replace(
                     "    \"cutoutPreserveTransparencyMaxMipLevel\": 3,\n" +
                     "    \"cutoutPreserveTransparencyMinTextureSize\": 128,\n" +
@@ -96,7 +96,7 @@ namespace Alrauna.Amuse.Tests.Editor
         }
 
         [Test]
-        public void ValidSchemaParsesAllSixteenValues()
+        public void ValidSchemaParsesAllEighteenValues()
         {
             var parsed = PresetParser.TryParse(
                 ValidJson, out var preset, out var refusal);
@@ -104,6 +104,8 @@ namespace Alrauna.Amuse.Tests.Editor
             Assert.That(preset.Name, Is.EqualTo("Safe"));
             Assert.That(preset.Description, Is.EqualTo("Shipped defaults."));
             Assert.That(preset.AlphaSeparatorEnabled, Is.True);
+            Assert.That(preset.CutoutSeparatorEnabled, Is.True);
+            Assert.That(preset.TransparentSeparatorEnabled, Is.True);
             Assert.That(preset.PreserveTransparencyMaxMipLevel, Is.EqualTo(4));
             Assert.That(preset.CutoutPreserveTransparencyMaxMipLevel,
                 Is.EqualTo(3));
@@ -157,7 +159,7 @@ namespace Alrauna.Amuse.Tests.Editor
         public void WrongSchemaVersionRefuses()
         {
             var json = WithSettings(
-                "\"schemaVersion\": 4", "\"schemaVersion\": 5");
+                "\"schemaVersion\": 5", "\"schemaVersion\": 6");
             Refuses(json, PresetLoadRefusal.UnknownSchemaVersion);
         }
 
@@ -196,6 +198,17 @@ namespace Alrauna.Amuse.Tests.Editor
         }
 
         [Test]
+        public void SchemaVersionFourRefusesAsUnknown()
+        {
+            // The parser knows only schema 5. A file that declares
+            // schema 4 refuses with UnknownSchemaVersion, and nothing
+            // invents its missing separator values.
+            var json = WithSettings(
+                "\"schemaVersion\": 5", "\"schemaVersion\": 4");
+            Refuses(json, PresetLoadRefusal.UnknownSchemaVersion);
+        }
+
+        [Test]
         public void MissingAcceptanceKeyRefuses()
         {
             var json = ValidJson.Replace(
@@ -217,7 +230,7 @@ namespace Alrauna.Amuse.Tests.Editor
         public void UnknownTopLevelFieldRefuses()
         {
             var json = WithSettings(
-                "\"schemaVersion\": 4", "\"schemaVersion\": 4, \"extra\": 1");
+                "\"schemaVersion\": 5", "\"schemaVersion\": 5, \"extra\": 1");
             Refuses(json, PresetLoadRefusal.UnknownField);
         }
 
@@ -251,7 +264,7 @@ namespace Alrauna.Amuse.Tests.Editor
         public void WrongValueTypeForSchemaVersionRefuses()
         {
             var json = WithSettings(
-                "\"schemaVersion\": 4", "\"schemaVersion\": \"4\"");
+                "\"schemaVersion\": 5", "\"schemaVersion\": \"5\"");
             Refuses(json, PresetLoadRefusal.WrongValueType);
         }
 
@@ -395,7 +408,7 @@ namespace Alrauna.Amuse.Tests.Editor
         public void IntegerBeyondIntRangeRefusesValueOutOfRange()
         {
             Refuses(WithSettings(
-                    "\"schemaVersion\": 4",
+                    "\"schemaVersion\": 5",
                     "\"schemaVersion\": 3000000000"),
                 PresetLoadRefusal.ValueOutOfRange);
         }
@@ -404,7 +417,7 @@ namespace Alrauna.Amuse.Tests.Editor
         public void IntegerBeyondLongRangeRefusesValueOutOfRange()
         {
             Refuses(WithSettings(
-                    "\"schemaVersion\": 4",
+                    "\"schemaVersion\": 5",
                     "\"schemaVersion\": 99999999999999999999"),
                 PresetLoadRefusal.ValueOutOfRange);
         }
@@ -479,7 +492,9 @@ namespace Alrauna.Amuse.Tests.Editor
         public void MissingFeaturesObjectRefuses()
         {
             var json = WithSettings(
-                "  \"features\": { \"alphaSeparator\": true },\n", "");
+                "  \"features\": { \"alphaSeparator\": true, " +
+                "\"cutoutSeparator\": true, " +
+                "\"transparentSeparator\": true },\n", "");
             Refuses(json, PresetLoadRefusal.MissingField);
         }
 
@@ -487,7 +502,9 @@ namespace Alrauna.Amuse.Tests.Editor
         public void NonObjectFeaturesRefusesWrongValueType()
         {
             Refuses(WithSettings(
-                    "\"features\": { \"alphaSeparator\": true }",
+                    "\"features\": { \"alphaSeparator\": true, " +
+                    "\"cutoutSeparator\": true, " +
+                    "\"transparentSeparator\": true }",
                     "\"features\": []"),
                 PresetLoadRefusal.WrongValueType);
         }

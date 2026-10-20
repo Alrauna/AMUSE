@@ -33,6 +33,20 @@ namespace Alrauna.Amuse.Editor.Build
         /// avatar summary exactly once per analyzed build.</summary>
         internal bool AlphaPolicyActive { get; set; }
 
+        /// <summary>True when the avatar's cutout separator switch was
+        /// off at the barrier capture, so cutout-sourced slots never
+        /// separated. The apply pass consumes this beside
+        /// <see cref="ReachedRendererAnalysis"/> to mark the avatar
+        /// summary exactly once per analyzed build.</summary>
+        internal bool CutoutSeparatorOff { get; set; }
+
+        /// <summary>True when the avatar's transparent separator switch
+        /// was off at the barrier capture, so transparent-sourced slots
+        /// never separated. The apply pass consumes this beside
+        /// <see cref="ReachedRendererAnalysis"/> to mark the avatar
+        /// summary exactly once per analyzed build.</summary>
+        internal bool TransparentSeparatorOff { get; set; }
+
         /// <summary>
         /// The active build target the barrier captured once, before
         /// per-renderer analysis. The apply pass compares its live

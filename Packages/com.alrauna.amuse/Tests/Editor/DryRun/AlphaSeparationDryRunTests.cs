@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -23,6 +24,7 @@ using NUnit.Framework;
 using UnityEditor;
 using UnityEditor.Animations;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace Alrauna.Amuse.Tests.Editor.DryRun
 {
@@ -686,6 +688,31 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 Is.False);
         }
 
+        [Test]
+        public void SeparatorOffCutoutSlotProducesSkippedSentence()
+        {
+            var fixture = NewComputeFixture(255, 0.5f);
+
+            // The fixture's slot records the cutout arm, so the cutout
+            // separator governs it. Turning it off skips the slot by
+            // policy. This assertion is also the case-removal guard: the
+            // default arm renders the Untouchable sentence instead.
+            SetSwitch(fixture.Optimizer, "_cutoutSeparatorEnabled", false);
+            var dryRun = NewDryRun(
+                fixture, null, FixtureSelector(), FixtureCapturer());
+            Run(dryRun);
+
+            var rows = SlotRows(dryRun);
+            Assert.That(rows, Has.Count.EqualTo(1));
+            Assert.That(
+                rows[0].Sentence,
+                Is.EqualTo("Skipped: the matching separator switch is off."));
+            Assert.That(
+                dryRun.RendererRows.Any(
+                    item => item.Kind == MaterialTransformationRowKind.Renderer),
+                Is.False);
+        }
+
         /// <summary>
         /// The mixed renderer of the pair-selection suite runs through
         /// the dry run and produces the verdicts the build prepares for
@@ -1295,6 +1322,90 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 dryRun.RendererRows.Any(
                     row => row.Kind == MaterialTransformationRowKind.Renderer),
                 Is.False);
+        }
+
+        /// <summary>
+        /// The dry run keeps strict attestation: the same byte-changed
+        /// in-range install the build approves must stay unknown here,
+        /// because the dry run's plain capturer carries no approval arm.
+        /// The fixture shader presents an approved, non-row package version
+        /// from the embedded vendor package, and its digests mismatch every
+        /// pin, so this pins the conservative edit-time view against the
+        /// version-keyed routing, not just against loose installs.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator ApprovedVersionStaysUnknownInDryRun()
+        {
+            var vendor = new VerifiedLilToonTestSeams
+                .ApprovedRangeVendorScope();
+            var installed = false;
+            try
+            {
+                vendor.InstallCutoutShader();
+                installed = true;
+                vendor.RequestRegistration();
+                var registrationGuard = 0;
+                while (!vendor.IsRegistered() &&
+                    registrationGuard++ < 600)
+                {
+                    yield return null;
+                }
+
+                Assert.That(
+                    vendor.IsRegistered(), Is.True,
+                    "the embedded vendor package must register");
+
+                var root = _scope.Track(
+                    NewAvatarRoot("amuse-dry-run-approved"));
+                var optimizer = AddOptimizer(root);
+                var texture = ImportHalfTexture("approved_range_dry", 255);
+                var material = _scope.Track(
+                    new Material(vendor.CutoutShader));
+                material.SetTexture("_MainTex", texture);
+                material.SetTextureScale("_MainTex", Vector2.one);
+                material.SetTextureOffset("_MainTex", Vector2.zero);
+                material.SetFloat("_Cutoff", 0.5f);
+                material.SetColor("_Color", new Color(1f, 1f, 1f, 1f));
+                AddSkinnedRenderer(root, TwoTriangleMesh(), material);
+
+                // Null selector and null capturer: the production family
+                // map and the dry run's plain capturer, which passes no
+                // approval arm.
+                var dryRun = NewDryRun(
+                    new Fixture
+                    {
+                        Root = root, Optimizer = optimizer,
+                        Renderer = null
+                    },
+                    null, null, null);
+                Run(dryRun);
+
+                Assert.That(
+                    dryRun.RendererRows.Any(row =>
+                        row.Sentence.StartsWith("Splittable") ||
+                        row.Sentence.StartsWith("Convertable")),
+                    Is.False,
+                    "the dry run's plain capturer must not admit the " +
+                    "approved member, so no polygon may be proven " +
+                    "splittable");
+                foreach (var row in dryRun.RendererRows)
+                {
+                    Assert.That(
+                        row.ProvenTriangles, Is.Not.GreaterThan(0),
+                        "an unadmitted member proves no triangles");
+                }
+
+                Assert.That(
+                    dryRun.RendererRows, Is.Not.Empty,
+                    "the dry run must still report the unknown slot");
+            }
+            finally
+            {
+                if (installed)
+                {
+                    vendor.TearDown();
+                }
+            }
         }
 
         [Test]

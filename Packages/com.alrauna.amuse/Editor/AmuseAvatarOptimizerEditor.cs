@@ -61,6 +61,8 @@ namespace Alrauna.Amuse.Editor
         internal static Func<string, bool> ButtonClickOverrideForTest;
         internal static Action<string> OnFoldoutHeaderDrawnForTest;
         internal static Action<bool> OnOutOfRangeToggleDrawnForTest;
+        internal static Action<bool> OnCutoutSeparatorToggleDrawnForTest;
+        internal static Action<bool> OnTransparentSeparatorToggleDrawnForTest;
 
         private void OnEnable()
         {
@@ -165,14 +167,34 @@ namespace Alrauna.Amuse.Editor
             }
 
             serializedObject.Update();
-            EditorGUILayout.PropertyField(
-                serializedObject.FindProperty("_alphaSeparatorEnabled"),
-                new GUIContent("Alpha Separator",
-                    "Turn this off to skip alpha separation on this " +
-                    "avatar. Nothing is analyzed, moved, or reported " +
-                    "for the feature. A later feature adds its own " +
-                    "switch beside this one."));
+            var masterSwitch = serializedObject.FindProperty("_alphaSeparatorEnabled");
+            EditorGUILayout.PropertyField(masterSwitch, MasterSwitchContent);
             serializedObject.ApplyModifiedProperties();
+            if (masterSwitch.boolValue)
+            {
+                using (new EditorGUI.IndentLevelScope())
+                {
+                    EditorGUILayout.PropertyField(
+                        serializedObject.FindProperty("_cutoutSeparatorEnabled"),
+                        new GUIContent("Cutout Separator",
+                            "Turn this off to skip separation for slots whose " +
+                            "material uses cutout alpha. Suppressed slots are " +
+                            "reported as skipped."));
+                    OnCutoutSeparatorToggleDrawnForTest?.Invoke(
+                        serializedObject.FindProperty("_cutoutSeparatorEnabled")
+                            .boolValue);
+                    EditorGUILayout.PropertyField(
+                        serializedObject.FindProperty("_transparentSeparatorEnabled"),
+                        new GUIContent("Transparent Separator",
+                            "Turn this off to skip separation for slots whose " +
+                            "material uses blended alpha. Suppressed slots are " +
+                            "reported as skipped."));
+                    OnTransparentSeparatorToggleDrawnForTest?.Invoke(
+                        serializedObject.FindProperty("_transparentSeparatorEnabled")
+                            .boolValue);
+                    serializedObject.ApplyModifiedProperties();
+                }
+            }
 
             DrawMaterialTransformations();
 
@@ -444,7 +466,7 @@ namespace Alrauna.Amuse.Editor
         /// <summary>
         /// The preset row. One button per shipped preset file, in the
         /// fixed order safe, normal, aggressive. A button presses only
-        /// while the component matches that preset on all sixteen
+        /// while the component matches that preset on all eighteen
         /// fields, so the pressed state is always honest and never
         /// stored. A broken preset file turns the row off with a
         /// warning, because a row over a partial preset universe could
@@ -488,6 +510,19 @@ namespace Alrauna.Amuse.Editor
                 }
             }
         }
+
+        /// <summary>
+        /// The Alpha Separator master row copy. The promise of a later
+        /// switch became this feature, so the copy names the two
+        /// sub-switches and their placement below, one indent down.
+        /// </summary>
+        private static readonly GUIContent MasterSwitchContent = new GUIContent(
+            "Alpha Separator",
+            "Turn this off to skip alpha separation on this " +
+            "avatar. Nothing is analyzed, moved, or reported " +
+            "for the feature. When this switch is on, the " +
+            "Cutout Separator and Transparent Separator " +
+            "switches draw below it, one indent level down.");
 
         private static readonly GUIContent MipCapRowContent = new GUIContent(
             "Smallest Tested Mipmap",

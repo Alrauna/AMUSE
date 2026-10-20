@@ -11,6 +11,8 @@ namespace Alrauna.Amuse.Editor.Presets
         string Name,
         string Description,
         bool AlphaSeparatorEnabled,
+        bool CutoutSeparatorEnabled,
+        bool TransparentSeparatorEnabled,
         int PreserveTransparencyMaxMipLevel,
         int CutoutPreserveTransparencyMaxMipLevel,
         int PreserveTransparencyMinTextureSize,
@@ -30,6 +32,10 @@ namespace Alrauna.Amuse.Editor.Presets
         internal string Name { get; } = Name;
         internal string Description { get; } = Description;
         internal bool AlphaSeparatorEnabled { get; } = AlphaSeparatorEnabled;
+        internal bool CutoutSeparatorEnabled { get; } =
+            CutoutSeparatorEnabled;
+        internal bool TransparentSeparatorEnabled { get; } =
+            TransparentSeparatorEnabled;
         internal int PreserveTransparencyMaxMipLevel { get; } =
             PreserveTransparencyMaxMipLevel;
         internal int CutoutPreserveTransparencyMaxMipLevel { get; } =
@@ -61,7 +67,7 @@ namespace Alrauna.Amuse.Editor.Presets
             AcceptMobileAnisotropyDifferences;
 
         /// <summary>
-        /// True when the component equals this preset on all sixteen
+        /// True when the component equals this preset on all eighteen
         /// mapped fields. The pressed state is computed from this
         /// comparison and never stored, so a manual edit of one value
         /// leaves every button unpressed.
@@ -69,6 +75,10 @@ namespace Alrauna.Amuse.Editor.Presets
         internal bool Matches(AmuseAvatarOptimizer component)
         {
             return component.AlphaSeparatorEnabled == AlphaSeparatorEnabled
+                && component.CutoutSeparatorEnabled
+                    == CutoutSeparatorEnabled
+                && component.TransparentSeparatorEnabled
+                    == TransparentSeparatorEnabled
                 && component.PreserveTransparencyMaxMipLevel
                     == PreserveTransparencyMaxMipLevel
                 && component.CutoutPreserveTransparencyMaxMipLevel
