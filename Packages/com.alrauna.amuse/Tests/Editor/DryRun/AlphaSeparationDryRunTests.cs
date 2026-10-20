@@ -1404,7 +1404,10 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 installed = true;
                 vendor.RequestRegistration();
                 var registrationGuard = 0;
-                while (!vendor.IsRegistered() &&
+                while ((!vendor.IsRegistered() ||
+                    VendorVersion() !=
+                        VerifiedLilToonTestSeams
+                            .ApprovedRangeVendorVersion) &&
                     registrationGuard++ < 600)
                 {
                     yield return null;
@@ -1570,7 +1573,11 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 installed = true;
                 vendor.RequestRegistration();
                 var guard = 0;
-                while (!vendor.IsRegistered() && guard++ < 600)
+                while ((!vendor.IsRegistered() ||
+                    VendorVersion() !=
+                        VerifiedLilToonTestSeams
+                            .ApprovedRangeVendorVersion) &&
+                    guard++ < 600)
                 {
                     yield return null;
                 }
