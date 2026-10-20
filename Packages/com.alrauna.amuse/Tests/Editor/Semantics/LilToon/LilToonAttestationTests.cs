@@ -1796,8 +1796,11 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                     ("2.4.0",
                         "346528b53eaa04b495b87e3faf583a79d6e0cbb1d35d7f3881c442b0a39ddf8f",
                         "f33e846c45eca0c62d343526fc9c3ee72d0e8585cc42b372c0fde9460ef18c85"),
+                    ("2.4.1",
+                        "346528b53eaa04b495b87e3faf583a79d6e0cbb1d35d7f3881c442b0a39ddf8f",
+                        "f33e846c45eca0c62d343526fc9c3ee72d0e8585cc42b372c0fde9460ef18c85"),
                 }),
-                "Multi admission is exactly the two version rows with " +
+                "Multi admission is exactly the three version rows with " +
                 "their per-version digests");
         }
 
@@ -2275,24 +2278,29 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             // tag tree on 2026-10-20 by the production recipe, licensed by
             // reproducing the 2.4.0 pin from the 2.4.0 tag tree (spec B1).
             // The 2.4.0 anchor lives in the AdmittedPackageVersions row
-            // literal and in the S11 tests. Installed-shape confirmation is
-            // outstanding.
+            // literal and in the S11 tests. The installed 2.4.1 shape
+            // reproduced the same digest by the same recipe on 2026-10-20.
             Assert.That(
                 LilToonSourceAttestation.IncludeTreeDigest,
                 Is.EqualTo(
                     "063f08cdc225ffc488d874c81860de376d5a9f9ad1c906ca84aa59f6193f0625"));
 
-            // Both admitted Multi version rows, verbatim: a transcription
-            // error in either Multi row fails this audit independently of
-            // the rows themselves.
+            // All three admitted Multi version rows, verbatim: a
+            // transcription error in any Multi row fails this audit
+            // independently of the rows themselves. The 2.4.1 row is the
+            // 2026-10-20 installed-shape measurement.
             var multiRows = LilToonSourceAttestation.AdmittedMultiRows();
-            Assert.That(multiRows.Count, Is.EqualTo(2));
+            Assert.That(multiRows.Count, Is.EqualTo(3));
             Assert.That(multiRows[0], Is.EqualTo(
                 ("2.3.4",
                     "346528b53eaa04b495b87e3faf583a79d6e0cbb1d35d7f3881c442b0a39ddf8f",
                     "225af2c6eba7a017593ca8a0f38114a98580ed67844a4d8465fed2c96f7cb75f")));
             Assert.That(multiRows[1], Is.EqualTo(
                 ("2.4.0",
+                    "346528b53eaa04b495b87e3faf583a79d6e0cbb1d35d7f3881c442b0a39ddf8f",
+                    "f33e846c45eca0c62d343526fc9c3ee72d0e8585cc42b372c0fde9460ef18c85")));
+            Assert.That(multiRows[2], Is.EqualTo(
+                ("2.4.1",
                     "346528b53eaa04b495b87e3faf583a79d6e0cbb1d35d7f3881c442b0a39ddf8f",
                     "f33e846c45eca0c62d343526fc9c3ee72d0e8585cc42b372c0fde9460ef18c85")));
         }

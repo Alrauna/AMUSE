@@ -599,24 +599,27 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                     "2.4.1",
                     "063f08cdc225ffc488d874c81860de376d5a9f9ad1c906ca84aa59f6193f0625",
                     Multi234BaseDigest, Multi234BaseDigest),
-                Is.True, "the packaged 2.4.1 Multi install pairs the 2.4.0 row");
+                Is.True, "the packaged 2.4.1 Multi install attests through its own row");
             Assert.That(
                 VerifyPairing(
                     BaseContainerName, BaseContainerGuid,
                     "2.4.1", Multi240IncludeTree,
                     Multi234BaseDigest, Multi234BaseDigest),
-                Is.False, "a 2.4.1 label over a foreign tree refuses");
+                Is.False, "a 2.4.1 label over the 2.4.0 tree refuses");
         }
 
         // --- (A2) loose installs: no version label, so the tree identifies the shipped version and the digest compares against that row's column. ---
 
+        // The 2.4.1 tree now names the 2.4.1 row, whose base column equals
+        // the 2.4.0 base by measurement. Its outline column differs from
+        // the 2.3.4 outline, so that swap still refuses.
         [TestCase(Multi234IncludeTree, Multi234BaseDigest, ExpectedResult = true)]
         [TestCase(Multi240IncludeTree, Multi234BaseDigest, ExpectedResult = true)]
         [TestCase(Multi234IncludeTree, Multi240OutlineDigest, ExpectedResult = false)]
         [TestCase(Multi240IncludeTree, Multi234OutlineDigest, ExpectedResult = false)]
         [TestCase(
             LilToonSourceAttestation.IncludeTreeDigest, Multi234BaseDigest,
-            ExpectedResult = false)]
+            ExpectedResult = true)]
         [TestCase(
             LilToonSourceAttestation.IncludeTreeDigest, Multi234OutlineDigest,
             ExpectedResult = false)]

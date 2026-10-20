@@ -2730,7 +2730,12 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         // outline digest differs from 2.3.4 because upstream fix 435 changed
         // the ltsmulti_o queue tag; measured 2026-10-19 from installed shapes
         // per the two-shape rule. The 2.3.4 row carries the 2026-10-01 pins
-        // unchanged.
+        // unchanged. The 2.4.1 row is measured from the installed 2.4.1
+        // shape on 2026-10-20 by the production gather: the include tree
+        // matches the tag-derived row, and both columns equal the 2.4.0
+        // columns because no Multi template changed upstream. Single-shape
+        // measurement, cross-checked against the official tag
+        // byte-equality.
         private static readonly
             (string Version, string MultiDigest, string MultiOutlineDigest)[]
             AdmittedMultiVersions =
@@ -2739,6 +2744,9 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     "346528b53eaa04b495b87e3faf583a79d6e0cbb1d35d7f3881c442b0a39ddf8f",
                     "225af2c6eba7a017593ca8a0f38114a98580ed67844a4d8465fed2c96f7cb75f"),
                 ("2.4.0",
+                    "346528b53eaa04b495b87e3faf583a79d6e0cbb1d35d7f3881c442b0a39ddf8f",
+                    "f33e846c45eca0c62d343526fc9c3ee72d0e8585cc42b372c0fde9460ef18c85"),
+                ("2.4.1",
                     "346528b53eaa04b495b87e3faf583a79d6e0cbb1d35d7f3881c442b0a39ddf8f",
                     "f33e846c45eca0c62d343526fc9c3ee72d0e8585cc42b372c0fde9460ef18c85"),
             };
