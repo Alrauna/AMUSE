@@ -152,6 +152,8 @@ namespace Alrauna.Amuse.Editor.DryRun
                     return RowText.UntouchableSlotSentence(verdict.TotalTriangles);
                 case SlotTransformOutcome.Fold:
                     return RowText.ConvertableSlotSentence(verdict.TotalTriangles);
+                case SlotTransformOutcome.SeparatorOffByPolicy:
+                    return RowText.SeparatorOffSlotSentence();
                 case SlotTransformOutcome.AlreadyOpaque:
                 case SlotTransformOutcome.CoverageBelowMinimum:
                     return RowText.UntouchableSlotSentence(verdict.TotalTriangles);

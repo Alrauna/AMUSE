@@ -128,15 +128,24 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
 
             var after = DryRunPolicyFingerprint(cutoutMipLevel: 6);
             Assert.That(after, Is.Not.EqualTo(before));
+
+            // A separator sub-switch is a policy value too, so turning
+            // the cutout separator off moves the fingerprint.
+            var separatorOff = DryRunPolicyFingerprint(
+                cutoutMipLevel: 6, cutoutSeparatorEnabled: false);
+            Assert.That(separatorOff, Is.Not.EqualTo(after));
         }
 
         /// <summary>
         /// Builds the dry-run policy fingerprint from a throwaway
         /// component. The component carries the stored cutout and
-        /// transparent mip levels this file pins.
+        /// transparent mip levels this file pins, plus the separator
+        /// sub-switch state the caller asks for.
         /// </summary>
         private static string DryRunPolicyFingerprint(
-            int cutoutMipLevel, int transparentMipLevel = 5)
+            int cutoutMipLevel,
+            int transparentMipLevel = 5,
+            bool cutoutSeparatorEnabled = true)
         {
             var root = new GameObject("AMUSE dry run fingerprint fixture");
             try
@@ -154,6 +163,12 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                     .intValue = transparentMipLevel;
                 serialized.FindProperty("_cutoutPreserveTransparencyMaxMipLevel")
                     .intValue = cutoutMipLevel;
+                if (!cutoutSeparatorEnabled)
+                {
+                    serialized.FindProperty("_cutoutSeparatorEnabled")
+                        .boolValue = false;
+                }
+
                 serialized.ApplyModifiedPropertiesWithoutUndo();
 
                 var dryRun = new AlphaSeparationDryRun(

@@ -97,6 +97,8 @@ namespace Alrauna.Amuse.Editor.DryRun
         private int _cutoutMinTextureSize;
         private int _cutoutMinimumCoverage;
         private int _cutoutPreserveCoverage;
+        private bool _cutoutSeparatorEnabled;
+        private bool _transparentSeparatorEnabled;
         private bool _allowDepthTestChange;
 
         private int _rendererIndex;
@@ -376,6 +378,9 @@ namespace Alrauna.Amuse.Editor.DryRun
             _cutoutPreserveCoverage =
                 RuntimeStateResolution.MinimumPreserveCoverageFrom(
                     _component.CutoutMinimumOpaqueCoverageToPreservePercent);
+            _cutoutSeparatorEnabled = _component.CutoutSeparatorEnabled;
+            _transparentSeparatorEnabled =
+                _component.TransparentSeparatorEnabled;
             _allowDepthTestChange = _component.AllowDepthTestChange;
             _bounds = AlphaPolicyBounds.From(
                 RuntimeStateResolution.OpaquePercentFrom(
@@ -797,12 +802,18 @@ namespace Alrauna.Amuse.Editor.DryRun
                         _minimumOpaqueCoverageToPreservePercent,
                         _cutoutMinimumCoverage,
                         _cutoutPreserveCoverage);
+                var separatorOffBySlot = SlotTransformDecision
+                    .SeparatorOffBySlot(
+                        coverageVectors.CutoutMembershipBySlot,
+                        _cutoutSeparatorEnabled,
+                        _transparentSeparatorEnabled);
                 var verdicts = SlotTransformDecision.Decide(
                     plan,
                     _inFlightResolved.SlotResults,
                     alreadyOpaqueBySlot,
                     coverageVectors.CoveragePercentsBySlot,
-                    coverageVectors.PreservePercentsBySlot);
+                    coverageVectors.PreservePercentsBySlot,
+                    separatorOffBySlot);
                 var rows = DryRunRowBuilder.BuildRows(
                     _inFlightRenderer,
                     _inFlightRendererPath,
@@ -1381,6 +1392,8 @@ namespace Alrauna.Amuse.Editor.DryRun
             {
                 _component.AmuseDisabled,
                 _component.AlphaSeparatorEnabled,
+                _component.CutoutSeparatorEnabled,
+                _component.TransparentSeparatorEnabled,
                 _component.PreserveTransparencyMaxMipLevel,
                 _component.PreserveTransparencyMinTextureSize,
                 _component.MinimumOpaqueCoveragePercent,

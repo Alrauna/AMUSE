@@ -163,6 +163,103 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             AssertPlanEntriesNeverYieldNone(plan, extended);
         }
 
+        [Test]
+        public void SeparatorOffSlotYieldsSeparatorOffByPolicyAheadOfOtherOutcomes()
+        {
+            // The slot's split submesh sits below the convert minimum,
+            // but the arm is off, so the policy outcome outranks the
+            // coverage refusal.
+            var plan = Plan(SplitSubmesh(0, 0, 1, 2));
+
+            var verdicts = SlotTransformDecision.Decide(
+                plan, null, null, new[] { 50 }, new[] { 0 },
+                separatorOffBySlot: new[] { true });
+
+            Assert.That(verdicts, Has.Count.EqualTo(1));
+            Assert.That(verdicts[0].SlotIndex, Is.Zero);
+            Assert.That(verdicts[0].Outcome, Is.EqualTo(
+                SlotTransformOutcome.SeparatorOffByPolicy));
+            AssertPlanEntriesNeverYieldNone(plan, verdicts);
+        }
+
+        [Test]
+        public void FoldArmOffSlotYieldsSeparatorOffByPolicy()
+        {
+            // The slot qualifies for the preserve fold, but the arm is
+            // off, so the policy outcome outranks the fold.
+            var plan = Plan(
+                SplitSubmesh(0, 0, 99, 1),
+                SplitSubmesh(1, 0, 49, 1));
+
+            var verdicts = SlotTransformDecision.Decide(
+                plan, null, null, new[] { 50 }, new[] { 5 },
+                separatorOffBySlot: new[] { true });
+
+            Assert.That(verdicts[0].Outcome, Is.EqualTo(
+                SlotTransformOutcome.SeparatorOffByPolicy));
+            AssertPlanEntriesNeverYieldNone(plan, verdicts);
+        }
+
+        [Test]
+        public void AlreadyOpaqueWinsOverSeparatorOff()
+        {
+            // Both flags true for the slot, and the proof fact wins over
+            // the policy fact.
+            var plan = Plan(SplitSubmesh(0, 0, 1, 2));
+
+            var verdicts = SlotTransformDecision.Decide(
+                plan, null, new[] { true }, new[] { 50 }, new[] { 0 },
+                separatorOffBySlot: new[] { true });
+
+            Assert.That(verdicts[0].Outcome, Is.EqualTo(
+                SlotTransformOutcome.AlreadyOpaque));
+        }
+
+        [Test]
+        public void SeparatorOffVectorEqualToNullBaselineChangesNoOtherOutcome()
+        {
+            // The file's existing verdict table, re-run twice: once with
+            // the parameter omitted and once with an all-false array. An
+            // all-false vector must read exactly like the baseline.
+            var plan = Plan(
+                SplitSubmesh(0, 0, 99, 1),
+                SplitSubmesh(1, 1, 1, 2),
+                UnchangedSubmesh(2, 2));
+
+            var baseline = SlotTransformDecision.Decide(
+                plan, null, null, new[] { 50, 50, 50 }, new[] { 5, 0, 5 });
+            var allFalse = SlotTransformDecision.Decide(
+                plan, null, null, new[] { 50, 50, 50 }, new[] { 5, 0, 5 },
+                separatorOffBySlot: new[] { false, false, false });
+
+            Assert.That(allFalse, Has.Count.EqualTo(baseline.Count));
+            for (var slot = 0; slot < baseline.Count; slot++)
+            {
+                Assert.That(allFalse[slot].Outcome, Is.EqualTo(
+                    baseline[slot].Outcome),
+                    "an all-false vector must not move any verdict");
+            }
+        }
+
+        [Test]
+        public void UnchangedSlotOutcomeMatchesItsBaselineUnderSeparatorOff()
+        {
+            // An unchanged slot never reports the policy outcome, so the
+            // arm switch leaves its verdict exactly as the baseline read
+            // it.
+            var plan = Plan(UnchangedSubmesh(0, 0));
+
+            var baseline = SlotTransformDecision.Decide(
+                plan, null, null, new[] { 50 }, new[] { 0 },
+                separatorOffBySlot: new[] { false });
+            var armOff = SlotTransformDecision.Decide(
+                plan, null, null, new[] { 50 }, new[] { 0 },
+                separatorOffBySlot: new[] { true });
+
+            Assert.That(armOff[0].Outcome, Is.EqualTo(
+                baseline[0].Outcome));
+        }
+
         // --- Falsifier 10: A dry run that keeps one coverage pair diverges from the build for a mixed renderer at non-default values. The shared-ladder test asserts equal verdicts and fails it. ---
         [Test]
         public void LadderReadsPerSlotPercents()

@@ -30,7 +30,7 @@ namespace Alrauna.Amuse.Editor.DryRun
         internal int AvatarRootInstanceId { get; }
         internal BuildTarget ActiveTarget { get; }
 
-        /// <summary>All thirteen component values, joined by the builder.</summary>
+        /// <summary>All nineteen component values, joined by the builder.</summary>
         internal string PolicyFingerprint { get; }
 
         /// <summary>Controller identities and ticks, joined by the builder.</summary>

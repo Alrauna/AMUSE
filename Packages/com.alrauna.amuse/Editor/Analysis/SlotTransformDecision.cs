@@ -17,6 +17,12 @@ namespace Alrauna.Amuse.Editor.Analysis
         CoverageBelowMinimum,
         AnisotropyDifferences,
         AlreadyOpaque,
+
+        /// <summary>
+        /// A slot the owner excluded by a separator sub-switch. A policy
+        /// fact, not a proof fact. Ranked after AlreadyOpaque.
+        /// </summary>
+        SeparatorOffByPolicy,
     }
 
     /// <summary>
@@ -60,12 +66,16 @@ namespace Alrauna.Amuse.Editor.Analysis
         // slot with no plan entry and no flag gets None. Both gates read
         // the slot's own percent pair, so one plan can carry two proof
         // arms. The ladder reads percents and never sees a family.
+        // SeparatorOffByPolicy sits after AlreadyOpaque and before the
+        // preserve fold for slots with a candidate plan entry. An
+        // unchanged slot never reports it.
         internal static IReadOnlyList<SlotTransformVerdict> Decide(
             MeshSeparationPlan plan,
             IReadOnlyList<SlotResolutionResult> slotResults,
             IReadOnlyList<bool> alreadyOpaqueBySlot,
             IReadOnlyList<int> minimumOpaqueCoveragePercents,
-            IReadOnlyList<int> minimumOpaqueCoverageToPreservePercents)
+            IReadOnlyList<int> minimumOpaqueCoverageToPreservePercents,
+            IReadOnlyList<bool> separatorOffBySlot = null)
         {
             if (plan == null) throw new ArgumentNullException(nameof(plan));
             if (minimumOpaqueCoveragePercents == null)
@@ -137,7 +147,8 @@ namespace Alrauna.Amuse.Editor.Analysis
             {
                 verdicts.Add(DecideSlot(
                     entriesByBindingIndex, slotIndex, slotResults,
-                    alreadyOpaqueBySlot, minimumOpaqueCoveragePercents,
+                    alreadyOpaqueBySlot, separatorOffBySlot,
+                    minimumOpaqueCoveragePercents,
                     minimumOpaqueCoverageToPreservePercents));
             }
 
@@ -187,6 +198,33 @@ namespace Alrauna.Amuse.Editor.Analysis
             }
 
             return (coverage, preserve, cutout);
+        }
+
+        /// <summary>
+        /// Whether each slot's arm is disabled by the separator sub-switches.
+        /// A slot whose current material declares cutoff follows the Cutout
+        /// Separator. Every other slot follows the Transparent Separator.
+        /// Both switches on answers false everywhere.
+        /// </summary>
+        internal static bool[] SeparatorOffBySlot(
+            IReadOnlyList<bool> cutoutMembershipBySlot,
+            bool cutoutSeparatorEnabled,
+            bool transparentSeparatorEnabled)
+        {
+            if (cutoutMembershipBySlot == null)
+            {
+                throw new ArgumentNullException(nameof(cutoutMembershipBySlot));
+            }
+
+            var separatorOff = new bool[cutoutMembershipBySlot.Count];
+            for (var slot = 0; slot < separatorOff.Length; slot++)
+            {
+                separatorOff[slot] = cutoutMembershipBySlot[slot]
+                    ? !cutoutSeparatorEnabled
+                    : !transparentSeparatorEnabled;
+            }
+
+            return separatorOff;
         }
 
         /// <summary>
@@ -243,6 +281,7 @@ namespace Alrauna.Amuse.Editor.Analysis
             int slotIndex,
             IReadOnlyList<SlotResolutionResult> slotResults,
             IReadOnlyList<bool> alreadyOpaqueBySlot,
+            IReadOnlyList<bool> separatorOffBySlot,
             IReadOnlyList<int> minimumOpaqueCoveragePercents,
             IReadOnlyList<int> minimumOpaqueCoverageToPreservePercents)
         {
@@ -282,6 +321,14 @@ namespace Alrauna.Amuse.Editor.Analysis
                 alreadyOpaqueBySlot[slotIndex])
             {
                 outcome = SlotTransformOutcome.AlreadyOpaque;
+            }
+            else if (hasEntries &&
+                     !everySubmeshUnchanged &&
+                     separatorOffBySlot != null &&
+                     slotIndex < separatorOffBySlot.Count &&
+                     separatorOffBySlot[slotIndex])
+            {
+                outcome = SlotTransformOutcome.SeparatorOffByPolicy;
             }
             else if (hasEntries &&
                      PreserveSlotQualifies(

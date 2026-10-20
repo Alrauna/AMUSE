@@ -198,6 +198,11 @@ namespace Alrauna.Amuse.Editor.DryRun
             return "Convertable: " + total + " out of " + total + " polygons may be moved";
         }
 
+        internal static string SeparatorOffSlotSentence()
+        {
+            return "Skipped: the matching separator switch is off.";
+        }
+
         internal static string RendererRefusedSentence(
             string path, string typeName, string refusalKey, params string[] args)
         {

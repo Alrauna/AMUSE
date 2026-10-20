@@ -686,6 +686,31 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 Is.False);
         }
 
+        [Test]
+        public void SeparatorOffCutoutSlotProducesSkippedSentence()
+        {
+            var fixture = NewComputeFixture(255, 0.5f);
+
+            // The fixture's slot records the cutout arm, so the cutout
+            // separator governs it. Turning it off skips the slot by
+            // policy. This assertion is also the case-removal guard: the
+            // default arm renders the Untouchable sentence instead.
+            SetSwitch(fixture.Optimizer, "_cutoutSeparatorEnabled", false);
+            var dryRun = NewDryRun(
+                fixture, null, FixtureSelector(), FixtureCapturer());
+            Run(dryRun);
+
+            var rows = SlotRows(dryRun);
+            Assert.That(rows, Has.Count.EqualTo(1));
+            Assert.That(
+                rows[0].Sentence,
+                Is.EqualTo("Skipped: the matching separator switch is off."));
+            Assert.That(
+                dryRun.RendererRows.Any(
+                    item => item.Kind == MaterialTransformationRowKind.Renderer),
+                Is.False);
+        }
+
         /// <summary>
         /// The mixed renderer of the pair-selection suite runs through
         /// the dry run and produces the verdicts the build prepares for

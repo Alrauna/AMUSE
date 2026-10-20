@@ -55,6 +55,8 @@ namespace Alrauna.Amuse.Editor.Build
                 activeTarget.ToString(),
                 component.AmuseDisabled ? "1" : "0",
                 component.AlphaSeparatorEnabled ? "1" : "0",
+                component.CutoutSeparatorEnabled ? "1" : "0",
+                component.TransparentSeparatorEnabled ? "1" : "0",
                 component.PreserveTransparencyMaxMipLevel,
                 component.PreserveTransparencyMinTextureSize,
                 component.MinimumOpaqueCoveragePercent,
