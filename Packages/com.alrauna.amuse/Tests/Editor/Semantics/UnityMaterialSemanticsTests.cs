@@ -813,11 +813,11 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         /// A resolver-refused Multi material answers all-Unknown alpha and
         /// carries the shared Multi cause kind, whose feature field names
         /// the refusal value in words for the slot-refusal report. With the
-        /// production Multi row table empty until Task 2, every captured
-        /// Multi material refuses, so this fixture exercises the real
-        /// refusal transport end to end the moment Task 7 phase B lands.
-        /// Compile-fail red on the family member and the cause kind until
-        /// then.
+        /// production AdmittedMultiVersions rows materialized (2.3.4
+        /// measured 2026-10-01, 2.4.0 measured 2026-10-19), a captured
+        /// Multi material refuses because its captured identity matches no
+        /// admitted row, so this fixture exercises the real refusal
+        /// transport end to end.
         /// </summary>
         // --- Falsifier: a transport that reports the generic unsupported-shader cause, or a bare Unknown with no named Multi refusal, fails this fixture. ---
         [Test]

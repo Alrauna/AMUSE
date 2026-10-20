@@ -175,7 +175,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
     /// strings and constructed evidence; they never require the real Poiyomi
     /// shader in the project.
     /// </summary>
-    public sealed class PoiyomiSourceAttestationTests
+    public sealed class PoiyomiSourceAttestationTests : PoiyomiFixtureTestBase
     {
         private static string Hash(string source)
         {
@@ -235,14 +235,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Assert.That(Hash("abc"), Does.Match("^[0-9a-f]{64}$"));
         }
 
-        private const string HashMemoFolder = "Assets/AmuseTests_Temp";
-
         [Test]
         public void CachedSourceHash_ReturnsTheFirstHashWhileMtimeIsUnchanged()
         {
-            Directory.CreateDirectory(HashMemoFolder);
+            EnsureSharedTempFolder();
             var path = Path.Combine(
-                HashMemoFolder,
+                TempFolder,
                 "hash_memo_unchanged_" + Guid.NewGuid().ToString("N") + ".shader");
             try
             {
@@ -278,9 +276,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void CachedSourceHash_RefreshesWhenFileContentChanges()
         {
-            Directory.CreateDirectory(HashMemoFolder);
+            EnsureSharedTempFolder();
             var path = Path.Combine(
-                HashMemoFolder,
+                TempFolder,
                 "hash_memo_refresh_" + Guid.NewGuid().ToString("N") + ".shader");
             try
             {
@@ -310,14 +308,20 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void CachedSourceHash_MissingFileThrows()
         {
-            Directory.CreateDirectory(HashMemoFolder);
             var path = Path.Combine(
-                HashMemoFolder,
+                TempFolder,
                 "hash_memo_missing_" + Guid.NewGuid().ToString("N") + ".shader");
-
-            Assert.Throws<FileNotFoundException>(() =>
-                PoiyomiSourceAttestation.TryReadNormalizedSourceHashCached(
-                    path, out _));
+            try
+            {
+                EnsureSharedTempFolder();
+                Assert.Throws<FileNotFoundException>(() =>
+                    PoiyomiSourceAttestation.TryReadNormalizedSourceHashCached(
+                        path, out _));
+            }
+            finally
+            {
+                File.Delete(path);
+            }
         }
 
         [Test]

@@ -39,7 +39,7 @@ Add the **AMUSE Avatar Optimizer** component to the avatar root and build as usu
 
 Triangles of an AlphaTest or AlphaBlend material that are proven visually opaque move to an appended submesh with a generated canonical opaque material. Triangles that cannot be proven stay on the original material, unchanged. Tessellation, fur, and gem variants are not admitted; unsupported means a named refusal with the renderer or material untouched - never a silent guess.
 
-Supported shaders: Poiyomi Toon 9.3.64 (including Two Pass) and lilToon 2.3.0-2.3.4 with their cutout, transparent, outline, and one-pass/two-pass variants.
+Supported shaders: Poiyomi Toon 9.3.64 (including Two Pass) and lilToon 2.3.0-2.4.0 with their cutout, transparent, outline, and one-pass/two-pass variants.
 
 ## Proof modes and acceptance
 

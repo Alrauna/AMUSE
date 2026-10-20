@@ -4,6 +4,7 @@ using Alrauna.Amuse.Research.Collection;
 using Alrauna.Amuse.Research.Tests.Editor.Collection;
 using NUnit.Framework;
 using UnityEngine;
+using LilToonPins = Alrauna.Amuse.Editor.Semantics.LilToon.LilToonSourceAttestation;
 
 namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
 {
@@ -55,15 +56,33 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
         }
 
         /// <summary>
-        /// Gate case 1. Attestation is exact-version: PoiyomiMaterialSemantics
-        /// pins 9.3.64 and LilToonSourceAttestation pins 2.3.4, and a mismatch
-        /// makes every material of that family unattested. An installed family
-        /// at the wrong version is therefore a gate failure, not a census
-        /// result.
+        /// Gate case 1. Attestation is version-scoped per family:
+        /// PoiyomiMaterialSemantics pins 9.3.64 exactly, while
+        /// LilToonSourceAttestation admits a measured set of versions
+        /// (AdmittedRows), and a version outside the admitted set makes
+        /// every material of that family unattested. An installed family at
+        /// a version AMUSE does not attest is therefore a gate failure, not
+        /// a census result.
         /// </summary>
         [Test]
         public void AnInstalledFamilyMatchesTheVersionAmuseAttests()
         {
+            // Membership measures the admitted set, so the probe's expected
+            // version needs its own pin: the constant must stay the newest
+            // admitted row, so a version bump moves the probe and the set
+            // together.
+            Assert.That(
+                LilToonPins.AdmittedRows().Last().Version,
+                Is.EqualTo(LilToonPins.PackageVersion),
+                "The probe's lilToon version constant is not the newest "
+                + "admitted row. The membership check below measures the "
+                + "admitted set, so the constant and the set must move "
+                + "together.");
+
+            var admittedLilToonVersions = LilToonPins.AdmittedRows()
+                .Select(row => row.Version)
+                .ToArray();
+
             var provenFamilies = 0;
             foreach (var presence in CensusVendorProbe.ProbeAll())
             {
@@ -73,13 +92,33 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
                 }
                 provenFamilies++;
 
-                Assert.That(
-                    presence.InstalledPackageVersion,
-                    Is.EqualTo(presence.ExpectedPackageVersion),
-                    presence.ExpectedPackageName
-                    + " is installed at a version AMUSE does not attest. "
-                    + "Every material of this family will be unattested, and a "
-                    + "census run would measure the mismatch rather than AMUSE.");
+                if (presence.ExpectedPackageName == LilToonPins.PackageName)
+                {
+                    Assert.That(
+                        admittedLilToonVersions.Contains(
+                            presence.InstalledPackageVersion,
+                            System.StringComparer.Ordinal),
+                        Is.True,
+                        presence.ExpectedPackageName
+                        + " is installed at version "
+                        + presence.InstalledPackageVersion
+                        + ", which AMUSE does not attest. Every material of "
+                        + "this family will be unattested, and a census run "
+                        + "would measure the mismatch rather than AMUSE. "
+                        + "The admitted set is: "
+                        + string.Join(", ", admittedLilToonVersions) + ".");
+                }
+                else
+                {
+                    Assert.That(
+                        presence.InstalledPackageVersion,
+                        Is.EqualTo(presence.ExpectedPackageVersion),
+                        presence.ExpectedPackageName
+                        + " is installed at a version AMUSE does not attest. "
+                        + "Every material of this family will be unattested, "
+                        + "and a census run would measure the mismatch rather "
+                        + "than AMUSE.");
+                }
             }
 
             if (provenFamilies == 0)
@@ -370,13 +409,13 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
         }
 
         /// <summary>
-        /// Gate case 2b, the positive reachability result. lilToon 2.3.4 is
-        /// installed, 2.3.4 is exactly the version LilToonSourceAttestation
-        /// pins, and a plain opaque lilToon material attests and proves
-        /// opaque through the production path. This replaces the negative
-        /// pin recorded before this project installed the vendor package.
-        /// That pin was asserted as observed, so its flip was noticed the
-        /// day the install landed.
+        /// Gate case 2b, the positive reachability result. lilToon is
+        /// installed at an admitted version - a member of
+        /// LilToonSourceAttestation's admitted set - and a plain opaque
+        /// lilToon material attests and proves opaque through the production
+        /// path. This replaces the negative pin recorded before this project
+        /// installed the vendor package. That pin was asserted as observed,
+        /// so its flip was noticed the day the install landed.
         /// </summary>
         [Test]
         public void LilToonReachesProvenOpaqueThroughTheProductionPath()
@@ -390,11 +429,19 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
                     " vendor package; install it to prove this reach.");
             }
 
+            var admittedVersions = LilToonPins.AdmittedRows()
+                .Select(row => row.Version)
+                .ToArray();
+
             Assert.That(
-                presence.InstalledPackageVersion,
-                Is.EqualTo(presence.ExpectedPackageVersion),
-                "Precondition: the installed lilToon must be the pinned "
-                + "version for this reach to mean what it says.");
+                admittedVersions.Contains(
+                    presence.InstalledPackageVersion,
+                    System.StringComparer.Ordinal),
+                Is.True,
+                "Precondition: the installed lilToon must be a version "
+                + "AMUSE attests for this reach to mean what it says. The "
+                + "admitted set is: " + string.Join(", ", admittedVersions)
+                + ".");
 
             var material = _scene.NewMaterial(presence.Shader, "GateLilToon");
             material.SetColor("_Color", new Color(1f, 1f, 1f, 1f));

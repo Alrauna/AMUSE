@@ -15,10 +15,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
     /// <para>
     /// The admit-path and mode-gate fixtures drive the resolver through the
     /// profile injection seam the Task 6 verify fixtures established: the
-    /// production Multi row table stays empty until the Task 2 digest
-    /// measurement, so the production entry point refuses every Multi
-    /// container and the fixtures inject one test-only profile row plus the
-    /// gathered identity evidence that matches it. The specialized-container
+    /// fixtures inject one test-only profile row plus the gathered
+    /// identity evidence that matches it, so the synthetic identities stay
+    /// isolated from the production AdmittedMultiVersions rows (2.3.4
+    /// measured 2026-10-01, 2.4.0 measured 2026-10-19). The specialized-container
     /// fixture injects a fur-named row, so a specialized container's
     /// identity refusal is pinned against attestation with a row that
     /// would otherwise attest. Every test comment names the path it

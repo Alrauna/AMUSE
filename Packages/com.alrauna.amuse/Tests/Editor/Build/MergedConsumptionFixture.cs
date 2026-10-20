@@ -119,16 +119,27 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         private AnisotropicFilteringPin _filteringPin;
+        private RecordingDeclineConsentPresenter _consentSeam;
 
         [SetUp]
         public void PinPerTextureAnisotropicFiltering()
         {
+            RecordingDeclineConsentPresenter.SubjectLog.Clear();
             _filteringPin = new AnisotropicFilteringPin();
+            _consentSeam = new RecordingDeclineConsentPresenter();
+            AmusePlatformFinishPass.PresenterForTests = _consentSeam.Present;
         }
 
         [TearDown]
         public void TearDown()
         {
+            AmusePlatformFinishPass.PresenterForTests = null;
+            Assert.That(
+                RecordingDeclineConsentPresenter.SubjectLog,
+                Is.Empty,
+                "a merged-consumption build must raise zero consent " +
+                "subjects now that the installed 2.4.0 attests; a " +
+                "recorded subject names what the attestation still refuses");
             _filteringPin.Dispose();
             OptimizerMergeObservation.Reset();
             _scope.TearDown();
@@ -886,6 +897,35 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             return parts.Count == 0
                 ? "none"
                 : string.Join(", ", parts);
+        }
+    }
+
+    /// <summary>
+    /// Decline-only consent presenter for headless runs (H1). Records every
+    /// subject it was asked about so tests can assert on real subjects.
+    /// <para>
+    /// The instance log serves direct unit drivers (ConsentSeamTests). The
+    /// static log accumulates across a whole class run: NUnit instantiates
+    /// a fresh fixture per test, so per-instance state is unobservable
+    /// after a class run. The merged-consumption fixture clears the static
+    /// log in its set-up and asserts it empty in its teardown, because
+    /// after the 2.4.0 admission a merged-consumption build must raise
+    /// zero consent subjects; a recorded subject names what the
+    /// attestation still refuses.
+    /// </para>
+    /// </summary>
+    internal sealed class RecordingDeclineConsentPresenter
+    {
+        internal static readonly List<string> SubjectLog =
+            new List<string>();
+
+        internal readonly List<string> SubjectsSeen = new List<string>();
+
+        internal bool Present(IReadOnlyList<string> subjects)
+        {
+            SubjectsSeen.AddRange(subjects);
+            SubjectLog.AddRange(subjects);
+            return false;
         }
     }
 }

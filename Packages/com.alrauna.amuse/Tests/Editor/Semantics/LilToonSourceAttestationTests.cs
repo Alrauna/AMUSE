@@ -18,10 +18,11 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
     /// no installed lilToon package.
     /// <para>
     /// The verify falsifiers drive the Multi verify conjunction through an
-    /// internal profile-injection seam. The production Multi profile table
-    /// stays empty until the Task 2 digest measurement lands, so the
-    /// production entry point refuses every Multi container and the
-    /// fixtures inject one test-only profile row instead.
+    /// internal profile-injection seam. The production rows resolve by
+    /// container name and asset GUID and take their per-version digests from
+    /// the admitted Multi table; the fixtures inject one test-only profile
+    /// row instead. The installed-container ground check at the bottom runs
+    /// the production resolve and gather against the real package.
     /// </para>
     /// </summary>
     public sealed class LilToonSourceAttestationTests
@@ -168,11 +169,11 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
 
         // --- Multi container attestation verify (Task 6) ---
 
-        // Test-only profile row for the base container. The production Multi
-        // profile table stays empty until Task 2 pins the container digests
-        // from installed shapes. The GUID and digest below are synthetic test
-        // vocabulary, never measured pins. Task 2 fills the production table,
-        // and no fixture value moves there.
+        // Test-only profile row for the base container. The production
+        // Multi rows resolve by container name and asset GUID and take
+        // their per-version digests from AdmittedMultiVersions. The GUID
+        // and digest below are synthetic test vocabulary, never measured
+        // pins; no fixture value moves there.
         private const string BaseContainerName = "_lil/lilToonMulti";
         private const string BaseContainerGuid =
             "0f19e2a4b7c8d6051324a5b6c7d8e9f0";
@@ -190,9 +191,46 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         // AdmittedPackageVersions rows are private, so the fixture repeats the
         // value. The prior-version fixture passes it with the 2.3.3 package
         // version, so the version row is the only mismatching conjunction
-        // term.
+        // term. The 2.4.0 pairing lives in the attestation's
+        // IncludeTreeDigest const, which the fixtures reach through the
+        // UsePin sentinel.
         private const string PriorVersionIncludeDigest =
             "154aa68f85633b643f27a82309dc9d755e1955f0e8de7d21c9f62120c6628416";
+
+        // The 2.3.4 Multi row literals (measured 2026-10-01 from installed
+        // 2.3.4 shapes) and the 2.4.0 outline digest (measured 2026-10-19
+        // per the two-shape rule). The 2.4.0 base digest equals the 2.3.4
+        // base pin. The audit test pins both rows independently of these
+        // fixtures, so a transcription error here fails there too.
+        private const string Multi234IncludeTree =
+            "6e2dce6cb3073d5e04b569a14df8e0944c93ca408999fb42d7c717050c48fd46";
+        private const string Multi234BaseDigest =
+            "346528b53eaa04b495b87e3faf583a79d6e0cbb1d35d7f3881c442b0a39ddf8f";
+        private const string Multi234OutlineDigest =
+            "225af2c6eba7a017593ca8a0f38114a98580ed67844a4d8465fed2c96f7cb75f";
+        private const string Multi240OutlineDigest =
+            "f33e846c45eca0c62d343526fc9c3ee72d0e8585cc42b372c0fde9460ef18c85";
+
+        // The installed containers' pinned asset GUIDs, the identity half of
+        // the production rows. The ground check resolves the live assets by
+        // GUID, because Shader.Find matches any shader carrying the
+        // container name, including test stand-ins.
+        private const string InstalledBaseContainerGuid =
+            "9294844b15dca184d914a632279b24e1";
+        private const string InstalledOutlineContainerGuid =
+            "51b2dee0ab07bd84d8147601ff89e511";
+
+        // Test-only profile row for the outline wrapper, shaped exactly like
+        // the base container's: the real container name with synthetic GUID
+        // and digest vocabulary. The production per-version digest rows in
+        // AdmittedMultiVersions own the real outline digests, and no fixture
+        // value moves there.
+        private const string OutlineContainerName = "Hidden/lilToonMultiOutline";
+        private const string OutlineContainerGuid =
+            "0f19e2a4b7c8d6051324a5b6c7d8e9f1";
+        private const string OutlineContainerCanonicalDigest =
+            "1029384756afbccddeeff0123456789a" +
+            "fedcba98765432100123456789abcdee";
 
         private static LilToonCanonicalizationAnalysis AnalyzeMulti(
             string source)
@@ -218,7 +256,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             float version = 45f,
             bool hasPackage = true,
             string packageName = "jp.lilxyzw.liltoon",
-            string packageVersion = "2.3.4",
+            string packageVersion = LilToonSourceAttestation.PackageVersion,
             string shaderDigest = UsePin,
             string includeDigest = UsePin,
             bool hasShaderCanonicalization = true,
@@ -347,9 +385,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [Test]
         public void MultiContainerVerifyRefusesPriorVersionStamp()
         {
-            // The 2.3.3 install presents the include tree that 2.3.3 ships,
-            // so the version row is the only mismatching term. 2.3.4 is the
-            // only admitted Multi version row.
+            // The 2.3.3 install presents the include tree that 2.3.3 ships.
+            // 2.3.3 names no admitted Multi row, so no conjunction term of
+            // an admitted row matches: 2.3.4 and 2.4.0 are the admitted
+            // Multi version rows.
             Assert.That(
                 VerifyAgainstBaseContainerProfile(
                     MultiEvidence(
@@ -357,7 +396,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                         includeDigest: PriorVersionIncludeDigest),
                     out var versionRefusal),
                 Is.False,
-                "2.3.4 is the only admitted Multi version row");
+                "2.3.4 and 2.4.0 are the admitted Multi version rows");
             Assert.That(
                 versionRefusal,
                 Is.EqualTo(LilToonMultiResolutionRefusal.AttestationFailed));
@@ -386,6 +425,184 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             Assert.That(
                 refusal,
                 Is.EqualTo(LilToonMultiResolutionRefusal.AttestationFailed));
+        }
+
+        /// <summary>
+        /// Runs the Multi verify conjunction once against the injected
+        /// outline wrapper row, the way
+        /// <see cref="VerifyAgainstBaseContainerProfile"/> runs it against
+        /// the base container's row.
+        /// </summary>
+        private static bool VerifyAgainstOutlineContainerProfile(
+            LilToonSourceEvidence evidence,
+            out LilToonMultiResolutionRefusal refusal)
+        {
+            var profile = new LilToonMultiContainerProfile(
+                OutlineContainerName,
+                OutlineContainerGuid,
+                OutlineContainerCanonicalDigest);
+            return LilToonSourceAttestation.TryVerifyMultiContainer(
+                evidence, profile, out refusal);
+        }
+
+        // --- Falsifier: a container verify that pairs one version's label with another version's digest admits a cross-combination. ---
+        [Test]
+        public void MultiContainer_VersionAndOutlineDigestFromDifferentVersions_Refuse()
+        {
+            // Evidence A: the pre-flip newest admitted version presents the
+            // outline wrapper, but the outline digest slot carries an
+            // impossible value. The digest term refuses.
+            Assert.That(
+                VerifyAgainstOutlineContainerProfile(
+                    MultiEvidence(
+                        shaderName: OutlineContainerName,
+                        assetGuid: OutlineContainerGuid,
+                        shaderDigest: new string('0', 64)),
+                    out var digestRefusal),
+                Is.False,
+                "the outline digest slot does not accept a foreign value");
+            Assert.That(
+                digestRefusal,
+                Is.EqualTo(LilToonMultiResolutionRefusal.AttestationFailed));
+
+            // Evidence B: the fully correct outline digest under an
+            // unadmitted version label. The version term refuses before any
+            // digest work, and the digest slot carries the matching row
+            // value so the version term is the only mismatching one.
+            Assert.That(
+                VerifyAgainstOutlineContainerProfile(
+                    MultiEvidence(
+                        shaderName: OutlineContainerName,
+                        assetGuid: OutlineContainerGuid,
+                        packageVersion: "2.3.5",
+                        shaderDigest: OutlineContainerCanonicalDigest),
+                    out var versionRefusal),
+                Is.False,
+                "an unadmitted version label refuses outright");
+            Assert.That(
+                versionRefusal,
+                Is.EqualTo(LilToonMultiResolutionRefusal.AttestationFailed));
+        }
+
+        // --- (A2) sharp form: the correct per-version pairing verifies, and every swapped pairing refuses. The rows below are the pinned
+        // --- literals; the audit test pins both rows independently of these fixtures. ---
+
+        /// <summary>
+        /// Runs the Multi verify conjunction against one row built from the
+        /// caller's pairing, the way the production resolver hands the
+        /// identified version's row digest to the verify. The row digest and
+        /// the evidence digest are separate on purpose: a swapped pairing
+        /// presents one version's label and tree with the other version's
+        /// container digest.
+        /// </summary>
+        private static bool VerifyPairing(
+            string shaderName,
+            string assetGuid,
+            string packageVersion,
+            string includeDigest,
+            string rowDigest,
+            string evidenceDigest)
+        {
+            var profile = new LilToonMultiContainerProfile(
+                shaderName, assetGuid, rowDigest);
+            var evidence = MultiEvidence(
+                shaderName: shaderName,
+                assetGuid: assetGuid,
+                packageVersion: packageVersion,
+                shaderDigest: evidenceDigest,
+                includeDigest: includeDigest);
+            return LilToonSourceAttestation.TryVerifyMultiContainer(
+                evidence, profile, out _);
+        }
+
+        [TestCase(
+            "2.3.4", Multi234IncludeTree, Multi234OutlineDigest,
+            OutlineContainerName, OutlineContainerGuid)]
+        [TestCase(
+            LilToonSourceAttestation.PackageVersion,
+            LilToonSourceAttestation.IncludeTreeDigest, Multi240OutlineDigest,
+            OutlineContainerName, OutlineContainerGuid)]
+        [TestCase(
+            "2.3.4", Multi234IncludeTree, Multi234BaseDigest,
+            BaseContainerName, BaseContainerGuid)]
+        [TestCase(
+            LilToonSourceAttestation.PackageVersion,
+            LilToonSourceAttestation.IncludeTreeDigest, Multi234BaseDigest,
+            BaseContainerName, BaseContainerGuid)]
+        public void MultiContainer_CorrectPerVersionPairing_Verifies(
+            string packageVersion,
+            string includeDigest,
+            string digest,
+            string shaderName,
+            string assetGuid)
+        {
+            Assert.That(
+                VerifyPairing(
+                    shaderName, assetGuid, packageVersion,
+                    includeDigest, digest, digest),
+                Is.True,
+                "the version's own tree and container digest attest");
+        }
+
+        [TestCase(
+            LilToonSourceAttestation.PackageVersion,
+            LilToonSourceAttestation.IncludeTreeDigest,
+            Multi234OutlineDigest, Multi240OutlineDigest)]
+        [TestCase(
+            "2.3.4", Multi234IncludeTree,
+            Multi240OutlineDigest, Multi234OutlineDigest)]
+        public void MultiContainer_SwappedVersionPairing_Refuses(
+            string packageVersion,
+            string includeDigest,
+            string foreignDigest,
+            string rowDigest)
+        {
+            Assert.That(
+                foreignDigest, Is.Not.EqualTo(rowDigest),
+                "fixture precondition: the swapped digest differs from " +
+                "the row's own digest");
+
+            // The outline wrapper presents the other version's outline
+            // digest under this version's label and tree. The profile row
+            // carries the presented version's own row digest, so only the
+            // digest term mismatches.
+            Assert.That(
+                VerifyPairing(
+                    OutlineContainerName, OutlineContainerGuid,
+                    packageVersion, includeDigest, rowDigest, foreignDigest),
+                Is.False,
+                "a version label paired with the other version's outline " +
+                "digest is a cross combination");
+        }
+
+        // --- (A2) loose installs: no version label, so the tree identifies the shipped version and the digest compares against that row's column. ---
+
+        [TestCase(Multi234IncludeTree, Multi234BaseDigest, ExpectedResult = true)]
+        [TestCase(
+            LilToonSourceAttestation.IncludeTreeDigest, Multi234BaseDigest,
+            ExpectedResult = true)]
+        [TestCase(Multi234IncludeTree, Multi240OutlineDigest, ExpectedResult = false)]
+        [TestCase(
+            LilToonSourceAttestation.IncludeTreeDigest, Multi234OutlineDigest,
+            ExpectedResult = false)]
+        public bool MultiContainer_LooseInstall_TreeIdentifiesTheRow(
+            string includeDigest, string shaderDigest)
+        {
+            // The injected profile row carries synthetic vocabulary; the
+            // loose branch reads the row the tree identifies, not the
+            // injected digest, so a synthetic profile digest proves the
+            // column lookup is the binding term.
+            var profile = new LilToonMultiContainerProfile(
+                BaseContainerName, BaseContainerGuid,
+                BaseContainerCanonicalDigest);
+            var evidence = MultiEvidence(
+                hasPackage: false,
+                packageName: null,
+                packageVersion: null,
+                shaderDigest: shaderDigest,
+                includeDigest: includeDigest);
+            return LilToonSourceAttestation.TryVerifyMultiContainer(
+                evidence, profile, out _);
         }
 
         /// <summary>
@@ -421,6 +638,193 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             Assert.That(
                 multiRefusal,
                 Is.EqualTo(LilToonMultiResolutionRefusal.AttestationFailed));
+        }
+
+        // --- (A2) installed-bytes ground: the production resolve, gather,
+        // --- and verify run against the real installed containers. Every
+        // --- other Multi vehicle is synthetic, so the rows would be
+        // --- self-consistent even if wrong without this check. ---
+
+        /// <summary>
+        /// The one real-gather Multi check. The production
+        /// <see cref="LilToonSourceAttestation.TryResolveMultiContainer"/>
+        /// resolves each installed container through the production gather,
+        /// the row the identified version selects verifies the gathered
+        /// bytes, and the other column's digest refuses the same evidence.
+        /// </summary>
+        [Test]
+        public void InstalledMultiContainers_ResolveVerifyAndRefuseASwappedDigest()
+        {
+            // By pinned GUID, not by name: Shader.Find matches any shader
+            // carrying the container name, including test stand-ins.
+            var baseShader = LoadInstalledMultiContainer(
+                InstalledBaseContainerGuid, BaseContainerName);
+            var outlineShader = LoadInstalledMultiContainer(
+                InstalledOutlineContainerGuid, OutlineContainerName);
+
+            var multiRows = LilToonSourceAttestation.AdmittedMultiRows();
+
+            var baseMaterial = new Material(baseShader);
+            var outlineMaterial = new Material(outlineShader);
+            try
+            {
+                var baseCaptured = UnityMaterialEvidenceCapture.Capture(
+                    new[]
+                    {
+                        new MaterialEvidenceCaptureInput(
+                            baseMaterial,
+                            LilToonMultiResolution.MultiEvidenceRequest),
+                    })[0];
+                var outlineCaptured = UnityMaterialEvidenceCapture.Capture(
+                    new[]
+                    {
+                        new MaterialEvidenceCaptureInput(
+                            outlineMaterial,
+                            LilToonMultiResolution.MultiEvidenceRequest),
+                    })[0];
+
+                Assert.That(
+                    LilToonSourceAttestation.TryResolveMultiContainer(
+                        baseShader, baseCaptured,
+                        out var baseEvidence, out var baseProfile,
+                        out var baseResolveRefusal),
+                    Is.True);
+                Assert.That(
+                    LilToonSourceAttestation.TryVerifyMultiContainer(
+                        baseEvidence, baseProfile, out _),
+                    Is.True,
+                    "the installed base container attests as the version " +
+                    "it identifies");
+
+                Assert.That(
+                    LilToonSourceAttestation.TryResolveMultiContainer(
+                        outlineShader, outlineCaptured,
+                        out var outlineEvidence, out var outlineProfile,
+                        out var outlineResolveRefusal),
+                    Is.True);
+                Assert.That(
+                    LilToonSourceAttestation.TryVerifyMultiContainer(
+                        outlineEvidence, outlineProfile, out _),
+                    Is.True,
+                    "the installed outline container attests as the " +
+                    "version it identifies");
+
+                // Swapped digest, same container: the other column's row
+                // digest must not attest. The version and tree terms stay
+                // correct, so the digest term is the one that fires.
+                var baseRow = FindMultiRow(multiRows, baseEvidence);
+                var swappedBase = SwapMultiDigest(
+                    baseEvidence, baseRow.MultiOutlineDigest);
+                Assert.That(
+                    baseRow.MultiOutlineDigest,
+                    Is.Not.EqualTo(baseEvidence.ShaderCanonicalDigest),
+                    "fixture precondition: the outline column digest " +
+                    "differs from the gathered base digest");
+                Assert.That(
+                    LilToonSourceAttestation.TryVerifyMultiContainer(
+                        swappedBase, baseProfile, out _),
+                    Is.False,
+                    "the base container refuses the outline column's digest");
+
+                var otherRow = FindOtherMultiRow(multiRows, outlineEvidence);
+                var swappedOutline = SwapMultiDigest(
+                    outlineEvidence, otherRow.MultiOutlineDigest);
+                Assert.That(
+                    otherRow.MultiOutlineDigest,
+                    Is.Not.EqualTo(outlineEvidence.ShaderCanonicalDigest),
+                    "fixture precondition: the other version's outline " +
+                    "digest differs from the gathered outline digest");
+                Assert.That(
+                    LilToonSourceAttestation.TryVerifyMultiContainer(
+                        swappedOutline, outlineProfile, out _),
+                    Is.False,
+                    "the outline container refuses the other version's " +
+                    "outline digest");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(baseMaterial);
+                UnityEngine.Object.DestroyImmediate(outlineMaterial);
+            }
+        }
+
+        private static Shader LoadInstalledMultiContainer(
+            string assetGuid, string containerName)
+        {
+            var path = UnityEditor.AssetDatabase.GUIDToAssetPath(assetGuid);
+            Assert.That(path, Is.Not.Empty,
+                "fixture precondition: the installed " + containerName +
+                " asset must resolve by its pinned GUID");
+            var shader = UnityEditor.AssetDatabase.LoadAssetAtPath<Shader>(
+                path);
+            Assert.That(shader, Is.Not.Null,
+                "fixture precondition: the installed " + containerName +
+                " asset must load");
+            return shader;
+        }
+
+        private static (string Version, string MultiDigest, string MultiOutlineDigest)
+            FindMultiRow(
+                IReadOnlyList<(string Version, string MultiDigest, string MultiOutlineDigest)> rows,
+                LilToonSourceEvidence evidence)
+        {
+            foreach (var row in rows)
+            {
+                if (string.Equals(
+                        row.Version, evidence.PackageVersion,
+                        StringComparison.Ordinal))
+                {
+                    return row;
+                }
+            }
+
+            Assert.Fail(
+                "fixture precondition: the gathered evidence must carry " +
+                "an admitted Multi version");
+            return default;
+        }
+
+        private static (string Version, string MultiDigest, string MultiOutlineDigest)
+            FindOtherMultiRow(
+                IReadOnlyList<(string Version, string MultiDigest, string MultiOutlineDigest)> rows,
+                LilToonSourceEvidence evidence)
+        {
+            foreach (var row in rows)
+            {
+                if (!string.Equals(
+                        row.Version, evidence.PackageVersion,
+                        StringComparison.Ordinal))
+                {
+                    return row;
+                }
+            }
+
+            Assert.Fail(
+                "fixture precondition: a second Multi version row must " +
+                "exist");
+            return default;
+        }
+
+        private static LilToonSourceEvidence SwapMultiDigest(
+            LilToonSourceEvidence evidence, string swappedDigest)
+        {
+            return new LilToonSourceEvidence(
+                evidence.ShaderName,
+                evidence.AssetGuid,
+                evidence.HasShaderFormatVersion,
+                evidence.ShaderFormatVersion,
+                evidence.HasPackage,
+                evidence.PackageName,
+                evidence.PackageVersion,
+                evidence.PassShaderGuid,
+                swappedDigest,
+                evidence.PassCanonicalDigest,
+                evidence.IncludeTreeDigest,
+                evidence.HasRenderMode,
+                evidence.RenderMode,
+                evidence.CompiledFeatures,
+                evidence.ShaderCanonicalization,
+                evidence.PassCanonicalization);
         }
 
         /// <summary>
