@@ -468,12 +468,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
         /// <summary>
         /// The default declared package version: an approved, non-row
-        /// version. It pairs the 2.4.0 row for the attestation-side pins
+        /// version. It pairs the 2.4.1 row for the attestation-side pins
         /// and rides the version-keyed routing arms in the pipeline
         /// fixtures. The scope's constructor takes another version, so a
-        /// boundary test can install the same package out of range.
+        /// boundary test can install the same package out of range. When
+        /// upstream ships a real 2.4.2, or when a later admission makes
+        /// 2.4.2 a row, re-sweep this witness to a version outside the
+        /// rows. Runtime derivation from the row list is the escape hatch.
         /// </summary>
-        internal const string ApprovedRangeVendorVersion = "2.4.1";
+        internal const string ApprovedRangeVendorVersion = "2.4.2";
 
         private static string ApprovedRangeVendorFolder()
         {

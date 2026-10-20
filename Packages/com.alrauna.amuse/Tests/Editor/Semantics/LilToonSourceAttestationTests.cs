@@ -191,7 +191,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         // AdmittedPackageVersions rows are private, so the fixture repeats the
         // value. The prior-version fixture passes it with the 2.3.3 package
         // version, so the version row is the only mismatching conjunction
-        // term. The 2.4.0 pairing lives in the attestation's
+        // term. The newest admitted pairing lives in the attestation's
         // IncludeTreeDigest const, which the fixtures reach through the
         // UsePin sentinel.
         private const string PriorVersionIncludeDigest =
@@ -210,6 +210,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             "225af2c6eba7a017593ca8a0f38114a98580ed67844a4d8465fed2c96f7cb75f";
         private const string Multi240OutlineDigest =
             "f33e846c45eca0c62d343526fc9c3ee72d0e8585cc42b372c0fde9460ef18c85";
+
+        // The 2.4.0 include-tree pin, computed from the official 2.4.0 tag
+        // tree and reproduced on installed 2.4.0 shapes on 2026-10-19. It
+        // anchors the 2.4.1 row's tag-tree license (spec B1).
+        private const string Multi240IncludeTree =
+            "549c3b552f8f001f2a2f6059acf4c8f0df6e9475f80b8d155784dabb68e7b670";
 
         // The installed containers' pinned asset GUIDs, the identity half of
         // the production rows. The ground check resolves the live assets by
@@ -584,13 +590,33 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 "digest is a cross combination");
         }
 
+        [Test]
+        public void MultiContainer_PackagedPairing_FlowsThroughThePairedRow()
+        {
+            Assert.That(
+                VerifyPairing(
+                    BaseContainerName, BaseContainerGuid,
+                    "2.4.1",
+                    "063f08cdc225ffc488d874c81860de376d5a9f9ad1c906ca84aa59f6193f0625",
+                    Multi234BaseDigest, Multi234BaseDigest),
+                Is.True, "the packaged 2.4.1 Multi install pairs the 2.4.0 row");
+            Assert.That(
+                VerifyPairing(
+                    BaseContainerName, BaseContainerGuid,
+                    "2.4.1", Multi240IncludeTree,
+                    Multi234BaseDigest, Multi234BaseDigest),
+                Is.False, "a 2.4.1 label over a foreign tree refuses");
+        }
+
         // --- (A2) loose installs: no version label, so the tree identifies the shipped version and the digest compares against that row's column. ---
 
         [TestCase(Multi234IncludeTree, Multi234BaseDigest, ExpectedResult = true)]
+        [TestCase(Multi240IncludeTree, Multi234BaseDigest, ExpectedResult = true)]
+        [TestCase(Multi234IncludeTree, Multi240OutlineDigest, ExpectedResult = false)]
+        [TestCase(Multi240IncludeTree, Multi234OutlineDigest, ExpectedResult = false)]
         [TestCase(
             LilToonSourceAttestation.IncludeTreeDigest, Multi234BaseDigest,
-            ExpectedResult = true)]
-        [TestCase(Multi234IncludeTree, Multi240OutlineDigest, ExpectedResult = false)]
+            ExpectedResult = false)]
         [TestCase(
             LilToonSourceAttestation.IncludeTreeDigest, Multi234OutlineDigest,
             ExpectedResult = false)]

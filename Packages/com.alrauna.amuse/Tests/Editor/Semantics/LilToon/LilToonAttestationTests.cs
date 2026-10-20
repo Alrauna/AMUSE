@@ -1764,7 +1764,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
 
             Assert.That(rows.Select(row => row.Version).ToList(), Is.Unique);
             Assert.That(rows.Select(row => row.Version).ToList(), Is.EqualTo(
-                new[] { "2.3.0", "2.3.1", "2.3.2", "2.3.3", "2.3.4", "2.4.0" }));
+                new[] { "2.3.0", "2.3.1", "2.3.2", "2.3.3", "2.3.4", "2.4.0",
+                    "2.4.1" }));
             Assert.That(rows[1].IncludeDigest, Is.EqualTo(rows[2].IncludeDigest),
                 "2.3.1 through 2.3.3 ship one shared tree");
             Assert.That(rows[3].IncludeDigest, Is.EqualTo(rows[2].IncludeDigest),
@@ -1776,6 +1777,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 rows.Take(5).Select(row => row.IncludeDigest),
                 Has.None.EqualTo(rows[5].IncludeDigest),
                 "the 2.4.0 tree matches no earlier row");
+            Assert.That(
+                rows.Take(6).Select(row => row.IncludeDigest),
+                Has.None.EqualTo(rows[6].IncludeDigest),
+                "the 2.4.1 tree matches no earlier row");
 
             var multiRows = LilToonSourceAttestation.AdmittedMultiRows();
             Assert.That(
@@ -1833,15 +1838,14 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 Is.EqualTo(LilToonSemanticDiagnosticCode.UnsupportedVersion));
         }
 
-        [TestCase("2.4.1")]
+        [TestCase("2.4.2")]
         [TestCase("2.4.9")]
         public void ApprovedRangePatchWithTheNearestRowTreeVerifies(
             string version)
         {
-            // An approved non-row version pairs the greatest admitted row
-            // at or below it: 2.4.1 and 2.4.9 both pair the 2.4.0 row, so
-            // the evidence presents that row's tree and the whole
-            // conjunction verifies honestly.
+            // 2.4.2 and 2.4.9 both pair the 2.4.1 row, so the evidence
+            // presents that row's tree and the whole conjunction verifies
+            // honestly.
             Assert.That(
                 LilToonSourceAttestation.TryVerifyLilToonIdentity(
                     Evidence(packageVersion: version), out var diagnostic),
@@ -1853,19 +1857,38 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void ApprovedRangeVersionWithAForeignTreeReportsModifiedSource()
         {
-            // The pairing still binds version to tree: 2.4.1 pairs the
-            // 2.4.0 row, so the 2.3.4 tree is a foreign tree and the
+            // The pairing still binds version to tree: 2.4.2 pairs the
+            // 2.4.1 row, so the 2.3.4 tree is a foreign tree and the
             // answer is modified source, never UnsupportedVersion.
             Assert.That(
                 LilToonSourceAttestation.TryVerifyLilToonIdentity(
                     Evidence(
-                        packageVersion: "2.4.1",
+                        packageVersion: "2.4.2",
                         includeDigest:
                             "6e2dce6cb3073d5e04b569a14df8e0944c93ca408999fb42d7c717050c48fd46"),
                     out var diagnostic),
                 Is.False);
             Assert.That(
                 diagnostic?.Code,
+                Is.EqualTo(LilToonSemanticDiagnosticCode.ModifiedShaderSource));
+        }
+
+        [Test]
+        public void AdmittedPatchVersionWithThePriorTreeReportsModifiedSource()
+        {
+            // The 2.4.1 row binds version to its own tree. A 2.4.1 label
+            // over the 2.4.0 tree is a foreign tree, and the answer is
+            // modified source, never UnsupportedVersion (spec B5).
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyLilToonIdentity(
+                    Evidence(
+                        packageVersion: "2.4.1",
+                        includeDigest:
+                            "549c3b552f8f001f2a2f6059acf4c8f0df6e9475f80b8d155784dabb68e7b670"),
+                    out var diagnostic),
+                Is.False);
+            Assert.That(
+                diagnostic.Code,
                 Is.EqualTo(LilToonSemanticDiagnosticCode.ModifiedShaderSource));
         }
 
@@ -2240,12 +2263,16 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 Is.EqualTo(
                     "aee1ea0c1fd0ae26f561fbade4c23309bb62ed8aff0c9221d1cba7c74a31d9d1"));
             // The flip moved the include-tree pin to the newest admitted
-            // tree (2.4.0). The 2.3.4 anchor lives in the
-            // AdmittedPackageVersions row literal and in the S11 tests.
+            // tree (2.4.1). The digest was computed from the official 2.4.1
+            // tag tree on 2026-10-20 by the production recipe, licensed by
+            // reproducing the 2.4.0 pin from the 2.4.0 tag tree (spec B1).
+            // The 2.4.0 anchor lives in the AdmittedPackageVersions row
+            // literal and in the S11 tests. Installed-shape confirmation is
+            // outstanding.
             Assert.That(
                 LilToonSourceAttestation.IncludeTreeDigest,
                 Is.EqualTo(
-                    "549c3b552f8f001f2a2f6059acf4c8f0df6e9475f80b8d155784dabb68e7b670"));
+                    "063f08cdc225ffc488d874c81860de376d5a9f9ad1c906ca84aa59f6193f0625"));
 
             // Both admitted Multi version rows, verbatim: a transcription
             // error in either Multi row fails this audit independently of
@@ -2734,10 +2761,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 Is.EqualTo(LilToonSemanticDiagnosticCode.UnsupportedVersion));
         }
 
-        // --- S11: admitted versions 2.3.0 through 2.4.0 --------------------
+        // --- S11: admitted versions 2.3.0 through 2.4.1 --------------------
 
         /// <summary>
-        /// Shader and pass bytes are byte-identical across 2.3.0-2.4.0 (the
+        /// Shader and pass bytes are byte-identical across 2.3.0-2.4.1 (the
         /// 2.4.0 digests reproduce the pinned constants on two installed
         /// 2.4.0 shapes, 2026-10-19), so each admitted version verifies
         /// against the shared digests with its own include-tree digest.
@@ -2745,7 +2772,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         /// over each official tag's Shader/Includes tree (37 files each),
         /// anchored by reproducing the pinned 2.3.4 digest exactly; the
         /// 2.4.0 digest was measured over the installed tree (38 files) and
-        /// reproduced on a second settings shape.
+        /// reproduced on a second settings shape, and the 2.4.1 digest was
+        /// computed from the official tag tree (38 files) under the anchor
+        /// license on 2026-10-20.
         /// </summary>
         [TestCase("2.3.0",
             "bba3205a08b2bd56b4d2c69b8de3144377ec0b4ca4c44cc9d71b1341e62c94a0")]
@@ -2759,6 +2788,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             "6e2dce6cb3073d5e04b569a14df8e0944c93ca408999fb42d7c717050c48fd46")]
         [TestCase("2.4.0",
             "549c3b552f8f001f2a2f6059acf4c8f0df6e9475f80b8d155784dabb68e7b670")]
+        [TestCase("2.4.1",
+            "063f08cdc225ffc488d874c81860de376d5a9f9ad1c906ca84aa59f6193f0625")]
         public void Verify_AcceptsAdmittedPatchVersionWithItsOwnTree(
             string version,
             string includeDigest)
@@ -2775,7 +2806,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         /// <summary>
         /// The in-range non-row twin of the admitted-patch pin: 2.4.3 is
         /// no admitted row, so the pairing fallback binds it to the
-        /// greatest row at or below it (2.4.0), and the evidence presents
+        /// greatest row at or below it (2.4.1), and the evidence presents
         /// exactly that row's tree.
         /// </summary>
         [Test]
