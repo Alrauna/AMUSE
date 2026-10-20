@@ -417,6 +417,9 @@ namespace Alrauna.Amuse.Editor.Build
                 "AMUSE moved triangles while the alpha policy was " +
                 "active, so some moved triangles rest on your alpha " +
                 "settings rather than on exact proof.",
+            ["amuse.summary.SeparatorSwitchOff:description"] =
+                "Some slots did not separate because a separator " +
+                "switch is off.",
 
             // --- Proof sampling disclosure. One key per closed policy
             // value; {0} names the captured build target. The summary

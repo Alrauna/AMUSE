@@ -720,6 +720,7 @@ namespace Alrauna.Amuse.Editor.Build
             int untouchedRenderers,
             AmuseBuildPath buildPath,
             bool alphaPolicyActive,
+            bool anySeparatorSwitchOff,
             BuildTarget capturedTarget,
             AlphaSamplingPolicy capturedPolicy)
         {
@@ -747,11 +748,16 @@ namespace Alrauna.Amuse.Editor.Build
                 ? " " + AmuseReportStrings.Get(
                     "amuse.summary.PolicyActive:description")
                 : "";
+            var separatorSentence = anySeparatorSwitchOff
+                ? " " + AmuseReportStrings.Get(
+                    "amuse.summary.SeparatorSwitchOff:description")
+                : "";
 
             AmuseBuildStatusStore.Record(
                 (buildPath == AmuseBuildPath.ApplyOnPlay
                     ? "Last play mode run: "
-                    : "Last upload: ") + summary + policySentence);
+                    : "Last upload: ") + summary + policySentence +
+                separatorSentence);
 
             using (ErrorReport.WithContextObject(avatarRoot))
             {
@@ -771,6 +777,16 @@ namespace Alrauna.Amuse.Editor.Build
                     // the status line above is where it surfaces.
                     reportArguments.Add(AmuseReportStrings.Get(
                         "amuse.summary.PolicyActive:description"));
+                }
+                if (anySeparatorSwitchOff)
+                {
+                    // The switch disclosure keeps its own trailing
+                    // argument beside the tolerance disclosure. The
+                    // description format holds no slot for it, so the
+                    // report itself stays inert and the status line
+                    // above is where it surfaces.
+                    reportArguments.Add(AmuseReportStrings.Get(
+                        "amuse.summary.SeparatorSwitchOff:description"));
                 }
 
                 ErrorReport.ReportError(

@@ -444,6 +444,12 @@ namespace Alrauna.Amuse.Editor.Build
                 optimizer == null || optimizer.CutoutSeparatorEnabled;
             var transparentSeparatorEnabled =
                 optimizer == null || optimizer.TransparentSeparatorEnabled;
+            // The separator switch facts ride the same barrier capture.
+            // A switch off at the capture means its slot family never
+            // separated. The apply pass reports the fact beside the
+            // reach flag.
+            state.CutoutSeparatorOff = !cutoutSeparatorEnabled;
+            state.TransparentSeparatorOff = !transparentSeparatorEnabled;
 
             // The proof policy is a build-wide fact. Capture the active
             // target and the selected policy exactly once, before any
