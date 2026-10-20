@@ -440,6 +440,10 @@ namespace Alrauna.Amuse.Editor.Build
                 optimizer == null || optimizer.IgnoreOutOfRangeMaterialSlots;
             var allowDepthTestChange =
                 optimizer == null || optimizer.AllowDepthTestChange;
+            var cutoutSeparatorEnabled =
+                optimizer == null || optimizer.CutoutSeparatorEnabled;
+            var transparentSeparatorEnabled =
+                optimizer == null || optimizer.TransparentSeparatorEnabled;
 
             // The proof policy is a build-wide fact. Capture the active
             // target and the selected policy exactly once, before any
@@ -774,6 +778,11 @@ namespace Alrauna.Amuse.Editor.Build
                                 minimumOpaqueCoverageToPreservePercent,
                                 cutoutMinimumCoverage,
                                 cutoutPreserveCoverage);
+                        var separatorOffBySlot = SlotTransformDecision
+                            .SeparatorOffBySlot(
+                                coverageVectors.CutoutMembershipBySlot,
+                                cutoutSeparatorEnabled,
+                                transparentSeparatorEnabled);
                         var prepared = RetainPreparedSeparation(
                             state,
                             extraction.MutationTarget,
@@ -786,6 +795,7 @@ namespace Alrauna.Amuse.Editor.Build
                             coverageVectors.CoveragePercentsBySlot,
                             coverageVectors.PreservePercentsBySlot,
                             coverageVectors.CutoutMembershipBySlot,
+                            separatorOffBySlot,
                             rendererTypeName,
                             allowDepthTestChange,
                             grantedShaderNames,
@@ -1060,6 +1070,7 @@ namespace Alrauna.Amuse.Editor.Build
             IReadOnlyList<int> coveragePercentsBySlot,
             IReadOnlyList<int> preservePercentsBySlot,
             IReadOnlyList<bool> cutoutMembershipBySlot,
+            bool[] separatorOffBySlot = null,
             string rendererTypeName = null,
             bool allowDepthTestChange = false,
             IReadOnlyCollection<string> grantedShaderNames = null,
@@ -1077,6 +1088,7 @@ namespace Alrauna.Amuse.Editor.Build
                 coveragePercentsBySlot,
                 preservePercentsBySlot,
                 cutoutMembershipBySlot,
+                separatorOffBySlot,
                 rendererTypeName,
                 allowDepthTestChange,
                 grantedShaderNames,

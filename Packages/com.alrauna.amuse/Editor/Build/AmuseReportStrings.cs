@@ -579,6 +579,12 @@ namespace Alrauna.Amuse.Editor.Build
             ["amuse.slotSeparation.AnisotropyDifferences:hint"] =
                 "Enable 'Accept Desktop Anisotropy Differences' (or mobile) on the AMUSE component " +
                 "if you want AMUSE to prove opacity without anisotropic footprints.",
+            ["amuse.slotSeparation.SeparatorOffByPolicy"] =
+                "The matching separator switch is off, so this slot did not separate.",
+            ["amuse.slotSeparation.SeparatorOffByPolicy:description"] =
+                "The matching separator switch is off, so this slot did not separate.",
+            ["amuse.slotSeparation.SeparatorOffByPolicy:hint"] =
+                "Enable 'Cutout Separator' or 'Transparent Separator' on the AMUSE component.",
             ["amuse.slotSeparation.DepthTestDivergence"] =
                 "AMUSE separated material slot {0} of renderer '{1}'.",
             ["amuse.slotSeparation.DepthTestDivergence:description"] =

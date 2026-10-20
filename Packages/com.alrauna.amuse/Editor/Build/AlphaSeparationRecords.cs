@@ -90,6 +90,10 @@ namespace Alrauna.Amuse.Editor.Build
         /// footprints.</summary>
         AnisotropyDifferences,
 
+        /// <summary>A policy refusal, not a proof fact. The slot's arm is
+        /// disabled by a separator sub-switch, so it never prepared.</summary>
+        SeparatorOffByPolicy,
+
         // --- Renderer-scoped members. Applied to all candidate slots of one
         // renderer and to nothing else: never to that renderer's alpha
         // analysis, never to another renderer.

@@ -9743,6 +9743,23 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// Stores one separator sub-switch on this root's own optimizer
+        /// through its serialized field, exactly as the editor writes the
+        /// toggle.
+        /// </summary>
+        private static void SetSeparatorSwitch(
+            GameObject root,
+            string fieldName,
+            bool value)
+        {
+            var optimizer = root.GetComponent<
+                Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            var serialized = new SerializedObject(optimizer);
+            serialized.FindProperty(fieldName).boolValue = value;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        /// <summary>
         /// An 8x8 mip-free RGBA32 asset with Point/Clamp sampling: the
         /// left half carries full alpha and the right half carries zero,
         /// so the cutout arms binarize a clean split and the exact arms
@@ -11141,6 +11158,820 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     UnityEngine.Object.DestroyImmediate(survivorMaterial);
                 }
             }
+        }
+
+        // --- Separator sub-switch arms at preparation -----------------------
+
+        /// <summary>
+        /// One comparable line per plan entry plus the triangle count,
+        /// so two runs of the same fixture compare their whole plan
+        /// shape. The digest names no prepared-slot count: a refused
+        /// arm legitimately prepares fewer slots over an untouched
+        /// plan. A plan that the separator switches must never touch
+        /// digests identically across both switch states.
+        /// </summary>
+        private static string DescribePreparedPlans(
+            AmusePlatformFinishState amuse)
+        {
+            var parts = new List<string>
+            {
+                "candidates=" + amuse.OpaqueCandidateTriangleCount,
+            };
+            if (amuse.Separation == null)
+            {
+                parts.Add("separation=none");
+                return string.Join(";", parts);
+            }
+
+            foreach (var prepared in amuse.Separation.Renderers)
+            {
+                foreach (var entry in prepared.Plan.Submeshes)
+                {
+                    parts.Add(
+                        entry.SourceMaterialBindingIndex + ":" +
+                        entry.Disposition + ":opaque=" +
+                        string.Join("|", entry.OpaqueTriangleOrdinals) +
+                        ":transparent=" + string.Join(
+                            "|", entry.TransparentTriangleOrdinals));
+                }
+            }
+
+            return string.Join(";", parts);
+        }
+
+        /// <summary>
+        /// One comparable count per refusal reason, so two runs compare
+        /// their whole refusal table.
+        /// </summary>
+        private static string DescribeRefusalTable(
+            AmusePlatformFinishState amuse)
+        {
+            var parts = new List<string>();
+            foreach (AlphaSeparationSlotRefusal reason in
+                     Enum.GetValues(
+                         typeof(AlphaSeparationSlotRefusal)))
+            {
+                if (reason == AlphaSeparationSlotRefusal.None)
+                {
+                    continue;
+                }
+
+                parts.Add(
+                    reason + "=" + amuse.SlotRefusalCount(reason));
+            }
+
+            return string.Join(";", parts);
+        }
+
+        /// <summary>
+        /// One two-slot separator arm: slot 0 binds the lilToon cutout
+        /// conversion material and slot 1 binds the split-alpha
+        /// material, both over one shared half-hole texture, and both
+        /// slots stay split candidates under the inert default pairs.
+        /// The serialized writes set the arm's separator sub-switches
+        /// before the barrier runs. The fixture tears itself down, so
+        /// only the recorded counts, plans and registry booleans stay
+        /// readable afterwards.
+        /// </summary>
+        private static (
+            AmusePlatformFinishState State,
+            IReadOnlyList<string> Messages) RunSeparatorOffArm(
+                bool cutoutOn,
+                bool transparentOn,
+                string armName)
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE separator " + armName);
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<
+                Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
+            SetSeparatorSwitch(
+                root, "_cutoutSeparatorEnabled", cutoutOn);
+            SetSeparatorSwitch(
+                root, "_transparentSeparatorEnabled", transparentOn);
+            Material cutoutMaterial = null;
+            Material transparentMaterial = null;
+            Mesh mesh = null;
+            AmusePlatformFinishState amuse = null;
+            IReadOnlyList<string> messages = null;
+            try
+            {
+                AlphaSeparationSplitTests.EnsureSplitFolder();
+                try
+                {
+                    var texture = ImportHalfHoleTexture(
+                        "separator_off_" + armName);
+                    cutoutMaterial =
+                        LilToonFixtureTestBase
+                            .CreateCutoutConversionMaterial();
+                    cutoutMaterial.SetTexture("_MainTex", texture);
+                    cutoutMaterial.SetTextureScale(
+                        "_MainTex", Vector2.one);
+                    cutoutMaterial.SetTextureOffset(
+                        "_MainTex", Vector2.zero);
+                    transparentMaterial =
+                        AlphaSeparationSplitTests.SplitAlphaMaterial(
+                            texture);
+                    mesh = HalfHoleSlotsMesh(1, 1);
+                    var renderer =
+                        root.AddComponent<SkinnedMeshRenderer>();
+                    renderer.sharedMesh = mesh;
+                    renderer.sharedMaterials = new[]
+                    {
+                        cutoutMaterial, transparentMaterial,
+                    };
+
+                    var reports = ErrorReport.CaptureErrors(
+                        () => amuse = RunBarrier(root));
+                    messages = reports
+                        .Select(report => report.TheError.ToMessage())
+                        .ToArray();
+                }
+                finally
+                {
+                    AlphaSeparationSplitTests.DeleteSplitFolder();
+                }
+            }
+            finally
+            {
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
+                if (mesh != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(mesh);
+                }
+
+                UnityEngine.Object.DestroyImmediate(root);
+                if (cutoutMaterial != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(cutoutMaterial);
+                }
+
+                if (transparentMaterial != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(
+                        transparentMaterial);
+                }
+            }
+
+            return (amuse, messages);
+        }
+
+        /// <summary>
+        /// A preserve-qualifying cutout slot: one lilToon cutout
+        /// conversion material over a half-hole texture whose 50 percent
+        /// unproven share folds at the cutout arm's stored preserve
+        /// value of 60. The serialized write sets the Cutout Separator
+        /// before the barrier runs. The fixture tears itself down.
+        /// </summary>
+        private static (
+            AmusePlatformFinishState State,
+            IReadOnlyList<string> Messages) RunPreserveFoldCutoutArm(
+                bool cutoutOn,
+                string armName)
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject(
+                "AMUSE preserve fold arm " + armName);
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<
+                Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
+            SetCutoutPreserveCoverage(root, 60);
+            SetSeparatorSwitch(
+                root, "_cutoutSeparatorEnabled", cutoutOn);
+            Material material = null;
+            Mesh mesh = null;
+            AmusePlatformFinishState amuse = null;
+            IReadOnlyList<string> messages = null;
+            try
+            {
+                AlphaSeparationSplitTests.EnsureSplitFolder();
+                try
+                {
+                    var texture = ImportHalfHoleTexture(
+                        "preserve_fold_arm_" + armName);
+                    material =
+                        LilToonFixtureTestBase
+                            .CreateCutoutConversionMaterial();
+                    material.SetTexture("_MainTex", texture);
+                    material.SetTextureScale("_MainTex", Vector2.one);
+                    material.SetTextureOffset(
+                        "_MainTex", Vector2.zero);
+                    mesh = HalfHoleSlotsMesh(1);
+                    var renderer =
+                        root.AddComponent<SkinnedMeshRenderer>();
+                    renderer.sharedMesh = mesh;
+                    renderer.sharedMaterials = new[] { material };
+
+                    var reports = ErrorReport.CaptureErrors(
+                        () => amuse = RunBarrier(root));
+                    messages = reports
+                        .Select(report => report.TheError.ToMessage())
+                        .ToArray();
+                }
+                finally
+                {
+                    AlphaSeparationSplitTests.DeleteSplitFolder();
+                }
+            }
+            finally
+            {
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
+                if (mesh != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(mesh);
+                }
+
+                UnityEngine.Object.DestroyImmediate(root);
+                if (material != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(material);
+                }
+            }
+
+            return (amuse, messages);
+        }
+
+        /// <summary>
+        /// One additive-layer conversion-state arm. When
+        /// <paramref name="withCutoutSlot"/> is false the renderer holds
+        /// one verified opaque Poiyomi slot, so every candidate slot
+        /// sits in the transparent arm. When it is true the renderer
+        /// holds a cutout-preset slot beside the verified opaque slot,
+        /// so the two arms split across the two candidate slots. The
+        /// renderer animates material._ZWrite on an additive layer, so
+        /// the renderer-wide additive gate fires before the candidate
+        /// loop. The fixture tears itself down.
+        /// </summary>
+        private static (
+            AmusePlatformFinishState State,
+            IReadOnlyList<string> Messages) RunAdditiveArm(
+                bool cutoutOn,
+                bool transparentOn,
+                bool withCutoutSlot,
+                string armName)
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject(
+                "AMUSE additive arm " + armName);
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<
+                Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
+            SetSeparatorSwitch(
+                root, "_cutoutSeparatorEnabled", cutoutOn);
+            SetSeparatorSwitch(
+                root, "_transparentSeparatorEnabled", transparentOn);
+            Material presetMaterial = null;
+            Material opaqueMaterial = null;
+            Mesh mesh = null;
+            AnimationClip clip = null;
+            AnimatorController controller = null;
+            AmusePlatformFinishState amuse = null;
+            IReadOnlyList<string> messages = null;
+            try
+            {
+                AlphaSeparationSplitTests.EnsureSplitFolder();
+                try
+                {
+                    if (withCutoutSlot)
+                    {
+                        var texture = ImportHalfHoleTexture(
+                            "additive_arm_" + armName);
+                        presetMaterial =
+                            PoiyomiFixtureTestBase
+                                .CreateVerifiedMaterial();
+                        PoiyomiFixtureTestBase.ApplyConvertibleRenderState(
+                            presetMaterial);
+                        presetMaterial.SetFloat("_AlphaForceOpaque", 0f);
+                        presetMaterial.SetFloat("_MainAlphaMaskMode", 0f);
+                        presetMaterial.SetColor(
+                            "_Color", new Color(1f, 1f, 1f, 1f));
+                        presetMaterial.SetFloat("_Mode", 1f);
+                        presetMaterial.SetFloat("_Cutoff", 0.5f);
+                        presetMaterial.SetTexture("_MainTex", texture);
+                        presetMaterial.SetTextureScale(
+                            "_MainTex", Vector2.one);
+                        presetMaterial.SetTextureOffset(
+                            "_MainTex", Vector2.zero);
+                    }
+
+                    opaqueMaterial = VerifiedOpaqueZWriteDefaultMaterial();
+                    mesh = withCutoutSlot
+                        ? HalfHoleSlotsMesh(1, 1)
+                        : HalfHoleSlotsMesh(1);
+                    var renderer =
+                        root.AddComponent<SkinnedMeshRenderer>();
+                    renderer.sharedMesh = mesh;
+                    renderer.sharedMaterials = withCutoutSlot
+                        ? new[] { presetMaterial, opaqueMaterial }
+                        : new[] { opaqueMaterial };
+
+                    clip = NewFloatClip(
+                        "AMUSE separator additive " + armName,
+                        string.Empty,
+                        "material._ZWrite", 0f);
+                    controller = AlphaSeparationTestLifecycle
+                        .NewController(
+                            root,
+                            "AMUSE separator additive graph " + armName,
+                            clip);
+                    var layers = controller.layers;
+                    layers[0].blendingMode =
+                        AnimatorLayerBlendingMode.Additive;
+                    controller.layers = layers;
+
+                    var reports = ErrorReport.CaptureErrors(
+                        () => amuse = RunBarrier(root));
+                    messages = reports
+                        .Select(report => report.TheError.ToMessage())
+                        .ToArray();
+                }
+                finally
+                {
+                    AlphaSeparationSplitTests.DeleteSplitFolder();
+                }
+            }
+            finally
+            {
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(
+                    root, controller);
+                if (mesh != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(mesh);
+                }
+
+                UnityEngine.Object.DestroyImmediate(root);
+                if (presetMaterial != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(presetMaterial);
+                }
+
+                if (opaqueMaterial != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(opaqueMaterial);
+                }
+
+                if (clip != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(clip);
+                }
+
+                if (controller != null)
+                {
+                    DestroyControllerGraph(controller);
+                }
+            }
+
+            return (amuse, messages);
+        }
+
+        /// <summary>
+        /// The file's mixed coverage table over one three-slot renderer:
+        /// the cutout preserve pair folds slot 0, the cutout coverage
+        /// minimum refuses slot 1, and the inert transparent pair keeps
+        /// slot 2 a surviving split. When <paramref name="explicitOn"/>
+        /// is true the arm stores both separator switches as true;
+        /// otherwise the component defaults stand. The fixture tears
+        /// itself down.
+        /// </summary>
+        private static (
+            AmusePlatformFinishState State,
+            IReadOnlyList<string> Messages) RunMixedCoverageTableArm(
+                bool explicitOn,
+                string armName)
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject(
+                "AMUSE mixed table " + armName);
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<
+                Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
+            SetConvertCoverage(root, 0);
+            SetPreserveCoverage(root, 0);
+            SetCutoutConvertCoverage(root, 40);
+            SetCutoutPreserveCoverage(root, 60);
+            if (explicitOn)
+            {
+                SetSeparatorSwitch(
+                    root, "_cutoutSeparatorEnabled", true);
+                SetSeparatorSwitch(
+                    root, "_transparentSeparatorEnabled", true);
+            }
+
+            Material cutoutMaterial = null;
+            Material transparentMaterial = null;
+            Mesh mesh = null;
+            AmusePlatformFinishState amuse = null;
+            IReadOnlyList<string> messages = null;
+            try
+            {
+                AlphaSeparationSplitTests.EnsureSplitFolder();
+                try
+                {
+                    var texture = ImportHalfHoleTexture(
+                        "mixed_table_" + armName);
+                    cutoutMaterial =
+                        LilToonFixtureTestBase
+                            .CreateCutoutConversionMaterial();
+                    cutoutMaterial.SetTexture("_MainTex", texture);
+                    cutoutMaterial.SetTextureScale(
+                        "_MainTex", Vector2.one);
+                    cutoutMaterial.SetTextureOffset(
+                        "_MainTex", Vector2.zero);
+                    transparentMaterial =
+                        AlphaSeparationSplitTests.SplitAlphaMaterial(
+                            texture);
+                    mesh = HalfHoleSlotsMesh(1, 2, 1);
+                    var renderer =
+                        root.AddComponent<SkinnedMeshRenderer>();
+                    renderer.sharedMesh = mesh;
+                    renderer.sharedMaterials = new[]
+                    {
+                        cutoutMaterial, cutoutMaterial,
+                        transparentMaterial,
+                    };
+
+                    var reports = ErrorReport.CaptureErrors(
+                        () => amuse = RunBarrier(root));
+                    messages = reports
+                        .Select(report => report.TheError.ToMessage())
+                        .ToArray();
+                }
+                finally
+                {
+                    AlphaSeparationSplitTests.DeleteSplitFolder();
+                }
+            }
+            finally
+            {
+                AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
+                if (mesh != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(mesh);
+                }
+
+                UnityEngine.Object.DestroyImmediate(root);
+                if (cutoutMaterial != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(cutoutMaterial);
+                }
+
+                if (transparentMaterial != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(
+                        transparentMaterial);
+                }
+            }
+
+            return (amuse, messages);
+        }
+
+        /// <summary>
+        /// One cutout slot and one transparent slot, both split
+        /// candidates, with the Cutout Separator off and the
+        /// Transparent Separator on. The cutout slot is absent from the
+        /// prepared set and the state carries SeparatorOffByPolicy for
+        /// it. The transparent slot prepares exactly as in the both-on
+        /// baseline run of the same fixture.
+        /// </summary>
+        [Test]
+        public void
+            DisabledCutoutArmRecordsSeparatorOffRefusalForCutoutSlots()
+        {
+            var baseline = RunSeparatorOffArm(true, true, "cutout base");
+            var disabled = RunSeparatorOffArm(
+                false, true, "cutout off");
+
+            Assert.That(baseline.State.AvatarRefusal,
+                Is.EqualTo(AvatarAnimationRefusal.None));
+            Assert.That(
+                baseline.State.SemanticallyRefusedRendererCount, Is.Zero,
+                "fixture precondition: the renderer must be " +
+                "analyzable");
+            Assert.That(baseline.State.Separation, Is.Not.Null,
+                "fixture precondition: both slots must prepare with " +
+                "both switches on");
+            foreach (AlphaSeparationSlotRefusal reason in
+                     Enum.GetValues(
+                         typeof(AlphaSeparationSlotRefusal)))
+            {
+                if (reason == AlphaSeparationSlotRefusal.None)
+                {
+                    continue;
+                }
+
+                Assert.That(
+                    baseline.State.SlotRefusalCount(reason), Is.Zero,
+                    "fixture precondition: the baseline must refuse " +
+                    "nothing: " + reason);
+            }
+
+            Assert.That(
+                DescribePreparedPlans(baseline.State),
+                Is.EqualTo(DescribePreparedPlans(disabled.State)),
+                "the refused arm changes no plan entry: the cutout " +
+                "slot keeps its split entry and the transparent slot " +
+                "prepares exactly as with both on");
+            Assert.That(disabled.State.AvatarRefusal,
+                Is.EqualTo(AvatarAnimationRefusal.None));
+            Assert.That(
+                disabled.State.SemanticallyRefusedRendererCount, Is.Zero,
+                "a disabled arm is a policy outcome, not a refusal");
+            Assert.That(
+                disabled.State.SlotRefusalCount(
+                    AlphaSeparationSlotRefusal.SeparatorOffByPolicy),
+                Is.EqualTo(1),
+                "the disabled cutout arm must record its policy " +
+                "refusal for the cutout slot exactly once");
+            foreach (AlphaSeparationSlotRefusal reason in
+                     Enum.GetValues(
+                         typeof(AlphaSeparationSlotRefusal)))
+            {
+                if (reason == AlphaSeparationSlotRefusal.None ||
+                    reason ==
+                        AlphaSeparationSlotRefusal.SeparatorOffByPolicy)
+                {
+                    continue;
+                }
+
+                Assert.That(
+                    disabled.State.SlotRefusalCount(reason), Is.Zero,
+                    "the disabled arm must refuse nothing else: " +
+                    reason);
+            }
+
+            Assert.That(disabled.State.Separation, Is.Not.Null,
+                "the enabled transparent slot must still prepare");
+            var prepared = disabled.State.Separation.Renderers.Single();
+            Assert.That(prepared.CandidateSlots, Has.Count.EqualTo(1),
+                "the cutout slot must be absent from the prepared " +
+                "set");
+            Assert.That(
+                prepared.Plan.Submeshes.Single(
+                        entry =>
+                            entry.SourceMaterialBindingIndex == 1)
+                    .Disposition,
+                Is.EqualTo(SubmeshSeparationDisposition.Split),
+                "the transparent slot keeps its surviving split");
+            Assert.That(
+                prepared.Plan.Submeshes.Single(
+                        entry =>
+                            entry.SourceMaterialBindingIndex == 0)
+                    .Disposition,
+                Is.EqualTo(SubmeshSeparationDisposition.Split),
+                "the refused cutout slot keeps its own split entry");
+        }
+
+        /// <summary>
+        /// The same two-slot fixture with the Transparent Separator off
+        /// and the Cutout Separator on: the transparent slot records
+        /// SeparatorOffByPolicy and stays out of the prepared set,
+        /// while the cutout slot prepares exactly as with both on.
+        /// </summary>
+        [Test]
+        public void DisabledTransparentArmMirrorsTheCutoutBehavior()
+        {
+            var baseline = RunSeparatorOffArm(
+                true, true, "transparent base");
+            var disabled = RunSeparatorOffArm(
+                true, false, "transparent off");
+
+            Assert.That(baseline.State.AvatarRefusal,
+                Is.EqualTo(AvatarAnimationRefusal.None));
+            Assert.That(
+                baseline.State.SemanticallyRefusedRendererCount, Is.Zero,
+                "fixture precondition: the renderer must be " +
+                "analyzable");
+            Assert.That(baseline.State.Separation, Is.Not.Null,
+                "fixture precondition: both slots must prepare with " +
+                "both switches on");
+            foreach (AlphaSeparationSlotRefusal reason in
+                     Enum.GetValues(
+                         typeof(AlphaSeparationSlotRefusal)))
+            {
+                if (reason == AlphaSeparationSlotRefusal.None)
+                {
+                    continue;
+                }
+
+                Assert.That(
+                    baseline.State.SlotRefusalCount(reason), Is.Zero,
+                    "fixture precondition: the baseline must refuse " +
+                    "nothing: " + reason);
+            }
+
+            Assert.That(
+                DescribePreparedPlans(baseline.State),
+                Is.EqualTo(DescribePreparedPlans(disabled.State)),
+                "the refused arm changes no plan entry: the " +
+                "transparent slot keeps its split entry and the " +
+                "cutout slot prepares exactly as with both on");
+            Assert.That(disabled.State.AvatarRefusal,
+                Is.EqualTo(AvatarAnimationRefusal.None));
+            Assert.That(
+                disabled.State.SemanticallyRefusedRendererCount, Is.Zero,
+                "a disabled arm is a policy outcome, not a refusal");
+            Assert.That(
+                disabled.State.SlotRefusalCount(
+                    AlphaSeparationSlotRefusal.SeparatorOffByPolicy),
+                Is.EqualTo(1),
+                "the disabled transparent arm must record its policy " +
+                "refusal for the transparent slot exactly once");
+            foreach (AlphaSeparationSlotRefusal reason in
+                     Enum.GetValues(
+                         typeof(AlphaSeparationSlotRefusal)))
+            {
+                if (reason == AlphaSeparationSlotRefusal.None ||
+                    reason ==
+                        AlphaSeparationSlotRefusal.SeparatorOffByPolicy)
+                {
+                    continue;
+                }
+
+                Assert.That(
+                    disabled.State.SlotRefusalCount(reason), Is.Zero,
+                    "the disabled arm must refuse nothing else: " +
+                    reason);
+            }
+
+            Assert.That(disabled.State.Separation, Is.Not.Null,
+                "the enabled cutout slot must still prepare");
+            var prepared = disabled.State.Separation.Renderers.Single();
+            Assert.That(prepared.CandidateSlots, Has.Count.EqualTo(1),
+                "the transparent slot must be absent from the " +
+                "prepared set");
+            Assert.That(
+                prepared.Plan.Submeshes.Single(
+                        entry =>
+                            entry.SourceMaterialBindingIndex == 0)
+                    .Disposition,
+                Is.EqualTo(SubmeshSeparationDisposition.Split),
+                "the cutout slot keeps its surviving split");
+        }
+
+        /// <summary>
+        /// A preserve-qualifying cutout slot with the Cutout Separator
+        /// off never folds: no ForcedOpaque disclosure fires and the
+        /// slot records SeparatorOffByPolicy. The same fixture with the
+        /// switch on folds and discloses exactly once, so the silence
+        /// proves the fold gate skipped the disabled arm.
+        /// </summary>
+        [Test]
+        public void DisabledArmSkipsThePreserveFoldDisclosure()
+        {
+            var folded = RunPreserveFoldCutoutArm(true, "fold on");
+            var skipped = RunPreserveFoldCutoutArm(false, "fold off");
+
+            Assert.That(folded.State.AvatarRefusal,
+                Is.EqualTo(AvatarAnimationRefusal.None));
+            Assert.That(
+                folded.State.SemanticallyRefusedRendererCount, Is.Zero,
+                "fixture precondition: the renderer must be " +
+                "analyzable");
+            Assert.That(folded.State.Separation, Is.Not.Null,
+                "fixture precondition: the preserve value must fold " +
+                "the qualifying cutout slot with the switch on");
+            Assert.That(
+                folded.State.Separation.Renderers[0].Plan.Submeshes
+                    .Single().Disposition,
+                Is.EqualTo(
+                    SubmeshSeparationDisposition
+                        .WhollyOpaqueCandidate),
+                "fixture precondition: the fold moved the whole " +
+                "slot onto the opaque list");
+            Assert.That(
+                folded.Messages,
+                Has.Exactly(1).Contains(
+                    "The moved triangles have no opacity proof."),
+                "fixture precondition: the folded slot must " +
+                "disclose its forced event with the switch on");
+
+            Assert.That(skipped.State.AvatarRefusal,
+                Is.EqualTo(AvatarAnimationRefusal.None));
+            Assert.That(
+                skipped.State.SemanticallyRefusedRendererCount, Is.Zero,
+                "a disabled arm is a policy outcome, not a refusal");
+            Assert.That(skipped.State.Separation, Is.Null,
+                "the disabled arm leaves no candidate to prepare");
+            Assert.That(
+                skipped.State.SlotRefusalCount(
+                    AlphaSeparationSlotRefusal.SeparatorOffByPolicy),
+                Is.EqualTo(1),
+                "the disabled arm must record its policy refusal " +
+                "instead of folding");
+            Assert.That(
+                skipped.Messages,
+                Has.None.Contains(
+                    "The moved triangles have no opacity proof."),
+                "a skipped fold must never disclose a forced event");
+        }
+
+        /// <summary>
+        /// Conversion-state additive bindings spare the disabled arm:
+        /// when every candidate slot sits in a disabled arm, the
+        /// renderer-wide additive gate records SeparatorOffByPolicy and
+        /// no additive refusal at all. With the two arms split across
+        /// two candidate slots, the disabled-arm slot keeps
+        /// SeparatorOffByPolicy and the enabled-arm slot receives the
+        /// additive refusal.
+        /// </summary>
+        [Test]
+        public void AdditiveLayerGateSparesDisabledArmSlots()
+        {
+            // The verified opaque slot follows the Transparent
+            // Separator, so the all-disabled arm turns that switch off.
+            var allDisabled = RunAdditiveArm(
+                true, false, false, "all disabled");
+            var mixed = RunAdditiveArm(
+                false, true, true, "mixed arms");
+
+            Assert.That(allDisabled.State.AvatarRefusal,
+                Is.EqualTo(AvatarAnimationRefusal.None),
+                "the conversion-only binding must stay outside the " +
+                "alpha request, so the analysis cannot refuse the " +
+                "renderer for the additive layer");
+            Assert.That(allDisabled.State.Separation, Is.Null,
+                "the only candidate slot was refused, so nothing is " +
+                "retained");
+            Assert.That(
+                allDisabled.State.SlotRefusalCount(
+                    AlphaSeparationSlotRefusal.SeparatorOffByPolicy),
+                Is.EqualTo(1),
+                "the disabled arm must record its policy refusal for " +
+                "the disabled-arm candidate slot");
+            Assert.That(
+                allDisabled.State.SlotRefusalCount(
+                    AlphaSeparationSlotRefusal
+                        .ConversionStateUnderAdditiveLayer),
+                Is.Zero,
+                "a disabled-arm candidate slot must never receive " +
+                "the additive refusal");
+
+            Assert.That(mixed.State.AvatarRefusal,
+                Is.EqualTo(AvatarAnimationRefusal.None));
+            Assert.That(mixed.State.Separation, Is.Null,
+                "every candidate slot was refused, so nothing is " +
+                "retained");
+            Assert.That(
+                mixed.State.SlotRefusalCount(
+                    AlphaSeparationSlotRefusal.SeparatorOffByPolicy),
+                Is.EqualTo(1),
+                "the disabled cutout arm must keep its policy " +
+                "refusal beside the additive gate");
+            Assert.That(
+                mixed.State.SlotRefusalCount(
+                    AlphaSeparationSlotRefusal
+                        .ConversionStateUnderAdditiveLayer),
+                Is.EqualTo(1),
+                "the enabled transparent slot must receive the " +
+                "additive refusal");
+        }
+
+        /// <summary>
+        /// The file's mixed coverage table re-run with both separator
+        /// switches explicitly on: the prepared plans and the refusal
+        /// table are identical to the base run, so a vector that marks
+        /// no arm disabled changes nothing.
+        /// </summary>
+        [Test]
+        public void BothSwitchesOnReproducesBasePreparation()
+        {
+            var baseline = RunMixedCoverageTableArm(
+                false, "base");
+            var bothOn = RunMixedCoverageTableArm(
+                true, "both on");
+
+            Assert.That(baseline.State.AvatarRefusal,
+                Is.EqualTo(AvatarAnimationRefusal.None));
+            Assert.That(
+                baseline.State.SemanticallyRefusedRendererCount, Is.Zero,
+                "fixture precondition: the renderer must be " +
+                "analyzable");
+            Assert.That(baseline.State.Separation, Is.Not.Null,
+                "fixture precondition: the table must prepare");
+            Assert.That(
+                DescribeRefusalTable(baseline.State),
+                Does.Contain("OpaqueCoverageBelowMinimum=1"),
+                "fixture precondition: the coverage gate refuses the " +
+                "below-minimum cutout slot in the base table");
+            Assert.That(
+                DescribePreparedPlans(baseline.State),
+                Is.EqualTo(DescribePreparedPlans(bothOn.State)),
+                "both switches on must reproduce the base prepared " +
+                "plans exactly");
+            Assert.That(
+                DescribeRefusalTable(baseline.State),
+                Is.EqualTo(DescribeRefusalTable(bothOn.State)),
+                "both switches on must reproduce the base refusals " +
+                "exactly");
         }
 
         // --- Fixture helpers ---------------------------------------------------

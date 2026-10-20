@@ -98,7 +98,12 @@ namespace Alrauna.Amuse.Editor.Build
         /// another arm's value. The membership vector records which arm each
         /// slot selected and carries the fold cause the folded disclosures
         /// report. All three vectors cover the largest binding index plus
-        /// one.
+        /// one. The optional separator-off vector records which slot's arm
+        /// a separator sub-switch disables; a null leaves every arm
+        /// enabled. A disabled arm's slots never fold and never prepare:
+        /// they record
+        /// <see cref="AlphaSeparationSlotRefusal.SeparatorOffByPolicy"/>
+        /// instead.
         /// </para>
         /// </summary>
         internal static PreparedRendererSeparation Prepare(
@@ -113,6 +118,7 @@ namespace Alrauna.Amuse.Editor.Build
             IReadOnlyList<int> coveragePercentsBySlot,
             IReadOnlyList<int> preservePercentsBySlot,
             IReadOnlyList<bool> cutoutMembershipBySlot = null,
+            bool[] separatorOffBySlot = null,
             string rendererTypeName = null,
             bool allowDepthTestChange = false,
             IReadOnlyCollection<string> grantedShaderNames = null,
@@ -170,6 +176,18 @@ namespace Alrauna.Amuse.Editor.Build
             var foldedEntries = new List<SubmeshSeparationPlan>();
             foreach (var slotGroup in entriesByBindingIndex)
             {
+                if (separatorOffBySlot != null &&
+                    slotGroup.Key < separatorOffBySlot.Length &&
+                    separatorOffBySlot[slotGroup.Key])
+                {
+                    // The slot's arm is disabled by a separator
+                    // sub-switch, so the slot never separates: the
+                    // preserve fold must not fold it, and no folded
+                    // entry may feed the forced report event of the
+                    // later report pass.
+                    continue;
+                }
+
                 if (!SlotTransformDecision.PreserveSlotQualifies(
                         slotGroup.Value,
                         preservePercentsBySlot[slotGroup.Key]))
@@ -200,6 +218,7 @@ namespace Alrauna.Amuse.Editor.Build
             // set keeps one refusal per slot, because several submeshes can
             // bind one material slot.
             var reportedAnisotropySlots = new HashSet<int>();
+            var reportedSeparatorOffSlots = new HashSet<int>();
             if (slotResults != null)
             {
                 foreach (var submesh in plan.Submeshes)
@@ -301,7 +320,8 @@ namespace Alrauna.Amuse.Editor.Build
                                 state,
                                 plan,
                                 AlphaSeparationSlotRefusal
-                                    .ConversionBindingUnrecognized);
+                                    .ConversionBindingUnrecognized,
+                                separatorOffBySlot);
                         }
 
                         if (resolution ==
@@ -327,7 +347,8 @@ namespace Alrauna.Amuse.Editor.Build
                         state,
                         plan,
                         AlphaSeparationSlotRefusal
-                            .ConversionStateUnderAdditiveLayer);
+                            .ConversionStateUnderAdditiveLayer,
+                        separatorOffBySlot);
                 }
 
                 if (conversionBindings.Count > 0 &&
@@ -338,7 +359,8 @@ namespace Alrauna.Amuse.Editor.Build
                         state,
                         plan,
                         AlphaSeparationSlotRefusal
-                            .ConversionStateUnderUnnormalizedDirectBlendTree);
+                            .ConversionStateUnderUnnormalizedDirectBlendTree,
+                        separatorOffBySlot);
                 }
 
                 foreach (var family in conversionCapableFamilies)
@@ -385,6 +407,30 @@ namespace Alrauna.Amuse.Editor.Build
                     // refusal of its own. The pass above already reported
                     // the anisotropy-caused ones, and the set keeps a slot
                     // shared with a split submesh from reporting twice.
+                    continue;
+                }
+
+                // A slot whose arm is disabled by a separator sub-switch
+                // refuses before every later gate, so the slot keeps its
+                // original material with its own policy cause instead of
+                // a conversion or coverage cause. The set keeps one
+                // refusal per slot, because several submeshes can bind
+                // one material slot.
+                var slotIndex = submesh.SourceMaterialBindingIndex;
+                if (separatorOffBySlot != null &&
+                    slotIndex < separatorOffBySlot.Length &&
+                    separatorOffBySlot[slotIndex])
+                {
+                    if (reportedSeparatorOffSlots.Add(slotIndex))
+                    {
+                        AmuseReports.RecordRefusal(
+                            state,
+                            target.Renderer,
+                            slotIndex,
+                            AlphaSeparationSlotRefusal
+                                .SeparatorOffByPolicy);
+                    }
+
                     continue;
                 }
 
@@ -436,8 +482,6 @@ namespace Alrauna.Amuse.Editor.Build
 
                     continue;
                 }
-
-                var slotIndex = submesh.SourceMaterialBindingIndex;
 
                 // Barrier-side marker-clip check: VirtualClip.SetObjectCurve
                 // silently no-ops on a marker clip, so a special motion
@@ -778,14 +822,19 @@ namespace Alrauna.Amuse.Editor.Build
         /// <summary>
         /// Records one renderer-scoped refusal once per candidate slot it
         /// drops, so the buckets always count dropped slots, and retains
-        /// nothing for the renderer.
+        /// nothing for the renderer. A candidate slot whose arm is
+        /// disabled by a separator sub-switch records the slot's own
+        /// policy cause instead of the renderer-wide reason; only
+        /// enabled-arm candidates receive that reason.
         /// </summary>
         private static PreparedRendererSeparation RefuseEveryCandidateSlot(
             UnityRendererMutationTarget target,
             AmusePlatformFinishState state,
             MeshSeparationPlan plan,
-            AlphaSeparationSlotRefusal reason)
+            AlphaSeparationSlotRefusal reason,
+            bool[] separatorOffBySlot)
         {
+            var reportedSeparatorOffSlots = new HashSet<int>();
             foreach (var submesh in plan.Submeshes)
             {
                 if (submesh.Disposition ==
@@ -794,10 +843,28 @@ namespace Alrauna.Amuse.Editor.Build
                     continue;
                 }
 
+                var slotIndex = submesh.SourceMaterialBindingIndex;
+                if (separatorOffBySlot != null &&
+                    slotIndex < separatorOffBySlot.Length &&
+                    separatorOffBySlot[slotIndex])
+                {
+                    if (reportedSeparatorOffSlots.Add(slotIndex))
+                    {
+                        AmuseReports.RecordRefusal(
+                            state,
+                            target.Renderer,
+                            slotIndex,
+                            AlphaSeparationSlotRefusal
+                                .SeparatorOffByPolicy);
+                    }
+
+                    continue;
+                }
+
                 AmuseReports.RecordRefusal(
                     state,
                     target.Renderer,
-                    submesh.SourceMaterialBindingIndex,
+                    slotIndex,
                     reason);
             }
 
