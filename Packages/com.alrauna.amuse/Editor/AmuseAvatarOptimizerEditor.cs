@@ -466,7 +466,7 @@ namespace Alrauna.Amuse.Editor
         /// <summary>
         /// The preset row. One button per shipped preset file, in the
         /// fixed order safe, normal, aggressive. A button presses only
-        /// while the component matches that preset on all sixteen
+        /// while the component matches that preset on all eighteen
         /// fields, so the pressed state is always honest and never
         /// stored. A broken preset file turns the row off with a
         /// warning, because a row over a partial preset universe could
