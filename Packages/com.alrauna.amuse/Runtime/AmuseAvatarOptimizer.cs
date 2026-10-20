@@ -20,16 +20,32 @@ namespace Alrauna.Amuse.Runtime
         [SerializeField] private bool _amuseDisabled;
 
         /// <summary>
-        /// The alpha separator switch. The alpha separator is the
-        /// first AMUSE feature with its own switch, and later features
-        /// add sibling switches beside it. The master "Disable AMUSE"
-        /// toggle stays above them and turns off the whole component.
-        /// Off here stops the alpha separator only: nothing is
-        /// analyzed, moved, or reported for it.
+        /// The alpha separator master switch. The cutout and transparent
+        /// separator sub-switches promised for later features exist now.
+        /// They draw below this switch, indented, visible only while it
+        /// is on. The master "Disable AMUSE" toggle stays above them and
+        /// turns off the whole component. Off here stops the alpha
+        /// separator only: nothing is analyzed, moved, or reported for it.
         /// </summary>
         [ToggleLeft]
         [SerializeField]
         private bool _alphaSeparatorEnabled = true;
+
+        /// <summary>
+        /// Master switch for separating cutout-sourced slots. Off means a
+        /// slot whose current material declares cutoff never separates. The
+        /// default of true keeps every avatar saved before this field
+        /// behaving as before, because Unity fills a missing serialized
+        /// field from the initializer.
+        /// </summary>
+        [ToggleLeft] [SerializeField] private bool _cutoutSeparatorEnabled = true;
+
+        /// <summary>
+        /// Master switch for separating transparent-sourced slots. Off means
+        /// a slot whose current material does not declare cutoff never
+        /// separates. Default true, same upgrade rule as above.
+        /// </summary>
+        [ToggleLeft] [SerializeField] private bool _transparentSeparatorEnabled = true;
 
         /// <summary>
         /// The largest mip level the opacity proof consults. The value -1
@@ -227,6 +243,8 @@ namespace Alrauna.Amuse.Runtime
         {
             _amuseDisabled = false;
             _alphaSeparatorEnabled = true;
+            _cutoutSeparatorEnabled = true;
+            _transparentSeparatorEnabled = true;
             _preserveTransparencyMaxMipLevel = 4;
             _preserveTransparencyMinTextureSize = 128;
             _minimumOpaqueCoveragePercent = 25;
@@ -260,6 +278,23 @@ namespace Alrauna.Amuse.Runtime
         /// field from the initializer.
         /// </summary>
         public bool AlphaSeparatorEnabled => _alphaSeparatorEnabled;
+
+        /// <summary>
+        /// True when the cutout separator runs for this component. The
+        /// default of true keeps every avatar saved before this field
+        /// behaving as before, because Unity fills a missing serialized
+        /// field from the initializer.
+        /// </summary>
+        public bool CutoutSeparatorEnabled => _cutoutSeparatorEnabled;
+
+        /// <summary>
+        /// True when the transparent separator runs for this component. The
+        /// default of true keeps every avatar saved before this field
+        /// behaving as before, because Unity fills a missing serialized
+        /// field from the initializer.
+        /// </summary>
+        public bool TransparentSeparatorEnabled =>
+            _transparentSeparatorEnabled;
 
         /// <summary>
         /// The opacity proof's mip cap as stored: -1 for every level, else
