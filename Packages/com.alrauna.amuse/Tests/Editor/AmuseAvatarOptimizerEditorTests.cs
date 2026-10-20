@@ -275,6 +275,62 @@ namespace Alrauna.Amuse.Tests.Editor
             }
         }
 
+        /// <summary>
+        /// Known limit, recorded: each full GUI pass runs the whole
+        /// OnInspectorGUI once, and both hooks sit outside PropertyField
+        /// in the same unconditional block. Every pass therefore appends
+        /// exactly one transparent and one cutout entry to the shared
+        /// list. A harness change that breaks that ceiling fails the
+        /// even-count assertion instead of passing silently. Each hook
+        /// is invoked immediately after its own PropertyField, so hook
+        /// fire order equals draw order.
+        /// --- Falsifier 3: the base-commit draw order, which draws the
+        /// cutout sub-switch first. Against that order the first pair
+        /// assertion fails, because element 0 is cutout. An
+        /// implementation that drops a hook fails the not-empty or the
+        /// even-count assertion. ---
+        /// </summary>
+        [UnityTest]
+        public IEnumerator TransparentSeparatorDrawsBeforeCutoutSeparator()
+        {
+            var component = NewHiddenComponent();
+            SetSwitch(component, "_alphaSeparatorEnabled", true);
+            SetSwitch(component, "_cutoutSeparatorEnabled", true);
+            SetSwitch(component, "_transparentSeparatorEnabled", true);
+            var drawn = new List<string>();
+            Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                .OnTransparentSeparatorToggleDrawnForTest = _ =>
+                    drawn.Add("transparent");
+            Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                .OnCutoutSeparatorToggleDrawnForTest = _ =>
+                    drawn.Add("cutout");
+            try
+            {
+                yield return RepaintThroughHostWindow(component);
+
+                Assert.That(drawn, Is.Not.Empty,
+                    "no sub-switch hook ever fired");
+                Assert.That(drawn.Count % 2, Is.EqualTo(0),
+                    "every pass records one pair, so the count is even");
+                for (var i = 0; i < drawn.Count; i += 2)
+                {
+                    Assert.That(drawn[i], Is.EqualTo("transparent"),
+                        "the transparent sub-switch draws above the " +
+                        "cutout sub-switch in every pass");
+                    Assert.That(drawn[i + 1], Is.EqualTo("cutout"),
+                        "the cutout sub-switch follows the transparent " +
+                        "sub-switch in every pass");
+                }
+            }
+            finally
+            {
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                    .OnTransparentSeparatorToggleDrawnForTest = null;
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                    .OnCutoutSeparatorToggleDrawnForTest = null;
+            }
+        }
+
         [UnityTest]
         public IEnumerator SubSwitchHooksDoNotFireWhenMasterSwitchIsOff()
         {
