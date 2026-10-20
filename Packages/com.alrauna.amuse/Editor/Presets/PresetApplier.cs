@@ -5,7 +5,7 @@ namespace Alrauna.Amuse.Editor.Presets
     /// <summary>
     /// Writes a preset onto the component through the serialized
     /// object, so Undo and Reset treat the change like every other
-    /// control. The apply covers exactly the sixteen mapped fields and
+    /// control. The apply covers exactly the eighteen mapped fields and
     /// never the master switch or the inspector-only reveal flag.
     /// Applying a preset replaces both acceptance settings, so no
     /// earlier acceptance survives unless the selected preset grants it.
@@ -18,6 +18,10 @@ namespace Alrauna.Amuse.Editor.Presets
         {
             serializedObject.FindProperty("_alphaSeparatorEnabled")
                 .boolValue = preset.AlphaSeparatorEnabled;
+            serializedObject.FindProperty("_cutoutSeparatorEnabled")
+                .boolValue = preset.CutoutSeparatorEnabled;
+            serializedObject.FindProperty("_transparentSeparatorEnabled")
+                .boolValue = preset.TransparentSeparatorEnabled;
             serializedObject.FindProperty(
                     "_preserveTransparencyMaxMipLevel")
                 .intValue = preset.PreserveTransparencyMaxMipLevel;

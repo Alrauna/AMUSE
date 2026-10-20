@@ -11,11 +11,13 @@ namespace Alrauna.Amuse.Tests.Editor
 
         private const string ValidBody =
             "{\n" +
-            "  \"schemaVersion\": 4,\n" +
+            "  \"schemaVersion\": 5,\n" +
             "  \"name\": \"Safe\",\n" +
             "  \"description\": \"A valid preset body for the store test.\",\n" +
             "  \"features\": {\n" +
-            "    \"alphaSeparator\": true\n" +
+            "    \"alphaSeparator\": true,\n" +
+            "    \"cutoutSeparator\": true,\n" +
+            "    \"transparentSeparator\": true\n" +
             "  },\n" +
             "  \"settings\": {\n" +
             "    \"preserveTransparencyMaxMipLevel\": 4,\n" +

@@ -1,9 +1,11 @@
 {
-  "schemaVersion": 4,
+  "schemaVersion": 5,
   "name": "Safe",
   "description": "Accepts desktop and mobile anisotropy differences. It does not allow slot or depth-test exceptions, and it never flattens a mixed material.",
   "features": {
-    "alphaSeparator": true
+    "alphaSeparator": true,
+    "cutoutSeparator": true,
+    "transparentSeparator": true
   },
   "settings": {
     "preserveTransparencyMaxMipLevel": 4,

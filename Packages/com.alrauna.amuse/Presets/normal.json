@@ -1,9 +1,11 @@
 {
-  "schemaVersion": 4,
+  "schemaVersion": 5,
   "name": "Normal",
   "description": "Accepts desktop and mobile anisotropy differences, slot exceptions, and depth-test changes. It flattens a nearly opaque material to save a draw call.",
   "features": {
-    "alphaSeparator": true
+    "alphaSeparator": true,
+    "cutoutSeparator": true,
+    "transparentSeparator": true
   },
   "settings": {
     "preserveTransparencyMaxMipLevel": 4,

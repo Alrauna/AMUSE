@@ -10,7 +10,7 @@ namespace Alrauna.Amuse.Tests.Editor
         internal static OptimizerPreset ShippedDefaults()
         {
             return new OptimizerPreset(
-                "Normal", "Shipped defaults.", true,
+                "Normal", "Shipped defaults.", true, true, true,
                 4, 3, 128, 128, 25, 25, 5, 5, 100, 100, 100,
                 true, true, true, true);
         }
@@ -55,10 +55,12 @@ namespace Alrauna.Amuse.Tests.Editor
         public void FlippingAnyOneFieldValueBreaksTheMatch()
         {
             var preset = ShippedDefaults();
-            // --- Falsifier 6: A preset press that matches only the transparent fields presses while a cutout value differs. The sixteen-row flip table fails it. ---
+            // --- Falsifier 6: A preset press that matches only the transparent fields presses while a cutout value differs. The eighteen-row flip table fails it. ---
             var fields = new (string name, object value)[]
             {
                 ("_alphaSeparatorEnabled", false),
+                ("_cutoutSeparatorEnabled", false),
+                ("_transparentSeparatorEnabled", false),
                 ("_preserveTransparencyMaxMipLevel", 5),
                 ("_cutoutPreserveTransparencyMaxMipLevel", 4),
                 ("_preserveTransparencyMinTextureSize", 256),

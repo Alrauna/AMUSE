@@ -1,9 +1,11 @@
 {
-  "schemaVersion": 4,
+  "schemaVersion": 5,
   "name": "Aggressive",
   "description": "Accepts desktop and mobile anisotropy differences, slot exceptions, and depth-test changes. It flattens more materials and admits more texels than Normal.",
   "features": {
-    "alphaSeparator": true
+    "alphaSeparator": true,
+    "cutoutSeparator": true,
+    "transparentSeparator": true
   },
   "settings": {
     "preserveTransparencyMaxMipLevel": 3,
