@@ -70,18 +70,22 @@ build reports the missing policy and keeps the conservative output.
 The last build status and the build report name the selected proof mode.
 They name it even when no triangle moves.
 
-Custom preset files use schema version 4. To migrate a version 3 file, set
-`"schemaVersion": 4` and add the four cutout keys to its settings:
-`cutoutPreserveTransparencyMaxMipLevel`,
+Custom preset files use schema version 5. A schema 4 file refuses with
+the schema version message. To migrate a version 4 file, set
+`"schemaVersion": 5` and add `"cutoutSeparator": true` and
+`"transparentSeparator": true` to its features. To migrate a version 3
+file, set `"schemaVersion": 4` and add the four cutout keys to its
+settings: `cutoutPreserveTransparencyMaxMipLevel`,
 `cutoutPreserveTransparencyMinTextureSize`,
 `cutoutMinimumOpaqueCoveragePercent`, and
-`cutoutMinimumOpaqueCoverageToPreservePercent`. To migrate a version 2
-file, first make it version 3: set `"schemaVersion": 3` and add
-`"minimumOpaqueCoverageToPreservePercent"`. Then make it version 4. To
-migrate a version 1 file, first make it version 2: set
-`"schemaVersion": 2` and add `"acceptDesktopAnisotropyDifferences"` and
+`cutoutMinimumOpaqueCoverageToPreservePercent`. Then make it version 5.
+To migrate a version 2 file, first make it version 3: set
+`"schemaVersion": 3` and add `"minimumOpaqueCoverageToPreservePercent"`.
+Then make it version 4. Then make it version 5. To migrate a version 1
+file, first make it version 2: set `"schemaVersion": 2` and add
+`"acceptDesktopAnisotropyDifferences"` and
 `"acceptMobileAnisotropyDifferences"`. Then make it version 3. Then make
-it version 4.
+it version 4. Then make it version 5.
 
 A brand-new component's first cutout edit in the session that adds it is
 replaced once by the transparent values. Every later edit sticks.
