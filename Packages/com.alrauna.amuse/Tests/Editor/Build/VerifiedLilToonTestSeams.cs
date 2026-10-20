@@ -467,9 +467,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             "com.alrauna.amuse.tests.vendor";
 
         /// <summary>
-        /// The declared package version: an approved, non-row version. It
-        /// pairs the 2.4.0 row for the attestation-side pins and rides the
-        /// version-keyed routing arms in the pipeline fixtures.
+        /// The default declared package version: an approved, non-row
+        /// version. It pairs the 2.4.0 row for the attestation-side pins
+        /// and rides the version-keyed routing arms in the pipeline
+        /// fixtures. The scope's constructor takes another version, so a
+        /// boundary test can install the same package out of range.
         /// </summary>
         internal const string ApprovedRangeVendorVersion = "2.4.1";
 
@@ -497,6 +499,26 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             private const string ManifestFileName = "package.json";
             private const string CutoutShaderFileName = "VendorCutout.shader";
+
+            private readonly string manifestVersion;
+
+            /// <summary>
+            /// Uses the approved in-range default version. A boundary test
+            /// passes its own version to pin the range edge.
+            /// </summary>
+            internal ApprovedRangeVendorScope()
+                : this(ApprovedRangeVendorVersion)
+            {
+            }
+
+            /// <summary>
+            /// Uses the given manifest version, so the same embedded
+            /// package can stand in for an out-of-range install.
+            /// </summary>
+            internal ApprovedRangeVendorScope(string manifestVersion)
+            {
+                this.manifestVersion = manifestVersion;
+            }
 
             private static string CutoutShaderProjectPath
                 => "Packages/" + ApprovedRangeVendorPackageName + "/" +
@@ -586,7 +608,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 UnityEditor.PackageManager.Client.Resolve();
             }
 
-            private static void WriteManifest()
+            private void WriteManifest()
             {
                 var folder = ApprovedRangeVendorFolder();
                 Directory.CreateDirectory(folder);
@@ -599,7 +621,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 File.WriteAllText(
                     manifestPath,
                     "{\"name\":\"" + ApprovedRangeVendorPackageName +
-                    "\",\"version\":\"" + ApprovedRangeVendorVersion +
+                    "\",\"version\":\"" + manifestVersion +
                     "\",\"displayName\":\"AMUSE approved-range test vendor\"}");
             }
         }

@@ -366,9 +366,10 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// <summary>
         /// Owner decision 2026-10-19: every lilToon version from the floor up
         /// to, but excluding, the bound is approved. Approved means the build
-        /// never asks and analysis runs under the current pins. Attestation
-        /// keeps failing closed on changed bytes. Approval bypasses only the
-        /// consent ask, never a digest comparison.
+        /// never asks and analysis runs under the current pins. On the build
+        /// path, capturer admission and the conversion boundary skip the
+        /// identity checks for an approved member with unattested bytes. The
+        /// attestation itself still fails closed on changed bytes.
         /// </summary>
         internal static readonly string ApprovedVersionFloor = "2.3.0";
         internal static readonly string ApprovedVersionUpperBound = "2.5.0";
@@ -2515,10 +2516,13 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
             // 3. Package identity, when installed as a package. The version
             //    must be an admitted one that carries an admitted Multi row
             //    (A2), or an approved version, which pairs the nearest
-            //    admitted Multi row at or below it; a version with no Multi
-            //    row at or below it stays on the consent path. A loose
-            //    install carries no version label, so an admitted tree
-            //    alone identifies the shipped version below.
+            //    admitted Multi row at or below it. A version with no Multi
+            //    row at or below it refuses right here: the container
+            //    attestation fails closed. An approved version below the
+            //    oldest Multi row gets its ask suppressed and reports
+            //    UnsupportedMultiState slot rows without separating. A
+            //    loose install carries no version label, so an admitted
+            //    tree alone identifies the shipped version below.
             if (evidence.HasPackage &&
                 (!string.Equals(
                         evidence.PackageName, PackageName,

@@ -198,6 +198,17 @@ namespace Alrauna.Amuse.Tests.Editor
         }
 
         [Test]
+        public void SchemaVersionFourRefusesAsUnknown()
+        {
+            // The parser knows only schema 5. A file that declares
+            // schema 4 refuses with UnknownSchemaVersion, and nothing
+            // invents its missing separator values.
+            var json = WithSettings(
+                "\"schemaVersion\": 5", "\"schemaVersion\": 4");
+            Refuses(json, PresetLoadRefusal.UnknownSchemaVersion);
+        }
+
+        [Test]
         public void MissingAcceptanceKeyRefuses()
         {
             var json = ValidJson.Replace(

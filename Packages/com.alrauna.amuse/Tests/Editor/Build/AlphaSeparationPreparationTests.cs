@@ -3476,6 +3476,116 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// The 2.5.0 boundary's negative witness: the same byte-changed
+        /// stand-in installed at the bound rides no approval arm. The
+        /// consent ask survives, so the presenter is called exactly once.
+        /// With the ask declined, nothing separates.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator OutOfRangeInstallStillAsksThroughTheRealPipeline()
+        {
+            var vendor = new VerifiedLilToonTestSeams
+                .ApprovedRangeVendorScope("2.5.0");
+            var installed = false;
+            try
+            {
+                vendor.InstallCutoutShader();
+                installed = true;
+                vendor.RequestRegistration();
+                var registrationGuard = 0;
+                while (!vendor.IsRegistered() &&
+                    registrationGuard++ < 600)
+                {
+                    yield return null;
+                }
+
+                Assert.That(
+                    vendor.IsRegistered(), Is.True,
+                    "the embedded vendor package must register");
+
+                var fixtures = new LilToonCutoutConversionFixtures();
+                GameObject root = null;
+                Material material = null;
+                Mesh mesh = null;
+                AmusePlatformFinishState amuse = null;
+                var asked = new List<IReadOnlyList<string>>();
+                try
+                {
+                    fixtures.BaseSetUp();
+                    root = new GameObject("AMUSE approved range boundary");
+                    FixtureAvatarIdentity.AttachVrcDescriptor(root);
+                    root.AddComponent<Alrauna.Amuse.Runtime
+                        .AmuseAvatarOptimizer>();
+                    FixtureProofScope.PinAllSizes(root);
+                    material = new Material(vendor.CutoutShader);
+                    material.SetTexture(
+                        "_MainTex",
+                        fixtures.ImportFullyOpaqueMipmap(
+                            "boundary_cutout"));
+                    AddSingleTriangleRenderer(
+                        root, material, out mesh);
+                    // The cutout proof is texture-backed, so the candidate
+                    // triangle needs a UV0 domain over the opaque chain.
+                    mesh.uv = new[]
+                    {
+                        new Vector2(0.25f, 0.25f),
+                        new Vector2(0.75f, 0.25f),
+                        new Vector2(0.25f, 0.75f),
+                    };
+
+                    var reports = ErrorReport.CaptureErrors(
+                        () => amuse = RunProductionBarrier(
+                            root,
+                            subjects =>
+                            {
+                                asked.Add(subjects);
+                                return false;
+                            }));
+                    Assert.That(reports, Is.Not.Null,
+                        "the capture overload answered");
+
+                    Assert.That(
+                        asked, Has.Count.EqualTo(1),
+                        "the bound stays on the consent path, so the " +
+                        "presenter asks exactly once");
+                    Assert.That(
+                        amuse.Separation, Is.Null,
+                        "the out-of-range install separates nothing " +
+                        "without consent");
+                }
+                finally
+                {
+                    AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
+                    AlphaSeparationTestLifecycle.DestroyCommittedClone(
+                        root, null);
+                    if (mesh != null)
+                    {
+                        UnityEngine.Object.DestroyImmediate(mesh, true);
+                    }
+
+                    if (root != null)
+                    {
+                        UnityEngine.Object.DestroyImmediate(root, true);
+                    }
+
+                    if (material != null)
+                    {
+                        UnityEngine.Object.DestroyImmediate(material, true);
+                    }
+
+                    fixtures.BaseTearDown();
+                }
+            }
+            finally
+            {
+                if (installed)
+                {
+                    vendor.TearDown();
+                }
+            }
+        }
+
+        /// <summary>
         /// The capture seam for the approved-range Multi case: real evidence
         /// capture, then the Task 6 profile-injection verify with one
         /// perturbed digest, so the container refuses exactly the way a

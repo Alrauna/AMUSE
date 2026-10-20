@@ -9,7 +9,7 @@ All notable changes to AMUSE are documented in this file.
 
 ### Changed
 - Preset schema version moves from 4 to 5. The new feature keys are `cutoutSeparator` and `transparentSeparator`. A schema 4 file refuses with the schema version message.
-- lilToon 2.3.0 and newer patches below 2.5 are approved without a consent prompt. The build asks once per build for versions outside that range.
+- lilToon 2.3.0 through any version below 2.5 are approved without a consent prompt. The build asks once per build for versions outside that range.
 
 ## [0.1.0-pre.8] - 2026-10-19
 
