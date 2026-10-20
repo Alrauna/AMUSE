@@ -38,11 +38,14 @@ namespace Alrauna.Amuse.Editor.DryRun
     /// One member per conditional note row the spec's Inspector
     /// section lists. The dry run accumulates the note facts across
     /// renderer passes and emits each note at most once per avatar.
+    /// The 2026-10-20 admission design adds ApprovedUnverifiedSource
+    /// (spec B4).
     /// </summary>
     internal enum NoteKind
     {
         StreamingMipmaps,
         LockedMaterials,
+        ApprovedUnverifiedSource,
         EditorOnly,
         RefreshOnly,
     }
@@ -263,6 +266,10 @@ namespace Alrauna.Amuse.Editor.DryRun
                     return "This avatar holds locked or transfer protected "
                         + "materials. A build with granted consent may "
                         + "convert further than this view shows.";
+                case NoteKind.ApprovedUnverifiedSource:
+                    return "A shader version inside the supported range "
+                        + "did not verify against its measured source. Its "
+                        + "triangles stay unproven.";
                 case NoteKind.EditorOnly:
                     return "Some objects are marked EditorOnly. The build "
                         + "removes them before AMUSE runs. This view shows "

@@ -1325,13 +1325,72 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
         }
 
         /// <summary>
+        /// Builds the approved-range avatar and runs the dry run over it
+        /// with the production family map and the plain capturer. The
+        /// approved-arm routing tests share this body, so one fixture
+        /// shape feeds every assertion.
+        /// </summary>
+        private AlphaSeparationDryRun RunApprovedAvatarDryRun(
+            VerifiedLilToonTestSeams.ApprovedRangeVendorScope vendor)
+        {
+            var root = _scope.Track(
+                NewAvatarRoot("amuse-dry-run-approved"));
+            var optimizer = AddOptimizer(root);
+            var texture = ImportHalfTexture("approved_range_dry", 255);
+            var material = _scope.Track(
+                new Material(vendor.CutoutShader));
+            material.SetTexture("_MainTex", texture);
+            material.SetTextureScale("_MainTex", Vector2.one);
+            material.SetTextureOffset("_MainTex", Vector2.zero);
+            material.SetFloat("_Cutoff", 0.5f);
+            material.SetColor("_Color", new Color(1f, 1f, 1f, 1f));
+            AddSkinnedRenderer(root, TwoTriangleMesh(), material);
+
+            // Null selector and null capturer: the production family
+            // map and the dry run's plain capturer, which passes no
+            // approval arm.
+            var dryRun = NewDryRun(
+                new Fixture
+                {
+                    Root = root, Optimizer = optimizer,
+                    Renderer = null
+                },
+                null, null, null);
+            Run(dryRun);
+            return dryRun;
+        }
+
+        private IReadOnlyList<MaterialTransformationRow> RunApprovedAvatar(
+            VerifiedLilToonTestSeams.ApprovedRangeVendorScope vendor)
+        {
+            return RunApprovedAvatarDryRun(vendor).AvatarRows;
+        }
+
+        /// <summary>
+        /// The version the package database reports for the embedded
+        /// vendor package, or null before registration. The client
+        /// resolves over editor updates, and a re-install answers with
+        /// the previous manifest's version first, so a registration wait
+        /// reads this until it names the declared version.
+        /// </summary>
+        private static string VendorVersion()
+        {
+            var info = UnityEditor.PackageManager.PackageInfo
+                .FindForAssetPath(
+                    "Packages/" +
+                    VerifiedLilToonTestSeams.ApprovedRangeVendorPackageName);
+            return info == null ? null : info.version;
+        }
+
+        /// <summary>
         /// The dry run keeps strict attestation: the same byte-changed
         /// in-range install the build approves must stay unknown here,
         /// because the dry run's plain capturer carries no approval arm.
         /// The fixture shader presents an approved, non-row package version
         /// from the embedded vendor package, and its digests mismatch every
         /// pin, so this pins the conservative edit-time view against the
-        /// version-keyed routing, not just against loose installs.
+        /// version-keyed routing, not just against loose installs. The
+        /// avatar-level note still names the true cause (spec B4).
         /// </summary>
         [UnityTest]
         public IEnumerator ApprovedVersionStaysUnknownInDryRun()
@@ -1355,30 +1414,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                     vendor.IsRegistered(), Is.True,
                     "the embedded vendor package must register");
 
-                var root = _scope.Track(
-                    NewAvatarRoot("amuse-dry-run-approved"));
-                var optimizer = AddOptimizer(root);
-                var texture = ImportHalfTexture("approved_range_dry", 255);
-                var material = _scope.Track(
-                    new Material(vendor.CutoutShader));
-                material.SetTexture("_MainTex", texture);
-                material.SetTextureScale("_MainTex", Vector2.one);
-                material.SetTextureOffset("_MainTex", Vector2.zero);
-                material.SetFloat("_Cutoff", 0.5f);
-                material.SetColor("_Color", new Color(1f, 1f, 1f, 1f));
-                AddSkinnedRenderer(root, TwoTriangleMesh(), material);
-
-                // Null selector and null capturer: the production family
-                // map and the dry run's plain capturer, which passes no
-                // approval arm.
-                var dryRun = NewDryRun(
-                    new Fixture
-                    {
-                        Root = root, Optimizer = optimizer,
-                        Renderer = null
-                    },
-                    null, null, null);
-                Run(dryRun);
+                var dryRun = RunApprovedAvatarDryRun(vendor);
 
                 Assert.That(
                     dryRun.RendererRows.Any(row =>
@@ -1398,6 +1434,187 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 Assert.That(
                     dryRun.RendererRows, Is.Not.Empty,
                     "the dry run must still report the unknown slot");
+
+                Assert.That(
+                    dryRun.AvatarRows.Count(row =>
+                        row.Sentence == RowText.NoteSentence(
+                            NoteKind.ApprovedUnverifiedSource)),
+                    Is.EqualTo(1),
+                    "the approved unverified source names its cause once");
+                Assert.That(
+                    dryRun.AvatarRows.Any(row =>
+                        row.Sentence == RowText.NoteSentence(
+                            NoteKind.LockedMaterials)),
+                    Is.False,
+                    "the false locked-materials note must not fire for an " +
+                    "approved unverified source");
+            }
+            finally
+            {
+                if (installed)
+                {
+                    vendor.TearDown();
+                }
+            }
+        }
+
+        /// <summary>
+        /// The approved arm and the out-of-range arm route their notes to
+        /// opposite rows. The two scope versions share one embedded package
+        /// folder, and the manifest write early-returns when a manifest is
+        /// present, so side-by-side scopes cannot work. The run installs,
+        /// builds, asserts, and tears down, then installs the next version.
+        /// A re-install answers with the previous manifest's version until
+        /// the package client settles, so each wait reads the declared
+        /// version before the avatar runs.
+        /// <para>
+        /// Attested avatars carry neither note by construction:
+        /// RecordConsentFacts emits only from the locked-refusal branch and
+        /// the Unsupported-sentinel branch, and an attested record matches
+        /// neither (spec B4).
+        /// </para>
+        /// </summary>
+        [UnityTest]
+        public IEnumerator ApprovedAndOutOfRangeAvatarsRouteTheirNotes()
+        {
+            var vendor = new VerifiedLilToonTestSeams
+                .ApprovedRangeVendorScope();
+            var outOfRange = new VerifiedLilToonTestSeams
+                .ApprovedRangeVendorScope("2.5.0");
+            var vendorInstalled = false;
+            var outOfRangeInstalled = false;
+            try
+            {
+                vendor.InstallCutoutShader();
+                vendorInstalled = true;
+                vendor.RequestRegistration();
+                var guard = 0;
+                while ((!vendor.IsRegistered() ||
+                    VendorVersion() !=
+                        VerifiedLilToonTestSeams
+                            .ApprovedRangeVendorVersion) &&
+                    guard++ < 600)
+                {
+                    yield return null;
+                }
+                Assert.That(vendor.IsRegistered(), Is.True);
+
+                var approvedRows = RunApprovedAvatar(vendor);
+                Assert.That(
+                    approvedRows.Any(row =>
+                        row.Sentence == RowText.NoteSentence(
+                            NoteKind.ApprovedUnverifiedSource)),
+                    Is.True, "the approved avatar earns the named cause");
+                Assert.That(
+                    approvedRows.Any(row =>
+                        row.Sentence == RowText.NoteSentence(
+                            NoteKind.LockedMaterials)),
+                    Is.False, "the approved avatar keeps no consent note");
+                vendor.TearDown();
+                vendorInstalled = false;
+
+                outOfRange.InstallCutoutShader();
+                outOfRangeInstalled = true;
+                outOfRange.RequestRegistration();
+                guard = 0;
+                while ((!outOfRange.IsRegistered() ||
+                    VendorVersion() != "2.5.0") &&
+                    guard++ < 600)
+                {
+                    yield return null;
+                }
+                Assert.That(outOfRange.IsRegistered(), Is.True);
+
+                var outOfRangeRows = RunApprovedAvatar(outOfRange);
+                Assert.That(
+                    outOfRangeRows.Any(row =>
+                        row.Sentence == RowText.NoteSentence(
+                            NoteKind.LockedMaterials)),
+                    Is.True, "the out-of-range avatar keeps the consent note");
+                Assert.That(
+                    outOfRangeRows.Any(row =>
+                        row.Sentence == RowText.NoteSentence(
+                            NoteKind.ApprovedUnverifiedSource)),
+                    Is.False, "the out-of-range avatar earns no named cause");
+                outOfRange.TearDown();
+                outOfRangeInstalled = false;
+            }
+            finally
+            {
+                if (outOfRangeInstalled)
+                {
+                    outOfRange.TearDown();
+                }
+
+                if (vendorInstalled)
+                {
+                    vendor.TearDown();
+                }
+            }
+        }
+
+        /// <summary>
+        /// The avatar cache serves the stored avatar rows on a hit. The
+        /// named cause rides those rows, so a second open shows it exactly
+        /// once and never appends a duplicate note.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator CacheHitServesTheApprovedNoteOnce()
+        {
+            var vendor = new VerifiedLilToonTestSeams
+                .ApprovedRangeVendorScope();
+            var installed = false;
+            try
+            {
+                vendor.InstallCutoutShader();
+                installed = true;
+                vendor.RequestRegistration();
+                var guard = 0;
+                while (!vendor.IsRegistered() && guard++ < 600)
+                {
+                    yield return null;
+                }
+                Assert.That(vendor.IsRegistered(), Is.True);
+
+                var root = _scope.Track(
+                    NewAvatarRoot("amuse-dry-run-approved-cache"));
+                var optimizer = AddOptimizer(root);
+                var texture = ImportHalfTexture("approved_range_cache", 255);
+                var material = _scope.Track(
+                    new Material(vendor.CutoutShader));
+                material.SetTexture("_MainTex", texture);
+                material.SetTextureScale("_MainTex", Vector2.one);
+                material.SetTextureOffset("_MainTex", Vector2.zero);
+                material.SetFloat("_Cutoff", 0.5f);
+                material.SetColor("_Color", new Color(1f, 1f, 1f, 1f));
+                var renderer = AddSkinnedRenderer(
+                    root, TwoTriangleMesh(), material);
+
+                var fixture = new Fixture
+                {
+                    Root = root, Optimizer = optimizer, Renderer = renderer
+                };
+                var first = NewDryRun(fixture, null, null, null);
+                Run(first);
+                var second = NewDryRun(fixture, null, null, null);
+                Run(second);
+
+                var note = RowText.NoteSentence(
+                    NoteKind.ApprovedUnverifiedSource);
+                Assert.That(
+                    first.AvatarRows.Count(row => row.Sentence == note),
+                    Is.EqualTo(1),
+                    "the first open names the cause once");
+                Assert.That(
+                    second.AvatarRows.Count(row => row.Sentence == note),
+                    Is.EqualTo(1),
+                    "the served rows name the cause once, not twice");
+                Assert.That(
+                    second.AvatarRows.Select(row => row.Sentence).ToList(),
+                    Is.EqualTo(
+                        first.AvatarRows.Select(row => row.Sentence)
+                            .ToList()),
+                    "the second open serves the cached avatar rows");
             }
             finally
             {

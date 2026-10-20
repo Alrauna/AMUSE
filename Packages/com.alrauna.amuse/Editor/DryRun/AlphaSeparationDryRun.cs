@@ -1229,6 +1229,18 @@ namespace Alrauna.Amuse.Editor.DryRun
                     continue;
                 }
 
+                // An approved version whose identity failed earns its own
+                // named cause. The consent-subject note below is false for
+                // it: nothing is locked, and the D3 approval arm converts
+                // without asking (spec B4). A locked record keeps its true
+                // locked note: the check above stays first.
+                if (captured.Family == CapturedAlphaMaterialFamily.Unsupported
+                    && captured.CapturedVersionApproved)
+                {
+                    AddNoteOnce(NoteKind.ApprovedUnverifiedSource);
+                    continue;
+                }
+
                 if (captured.Family == CapturedAlphaMaterialFamily.Unsupported
                     && index < admittedLive.Count &&
                     EffectiveSelector(

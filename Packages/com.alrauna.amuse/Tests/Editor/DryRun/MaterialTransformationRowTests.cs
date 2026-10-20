@@ -115,6 +115,12 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 Is.EqualTo(
                     "Some textures change every frame. This view computes " +
                     "them on Refresh only."));
+            Assert.That(
+                RowText.NoteSentence(NoteKind.ApprovedUnverifiedSource),
+                Is.EqualTo(
+                    "A shader version inside the supported range did not " +
+                    "verify against its measured source. Its triangles " +
+                    "stay unproven."));
         }
 
         [Test]
