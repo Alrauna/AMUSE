@@ -175,15 +175,6 @@ namespace Alrauna.Amuse.Editor
                 using (new EditorGUI.IndentLevelScope())
                 {
                     EditorGUILayout.PropertyField(
-                        serializedObject.FindProperty("_cutoutSeparatorEnabled"),
-                        new GUIContent("Cutout Separator",
-                            "Turn this off to skip separation for slots whose " +
-                            "material uses cutout alpha. Suppressed slots are " +
-                            "reported as skipped."));
-                    OnCutoutSeparatorToggleDrawnForTest?.Invoke(
-                        serializedObject.FindProperty("_cutoutSeparatorEnabled")
-                            .boolValue);
-                    EditorGUILayout.PropertyField(
                         serializedObject.FindProperty("_transparentSeparatorEnabled"),
                         new GUIContent("Transparent Separator",
                             "Turn this off to skip separation for slots whose " +
@@ -191,6 +182,15 @@ namespace Alrauna.Amuse.Editor
                             "reported as skipped."));
                     OnTransparentSeparatorToggleDrawnForTest?.Invoke(
                         serializedObject.FindProperty("_transparentSeparatorEnabled")
+                            .boolValue);
+                    EditorGUILayout.PropertyField(
+                        serializedObject.FindProperty("_cutoutSeparatorEnabled"),
+                        new GUIContent("Cutout Separator",
+                            "Turn this off to skip separation for slots whose " +
+                            "material uses cutout alpha. Suppressed slots are " +
+                            "reported as skipped."));
+                    OnCutoutSeparatorToggleDrawnForTest?.Invoke(
+                        serializedObject.FindProperty("_cutoutSeparatorEnabled")
                             .boolValue);
                     serializedObject.ApplyModifiedProperties();
                 }

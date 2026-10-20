@@ -2,7 +2,7 @@
 
 All notable changes to AMUSE are documented in this file.
 
-## [Unreleased]
+## [0.1.0-pre.9] - 2026-10-20
 
 ### Added
 - Cutout Separator and Transparent Separator sub-switches below the Alpha Separator switch. Presets store both switches.
