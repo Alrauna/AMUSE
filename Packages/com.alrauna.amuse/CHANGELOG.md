@@ -2,6 +2,11 @@
 
 All notable changes to AMUSE are documented in this file.
 
+## [Unreleased] - 2026-10-21
+
+### Changed
+- Capture tests for RGB24 and ARGB32 no longer pin a specific backend's sampling capability. RGB24 keeps its source-format Sample support exemption, and its test checks full-chain opaque alpha. ARGB32 follows the exact sampling gate. Without exact support, its test asserts the real capture refusal with no evidence. With exact support, it checks 255, which passes the opaque predicate, and 128 and 254, which do not.
+
 ## [0.1.0-pre.10] - 2026-10-21
 
 ### Added

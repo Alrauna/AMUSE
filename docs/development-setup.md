@@ -61,3 +61,12 @@ Open the project root in Unity 2022.3.22f1. At this point, NDMF is already resol
 ## Tests
 
 Tests run through the Unity Test Runner, EditMode mode. Run a focused filter first, then the full `Alrauna.Amuse.Tests.Editor` and `Alrauna.Amuse.Research.Tests.Editor` assemblies. A filtered run that reports 0 tests is a failure.
+
+## Capability-dependent capture tests
+
+The alpha capture gate needs exact Sample support for a texture's graphics format. Graphics backends report that support differently:
+
+- The RGB24 test covers the one admitted exemption. The exemption is only from source-format Sample support, and other capture gates still apply. The test asserts alpha exactly 255 across the full mip chain.
+- The ARGB32 test follows the exact sampling gate on the fixture format. Without exact support, it asserts the real capture refusal with no evidence. With exact support, it asserts 255, which passes the opaque predicate, and 128 and 254, which do not.
+
+Thus, a capability observation from one machine does not describe another machine's test results.

@@ -588,21 +588,46 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         /// error and then produces it anyway. The producer opens no importer, so how
         /// the asset came to be in this format is outside its contract: what it must
         /// handle is an ARGB32 <see cref="Texture2D"/> with a project identity, which
-        /// is exactly what this builds. It also confirms that
-        /// the shader samples alpha from ARGB32's channel order correctly, since
-        /// ARGB32's memory order differs from RGBA32's.
+        /// is exactly what this builds.
+        /// <para>
+        /// Exact Sample support for the fixture's own graphics format selects the
+        /// branch. On a host that samples the format exactly, the capture admits it
+        /// and the shader reads alpha from ARGB32's channel order correctly. Input
+        /// alpha 255 passes the opaque predicate, and inputs 128 and 254 do not. On
+        /// a host without that support, the real capture entry refuses with
+        /// <see cref="TextureCaptureRefusalReason.UnavailableCapture"/> and returns
+        /// no chain, so an unsampleable format never yields fabricated evidence.
+        /// </para>
         /// </summary>
         [Test]
-        public void ReadableArgb32_IsAdmittedAndSeparatesMaximumFromSubmaximum()
+        public void ReadableArgb32RequiresExactSamplingSupport()
         {
             var texture = CreateTextureAsset("argb32", TextureFormat.ARGB32);
 
             Assert.That(texture.format, Is.EqualTo(TextureFormat.ARGB32));
             Assert.That(texture.mipmapCount, Is.EqualTo(1));
-            Assert.That(TryField(texture, out var field), Is.True);
-            Assert.That(field.GetAlpha(1, 1), Is.EqualTo(255), "alpha 255");
-            Assert.That(field.GetAlpha(0, 0), Is.EqualTo(0), "alpha 128");
-            Assert.That(field.GetAlpha(Size - 1, Size - 1), Is.EqualTo(0), "alpha 254");
+
+            if (SystemInfo.IsFormatSupported(texture.graphicsFormat, FormatUsage.Sample))
+            {
+                Assert.That(TryField(texture, out var field), Is.True);
+                Assert.That(field.GetAlpha(1, 1), Is.EqualTo(255), "alpha 255");
+                Assert.That(field.GetAlpha(0, 0), Is.EqualTo(0), "alpha 128");
+                Assert.That(field.GetAlpha(Size - 1, Size - 1), Is.EqualTo(0), "alpha 254");
+            }
+            else
+            {
+                var captured = UnityAlphaFieldEvidence.TryCapture(
+                    texture, TextureChannel.Alpha, 1.0f, AlphaPolicyBounds.Inert,
+                    out _, out var refusedChain, out var refusal);
+
+                Assert.That(captured, Is.False);
+                Assert.That(
+                    refusal,
+                    Is.EqualTo(TextureCaptureRefusalReason.UnavailableCapture));
+                Assert.That(
+                    refusedChain, Is.Null,
+                    "A refused capture must return no evidence.");
+            }
         }
 
         [Test]
@@ -1044,12 +1069,15 @@ namespace Alrauna.Amuse.Tests.Editor.Host
 
         /// <summary>
         /// The source-sampling gate. Every admitted alpha-bearing format must have
-        /// exact reported-format Sample support; RGB24 alone is exempt.
+        /// exact reported-format Sample support. RGB24 alone is exempt.
         /// <para>
-        /// Measured on this host: SystemInfo reports Sample support False for
-        /// R8G8B8_UNorm, which is RGB24's reported graphicsFormat, yet the
-        /// production shader route samples RGB24 with alpha exactly one at 4x4 and
-        /// 8x8, single-mip and mipmapped. Unity 2022.3 converts RGB24 to RGBA32 at
+        /// This test injects both capability facts, so it proves only the gate
+        /// predicate. The shader-route tests prove the live RGB24 capture:
+        /// <see cref="ReadableRgb24_IsAdmittedAndFullyOpaque"/> covers 4x4
+        /// single-mip, and
+        /// <see cref="AnRgbOnlyFormatSamplesAlphaExactlyOneAtEveryLevel"/> covers
+        /// 8x8 mipmapped. In both, the production shader route samples RGB24 with
+        /// alpha exactly one. Unity 2022.3 converts RGB24 to RGBA32 at
         /// texture load because native RGB24 support is rare, so the reported
         /// storage format is not the sampled one.
         /// </para>
@@ -1875,7 +1903,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         /// <para>
         /// ARGB32 is absent deliberately: the importer rejects it for the Default
         /// texture type on Standalone with a console error. It is covered by
-        /// <see cref="ReadableArgb32_IsAdmittedAndSeparatesMaximumFromSubmaximum"/>,
+        /// <see cref="ReadableArgb32RequiresExactSamplingSupport"/>,
         /// which builds the asset directly, and by the exhaustive allowlist
         /// predicate.
         /// </para>
@@ -1898,10 +1926,10 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         /// <summary>
-        /// RGB24 through the real production shader route. It is the one admitted
-        /// format exempt from exact source-format Sample support, so this proves the
-        /// exemption is sound in practice and not merely permitted by a predicate:
-        /// every returned byte must be exactly 255 at every level.
+        /// RGB24 through the real production shader route, over the full mip
+        /// chain. It is the one admitted format exempt from exact source-format
+        /// Sample support. Other capture gates still apply. Every returned byte
+        /// must be exactly 255 at every level.
         /// </summary>
         [Test]
         public void AnRgbOnlyFormatSamplesAlphaExactlyOneAtEveryLevel()
@@ -1911,12 +1939,6 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 TextureImporterFormat.RGB24);
 
             Assert.That(texture.format, Is.EqualTo(TextureFormat.RGB24));
-            Assert.That(
-                SystemInfo.IsFormatSupported(
-                    texture.graphicsFormat, FormatUsage.Sample),
-                Is.False,
-                "This host reports no exact Sample support for RGB24's graphics "
-                + "format; the exemption is what admits it.");
 
             Assert.That(TryChain(texture, out var chain), Is.True);
             Assert.That(chain.Count, Is.EqualTo(texture.mipmapCount));
