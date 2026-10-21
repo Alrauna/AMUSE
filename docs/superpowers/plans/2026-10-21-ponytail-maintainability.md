@@ -394,8 +394,23 @@ Task 1 is complete in commit `c0509cb`. The task review approved spec compliance
 
 A native callback retained all four result categories. The four ignored vendor checks need the absent Poiyomi package. The two inconclusive SDK-sequence checks need a disposable public integration project. Their destructive opt-in stayed off. No vendor package was installed.
 
-Task 2 stopped at the probe setup prerequisite. Unity refused to create a new additive scene while an untitled scene was open. The runtime scene-creation API also refused use outside Play mode. The controller did not save or close the original scene.
+At the first pause, Task 2 stopped at the probe setup prerequisite. Unity refused to create a new additive scene while an untitled scene was open. The runtime scene-creation API also refused use outside Play mode. The controller did not save or close the original scene.
 
-No Play transition ran. The identity candidate is not proved or disproved. No product source changed. The probe restored both Enter Play Mode option values and removed its owned folder and metadata. The original scene setup, active scene, saved scene bytes, editor-settings bytes, and five pre-existing modified files matched their captured state. The editor remained in Edit mode with no dirty scene.
+At that pause, no Play transition had run. The identity candidate was not proved or disproved. No product source changed. The probe restored both Enter Play Mode option values and removed its owned folder and metadata. The original scene setup, active scene, saved scene bytes, editor-settings bytes, and five pre-existing modified files matched their captured state. The editor remained in Edit mode with no dirty scene.
 
-Execution needs an owner decision about the untitled scene or an isolated validation project. Tasks 2 through 14 are not complete. The spec and its acceptance criteria remain unchanged.
+The owner then saved the open scene and requested resume. Tasks 2 through 14 remain incomplete. The spec and its acceptance criteria remain unchanged.
+
+### Resumed identity gate on 2026-10-21
+
+The controller pinned the dev editor and observed zero unsaved scenes and zero dirty scenes. The restored temporary helper compiled. The probe then completed one real Play entry and exit with scene reload enabled.
+
+| Saved root | Entry, rename, and fake-sibling checks combined | Play-to-Edit identity correlation |
+| --- | --- | --- |
+| Loose root | Passed | Passed |
+| Prefab root | Failed | Failed |
+
+The prefab-instance status was true before Play, false during Play, and true after exit. The probe replayed the host rename window. It did not invoke the host build pipeline. The combined entry check does not identify which subcheck failed. The failed exit check does show that the proposed key cannot prove the required prefab round trip.
+
+The gate returned `FAIL`. The scene-reload-disabled gate did not run after this failure. No production source changed. The controller restored both runtime option values and their serialized file bytes, removed the owned probe assets, and preserved the original scene setup and captured user-owned files.
+
+Task 2 needs an owner decision about a revised identity design or a change to the saved-prefab Play-record requirement. Do not implement the proposed full identity-string key or add an unapproved fallback.
