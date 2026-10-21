@@ -2,16 +2,22 @@
 
 All notable changes to AMUSE are documented in this file.
 
+## [0.1.0-pre.10] - 2026-10-21
+
+### Added
+- Dry run note for a shader version inside the supported range that does not verify against its measured source. The note names the cause and says the triangles stay unproven.
+
+### Changed
+- lilToon 2.4.1 is a measured version. Exact attestation rows now cover 2.3.0 through 2.4.1. Multi container rows cover it too.
+
 ## [0.1.0-pre.9] - 2026-10-20
 
 ### Added
 - Cutout Separator and Transparent Separator sub-switches below the Alpha Separator switch. Presets store both switches.
-- Dry run note for a shader version inside the supported range that does not verify against its measured source. The note names the cause and says the triangles stay unproven.
 
 ### Changed
 - Preset schema version moves from 4 to 5. The new feature keys are `cutoutSeparator` and `transparentSeparator`. A schema 4 file refuses with the schema version message.
 - lilToon 2.3.0 through any version below 2.5 are approved without a consent prompt. The build asks once per build for versions outside that range.
-- lilToon 2.4.1 is a measured version. Exact attestation rows now cover 2.3.0 through 2.4.1.
 
 ## [0.1.0-pre.8] - 2026-10-19
 
