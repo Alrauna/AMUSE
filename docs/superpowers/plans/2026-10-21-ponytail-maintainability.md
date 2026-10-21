@@ -383,3 +383,19 @@ On 2026-10-21, the controller recovered the cached aggregate from the test manag
 | Full AMUSE baseline before product edits | 2970 | 2964 | 2 | 4 |
 
 Progress counters and aggregate totals differ. Do not combine them or derive a pass count from progress. Task 1 must still obtain a clean terminal aggregate after the approved test corrections.
+
+## Execution record on 2026-10-21
+
+Task 1 is complete in commit `c0509cb`. The task review approved spec compliance and quality. A scoped review confirmed the final test-comment citation.
+
+| Final prerequisite run | All outcomes | Passed | Failed | Ignored | Inconclusive |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Both full AMUSE assemblies | 2972 | 2966 | 0 | 4 | 2 |
+
+A native callback retained all four result categories. The four ignored vendor checks need the absent Poiyomi package. The two inconclusive SDK-sequence checks need a disposable public integration project. Their destructive opt-in stayed off. No vendor package was installed.
+
+Task 2 stopped at the probe setup prerequisite. Unity refused to create a new additive scene while an untitled scene was open. The runtime scene-creation API also refused use outside Play mode. The controller did not save or close the original scene.
+
+No Play transition ran. The identity candidate is not proved or disproved. No product source changed. The probe restored both Enter Play Mode option values and removed its owned folder and metadata. The original scene setup, active scene, saved scene bytes, editor-settings bytes, and five pre-existing modified files matched their captured state. The editor remained in Edit mode with no dirty scene.
+
+Execution needs an owner decision about the untitled scene or an isolated validation project. Tasks 2 through 14 are not complete. The spec and its acceptance criteria remain unchanged.
