@@ -710,18 +710,24 @@ namespace Alrauna.Amuse.Editor.Host
                 }
                 var failedOrdinals = new HashSet<int>(batchOutcome.UnattestedOrdinals);
                 var survivorOrdinal = 0;
+                var failedOrdinal = 0;
                 for (var index = 0; index < attestedIndices.Count; index++)
                 {
                     var admittedIndex = attestedIndices[index];
                     if (failedOrdinals.Contains(index))
                     {
+                        var approved = batchOutcome.UnattestedApprovedFlags;
+                        var approvedFlag = failedOrdinal < approved.Count &&
+                            approved[failedOrdinal];
+                        failedOrdinal++;
                         var lockedRefusal = lockedRefusalCheck?.Invoke(
                             admitted[admittedIndex]) ?? RendererAnalysisRefusal.None;
                         capturedByIndex[admittedIndex] =
                             UnityMaterialSemantics.UnattestedMaterial(
                                 lockedRefusal,
                                 admitted[admittedIndex],
-                                resolveRegisteredSource);
+                                resolveRegisteredSource,
+                                approvedFlag);
                     }
                     else
                     {

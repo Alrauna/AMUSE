@@ -1027,6 +1027,35 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         }
 
         [Test]
+        public void ApprovedIdentityFailureAloneEarnsTheCauseFlag()
+        {
+            // An approved Multi record refused on state carries no cause
+            // flag. The false "did not verify" sentence must never reach
+            // the preview for a verified source (spec B4).
+            var material = NewMaterial(
+                "helper-approved-multi-state.shader",
+                "_lil/lilToonMulti",
+                MultiProperties());
+
+            Assert.That(
+                UnityMaterialSemantics.IsApprovedIdentityFailure(
+                    MultiCaptured(
+                        material,
+                        LilToonMultiResolutionRefusal.ClippingCancellerEnabled,
+                        true,
+                        "2.4.0")),
+                Is.False);
+            Assert.That(
+                UnityMaterialSemantics.IsApprovedIdentityFailure(
+                    MultiCaptured(
+                        material,
+                        LilToonMultiResolutionRefusal.AttestationFailed,
+                        true,
+                        "2.4.0")),
+                Is.True);
+        }
+
+        [Test]
         public void LooseInstallStillProducesASubject()
         {
             // HasPackage false never approves: a loose install keeps the

@@ -2,6 +2,14 @@
 
 All notable changes to AMUSE are documented in this file.
 
+## [0.1.0-pre.10] - 2026-10-21
+
+### Added
+- Dry run note for a shader version inside the supported range that does not verify against its measured source. The note names the cause and says the triangles stay unproven.
+
+### Changed
+- lilToon 2.4.1 is a measured version. Exact attestation rows now cover 2.3.0 through 2.4.1. Multi container rows cover it too.
+
 ## [0.1.0-pre.9] - 2026-10-20
 
 ### Added

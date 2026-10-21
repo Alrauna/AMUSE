@@ -342,7 +342,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
     }
 
     /// <summary>
-    /// Attestation for the admitted lilToon versions, 2.3.0 through 2.4.0.
+    /// Attestation for the admitted lilToon versions, 2.3.0 through 2.4.1.
     /// lilToon regenerates its shader assets from
     /// per-project settings, so a whole-file hash would refuse legitimate
     /// installs. Instead the two generated assets are hashed after
@@ -359,7 +359,7 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         internal const string PassShaderGuid =
             "61b4f98a5d78b4a4a9d89180fac793fc";
         internal const string PackageName = "jp.lilxyzw.liltoon";
-        internal const string PackageVersion = "2.4.0"; // newest admitted; the set is AdmittedPackageVersions (S11)
+        internal const string PackageVersion = "2.4.1"; // newest admitted. The set is AdmittedPackageVersions (S11)
         internal const float ShaderFormatVersion = 45f; // re-confirmed on installed 2.4.0, 2026-10-19
         internal const int OpaqueRenderMode = 0;
 
@@ -388,10 +388,13 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         // of the two shapes agree on one digest per file.
         internal const string PassCanonicalDigest =
             "aee1ea0c1fd0ae26f561fbade4c23309bb62ed8aff0c9221d1cba7c74a31d9d1";
-        // The newest admitted tree digest (2.4.0). The 2.3.4 anchor lives
-        // in the AdmittedPackageVersions row literal and the S11 tests.
+        // The newest admitted tree digest (2.4.1). Computed from the
+        // official 2.4.1 tag tree on 2026-10-20 by the recipe below,
+        // licensed by reproducing the 2.4.0 pin from the 2.4.0 tag tree
+        // (spec B1). The 2.4.0 digest lives in the AdmittedPackageVersions
+        // row literal. Installed-shape confirmation is outstanding.
         internal const string IncludeTreeDigest =
-            "549c3b552f8f001f2a2f6059acf4c8f0df6e9475f80b8d155784dabb68e7b670";
+            "063f08cdc225ffc488d874c81860de376d5a9f9ad1c906ca84aa59f6193f0625";
 
         // Admitted package versions and the include-tree digest each ships
         // (S11). Three evidence sources, named per the file's comment
@@ -407,9 +410,21 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         // per-version bytes the identity conjunction checks. 2.3.1-2.3.3
         // ship identical trees and share a row. The 2.4.0 tree differs by
         // the VRC Light Volumes 3 rewrite and the APV sampling refactor.
-        // Never re-derive these from the lilToon repository, whose
-        // committed generated shaders are stale relative to their own tag's
-        // generator.
+        // The 2.4.1 row carries the one upstream patch past it. The 2.4.0
+        // to 2.4.1 diff changed two changelogs, the package version
+        // fields, and Shader/Includes/openlit_core.hlsl. The 2.4.1 row is
+        // computed from the official 2.4.1 tag tree by the recipe below.
+        // The anchor reproduced the 2.4.0 digest from the 2.4.0 tag tree
+        // on 2026-10-20. The installed-shape follow-up re-measures, from
+        // two installed 2.4.1 shapes: the include tree, the shader, pass,
+        // and extended family digests, the Multi container digests, the
+        // GUIDs, the `_lilToonVersion` stamp, and the opaque-target tuple
+        // per the mandate at Editor/Semantics/LilToon/LilToonOpaqueTarget.cs:26-30.
+        // Never re-derive the generated shader and pass digests from the
+        // lilToon repository, whose committed generated shaders are stale
+        // relative to their own tag's generator. Include-tree rows may
+        // cite the official tag tree when the anchor reproduces the
+        // previous row's digest.
         private static readonly (string Version, string IncludeDigest)[]
             AdmittedPackageVersions =
             {
@@ -423,6 +438,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     "154aa68f85633b643f27a82309dc9d755e1955f0e8de7d21c9f62120c6628416"),
                 ("2.3.4",
                     "6e2dce6cb3073d5e04b569a14df8e0944c93ca408999fb42d7c717050c48fd46"),
+                ("2.4.0",
+                    "549c3b552f8f001f2a2f6059acf4c8f0df6e9475f80b8d155784dabb68e7b670"),
                 (PackageVersion, IncludeTreeDigest),
             };
 
@@ -2713,7 +2730,12 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         // outline digest differs from 2.3.4 because upstream fix 435 changed
         // the ltsmulti_o queue tag; measured 2026-10-19 from installed shapes
         // per the two-shape rule. The 2.3.4 row carries the 2026-10-01 pins
-        // unchanged.
+        // unchanged. The 2.4.1 row is measured from the installed 2.4.1
+        // shape on 2026-10-20 by the production gather: the include tree
+        // matches the tag-derived row, and both columns equal the 2.4.0
+        // columns because no Multi template changed upstream. Single-shape
+        // measurement, cross-checked against the official tag
+        // byte-equality.
         private static readonly
             (string Version, string MultiDigest, string MultiOutlineDigest)[]
             AdmittedMultiVersions =
@@ -2722,6 +2744,9 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                     "346528b53eaa04b495b87e3faf583a79d6e0cbb1d35d7f3881c442b0a39ddf8f",
                     "225af2c6eba7a017593ca8a0f38114a98580ed67844a4d8465fed2c96f7cb75f"),
                 ("2.4.0",
+                    "346528b53eaa04b495b87e3faf583a79d6e0cbb1d35d7f3881c442b0a39ddf8f",
+                    "f33e846c45eca0c62d343526fc9c3ee72d0e8585cc42b372c0fde9460ef18c85"),
+                ("2.4.1",
                     "346528b53eaa04b495b87e3faf583a79d6e0cbb1d35d7f3881c442b0a39ddf8f",
                     "f33e846c45eca0c62d343526fc9c3ee72d0e8585cc42b372c0fde9460ef18c85"),
             };

@@ -90,6 +90,14 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// </summary>
         public bool PredicatesDeclareCutoff { get; }
 
+        /// <summary>
+        /// Whether the failed capture that produced this sentinel carried
+        /// an approved package version with an identity failure. Only the
+        /// sentinel builder sets it true. Live captures leave it false.
+        /// The preview's cause note routes on it (spec B4).
+        /// </summary>
+        internal bool CapturedVersionApproved { get; }
+
         internal CapturedAlphaMaterial(
             CapturedAlphaMaterialFamily family,
             CapturedMaterialEvidence evidence,
@@ -101,7 +109,8 @@ namespace Alrauna.Amuse.Editor.Semantics
             string materialName = null,
             string shaderName = null,
             LilToonMultiResolutionRecord multiResolution = null,
-            bool predicatesDeclareCutoff = false)
+            bool predicatesDeclareCutoff = false,
+            bool capturedVersionApproved = false)
         {
             if (!Enum.IsDefined(typeof(CapturedAlphaMaterialFamily), family))
             {
@@ -158,6 +167,7 @@ namespace Alrauna.Amuse.Editor.Semantics
             MaterialName = materialName;
             ShaderName = shaderName;
             PredicatesDeclareCutoff = predicatesDeclareCutoff;
+            CapturedVersionApproved = capturedVersionApproved;
         }
     }
 
@@ -366,6 +376,7 @@ namespace Alrauna.Amuse.Editor.Semantics
                 cutoutRawMipCap, exactRawMipCap);
             var captured = new List<CapturedAlphaMaterial>();
             var failed = new List<int>();
+            var approvedFlags = new List<bool>();
             for (var index = 0; index < result.Count; index++)
             {
                 if (IsAttestedAlphaMaterial(result[index], true))
@@ -398,9 +409,12 @@ namespace Alrauna.Amuse.Editor.Semantics
                     continue;
                 }
 
+                approvedFlags.Add(
+                    IsApprovedIdentityFailure(result[index]));
                 failed.Add(index);
             }
-            outcome = new ClosedAlphaCaptureOutcome(captured, failed);
+            outcome = new ClosedAlphaCaptureOutcome(
+                captured, failed, approvedFlags);
             return true;
         }
 
@@ -422,6 +436,25 @@ namespace Alrauna.Amuse.Editor.Semantics
                   LilToonSourceAttestation.IsApprovedPackageEvidence(
                       captured.LilToonEvidence.HasPackage,
                       captured.LilToonEvidence.PackageVersion);
+        }
+
+        /// <summary>
+        /// The D3 suppression conjunct over one failed capture record
+        /// (spec B4). Approval alone is not enough: an approved Multi
+        /// record refused on state, for example the clipping canceller,
+        /// names no unverified source. For the regular lilToon families
+        /// the capture failure is itself the identity verify, so approval
+        /// plus failure suffices.
+        /// </summary>
+        internal static bool IsApprovedIdentityFailure(
+            CapturedAlphaMaterial record)
+        {
+            var identityRefused = record.Family !=
+                CapturedAlphaMaterialFamily.LilToonMulti ||
+                (record.MultiResolution != null &&
+                    record.MultiResolution.Refusal ==
+                        LilToonMultiResolutionRefusal.AttestationFailed);
+            return CapturedVersionIsApproved(record) && identityRefused;
         }
 
         /// <summary>
@@ -1279,6 +1312,11 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// only the resolved path and name strings, so the evidence never
         /// holds live Unity objects.
         /// </para>
+        /// <para>
+        /// True in <paramref name="capturedVersionApproved"/> marks the
+        /// capture-failure sentinel for an approved version with an
+        /// identity failure. The preview's cause note routes on it.
+        /// </para>
         /// </summary>
         /// <param name="resolveRegisteredSource">
         /// Maps the live material to the source object a producer
@@ -1290,7 +1328,8 @@ namespace Alrauna.Amuse.Editor.Semantics
             RendererAnalysisRefusal lockedIdentityRefusal =
                 RendererAnalysisRefusal.None,
             Material sourceMaterial = null,
-            RegisteredSourceLookup resolveRegisteredSource = null)
+            RegisteredSourceLookup resolveRegisteredSource = null,
+            bool capturedVersionApproved = false)
         {
             var namedSource = namedSourceFor(
                 resolveRegisteredSource, sourceMaterial);
@@ -1316,7 +1355,8 @@ namespace Alrauna.Amuse.Editor.Semantics
                 shaderName: sourceMaterial != null &&
                     sourceMaterial.shader != null
                     ? sourceMaterial.shader.name
-                    : null);
+                    : null,
+                capturedVersionApproved: capturedVersionApproved);
         }
 
     }
