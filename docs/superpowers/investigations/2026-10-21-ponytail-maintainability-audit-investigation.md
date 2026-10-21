@@ -210,3 +210,44 @@ The five pre-existing modified configuration and project-setting files matched t
 No Unity tests, GPU capture, avatar build, upload, private project, or published website ran. No dependency was installed and no network source was fetched. The browser smoke excluded Fluent and the listing template engine.
 
 The proof scan read classifier entry and dispatch code, not every filter walk or exact geometry helper. The Build scan did not fully read material reconstruction, conversion, lifecycle gate bodies, or every apply case. The lilToon scan did not fully read every interpreter, eligibility helper, or source-normalization path. The common-semantics scan did not fully read source attestation or every alpha equation. Large test files were sampled around contracts and call sites. Release workflow, setup script, and website source review do not establish hosted execution.
+
+## PTM1 follow-up on 2026-10-21
+
+The first implementation gate rejected the proposed full identity-string key for saved prefab roots. The owner chose to preserve prefab Play reports and authorized a revised identity design.
+
+Native probes covered a loose root and a saved prefab through real Play entry and exit with scene reload enabled and disabled. For the prefab, the full GameObject and Transform identities changed during Play and returned after exit. Both samples remained valid. The scene identity stayed equal, but the object and prefab parts changed. Reverse resolution of the authored identity did not find the Play object. The asset identifier helper returned false for both scene-root roles.
+
+The instance IDs stayed equal across both probe legs. The installed Unity reference metadata did not provide a uniqueness or recycling guarantee that would prove a raw-ID join after scene reload. A scene-plus-prefab-source key is also unsafe. A later replacement instance of the same prefab would inherit the old key.
+
+A throwaway native reference snapshot preserved the authored key without reconstructing an owner from an integer. The snapshot was a `HideAndDontSave` editor `ScriptableObject` with paired root-reference and key arrays.
+
+| Reference-snapshot check | Scene reload enabled | Scene reload disabled |
+| --- | --- | --- |
+| Loose and prefab references match during Play | Passed | Passed |
+| Authored keys survive the rename and fake-sibling window | Passed | Passed |
+| References match their restored roots after exit | Passed | Passed |
+| Destroyed reference becomes null | Passed | Passed |
+| Same-name replacement does not match destroyed reference | Passed | Passed |
+
+These probes did not invoke the host build pipeline. They establish a viable native correlation mechanism, not the final product interface or all-host support. The revised spec retains an installed-host gate before product edits.
+
+No production source changed. The controller removed the synthetic scene, prefab, transient snapshots, and prototype script with their metadata. The probe restored runtime settings. Serialized setting drift is checked separately against the captured user-owned bytes.
+
+### Matching and reload falsifiers on 2026-10-21
+
+The later prototype used loose and prefab roots nested under a parent. It observed `ExitingEditMode` and recovered its native snapshot through loaded objects rather than a managed static field.
+
+| Domain reload | Scene reload | Authored anchors at entry | Native match in Play and after exit | CLR match in Play | CLR match after exit |
+| --- | --- | --- | --- | --- | --- |
+| Enabled | Enabled | Unchanged | Passed | Failed | Failed |
+| Enabled | Disabled | Unchanged | Passed | Passed | Failed |
+| Disabled | Enabled | Unchanged | Passed | Failed | Failed |
+| Disabled | Disabled | Unchanged | Passed | Passed | Failed |
+
+An explicit script reload was observed during Play with both entry reloads enabled. The editor stayed in Play. The native matches remained true while the roots retained the temporary clone names.
+
+This falsifies the review's proposed managed `ReferenceEquals` remedy. It does not falsify the native object-reference bridge. The installed Unity metadata documents native `==` as the same-object test and the implicit Boolean as the existence test. Matching therefore needs two existing native references. It must not reconstruct a reference from an integer.
+
+The native reference and wrapper observations are separate from build activation. The source activation gate checks `context.AvatarRootObject`, not the object's scene-root parent. The revised capture must include nested optimizer objects without making a stray child component a new build trigger.
+
+The prototype's fixture assets, script, metadata, native objects, and observation counter were removed. Both runtime options and their serialized bytes were restored. All captured user-owned files and saved source-scene bytes matched. No NDMF or SDK pipeline validation is claimed by these probes.
