@@ -2,7 +2,7 @@
 
 Privacy note: This record uses public repository source and synthetic verification cases. It contains no private observations or machine identifiers.
 
-Status: 2026-10-21, finalized after six parallel adversarial reviews and scoped safety and latent-bug confirmation. The owner decisions and preflight observations are recorded below. Source baseline: `5eeea83`. Investigation: `docs/superpowers/investigations/2026-10-21-ponytail-maintainability-audit-investigation.md`.
+Status: 2026-10-21, PTM1 revision finalized after six parallel review lenses and scoped confirmation. The owner chose to preserve prefab Play reports through a small session-only correlation. The revised native mechanism and its limits are recorded below. The installed-host proof remains a gate before product edits. Source baseline: `5eeea83`. Investigation: `docs/superpowers/investigations/2026-10-21-ponytail-maintainability-audit-investigation.md`.
 
 ## Intent
 
@@ -16,7 +16,7 @@ All 13 numbered investigation findings are in scope. Sections PTM1 through PTM13
 
 Do not change alpha mathematics, shader support ranges, attestation pins, consent policy, source assets, the five NDMF passes, live apply revalidation, or transient unlock-close ordering. Do not add packages, a settings framework, a cache registry, a fixture framework, serialized avatar markers, or a new research export path. Do not fold unrelated website issues into the download fix.
 
-The five pre-existing modified configuration and project-setting files remain user-owned. Do not stage them or alter their bytes. Do not access private projects for tests. The research package must not enter the product archive or listing.
+All user-owned configuration, project-setting, scene, and metadata changes remain outside task commits. Preserve the bytes captured before each validation phase. This includes the scene and settings saved by the owner during the execution pause. Do not access private projects for tests. The research package must not enter the product archive or listing.
 
 ## Constraints
 
@@ -47,11 +47,29 @@ The baseline failures are observed evidence. A corrected test that passes on its
 
 `PlayModeBuildStore.ComputeAvatarKey(Transform)` must distinguish roots, not names. Clone-name normalization is not identity. A sibling-index chain alone is also not identity because a reorder or replacement can assign the old position to another same-named root.
 
-Use a Unity-owned stable scene-object identity where it is available. A saved scene root must retain its identity through the supported NDMF Play processing path. An unsaved or transient root must never fall back to scene name plus object name. A local session identity may serve it only while ownership can be proved. A root without proved ownership neither saves nor loads a Play record. Refresh must not clear another root's record. Fall back to the existing preview rather than borrow another root's record.
+Use the authored root's full `GlobalObjectId` as the record anchor in Edit mode. Require a loaded saved scene, scene-object identity, non-default scene identity, and non-zero object identity. An unsaved or transient root must not fall back to a name, sibling position, prefab source, or raw instance ID. A root without proved ownership neither saves nor loads a Play record. Refresh must not clear another root's record.
 
-Keep ownership logic inside the existing store. Do not add a persistent avatar marker, a parallel root registry, or a migration shim for the old name key. Change the session-key prefix for the new key format so old name-based records become misses. `SaveOutcome`, lookup, and Refresh must use the same root identity rule.
+A saved prefab's full identity changes during the native Play transition. Do not recompute its authored anchor from the Play object. Capture the authored key and its live reference at `ExitingEditMode`, before scene conversion. Enumerate `AmuseAvatarOptimizer` components throughout normal loaded saved scenes, including inactive objects and avatars nested under a parent. Use each component's GameObject as an identity candidate. Reject persistent assets, preview scenes, and invalid identities. Do not require a scene-root parent. A stray child component may have an inert identity entry, but it does not activate a build. The existing context-avatar-root activation gate stays authoritative.
 
-Before finalizing the implementation interface, verify identity behavior for saved and unsaved synthetic roots through the installed host path. The saved-root check must span Play mode entry and exit with scene reload enabled and disabled. A raw instance ID alone cannot establish the post-Play match. Stop if maintaining the existing Play-result experience requires an owner choice. Do not claim that one installed NDMF source proves all supported hosts.
+Keep one fixed transient root snapshot owned by `PlayModeBuildStore`. Its paired arrays hold live `GameObject` references and their authored key strings. Implement the native lifetime holder as `PlayModeRootIdentitySnapshot`, an editor-only `ScriptableObject` in Build with its own source and metadata. Use `HideAndDontSave`. Never save an instance as an asset, add a marker to an avatar, dirty a source scene, or place live references in immutable proof evidence. This is one concrete Play-lifetime capability, not an extensible registry or a second cache framework.
+
+Recover the owned snapshot through Unity's loaded objects before capture and teardown, even when the store's managed field was lost. Retain lazy recovery on the first Play lookup. Recover only non-persistent instances of the exact snapshot type with the owned `HideAndDontSave` flags. Keep the recovered reference private to the store. Multiple owned snapshots violate the module invariant and throw. This guards failed cleanup or foreign tooling, not a normal flow. A missing snapshot or unmatched root is an empty key, not a fallback to the Play object's changed identity. Do not reconstruct a root reference from an integer or a prefab-source identity.
+
+During Play, `ComputeAvatarKey` returns the captured authored key only when both GameObject references exist and Unity's native `==` says they are the same object. A dead captured reference is a miss. Do not use CLR `ReferenceEquals` or the Host reference comparer across this lifetime. Managed wrappers changed in the measured reload paths. The host's fake sibling and roots created after capture have no entry. In Edit mode, use the valid authored identity directly. `SaveOutcome`, inspector lookup, and Refresh keep the same interface and ownership rule. Keep the policy fingerprint separate.
+
+`PlayModeBuildStore` owns a Build-side `[InitializeOnLoad]` hook. It subscribes to `EditorApplication.playModeStateChanged` without depending on an open inspector or a previous store lookup. Do not move capture into the inspector's existing handler.
+
+Create a fresh snapshot for each Play entry. Recover and destroy an old owned snapshot before capture. Recover and destroy the snapshot on `EnteredEditMode`, not just the cached managed reference. Stored rows keep their existing session lifetime. A reload during Play retains the native snapshot and recovers it on lookup. It must not recapture changed Play identities.
+
+Keep one private pending-entry Boolean in `SessionState`. Set it when entry capture begins. Arm a temporary editor-update guard. The load hook re-arms the guard after a domain reload while entry is pending. Once Play starts, remove the guard and clear the flag. If both `EditorApplication.isPlaying` and `EditorApplication.isPlayingOrWillChangePlaymode` are false, recover and destroy the snapshot, clear the flag, and remove the guard. This closes canceled entry without a permanent update loop.
+
+On a load in idle Edit mode, schedule the same guarded cleanup after native objects are ready. It must recover an orphan through loaded objects rather than rely on a lost static field. Recheck the mode before destruction. A Play entry that begins before this callback must retain its new snapshot. No permanent setting or source asset changes.
+
+Keep `ComputeAvatarKey`, `Save`, `TryLoad`, `Clear`, and `SaveOutcome` signatures. Change the session prefix to `Amuse_PlayMode_v2_` so old name-key records miss. Old records remain unread until editor exit. Add no migration shim. Delete clone-name normalization. Add no persistent marker, raw-ID alias, or generic registry.
+
+The native prototypes below prove the reference mechanism for the installed editor, not the full host pipeline. Before product edits, exercise the candidate through the installed in-place NDMF path with public roots and the temporary rename window. Cover all four combinations of domain reload and scene reload. Include a script reload during Play, canceled entry followed by an idle-Edit reload, and a second fresh Play entry. Observe actual reloads and recover snapshots through loaded objects. Restore both Enter Play Mode option values and serialized bytes.
+
+Do not run the destructive SDK callback sequence in the dev project. Use a safe in-place NDMF entry with owned or disabled temporary output. A manual-bake clone is not proof of the Apply-on-Play path. Stop if the necessary host proof needs an unapproved environment or mechanism. One installed host does not prove every supported host.
 
 Acceptance:
 
@@ -60,6 +78,10 @@ Acceptance:
 - Duplicate scene names and additive scenes do not collide.
 - A record saved inside the host's temporary rename window loads under the restored saved root after leaving Play mode. The host's fake sibling never matches or clears that record.
 - A root without a proved correlation produces a cache miss, not an accurate label.
+- Two instances of one prefab asset remain distinct owners. Destroying one and creating another instance must not transfer the old record.
+- A second Play entry captures a fresh snapshot. Canceled entry and ordinary script reload do not leave a stale owner or an orphan snapshot.
+- Snapshot teardown removes only AMUSE-owned transients and leaves authored scene, prefab, component, and metadata bytes unchanged.
+- A valid avatar nested under a scene parent retains its own Play report. A stray optimizer on a child does not become a new build trigger.
 
 ### PTM2. Reject a preview after its policy or target changes
 
@@ -215,7 +237,7 @@ Six parallel spec-review jobs failed at the configured model provider before the
 
 The deferral trace exposed a scope choice in PTM3. Slot resolution retains only the first blocking material. A locked current material can therefore hide a later permanent swap-material failure from the captured result. The owner chose the narrow recorded-cause correction on 2026-10-21. Broader blocker discovery is out of scope.
 
-On 2026-10-21, the owner requested diagnosis of both baseline failures before proceeding. The owner also authorized explicit per-job model overrides to recover the failed parallel reviews. Saved role settings remain unchanged. The plan and implementation have not started.
+On 2026-10-21, the owner requested diagnosis of both baseline failures before proceeding. The owner also authorized explicit per-job model overrides to recover the failed parallel reviews. Saved role settings remain unchanged. At that preflight point, the plan and implementation had not started.
 
 ### Baseline diagnosis on 2026-10-21
 
@@ -257,3 +279,49 @@ Both a real mouse click and Enter emitted `change`. The unchanged handler then s
 The actual Fluent style makes the nested SVG ignore pointer events. A direct SVG-target click was therefore not a valid user action in this probe. Use the row button and its real rendered content in the final browser check. The URL still belongs to `event.currentTarget`, not to an incidental event target.
 
 The controller observed a screenshot and closed the probe tab. This proves the original listener accumulation with the real pinned runtime. It does not prove the future fix or the hosted listing.
+
+### PTM1 identity follow-up on 2026-10-21
+
+The first saved-root gate failed. The owner chose to preserve prefab Play reports rather than narrow the acceptance criteria. The controller then measured native identities and a throwaway reference snapshot on public synthetic roots.
+
+| Observation | Domain and scene reload enabled | Domain and scene reload disabled |
+| --- | --- | --- |
+| Loose full identity across Play entry | Stable | Stable |
+| Prefab full identity across Play entry | Changed | Changed |
+| Prefab authored identity after exit | Restored | Restored |
+| Prefab Transform identity across entry | Changed | Changed |
+| Reverse authored identity resolves the Play prefab | No | No |
+| Scene-object asset identifier helper | Unavailable | Unavailable |
+| Captured live reference matches each Play root | Yes | Yes |
+| Captured key survives the rename and fake-sibling window | Yes | Yes |
+| Captured live reference matches after exit | Yes | Yes |
+| Destroyed reference is null and does not match replacement | Yes | Yes |
+
+Both prefab identity samples were valid. The scene part stayed stable while the object and prefab parts changed. Raw instance IDs also stayed equal in this experiment, but the installed reference metadata does not state a reuse guarantee. The revised design does not rely on that observation.
+
+The prototype was a transient editor `ScriptableObject` with root-reference and key arrays. It added no avatar marker. These checks used native Play transitions and a replayed rename window. They did not run the NDMF or SDK build pipeline. Actual host proof remains a pre-implementation gate. The prototype's objects and assets were removed after the check.
+
+### PTM1 review falsifiers on 2026-10-21
+
+Six parallel lenses found missing lifecycle ownership, incomplete reload gates, and ambiguous component enumeration. The revision makes the store's load hook explicit, captures component GameObjects without a scene-root filter, and specifies recovered teardown plus reload-safe entry cancellation.
+
+A review proposed managed `ReferenceEquals` for matching. A new native probe falsified that remedy. It used nested loose and prefab roots. The `ExitingEditMode` anchors were unchanged in every domain and scene reload combination. The probe recovered its snapshot through loaded objects at each observation.
+
+| Domain reload | Scene reload | Native match in Play and after exit | Managed match in Play | Managed match after exit |
+| --- | --- | --- | --- | --- |
+| Enabled | Enabled | Passed | Failed | Failed |
+| Enabled | Disabled | Passed | Passed | Failed |
+| Disabled | Enabled | Passed | Failed | Failed |
+| Disabled | Disabled | Passed | Passed | Failed |
+
+A requested script reload was observed inside Play with both entry reloads enabled. The editor stayed in Play. Both native matches remained true in the rename window and after the reload. These are reference-mechanism observations, not a host pipeline result.
+
+The installed Unity reference metadata defines native equality as the same-object comparison and its existence test as whether the object exists. The design therefore uses native equality only with two existing object references. It stores no integer join. The safety reviewer withdrew the managed-identity remedy after the counterexample.
+
+### PTM1 revision review on 2026-10-21
+
+Six parallel lenses reviewed accuracy, safety and security, architecture, ponytail, latent bugs, and builder readiness. Scoped re-review confirmed every Important finding and the orphan-lifetime contradiction were addressed. No blocking finding remains in the revised spec.
+
+The fixes name the store's load hook, recovered teardown, reload-safe pending guard, component-based capture, and native equality with existence guards. The probes falsified a proposed CLR comparison remedy before product edits.
+
+The plan revision must name the idle cleanup deferral, preserve snapshot teardown outside the shared cache reset and clone sweep, migrate saved-root fixtures at the apply and inspector call sites, and include the idle-load cleanup versus immediate-entry race. These are implementation details, not new owner choices. Actual host and complete lifecycle proof remain required.
