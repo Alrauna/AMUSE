@@ -251,3 +251,20 @@ This falsifies the review's proposed managed `ReferenceEquals` remedy. It does n
 The native reference and wrapper observations are separate from build activation. The source activation gate checks `context.AvatarRootObject`, not the object's scene-root parent. The revised capture must include nested optimizer objects without making a stray child component a new build trigger.
 
 The prototype's fixture assets, script, metadata, native objects, and observation counter were removed. Both runtime options and their serialized bytes were restored. All captured user-owned files and saved source-scene bytes matched. No NDMF or SDK pipeline validation is claimed by these probes.
+
+### Host forwarding and runner-scene checks on 2026-10-21
+
+Read-only inspection of the installed SDK dispatcher's managed method body showed that it forwards its unchanged GameObject argument to each callback. It does not assign a replacement root or clone one. The readable NDMF hook forwards that argument to `BuildContext`, which retains it. This closes the dispatcher-replacement premise for the installed host. No SDK callback chain ran. Callback success and other host versions remain outside this observation.
+
+The safe probe must use the public ambient platform accessor. The concrete VRChat platform type is internal. Disabled temporary output selects a null asset saver, so the named missing-build-services refusal is expected from AMUSE during a mechanism-only probe.
+
+The Unity EditMode launcher creates an untitled scene. A native API check reproduced the resulting fixture constraint without running a test suite.
+
+| Scene operation beside an untitled scene | Observed result |
+| --- | --- |
+| Create another additive scene | Refused |
+| Open an existing saved scene additively | Succeeded |
+| Open the saved scene while the untitled scene is active | Succeeded |
+| Keep the untitled scene loaded | Succeeded |
+
+The check created and removed only its own seed asset and scenes. It restored the original active scene. The test helper can copy one minimal public empty scene fixture and open that copy. It does not need to save, close, or replace the runner's scene or the user's scene.
