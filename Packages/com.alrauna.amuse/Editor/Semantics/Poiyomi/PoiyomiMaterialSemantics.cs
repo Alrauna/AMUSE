@@ -64,14 +64,6 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             "_EnableEmission3",
         };
 
-        internal static readonly string[] AlphaRequiredSchemaProperties =
-        {
-            "shader_master_label",
-            PoiyomiProperties.ShaderOptimizerEnabled,
-            PoiyomiProperties.MainTex,
-            PoiyomiProperties.Color,
-        };
-
         // _MainTex sampling-mode flags whose enabled state changes sampling
         // beyond the single supported tap. Proven exactly off before a texture
         // sample is claimed for any output.
