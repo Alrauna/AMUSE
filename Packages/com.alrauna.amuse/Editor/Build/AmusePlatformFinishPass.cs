@@ -649,19 +649,15 @@ namespace Alrauna.Amuse.Editor.Build
                     minTextureSize, densityCapPercent, blockState,
                     rendererTypeName: rendererTypeName);
                 refusal = resolved.Refusal;
-                var slots = RuntimeStateResolution.MaterialSlotsFor(
-                    evidence, rendererPath,
-                    UnityAnimationEvidenceCapture.MaterialSlotBindingParser,
-                    rendererTypeName);
                 // Every refused slot reports its own exact reason, even
                 // when the renderer as a whole continues or the first
                 // refusal names the renderer: one line per slot, no
                 // aggregation, so a manual test can read the full list.
                 // The slot entry folds the slot's texture capture facts,
                 // so one refused slot is one console entry. The slots and
-                // the slot results come from one MaterialSlotsFor call on
-                // one evidence record, so slot i of one is slot i of the
-                // other, and a divergence is an invariant defect.
+                // the slot results ride on one resolved result, so slot i
+                // of one is slot i of the other, and a divergence is an
+                // invariant defect.
                 for (var slotIndex = 0;
                      slotIndex < resolved.SlotResults.Length;
                      slotIndex++)
@@ -680,7 +676,7 @@ namespace Alrauna.Amuse.Editor.Build
                         renderer.gameObject.name,
                         resolved.SlotResults[slotIndex].Offender,
                         resolved.SlotResults[slotIndex].UnknownReason,
-                        slots[slotIndex].CaptureRefusals,
+                        resolved.Slots[slotIndex].CaptureRefusals,
                         closureWay ==
                             MaterialDependencyClosureFailure.None
                             ? null
@@ -735,7 +731,8 @@ namespace Alrauna.Amuse.Editor.Build
                                 continue;
                             }
                             var offender = evidence.AdmittedMaterials[
-                                slots[slotIndex].AdmittedMaterialIndices[i]];
+                                resolved.Slots[slotIndex]
+                                    .AdmittedMaterialIndices[i]];
                             AmuseReports.SlotResolutionRefused(
                                 renderer, slotIndex, renderer.gameObject.name,
                                 offender, resolution.Failure);
@@ -762,13 +759,14 @@ namespace Alrauna.Amuse.Editor.Build
                             UnityRendererAlphaAnalysis.OutcomeIntersector);
                         opaqueCandidateTriangleCount = plan.OpaqueTriangleCount;
                         for (var slotIndex = 0;
-                             slotIndex < slots.Count;
+                             slotIndex < resolved.Slots.Count;
                              slotIndex++)
                         {
                             if (resolved.SlotResults[slotIndex].IsResolved)
                             {
                                 foreach (var textureRefusal in
-                                         slots[slotIndex].CaptureRefusals)
+                                         resolved.Slots[slotIndex]
+                                             .CaptureRefusals)
                                 {
                                     AmuseReports.TextureCaptureRefusal(
                                         renderer,
@@ -778,7 +776,8 @@ namespace Alrauna.Amuse.Editor.Build
                             }
 
                             foreach (var propertyName in
-                                     slots[slotIndex].NoAlphaChannelProperties)
+                                     resolved.Slots[slotIndex]
+                                         .NoAlphaChannelProperties)
                             {
                                 AmuseReports.TextureAlphaMissing(
                                     renderer,
@@ -856,8 +855,25 @@ namespace Alrauna.Amuse.Editor.Build
                             state, renderer, rendererPath, rendererTypeName,
                             refusal, extractionMeshSubMeshCount, extractionMaterialSlotCount, detail);
                     }
+                    // The result pairs its slot evidence with its slot
+                    // results, so a renderer-scoped early refusal carries
+                    // none: nothing resolved, so nothing paired. This
+                    // branch still reports each slot's captured texture
+                    // and locked-identity facts, so it derives the slot
+                    // evidence from the capture directly on that path.
+                    var reportedSlots = resolved.Slots;
+                    if (reportedSlots.Count == 0)
+                    {
+                        reportedSlots =
+                            RuntimeStateResolution.MaterialSlotsFor(
+                                evidence, rendererPath,
+                                UnityAnimationEvidenceCapture
+                                    .MaterialSlotBindingParser,
+                                rendererTypeName);
+                    }
+
                     for (var slotIndex = 0;
-                         slotIndex < slots.Count;
+                         slotIndex < reportedSlots.Count;
                          slotIndex++)
                     {
                         var foldedAlready =
@@ -868,7 +884,7 @@ namespace Alrauna.Amuse.Editor.Build
                             continue;
                         }
 
-                        var slotEvidence = slots[slotIndex];
+                        var slotEvidence = reportedSlots[slotIndex];
                         foreach (var captureRefusal in
                                  slotEvidence.CaptureRefusals)
                         {

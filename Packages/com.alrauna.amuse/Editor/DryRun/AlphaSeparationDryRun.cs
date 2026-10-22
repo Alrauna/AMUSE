@@ -115,7 +115,6 @@ namespace Alrauna.Amuse.Editor.DryRun
         private IReadOnlyList<BlockStateEntry> _inFlightBlockState;
         private CapturedAnimationEvidence _inFlightEvidence;
         private RuntimeStateResolution.ResolvedRuntimeStates _inFlightResolved;
-        private IReadOnlyList<CapturedMaterialSlotEvidence> _inFlightSlots;
         private string _inFlightRendererKey;
         private string _inFlightCompositeKey;
         private bool _inFlightRefreshOnly;
@@ -551,7 +550,6 @@ namespace Alrauna.Amuse.Editor.DryRun
             _inFlightBlockState = null;
             _inFlightEvidence = null;
             _inFlightResolved = null;
-            _inFlightSlots = null;
             _inFlightRendererKey = null;
             _inFlightCompositeKey = null;
             _inFlightRefreshOnly = false;
@@ -643,7 +641,6 @@ namespace Alrauna.Amuse.Editor.DryRun
             IReadOnlyList<BlockStateEntry> blockState;
             CapturedAnimationEvidence evidence;
             RuntimeStateResolution.ResolvedRuntimeStates resolved;
-            IReadOnlyList<CapturedMaterialSlotEvidence> slots;
             UnityRendererAlphaExtraction extraction;
 
             try
@@ -679,15 +676,11 @@ namespace Alrauna.Amuse.Editor.DryRun
                     _densityCapPercent,
                     blockState,
                     rendererTypeName);
-                slots = RuntimeStateResolution.MaterialSlotsFor(
-                    evidence, rendererPath,
-                    UnityAnimationEvidenceCapture.MaterialSlotBindingParser,
-                    rendererTypeName);
 
                 if (resolved.Refusal != RendererAnalysisRefusal.None)
                 {
                     var refusalRows = DryRunRowBuilder.BuildResolvedRefusalRows(
-                        renderer, rendererPath, rendererTypeName, resolved, slots);
+                        renderer, rendererPath, rendererTypeName, resolved);
                     _rendererRows.AddRange(refusalRows);
                     if (!refreshOnly && _avatarKey != null)
                     {
@@ -750,7 +743,6 @@ namespace Alrauna.Amuse.Editor.DryRun
             _inFlightBlockState = blockState;
             _inFlightEvidence = evidence;
             _inFlightResolved = resolved;
-            _inFlightSlots = slots;
             _inFlightRendererKey = rendererKey;
             _inFlightCompositeKey = composite;
             _inFlightRefreshOnly = refreshOnly;
@@ -864,7 +856,7 @@ namespace Alrauna.Amuse.Editor.DryRun
                     _inFlightRendererTypeName,
                     verdicts,
                     _inFlightResolved.SlotResults,
-                    _inFlightSlots,
+                    _inFlightResolved.Slots,
                     _inFlightRendererName);
 
                 _rendererRows.AddRange(rows);
