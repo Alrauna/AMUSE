@@ -62,6 +62,12 @@ Open the project root in Unity 2022.3.22f1. At this point, NDMF is already resol
 
 Tests run through the Unity Test Runner, EditMode mode. Run a focused filter first, then the full `Alrauna.Amuse.Tests.Editor` and `Alrauna.Amuse.Research.Tests.Editor` assemblies. A filtered run that reports 0 tests is a failure.
 
+### Research source tripwire
+
+`Alrauna.Amuse.Research.Tests.Editor` holds a source tripwire. The test scans the Editor source of the research package. It refuses names of mutating, importing, persisting, and transmitting APIs. The Tests directory of that package is out of scope, because tests must create and destroy objects. Two read-only AssetDatabase lookups are allowed. All other AssetDatabase members are refused. The synthetic snippets in that test are plain strings. The test never compiles or runs a snippet.
+
+The checks are case-sensitive substring matches on raw source text. They match API names. They do not analyze behavior. The list is a small fixed set of representative names. An indirect, wrapped, or renamed call can pass unseen. A file stream opened with `FileMode.Open` and no explicit `FileAccess` passes unseen. The tripwire catches accidental misuse. It is not a sandbox and not a proof against hostile code.
+
 ## Capability-dependent capture tests
 
 The alpha capture gate needs exact Sample support for a texture's graphics format. Graphics backends report that support differently:
