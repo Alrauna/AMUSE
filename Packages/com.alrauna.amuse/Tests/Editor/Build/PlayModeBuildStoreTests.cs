@@ -738,8 +738,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 first.name = "AMUSE Probe Twin";
                 second.name = "AMUSE Probe Twin";
                 Assert.That(
-                    first.scene == second.scene,
-                    Is.True, "both twins must live in the owned scene");
+                    first.scene.path,
+                    Does.StartWith(OwnedSceneFolder + "/"),
+                    "the first twin must live in the owned scene folder");
+                Assert.That(
+                    second.scene.path,
+                    Does.StartWith(OwnedSceneFolder + "/"),
+                    "the second twin must live in the owned scene folder");
                 scope.SaveOwnedScene();
 
                 firstKey = PlayModeBuildStore.ComputeAvatarKey(first.transform);

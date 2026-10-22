@@ -94,7 +94,7 @@ replaced once by the transparent values. Every later edit sticks.
 
 Open the Show Material Transformations foldout on the AMUSE component to see what the Alpha Separator would do on this avatar. The nested Alpha Separator view runs the same proof on the avatar in the scene. Each material slot displays as two lines: the top line displays the target mesh renderer and source material side by side, and the bottom line reports the transformation status.
 The view reads the scene state. Other tools can change the avatar later during a build, and some tools add animations the build must obey. This view cannot see those changes. A run in Play mode or an upload shows the true result. The first open measures textures on the GPU. It can take a moment. The Refresh button recomputes everything.
-If a setting changes after a preview run starts, the preview rejects that run and hides its results. It shows the settings-changed message. Changing the setting back does not restore the old results. Only Refresh computes new results.
+If a setting changes after a preview run starts, the preview rejects that run and hides its results. It shows the settings-changed message. Changing the setting back does not restore the rejected results. Select Refresh to compute new results.
 
 ### Play mode results
 

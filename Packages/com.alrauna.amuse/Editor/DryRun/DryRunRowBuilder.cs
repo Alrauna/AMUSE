@@ -71,12 +71,15 @@ namespace Alrauna.Amuse.Editor.DryRun
             {
                 if (!slotResults[slotIndex].IsResolved)
                 {
+                    // The slot evidence rides on the same result, so slot
+                    // i of one is slot i of the other by construction. A
+                    // mismatch is an invariant defect and must throw.
                     rows.Add(RefusedSlotRow(
                         renderer,
                         rendererPath,
                         rendererTypeName,
                         slotResults[slotIndex],
-                        slotIndex < slots.Count ? slots[slotIndex] : null,
+                        slots[slotIndex],
                         slotIndex,
                         rendererName));
                     continue;

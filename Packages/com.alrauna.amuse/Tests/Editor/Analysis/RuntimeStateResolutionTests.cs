@@ -302,6 +302,8 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 "keeps the structural refusal");
             Assert.That(refused.SlotResults, Is.Empty,
                 "a renderer-wide refusal happens before any slot resolves");
+            Assert.That(refused.Slots, Is.Empty,
+                "a renderer-wide refusal resolves no slot evidence");
             Assert.That(refused.CurrentMaterials, Is.Empty,
                 "a renderer-wide refusal keeps no current material");
 

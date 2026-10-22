@@ -14,8 +14,10 @@ namespace Alrauna.Amuse.Editor.Build
     /// the shape, the cache stores it, and the drawer indents and
     /// labels from it, so one display decision lives in exactly one
     /// place.
-    /// The numbers are a stored wire contract. Old records in session
-    /// state keep the raw numbers. The values must not change.
+    /// The numbers are a stored wire contract. Records stored
+    /// earlier in this session keep loading. The v2 session prefix
+    /// means older-release records are never read. The values must
+    /// not change.
     /// </summary>
     internal enum MaterialTransformationRowKind
     {
@@ -51,10 +53,11 @@ namespace Alrauna.Amuse.Editor.Build
 
     /// <summary>
     /// Play records belong to one proved avatar root. The key is the full
-    /// valid global identity string of a saved scene root in edit mode, and
-    /// a captured native reference match in Play mode. An empty key
-    /// authorizes no save, load, or clear. The session prefix changed with
-    /// the proved key, so old name-key records cannot load.
+    /// valid global identity string of the avatar object in a loaded saved
+    /// scene in edit mode, and a captured native reference match in Play
+    /// mode. An empty key authorizes no save, load, or clear. The session
+    /// prefix changed with the proved key, so old name-key records cannot
+    /// load.
     /// </summary>
     [InitializeOnLoad]
     internal static class PlayModeBuildStore

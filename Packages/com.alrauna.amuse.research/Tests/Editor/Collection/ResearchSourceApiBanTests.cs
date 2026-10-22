@@ -248,8 +248,7 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Collection
         /// <summary>
         /// Direct persistence and transmission forms that break the read-only
         /// promise. ExpectedOffence names the fixed check that must report the
-        /// form. In the red phase no fixed check knows these forms yet, so each
-        /// case fails until the checks learn it.
+        /// form. Each forbidden case reports its named check.
         /// </summary>
         private static readonly SourceCase[] ForbiddenCases =
         {

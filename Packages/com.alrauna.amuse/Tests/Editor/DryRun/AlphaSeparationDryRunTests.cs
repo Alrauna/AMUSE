@@ -1671,8 +1671,8 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 dryRun.RendererRows.Any(
                     row => row.Kind == MaterialTransformationRowKind.Renderer),
                 Is.False,
-                "a renderer with one resolved and one refused slot keeps " +
-                "its per-slot rows without a renderer refusal row");
+                "a renderer with a resolved slot has no renderer " +
+                "refusal row");
         }
 
         [Test]

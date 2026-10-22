@@ -260,12 +260,14 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                         "\"totalTriangles\":100," +
                         "\"sentence\":" +
                         "\"Splittable: 50 out of 100 polygons may be moved\"}";
-                default:
+                case 4:
                     return "{\"kind\":4," +
                         "\"rendererPath\":\"Armature/Body\"," +
                         "\"rendererTypeName\":\"UnityEngine.SkinnedMeshRenderer\"," +
                         "\"sentence\":\"Body (SkinnedMeshRenderer): could not " +
                         "be computed. Press Refresh to try again.\"}";
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(kind));
             }
         }
 
@@ -294,9 +296,11 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 case 3:
                     expectedKind = MaterialTransformationRowKind.Slot;
                     break;
-                default:
+                case 4:
                     expectedKind = MaterialTransformationRowKind.Errored;
                     break;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(wireKind));
             }
 
             var dto = JsonUtility.FromJson<SerializedTransformationRow>(

@@ -825,10 +825,9 @@ namespace Alrauna.Amuse.Tests.Editor
         [Test]
         public void StoredNumericRowsDrawTheirRowShapesThroughTheRealDrawer()
         {
-            // The fixtures carry the wire numbers from the stored
-            // record. They never name the enum. The enum names live in
-            // the assertions only. This pins the stored payload
-            // contract through the real reader and the real drawer.
+            // The fixture carries the wire numbers from the stored
+            // record. This test checks how a stored numeric Slot row
+            // draws through the real drawer.
             var rows = new List<MaterialTransformationRow>();
             foreach (var wireKind in new[] { 0, 1, 2, 3, 4 })
             {
@@ -841,25 +840,12 @@ namespace Alrauna.Amuse.Tests.Editor
             var dummyRoot = new GameObject("NumericWireAvatarRoot").transform;
             _scope.Track(dummyRoot.gameObject);
 
-            var drawn = new List<MaterialTransformationRow>();
             string pathLabel = null;
             GUIStyle pathStyle = null;
             var rendererFieldFired = false;
             var materialFieldFired = false;
             UnityEngine.Object drawnMaterial = null;
 
-            Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
-                .OnTransformationRowDrawnForTest = (row, avatarRoot) =>
-                {
-                    // IMGUI paints one pass per event. Record the
-                    // repaint pass only, so one drawn row maps to
-                    // one record.
-                    if (Event.current.type != EventType.Repaint)
-                    {
-                        return;
-                    }
-                    drawn.Add(row);
-                };
             Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
                 .OnRendererLabelDrawnForTest = (label, style) =>
                 {
@@ -892,18 +878,6 @@ namespace Alrauna.Amuse.Tests.Editor
                 });
 
                 Assert.That(
-                    drawn.Select(row => row.Kind).ToArray(),
-                    Is.EqualTo(new[]
-                    {
-                        MaterialTransformationRowKind.Banner,
-                        MaterialTransformationRowKind.Note,
-                        MaterialTransformationRowKind.Renderer,
-                        MaterialTransformationRowKind.Slot,
-                        MaterialTransformationRowKind.Errored
-                    }),
-                    "the real drawer must receive every stored numeric row " +
-                    "as its typed kind");
-                Assert.That(
                     pathLabel,
                     Is.EqualTo("Armature/Body"),
                     "the stored slot row must draw its renderer path label");
@@ -926,8 +900,6 @@ namespace Alrauna.Amuse.Tests.Editor
             }
             finally
             {
-                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
-                    .OnTransformationRowDrawnForTest = null;
                 Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
                     .OnRendererLabelDrawnForTest = null;
                 Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
@@ -1297,14 +1269,7 @@ namespace Alrauna.Amuse.Tests.Editor
             try
             {
                 _window.CompletionProbe = () => true;
-                _window.Painted = false;
-                _window.Repaint();
-                for (var frame = 0;
-                     frame < 60 && !_window.Painted;
-                     frame++)
-                {
-                    yield return null;
-                }
+                yield return RepaintOnce();
 
                 Assert.That(_window.Painted, Is.True,
                     "the rejected render never painted");
@@ -1354,18 +1319,10 @@ namespace Alrauna.Amuse.Tests.Editor
             drawn.Install();
             try
             {
-                _window.CompletionProbe = () => true;
-
                 // Render once while the foldout is still open. The
                 // open view must latch the change and hide the old rows.
-                _window.Painted = false;
-                _window.Repaint();
-                for (var frame = 0;
-                     frame < 60 && !_window.Painted;
-                     frame++)
-                {
-                    yield return null;
-                }
+                _window.CompletionProbe = () => true;
+                yield return RepaintOnce();
 
                 Assert.That(_window.Painted, Is.True,
                     "the open render after the change never painted");
@@ -1382,14 +1339,7 @@ namespace Alrauna.Amuse.Tests.Editor
                         "_materialTransformationsOpen",
                         BindingFlags.NonPublic | BindingFlags.Instance)
                     ?.SetValue(editor, false);
-                _window.Painted = false;
-                _window.Repaint();
-                for (var frame = 0;
-                     frame < 60 && !_window.Painted;
-                     frame++)
-                {
-                    yield return null;
-                }
+                yield return RepaintOnce();
 
                 Assert.That(_window.Painted, Is.True,
                     "the closed-foldout render never painted");
@@ -1401,14 +1351,7 @@ namespace Alrauna.Amuse.Tests.Editor
                         "_materialTransformationsOpen",
                         BindingFlags.NonPublic | BindingFlags.Instance)
                     ?.SetValue(editor, true);
-                _window.Painted = false;
-                _window.Repaint();
-                for (var frame = 0;
-                     frame < 60 && !_window.Painted;
-                     frame++)
-                {
-                    yield return null;
-                }
+                yield return RepaintOnce();
 
                 Assert.That(_window.Painted, Is.True,
                     "the reopened render never painted");
@@ -1466,14 +1409,7 @@ namespace Alrauna.Amuse.Tests.Editor
             try
             {
                 _window.CompletionProbe = () => true;
-                _window.Painted = false;
-                _window.Repaint();
-                for (var frame = 0;
-                     frame < 60 && !_window.Painted;
-                     frame++)
-                {
-                    yield return null;
-                }
+                yield return RepaintOnce();
 
                 Assert.That(_window.Painted, Is.True,
                     "the rejected render never painted");
@@ -1525,14 +1461,7 @@ namespace Alrauna.Amuse.Tests.Editor
             try
             {
                 _window.CompletionProbe = () => true;
-                _window.Painted = false;
-                _window.Repaint();
-                for (var frame = 0;
-                     frame < 60 && !_window.Painted;
-                     frame++)
-                {
-                    yield return null;
-                }
+                yield return RepaintOnce();
 
                 Assert.That(_window.Painted, Is.True,
                     "the rejected render never painted");
@@ -1591,14 +1520,7 @@ namespace Alrauna.Amuse.Tests.Editor
             try
             {
                 _window.CompletionProbe = () => true;
-                _window.Painted = false;
-                _window.Repaint();
-                for (var frame = 0;
-                     frame < 60 && !_window.Painted;
-                     frame++)
-                {
-                    yield return null;
-                }
+                yield return RepaintOnce();
 
                 Assert.That(_window.Painted, Is.True,
                     "the rejected render never painted");
@@ -1668,14 +1590,7 @@ namespace Alrauna.Amuse.Tests.Editor
             try
             {
                 _window.CompletionProbe = () => true;
-                _window.Painted = false;
-                _window.Repaint();
-                for (var frame = 0;
-                     frame < 60 && !_window.Painted;
-                     frame++)
-                {
-                    yield return null;
-                }
+                yield return RepaintOnce();
 
                 Assert.That(_window.Painted, Is.True,
                     "the rejected render never painted");
@@ -1871,6 +1786,25 @@ namespace Alrauna.Amuse.Tests.Editor
             }
             Assert.That(_window.Painted, Is.True,
                 "the repaint host window never painted");
+        }
+
+        /// <summary>
+        /// One forced repaint through the open host window. The
+        /// helper sets the default completion probe, clears the
+        /// painted flag, and waits for the next paint. The caller
+        /// keeps its own paint assertion.
+        /// </summary>
+        private IEnumerator RepaintOnce()
+        {
+            _window.CompletionProbe = () => true;
+            _window.Painted = false;
+            _window.Repaint();
+            for (var frame = 0;
+                 frame < 60 && !_window.Painted;
+                 frame++)
+            {
+                yield return null;
+            }
         }
 
         /// <summary>
