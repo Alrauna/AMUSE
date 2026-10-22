@@ -465,3 +465,27 @@ Accuracy, safety and security, architecture, ponytail, and latent-bug reviewers 
 The final corrections replace internal-type references with public APIs or exact fixture-only type-name matching. They name the admitted product smoke output, keep the refused mechanism probe separate, use copied saved scenes beside the runner's untitled scene, and pin failure-safe teardown. The constraints copy covers all captured user-owned files.
 
 The null-output refusal path does save a banner record before returning. The positive product smoke still needs a non-null owned output to prove the admitted path. The reviewers confirmed this distinction. No host-pipeline or product-lifecycle pass is claimed before execution.
+
+### Task 2 finalized on 2026-10-21
+
+Task 2 is committed as `cd8f78a`. Both adversarial code lenses approved the corrected implementation and documentation. They found a missing-holder null dereference and prefab twins outside their owned test scene. Both defects were corrected before the commit.
+
+The focused checks passed 22 store tests, 27 inspector tests, and one apply-record test. The store fixture passed all 22 tests again after the fixture correction. The product smoke passed all four reload combinations through the actual NDMF processor with owned output. Loose, nested, and prefab roots retained their exact authored keys and actual records after exit.
+
+Observed lifecycle checks covered a mid-Play script reload, a fresh second entry, canceled entry with idle reload, idle orphan cleanup, and queued idle cleanup during immediate entry. The real inspector showed the Play accuracy banner. A pointer-driven Refresh removed only the selected root's record. The other two roots retained their exact records.
+
+A real holderless Play case failed before its correction and returned an empty key afterward. Its rendered inspector and real null-output host consumers then ran without a borrowed record or exception. No full SDK dispatcher ran.
+
+All temporary task assets and native snapshots were removed. The final Task 2 guards matched the captured user-owned files, source scene bytes, scene setup, active scene, and editor options. The metadata whitespace correction changed no value or identity. The document identifier sweep and staged whitespace check passed.
+
+### Task 3 validation blocked on 2026-10-22
+
+Task 3 has six uncommitted source and test changes after `cd8f78a`. Nine focused regressions failed for the intended stale-result behavior before the production fix. The implementation uses the existing shared formatter and cancellation path. The last dev bridge response on 2026-10-21 reported no compilation failure and loaded both new validation members. No focused GREEN run followed.
+
+The validation runtime later reset. Its scratch runner and recorder files were absent on 2026-10-22. The focused command did not start tests. The retained dev-project bridge descriptor refused a connection. The running Unity process points to a different project. The controller did not touch that editor.
+
+No live dev bridge can verify the intended `Application.dataPath`. Further Unity writes and validation must wait. The Task 3 whitespace check passed. GREEN, the actual policy inspector smoke, task review, documentation, and the Task 3 commit remain incomplete.
+
+The earlier byte captures lived only in the lost validation kernel. A new comparison against those captures is not possible. The user-owned shader settings file also changed from its earlier dirty-state record. Its current contents were left unchanged. A new native crash artifact remains untracked and unread. Its cause and ownership are not proved. The temporary review-role override is already the empty default. No routing setting was saved.
+
+Resume at Task 3. Open this repository in the dev editor and start its MCP bridge. Pin the exact project and capture the user-owned state as found. Recreate the validation helpers outside Unity's disposable temporary folder. Run the four focused fixtures and the actual inspector policy and Refresh smoke. Then finish task review, documentation, and the explicit Task 3 commit. Do not repeat Task 1, Task 2, or the observed nine-test RED just to confirm them.
