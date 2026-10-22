@@ -12,7 +12,9 @@ namespace Alrauna.Amuse.Tests.Editor.Shared
     /// One editor test's transient lifetime: tracked in-memory objects for
     /// teardown destruction, plus an optional disposable temp folder under
     /// Assets. A null <paramref name="tempFolder"/> names the teardown-only
-    /// shape: tracked objects, no folder lifecycle.
+    /// shape: tracked objects, no folder lifecycle. When the scope opens a
+    /// saved scene copy, teardown restores the scene that was active before
+    /// the copy opened.
     /// </summary>
     internal sealed class TestTransientScope
     {
@@ -30,7 +32,22 @@ namespace Alrauna.Amuse.Tests.Editor.Shared
 
         private Scene _ownedScene;
         private string _ownedScenePath;
-        private string _priorScenePath;
+
+        // Scene handles, not paths. The runner's untitled scene has an
+        // empty path, so only a handle can identify it.
+        private Scene _priorScene;
+
+        // Cross-scope bookkeeping for nested scopes. The first scope that
+        // opens a copy records the scene active at that moment. A scope
+        // whose own prior scene is gone restores that scene, so a saved
+        // scene is never an arbitrary first pick.
+        private static Scene _firstPriorScene;
+        private static int _openOwnedCopies;
+
+        // True when this scope holds one open-copy count. The count drops
+        // in TearDown, so a copy that something else closed first still
+        // drains the count.
+        private bool _countedCopy;
 
         /// <summary>
         /// The project-relative temp folder this scope owns, or null when
@@ -110,9 +127,15 @@ namespace Alrauna.Amuse.Tests.Editor.Shared
                     "The public empty scene fixture could not be copied to " +
                     "the owned test folder.");
             }
-            _priorScenePath = SceneManager.GetActiveScene().path;
+            _priorScene = SceneManager.GetActiveScene();
+            if (_openOwnedCopies == 0)
+            {
+                _firstPriorScene = _priorScene;
+            }
             _ownedScene = EditorSceneManager.OpenScene(
                 _ownedScenePath, OpenSceneMode.Additive);
+            _openOwnedCopies++;
+            _countedCopy = true;
             SceneManager.SetActiveScene(_ownedScene);
         }
 
@@ -152,17 +175,31 @@ namespace Alrauna.Amuse.Tests.Editor.Shared
                     // destruction or the folder deletion throws above
                     _ownedScene = default;
                     _ownedScenePath = null;
-                    _priorScenePath = null;
+                    _priorScene = default;
+                    // the copy count drops here, so a copy that something
+                    // else closed first still drains the session count
+                    if (_countedCopy)
+                    {
+                        _countedCopy = false;
+                        _openOwnedCopies--;
+                        if (_openOwnedCopies == 0)
+                        {
+                            _firstPriorScene = default;
+                        }
+                    }
                 }
             }
         }
 
         /// <summary>
         /// Closes only the owned scene copy, never saving it. An active owned
-        /// scene is deactivated first, back to the still-loaded prior scene
-        /// or any other loaded scene. Closing the scene destroys its
-        /// GameObjects. The untitled runner scene and the user scene are
-        /// never saved or closed.
+        /// scene is deactivated first. The restore pick is the scene active
+        /// before this scope opened its copy, while that scene is still
+        /// loaded. Next comes the scene active before any owned copy opened.
+        /// Last comes any other loaded scene. An untitled scene comes before
+        /// a saved scene. Closing the scene destroys its GameObjects. The
+        /// untitled runner scene and the user scene are never saved or
+        /// closed.
         /// </summary>
         private void CloseOwnedSceneCopy()
         {
@@ -170,21 +207,48 @@ namespace Alrauna.Amuse.Tests.Editor.Shared
             var owned = _ownedScene;
             if (SceneManager.GetActiveScene() == owned)
             {
-                var fallback = default(Scene);
-                for (var index = 0; index < SceneManager.sceneCount; index++)
-                {
-                    var candidate = SceneManager.GetSceneAt(index);
-                    if (candidate.path == owned.path || !candidate.isLoaded) continue;
-                    if (candidate.path == _priorScenePath)
-                    {
-                        fallback = candidate;
-                        break;
-                    }
-                    if (!fallback.IsValid()) fallback = candidate;
-                }
-                if (fallback.IsValid()) SceneManager.SetActiveScene(fallback);
+                var restore = FindRestoreScene(owned);
+                if (restore.IsValid()) SceneManager.SetActiveScene(restore);
             }
             EditorSceneManager.CloseScene(owned, true);
+        }
+
+        /// <summary>
+        /// Picks the scene that becomes active when the owned copy closes.
+        /// It compares scene handles, not paths. All untitled scenes have
+        /// the same empty path, so a path cannot identify one of them.
+        /// </summary>
+        private Scene FindRestoreScene(Scene owned)
+        {
+            if (_priorScene.IsValid() && _priorScene.isLoaded &&
+                _priorScene != owned)
+            {
+                return _priorScene;
+            }
+            if (_firstPriorScene.IsValid() && _firstPriorScene.isLoaded &&
+                _firstPriorScene != owned)
+            {
+                return _firstPriorScene;
+            }
+            var untitled = default(Scene);
+            var saved = default(Scene);
+            for (var index = 0; index < SceneManager.sceneCount; index++)
+            {
+                var candidate = SceneManager.GetSceneAt(index);
+                if (!candidate.isLoaded || candidate == owned) continue;
+                if (candidate.path == "")
+                {
+                    if (!untitled.IsValid() &&
+                        !EditorSceneManager.IsPreviewScene(candidate))
+                    {
+                        untitled = candidate;
+                    }
+                    continue;
+                }
+                if (!saved.IsValid()) saved = candidate;
+            }
+            if (untitled.IsValid()) return untitled;
+            return saved;
         }
 
         /// <summary>Registers a transient object for teardown destruction.</summary>

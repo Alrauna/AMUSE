@@ -836,13 +836,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 if (firstKey != "") PlayModeBuildStore.Clear(firstKey);
                 if (secondKey != "") PlayModeBuildStore.Clear(secondKey);
+                // reverse order, so each scope restores the scene that
+                // was active before it opened its own copy
                 try
                 {
-                    scopeA.TearDown();
+                    scopeB.TearDown();
                 }
                 finally
                 {
-                    scopeB.TearDown();
+                    scopeA.TearDown();
                 }
             }
         }
