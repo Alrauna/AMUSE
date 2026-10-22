@@ -1053,13 +1053,7 @@ namespace Alrauna.Amuse.Editor.Build
                 }
             }
 
-            UnityGeneratedTextureEvidence.ClearCache();
-            UnityAlphaFieldEvidence.ClearCache();
-            ReplacementTextureIdentity.ClearSession();
-            ReplacementTextureAttestation.Versions.ClearVersionCacheForSession();
-            AaoAtlasTextureAttestation.Versions.ClearVersionCacheForSession();
-            Semantics.LilToon.LilToonSourceAttestation.ClearGatherMemo();
-            Semantics.Poiyomi.PoiyomiSourceAttestation.ClearSourceHashMemo();
+            AmuseSessionCaches.Clear();
         }
         internal static HashSet<(string path, int slot)> CollectAppliedSlots(
             AmusePlatformFinishState state)
