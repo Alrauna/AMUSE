@@ -643,7 +643,7 @@ namespace Alrauna.Amuse.Tests.Editor
                     {
                         new SerializedTransformationRow
                         {
-                            kind = (int)MaterialTransformationRowKind.Note,
+                            kind = MaterialTransformationRowKind.Note,
                             sentence = "Play mode note row."
                         }
                     },
@@ -699,7 +699,7 @@ namespace Alrauna.Amuse.Tests.Editor
                 {
                     new SerializedTransformationRow
                     {
-                        kind = (int)MaterialTransformationRowKind.Note,
+                        kind = MaterialTransformationRowKind.Note,
                         sentence = "cache probe note."
                     }
                 },
@@ -819,6 +819,121 @@ namespace Alrauna.Amuse.Tests.Editor
                 Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor.OnMaterialObjectFieldDrawnForTest = null;
                 AssetDatabase.DeleteAsset(fallbackMatPath);
                 UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void StoredNumericRowsDrawTheirRowShapesThroughTheRealDrawer()
+        {
+            // The fixtures carry the wire numbers from the stored
+            // record. They never name the enum. The enum names live in
+            // the assertions only. This pins the stored payload
+            // contract through the real reader and the real drawer.
+            var rows = new List<MaterialTransformationRow>();
+            foreach (var wireKind in new[] { 0, 1, 2, 3, 4 })
+            {
+                rows.Add(MaterialTransformationRow.FromSerialized(
+                    JsonUtility.FromJson<SerializedTransformationRow>(
+                        DryRun.MaterialTransformationRowTests
+                            .SerializedRowJson(wireKind))));
+            }
+
+            var dummyRoot = new GameObject("NumericWireAvatarRoot").transform;
+            _scope.Track(dummyRoot.gameObject);
+
+            var drawn = new List<MaterialTransformationRow>();
+            string pathLabel = null;
+            GUIStyle pathStyle = null;
+            var rendererFieldFired = false;
+            var materialFieldFired = false;
+            UnityEngine.Object drawnMaterial = null;
+
+            Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                .OnTransformationRowDrawnForTest = (row, avatarRoot) =>
+                {
+                    // IMGUI paints one pass per event. Record the
+                    // repaint pass only, so one drawn row maps to
+                    // one record.
+                    if (Event.current.type != EventType.Repaint)
+                    {
+                        return;
+                    }
+                    drawn.Add(row);
+                };
+            Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                .OnRendererLabelDrawnForTest = (label, style) =>
+                {
+                    pathLabel = label;
+                    pathStyle = style;
+                };
+            Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                .OnRendererObjectFieldDrawnForTest =
+                (obj, type, allowScene) => rendererFieldFired = true;
+            Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                .OnMaterialObjectFieldDrawnForTest =
+                (obj, type, allowScene) =>
+                {
+                    materialFieldFired = true;
+                    drawnMaterial = obj;
+                };
+
+            try
+            {
+                var draw = typeof(Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor)
+                    .GetMethod(
+                        "DrawTransformationRow",
+                        BindingFlags.NonPublic | BindingFlags.Static);
+                RenderInHostWindow(() =>
+                {
+                    foreach (var row in rows)
+                    {
+                        draw.Invoke(null, new object[] { row, dummyRoot });
+                    }
+                });
+
+                Assert.That(
+                    drawn.Select(row => row.Kind).ToArray(),
+                    Is.EqualTo(new[]
+                    {
+                        MaterialTransformationRowKind.Banner,
+                        MaterialTransformationRowKind.Note,
+                        MaterialTransformationRowKind.Renderer,
+                        MaterialTransformationRowKind.Slot,
+                        MaterialTransformationRowKind.Errored
+                    }),
+                    "the real drawer must receive every stored numeric row " +
+                    "as its typed kind");
+                Assert.That(
+                    pathLabel,
+                    Is.EqualTo("Armature/Body"),
+                    "the stored slot row must draw its renderer path label");
+                Assert.That(
+                    pathStyle,
+                    Is.EqualTo(EditorStyles.boldLabel),
+                    "a missing renderer must draw the bold path label");
+                Assert.That(
+                    rendererFieldFired,
+                    Is.False,
+                    "a missing renderer must draw no renderer object field");
+                Assert.That(
+                    materialFieldFired,
+                    Is.True,
+                    "the stored slot row must draw its material object field");
+                Assert.That(
+                    drawnMaterial,
+                    Is.Null,
+                    "an unloadable source path must draw no material");
+            }
+            finally
+            {
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                    .OnTransformationRowDrawnForTest = null;
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                    .OnRendererLabelDrawnForTest = null;
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                    .OnRendererObjectFieldDrawnForTest = null;
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                    .OnMaterialObjectFieldDrawnForTest = null;
             }
         }
 
@@ -1124,8 +1239,8 @@ namespace Alrauna.Amuse.Tests.Editor
                 "the foldout exposed no separator-off banner row");
             Assert.That(
                 rows.Any(
-                    row => row.Kind == Alrauna.Amuse.Editor.DryRun
-                        .MaterialTransformationRowKind.Renderer),
+                    row => row.Kind == MaterialTransformationRowKind
+                        .Renderer),
                 Is.False,
                 "the separator-off view computed a renderer row");
         }

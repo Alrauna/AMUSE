@@ -5,21 +5,6 @@ using Alrauna.Amuse.Editor.Build;
 namespace Alrauna.Amuse.Editor.DryRun
 {
     /// <summary>
-    /// The row shapes the inspector can draw. The orchestrator picks
-    /// the shape, the cache stores it, and the drawer indents and
-    /// labels from it, so one display decision lives in exactly one
-    /// place.
-    /// </summary>
-    internal enum MaterialTransformationRowKind
-    {
-        Banner,
-        Note,
-        Renderer,
-        Slot,
-        Errored,
-    }
-
-    /// <summary>
     /// One member per banner row the spec's Inspector section lists,
     /// in the order the dry run can emit them. A new banner row needs
     /// a spec sentence first, then a member here, so the display
@@ -153,7 +138,7 @@ namespace Alrauna.Amuse.Editor.DryRun
             SerializedTransformationRow row)
         {
             return new MaterialTransformationRow(
-                (MaterialTransformationRowKind)row.kind,
+                row.kind,
                 row.rendererPath,
                 row.rendererTypeName,
                 row.slotIndex,

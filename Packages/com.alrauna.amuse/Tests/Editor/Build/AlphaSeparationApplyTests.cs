@@ -6066,7 +6066,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var state = new AmusePlatformFinishState();
             state.PlayModeRendererRows.Add(new SerializedTransformationRow
             {
-                kind = 3,
+                kind = MaterialTransformationRowKind.Slot,
                 rendererPath = "SceneRoot/Renderer",
                 slotIndex = 0,
                 movedTriangles = 0,
@@ -6075,7 +6075,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             });
             state.PlayModeRendererRows.Add(new SerializedTransformationRow
             {
-                kind = 3,
+                kind = MaterialTransformationRowKind.Slot,
                 rendererPath = "SceneRoot/Renderer",
                 slotIndex = 1,
                 movedTriangles = 0,
@@ -6201,7 +6201,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             state.PlayModeRendererRows.Add(new SerializedTransformationRow
             {
-                kind = 3,
+                kind = MaterialTransformationRowKind.Slot,
                 rendererPath = rendererPath,
                 slotIndex = 0,
                 movedTriangles = 0,
@@ -6210,7 +6210,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             });
             state.PlayModeRendererRows.Add(new SerializedTransformationRow
             {
-                kind = 3,
+                kind = MaterialTransformationRowKind.Slot,
                 rendererPath = rendererPath,
                 slotIndex = 1,
                 movedTriangles = 0,
@@ -6372,7 +6372,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             state.PlayModeRendererRows.Add(new SerializedTransformationRow
             {
-                kind = 3,
+                kind = MaterialTransformationRowKind.Slot,
                 rendererPath = rendererPath,
                 slotIndex = 0,
                 movedTriangles = 0,
@@ -6381,7 +6381,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             });
             state.PlayModeRendererRows.Add(new SerializedTransformationRow
             {
-                kind = 3,
+                kind = MaterialTransformationRowKind.Slot,
                 rendererPath = rendererPath,
                 slotIndex = 1,
                 movedTriangles = 0,
@@ -6390,7 +6390,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             });
             state.PlayModeRendererRows.Add(new SerializedTransformationRow
             {
-                kind = 3,
+                kind = MaterialTransformationRowKind.Slot,
                 rendererPath = rendererPath,
                 slotIndex = 2,
                 movedTriangles = 0,

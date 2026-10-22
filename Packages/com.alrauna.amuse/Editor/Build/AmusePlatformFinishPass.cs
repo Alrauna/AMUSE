@@ -225,7 +225,7 @@ namespace Alrauna.Amuse.Editor.Build
                         : "Lifecycle refusal: " + lifecycle.Refusal;
                     state.PlayModeAvatarRows.Add(new SerializedTransformationRow
                     {
-                        kind = 0,
+                        kind = MaterialTransformationRowKind.Banner,
                         sentence = sentence
                     });
                     PlayModeBuildStore.SaveOutcome(context, state);
@@ -297,7 +297,7 @@ namespace Alrauna.Amuse.Editor.Build
                         : "Structural refusal: " + graph.Refusal;
                     state.PlayModeAvatarRows.Add(new SerializedTransformationRow
                     {
-                        kind = 0,
+                        kind = MaterialTransformationRowKind.Banner,
                         sentence = sentence
                     });
                     PlayModeBuildStore.SaveOutcome(context, state);
@@ -354,7 +354,7 @@ namespace Alrauna.Amuse.Editor.Build
                 {
                     state.PlayModeAvatarRows.Add(new SerializedTransformationRow
                     {
-                        kind = 0,
+                        kind = MaterialTransformationRowKind.Banner,
                         sentence = "Build consent was declined."
                     });
                     PlayModeBuildStore.SaveOutcome(context, state);
@@ -370,7 +370,7 @@ namespace Alrauna.Amuse.Editor.Build
                 {
                     state.PlayModeAvatarRows.Add(new SerializedTransformationRow
                     {
-                        kind = 1,
+                        kind = MaterialTransformationRowKind.Note,
                         sentence = "This avatar holds locked or transfer protected materials. A build with granted consent may convert further than this view shows."
                     });
                 }
@@ -482,7 +482,7 @@ namespace Alrauna.Amuse.Editor.Build
                 {
                     state.PlayModeAvatarRows.Add(new SerializedTransformationRow
                     {
-                        kind = 0,
+                        kind = MaterialTransformationRowKind.Banner,
                         sentence = "The active build target supports no sampling policy. A build on this target applies nothing. This view shows no results for it."
                     });
                 }
@@ -492,7 +492,7 @@ namespace Alrauna.Amuse.Editor.Build
             {
                 state.PlayModeAvatarRows.Add(new SerializedTransformationRow
                 {
-                    kind = 0,
+                    kind = MaterialTransformationRowKind.Banner,
                     sentence = "The active build target is not Windows. Texture proof needs the Windows import. This view can prove fewer triangles than a Windows build."
                 });
             }
@@ -1168,7 +1168,7 @@ namespace Alrauna.Amuse.Editor.Build
 
             state.PlayModeRendererRows.Add(new SerializedTransformationRow
             {
-                kind = 2,
+                kind = MaterialTransformationRowKind.Renderer,
                 rendererPath = effectivePath,
                 rendererTypeName = rendererTypeName,
                 sentence = effectivePath + " (" + rendererTypeName + "): refused. " + refusalSentence
@@ -1183,7 +1183,7 @@ namespace Alrauna.Amuse.Editor.Build
                 var sourcePath = sourceMat != null ? AssetDatabase.GetAssetPath(sourceMat) : string.Empty;
                 state.PlayModeRendererRows.Add(new SerializedTransformationRow
                 {
-                    kind = 3,
+                    kind = MaterialTransformationRowKind.Slot,
                     rendererPath = effectivePath,
                     rendererTypeName = rendererTypeName,
                     sourceMaterialPath = sourcePath,
@@ -1270,7 +1270,7 @@ namespace Alrauna.Amuse.Editor.Build
                         : "Refused: AMUSE currently does not support this material";
                     state.PlayModeRendererRows.Add(new SerializedTransformationRow
                     {
-                        kind = 3,
+                        kind = MaterialTransformationRowKind.Slot,
                         rendererPath = effectivePath,
                         rendererTypeName = rendererTypeName,
                         sourceMaterialPath = sourcePath,
@@ -1322,7 +1322,7 @@ namespace Alrauna.Amuse.Editor.Build
 
                     state.PlayModeRendererRows.Add(new SerializedTransformationRow
                     {
-                        kind = 3,
+                        kind = MaterialTransformationRowKind.Slot,
                         rendererPath = effectivePath,
                         rendererTypeName = rendererTypeName,
                         sourceMaterialPath = sourcePath,

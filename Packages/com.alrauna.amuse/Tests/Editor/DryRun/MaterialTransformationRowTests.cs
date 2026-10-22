@@ -2,6 +2,7 @@ using System;
 using NUnit.Framework;
 using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.DryRun;
+using UnityEngine;
 
 namespace Alrauna.Amuse.Tests.Editor.DryRun
 {
@@ -224,6 +225,105 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             Assert.That(row.ProvenTriangles, Is.EqualTo(12));
             Assert.That(row.TotalTriangles, Is.EqualTo(40));
             Assert.That(row.Sentence, Is.EqualTo("slot sentence"));
+        }
+
+        // --- Stored numeric row-kind wire contract ---
+
+        // The fixtures carry the wire numbers. They never name the
+        // enum. The assertion names the enum. This pins the stored
+        // numeric payload contract. The values must stay 0 through 4.
+
+        internal static string SerializedRowJson(int kind)
+        {
+            switch (kind)
+            {
+                case 0:
+                    return "{\"kind\":0,\"sentence\":" +
+                        "\"AMUSE is off. Turn it on to see results.\"}";
+                case 1:
+                    return "{\"kind\":1,\"sentence\":" +
+                        "\"Some textures use streaming mipmaps.\"}";
+                case 2:
+                    return "{\"kind\":2," +
+                        "\"rendererPath\":\"Armature/Body\"," +
+                        "\"rendererTypeName\":\"UnityEngine.SkinnedMeshRenderer\"," +
+                        "\"movedTriangles\":300,\"provenTriangles\":120," +
+                        "\"totalTriangles\":400," +
+                        "\"sentence\":\"Armature/Body summary row.\"}";
+                case 3:
+                    return "{\"kind\":3," +
+                        "\"rendererPath\":\"Armature/Body\"," +
+                        "\"rendererTypeName\":\"UnityEngine.SkinnedMeshRenderer\"," +
+                        "\"sourceMaterialPath\":" +
+                        "\"Assets/AmuseTests_NumberedBody.mat\"," +
+                        "\"slotIndex\":1,\"provenTriangles\":50," +
+                        "\"totalTriangles\":100," +
+                        "\"sentence\":" +
+                        "\"Splittable: 50 out of 100 polygons may be moved\"}";
+                default:
+                    return "{\"kind\":4," +
+                        "\"rendererPath\":\"Armature/Body\"," +
+                        "\"rendererTypeName\":\"UnityEngine.SkinnedMeshRenderer\"," +
+                        "\"sentence\":\"Body (SkinnedMeshRenderer): could not " +
+                        "be computed. Press Refresh to try again.\"}";
+            }
+        }
+
+        [TestCase(0)]
+        [TestCase(1)]
+        [TestCase(2)]
+        [TestCase(3)]
+        [TestCase(4)]
+        public void StoredNumericKindReadsBackAsItsTypedRowKind(
+            int wireKind)
+        {
+            // The test maps each wire number to the named enum
+            // member here. The reader must land on the same member.
+            MaterialTransformationRowKind expectedKind;
+            switch (wireKind)
+            {
+                case 0:
+                    expectedKind = MaterialTransformationRowKind.Banner;
+                    break;
+                case 1:
+                    expectedKind = MaterialTransformationRowKind.Note;
+                    break;
+                case 2:
+                    expectedKind = MaterialTransformationRowKind.Renderer;
+                    break;
+                case 3:
+                    expectedKind = MaterialTransformationRowKind.Slot;
+                    break;
+                default:
+                    expectedKind = MaterialTransformationRowKind.Errored;
+                    break;
+            }
+
+            var dto = JsonUtility.FromJson<SerializedTransformationRow>(
+                SerializedRowJson(wireKind));
+            var row = MaterialTransformationRow.FromSerialized(dto);
+
+            Assert.That(
+                row.Kind,
+                Is.EqualTo(expectedKind),
+                "stored numeric kind " + wireKind +
+                " must read back as its typed row kind");
+            Assert.That(
+                row.Sentence,
+                Is.Not.Null.And.Not.Empty,
+                "the read back row must keep its payload sentence");
+            switch (wireKind)
+            {
+                case 2:
+                    Assert.That(row.TotalTriangles, Is.EqualTo(400));
+                    break;
+                case 3:
+                    Assert.That(row.SlotIndex, Is.EqualTo(1));
+                    break;
+                case 4:
+                    Assert.That(row.RendererPath, Is.EqualTo("Armature/Body"));
+                    break;
+            }
         }
 
         [Test]

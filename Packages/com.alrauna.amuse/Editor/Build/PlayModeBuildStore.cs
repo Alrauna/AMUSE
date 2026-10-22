@@ -9,10 +9,27 @@ using UnityEngine.SceneManagement;
 
 namespace Alrauna.Amuse.Editor.Build
 {
+    /// <summary>
+    /// The row shapes the inspector can draw. The orchestrator picks
+    /// the shape, the cache stores it, and the drawer indents and
+    /// labels from it, so one display decision lives in exactly one
+    /// place.
+    /// The numbers are a stored wire contract. Old records in session
+    /// state keep the raw numbers. The values must not change.
+    /// </summary>
+    internal enum MaterialTransformationRowKind
+    {
+        Banner = 0,
+        Note = 1,
+        Renderer = 2,
+        Slot = 3,
+        Errored = 4,
+    }
+
     [Serializable]
     internal struct SerializedTransformationRow
     {
-        public int kind;
+        public MaterialTransformationRowKind kind;
         public string rendererPath;
         public string rendererTypeName;
         public string sourceMaterialPath;

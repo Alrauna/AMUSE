@@ -161,7 +161,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 {
                     new SerializedTransformationRow
                     {
-                        kind = 2,
+                        kind = MaterialTransformationRowKind.Renderer,
                         rendererPath = "Body",
                         rendererTypeName = "SkinnedMeshRenderer",
                         slotIndex = 0,
@@ -286,7 +286,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             var serialized = new SerializedTransformationRow
             {
-                kind = 3,
+                kind = MaterialTransformationRowKind.Slot,
                 rendererPath = "Armature/Body",
                 rendererTypeName = "UnityEngine.SkinnedMeshRenderer",
                 sourceMaterialPath = "Assets/Materials/Body.mat",
@@ -321,7 +321,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 {
                     new SerializedTransformationRow
                     {
-                        kind = 3,
+                        kind = MaterialTransformationRowKind.Slot,
                         rendererPath = "SceneRoot/Accessory/Mesh",
                         rendererTypeName = "UnityEngine.SkinnedMeshRenderer",
                         sourceMaterialPath = "Assets/Materials/Accessory.mat",
@@ -348,7 +348,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             return new SerializedTransformationRow
             {
-                kind = 0,
+                kind = MaterialTransformationRowKind.Banner,
                 sentence = sentence
             };
         }
