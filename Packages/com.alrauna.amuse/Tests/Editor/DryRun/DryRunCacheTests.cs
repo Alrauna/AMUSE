@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using System.Reflection;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
@@ -137,10 +136,11 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
         }
 
         /// <summary>
-        /// Builds the dry-run policy fingerprint from a throwaway
-        /// component. The component carries the stored cutout and
-        /// transparent mip levels this file pins, plus the separator
-        /// sub-switch state the caller asks for.
+        /// Builds the policy fingerprint from a throwaway component
+        /// through the shared store formatter. The component carries
+        /// the stored cutout and transparent mip levels this file
+        /// pins, plus the separator sub-switch state the caller asks
+        /// for.
         /// </summary>
         private static string DryRunPolicyFingerprint(
             int cutoutMipLevel,
@@ -171,16 +171,8 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
 
                 serialized.ApplyModifiedPropertiesWithoutUndo();
 
-                var dryRun = new AlphaSeparationDryRun(
-                    component, () => BuildTarget.StandaloneWindows64);
-                var method = typeof(AlphaSeparationDryRun).GetMethod(
-                    "BuildPolicyFingerprint",
-                    BindingFlags.NonPublic | BindingFlags.Instance);
-                Assert.That(
-                    method,
-                    Is.Not.Null,
-                    "the dry run must declare BuildPolicyFingerprint");
-                return (string)method.Invoke(dryRun, null);
+                return PlayModeBuildStore.ComputePolicyFingerprint(
+                    component, BuildTarget.StandaloneWindows64);
             }
             finally
             {

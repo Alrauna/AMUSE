@@ -1667,6 +1667,234 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 "renderer refusal box must NOT be suppressed when slot is truly refused");
         }
 
+        // --- Policy validity --------------------------------------------------
+
+        /// <summary>
+        /// A policy change observed while the renderer classifies in the
+        /// background must invalidate the run. The rows computed under
+        /// the changed policy must never publish. Restoring the old
+        /// value must not resurrect them in the rejected run. A
+        /// separate light fixture runs under the restored policy and
+        /// produces the known row, so the empty view proves the
+        /// rejection and not a dead compute path.
+        /// </summary>
+        [Test]
+        public void PolicyChangeDuringBackgroundWorkKeepsRowsRejectedAfterRestore()
+        {
+            var root = _scope.Track(NewAvatarRoot("amuse-dry-run-policy-flight"));
+            var optimizer = AddOptimizer(root);
+            var texture = ImportHalfTexture("half_policy_flight", 255);
+            var material = NewCutoutMaterial(texture, 0.5f);
+            AddSkinnedRenderer(root, ManyTriangleMesh(16384), material);
+            var fixture = new Fixture
+            {
+                Root = root, Optimizer = optimizer, Renderer = null
+            };
+            var dryRun = NewDryRun(
+                fixture, null, FixtureSelector(), FixtureCapturer());
+            dryRun.Begin();
+
+            dryRun.Step(synchronous: false);
+            Assert.That(
+                dryRun.State,
+                Is.EqualTo(DryRunState.ClassifyingBackground),
+                "the run must classify in the background before the change");
+            var inFlight = InFlightTask(dryRun);
+            Assert.That(
+                inFlight, Is.Not.Null, "the run must own an in-flight task");
+            WaitUntilRunning(inFlight);
+
+            SetSwitch(fixture.Optimizer, "_cutoutSeparatorEnabled", false);
+
+            for (var guard = 0; guard < 1000 && !dryRun.Done; guard++)
+            {
+                dryRun.Step(synchronous: false);
+                Thread.Sleep(10);
+            }
+
+            Assert.That(
+                dryRun.Done, Is.True,
+                "the invalidated run must end its pending work");
+            Assert.That(
+                dryRun.PolicyInvalidated, Is.True,
+                "the in-flight change must latch the rejection");
+            Assert.That(
+                SlotRows(dryRun), Is.Empty,
+                "rows finished after a policy change must not publish");
+
+            SetSwitch(fixture.Optimizer, "_cutoutSeparatorEnabled", true);
+            dryRun.Step(synchronous: false);
+            Assert.That(
+                dryRun.ValidatePolicy(PlayModeBuildStore
+                    .ComputePolicyFingerprint(
+                        fixture.Optimizer,
+                        BuildTarget.StandaloneWindows64)),
+                Is.False,
+                "restoring the old policy must keep the latch set");
+            Assert.That(
+                SlotRows(dryRun), Is.Empty,
+                "restoring the old policy must not resurrect the " +
+                "rejected rows");
+
+            // No-op guard: the same policy on a light fixture must
+            // compute the known row, so the rejection above names the
+            // invalidated run and not a broken fixture.
+            var freshFixture = NewComputeFixture(255, 0.5f);
+            var fresh = NewDryRun(
+                freshFixture, null, FixtureSelector(), FixtureCapturer());
+            Run(fresh);
+            var freshRows = SlotRows(fresh);
+            Assert.That(freshRows, Has.Count.EqualTo(1));
+            Assert.That(
+                freshRows[0].ProvenTriangles, Is.EqualTo(1),
+                "the restored policy must compute the known row again");
+            Assert.That(
+                freshRows[0].TotalTriangles, Is.EqualTo(2),
+                "the restored policy must compute the known row again");
+        }
+
+        /// <summary>
+        /// A target change observed between renderer steps must reject
+        /// the rows the next renderer would publish under the new
+        /// target beside the rows the old target already published.
+        /// The first renderer's known row and triangle counts stand as
+        /// the no-op guard.
+        /// </summary>
+        [Test]
+        public void TargetChangeBetweenRendererStepsRejectsMixedTargetRows()
+        {
+            var fixture = NewComputeFixture(255, 0.5f);
+            var texture = ImportHalfTexture("half_255_target_shift", 255);
+            var material = NewCutoutMaterial(texture, 0.5f);
+            var second = AddSkinnedRenderer(
+                fixture.Root, TwoTriangleMesh(), material);
+            second.gameObject.name = "Cape";
+            var target = BuildTarget.StandaloneWindows64;
+            var dryRun = NewDryRun(
+                fixture, () => target, FixtureSelector(), FixtureCapturer());
+            dryRun.Begin();
+
+            Assert.That(dryRun.Step(), Is.True, "the first renderer must step");
+            var guarded = SlotRows(dryRun);
+            Assert.That(guarded, Has.Count.EqualTo(1));
+            Assert.That(guarded[0].ProvenTriangles, Is.EqualTo(1));
+            Assert.That(guarded[0].TotalTriangles, Is.EqualTo(2));
+
+            target = BuildTarget.Android;
+
+            for (var guard = 0; guard < 16 && !dryRun.Done; guard++)
+            {
+                dryRun.Step();
+            }
+
+            Assert.That(
+                SlotRows(dryRun), Has.Count.EqualTo(1),
+                "a renderer stepped after a target change must not add " +
+                "rows computed under a mixed target");
+        }
+
+        /// <summary>
+        /// A renderer stepped after a policy change must not add its
+        /// rows to the run that opened under the old policy, because
+        /// the published view would mix two policies. The first
+        /// renderer's known row and triangle counts stand as the
+        /// no-op guard.
+        /// </summary>
+        [Test]
+        public void IgnoreSlotsChangeBetweenRendererStepsRejectsMixedPolicyRows()
+        {
+            var fixture = NewComputeFixture(255, 0.5f);
+            var texture = ImportHalfTexture("half_255_mixed_steps", 255);
+            var material = NewCutoutMaterial(texture, 0.5f);
+            var second = AddSkinnedRenderer(
+                fixture.Root, TwoTriangleMesh(), material);
+            second.gameObject.name = "Cape";
+
+            var dryRun = NewDryRun(
+                fixture, null, FixtureSelector(), FixtureCapturer());
+            dryRun.Begin();
+
+            Assert.That(dryRun.Step(), Is.True, "the first renderer must step");
+            var guarded = SlotRows(dryRun);
+            Assert.That(guarded, Has.Count.EqualTo(1));
+            Assert.That(guarded[0].ProvenTriangles, Is.EqualTo(1));
+            Assert.That(guarded[0].TotalTriangles, Is.EqualTo(2));
+
+            SetSwitch(
+                fixture.Optimizer, "_ignoreOutOfRangeMaterialSlots", false);
+
+            for (var guard = 0; guard < 16 && !dryRun.Done; guard++)
+            {
+                dryRun.Step();
+            }
+
+            Assert.That(
+                SlotRows(dryRun), Has.Count.EqualTo(1),
+                "a renderer stepped after a policy change must not add " +
+                "rows computed under a mixed policy");
+        }
+
+        /// <summary>
+        /// Characterization of the mandated validation API, not a
+        /// computed-row regression. The unsupported-target fixture is
+        /// the existing stand-in: its run completes at the sampling
+        /// banner before any step. A changed shared key must latch the
+        /// run invalid, keep the rejection after the old key returns,
+        /// and never let the completed run publish or recompute.
+        /// </summary>
+        [Test]
+        public void CompletedUnsupportedTargetRunRejectsAChangedSharedKey()
+        {
+            var fixture = NewComputeFixture(255, 0.5f);
+            var dryRun = NewDryRun(
+                fixture,
+                () => BuildTarget.StandaloneLinux64,
+                FixtureSelector(),
+                FixtureCapturer());
+            dryRun.Begin();
+
+            Assert.That(
+                dryRun.Done, Is.True,
+                "the run must complete at its sampling banner");
+            Assert.That(
+                _captureCalls, Is.EqualTo(0),
+                "the unsupported target must compute nothing");
+            Assert.That(SlotRows(dryRun), Is.Empty);
+
+            // Guard: the unchanged shared key must keep the run valid.
+            Assert.That(
+                dryRun.ValidatePolicy(PlayModeBuildStore
+                    .ComputePolicyFingerprint(
+                        fixture.Optimizer,
+                        BuildTarget.StandaloneLinux64)),
+                Is.True,
+                "the unchanged key must keep the completed run valid");
+
+            SetSwitch(fixture.Optimizer, "_cutoutSeparatorEnabled", false);
+            Assert.That(
+                dryRun.ValidatePolicy(PlayModeBuildStore
+                    .ComputePolicyFingerprint(
+                        fixture.Optimizer,
+                        BuildTarget.StandaloneLinux64)),
+                Is.False,
+                "a changed shared key must invalidate the completed run");
+
+            SetSwitch(fixture.Optimizer, "_cutoutSeparatorEnabled", true);
+            Assert.That(
+                dryRun.ValidatePolicy(PlayModeBuildStore
+                    .ComputePolicyFingerprint(
+                        fixture.Optimizer,
+                        BuildTarget.StandaloneLinux64)),
+                Is.False,
+                "restoring the old key must not clear the latch");
+            Assert.That(
+                SlotRows(dryRun), Is.Empty,
+                "the rejected run must not publish rows");
+            Assert.That(
+                _captureCalls, Is.EqualTo(0),
+                "the rejected run must not recompute");
+        }
+
         // --- No-persistence guard -------------------------------------------
 
         [Test]

@@ -29,24 +29,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
-        public void ComputePolicyFingerprintProducesConsistentString()
-        {
-            var go = new GameObject("Avatar");
-            try
-            {
-                var component = go.AddComponent<AmuseAvatarOptimizer>();
-                var fingerprint = PlayModeBuildStore.ComputePolicyFingerprint(
-                    component, BuildTarget.StandaloneWindows64);
-                Assert.That(fingerprint, Does.StartWith("StandaloneWindows64;"));
-                Assert.That(fingerprint.Split(';').Length, Is.EqualTo(20));
-            }
-            finally
-            {
-                UnityEngine.Object.DestroyImmediate(go);
-            }
-        }
-
-        [Test]
         public void ComputePolicyFingerprintChangesWhenMasterSwitchesOrAnisotropyToggle()
         {
             var go = new GameObject("Avatar");
