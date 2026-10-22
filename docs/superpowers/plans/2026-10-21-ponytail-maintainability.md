@@ -12,7 +12,7 @@
 
 Privacy note: This plan uses public source and synthetic cases. It contains no private observations or machine identifiers.
 
-Status: 2026-10-21, PTM1 plan revision finalized after five parallel adversarial lenses and scoped confirmation. No blocking finding or owner choice remains in this plan. Task 1 is complete in `c0509cb`. Task 2 resumes at the candidate host and lifecycle gate before product edits. The owner selected subagent-driven execution and authorized commits between finalized changes.
+Status: 2026-10-22, all fourteen tasks are complete. The final whole-branch review approved the branch. Nothing was pushed or merged. The owner selected subagent-driven execution and authorized commits between finalized changes.
 
 ## Global Constraints
 
@@ -87,13 +87,13 @@ All complete paths appear in their owning task below. Tests use existing synthet
 
 Execution status on 2026-10-21: complete in `c0509cb`. Do not dispatch Task 1 again. Its final evidence appears in the execution record.
 
-- [ ] **Step 1: Preserve the observed RED evidence.** The baseline recorded two failures: `AnRgbOnlyFormatSamplesAlphaExactlyOneAtEveryLevel` and `ReadableArgb32_IsAdmittedAndSeparatesMaximumFromSubmaximum`. The capability probe found RGB24 Sample support true and ARGB32 Sample support false on the dev backend. Do not rerun the old assertions to confirm them.
-- [ ] **Step 2: Correct the two tests.** Delete only the RGB24 host-capability assertion. Keep every full-chain alpha check. In the ARGB32 test, inspect exact Sample support for the fixture's actual graphics format. On the unsupported branch call the real capture entry and assert false, `TextureCaptureRefusalReason.UnavailableCapture`, and null evidence. On the supported branch keep the existing exact 255, 128, and 254 distinction checks. Update both XML comments to state what each branch proves. Do not skip a test or change production gates.
-- [ ] **Step 3: Run the focused fixture.** Run `Alrauna.Amuse.Tests.Editor.Host.UnityAlphaFieldEvidenceTests`. Expect a non-zero count and no failure. Record the correction as characterization, not a production RED/GREEN fix.
-- [ ] **Step 4: Run both full AMUSE assemblies.** Expect terminal aggregate results with no failure before the product changes begin. If another baseline failure appears, diagnose it and stop before any out-of-scope correction.
-- [ ] **Step 5: Update the test documentation.** Explain backend capability-dependent capture tests in development setup. Add one dated Unreleased test-maintenance bullet.
-- [ ] **Step 6: Obtain the task review.** Require spec compliance and quality approval for the observed code and evidence.
-- [ ] **Step 7: Commit.** Commit only the listed changed files as `test(host): respect exact texture sampling capability`.
+- [x] **Step 1: Preserve the observed RED evidence.** The baseline recorded two failures: `AnRgbOnlyFormatSamplesAlphaExactlyOneAtEveryLevel` and `ReadableArgb32_IsAdmittedAndSeparatesMaximumFromSubmaximum`. The capability probe found RGB24 Sample support true and ARGB32 Sample support false on the dev backend. Do not rerun the old assertions to confirm them.
+- [x] **Step 2: Correct the two tests.** Delete only the RGB24 host-capability assertion. Keep every full-chain alpha check. In the ARGB32 test, inspect exact Sample support for the fixture's actual graphics format. On the unsupported branch call the real capture entry and assert false, `TextureCaptureRefusalReason.UnavailableCapture`, and null evidence. On the supported branch keep the existing exact 255, 128, and 254 distinction checks. Update both XML comments to state what each branch proves. Do not skip a test or change production gates.
+- [x] **Step 3: Run the focused fixture.** Run `Alrauna.Amuse.Tests.Editor.Host.UnityAlphaFieldEvidenceTests`. Expect a non-zero count and no failure. Record the correction as characterization, not a production RED/GREEN fix.
+- [x] **Step 4: Run both full AMUSE assemblies.** Expect terminal aggregate results with no failure before the product changes begin. If another baseline failure appears, diagnose it and stop before any out-of-scope correction.
+- [x] **Step 5: Update the test documentation.** Explain backend capability-dependent capture tests in development setup. Add one dated Unreleased test-maintenance bullet.
+- [x] **Step 6: Obtain the task review.** Require spec compliance and quality approval for the observed code and evidence.
+- [x] **Step 7: Commit.** Commit only the listed changed files as `test(host): respect exact texture sampling capability`.
 
 ### Task 2: Give Play records proved root ownership
 
@@ -120,13 +120,13 @@ Execution status on 2026-10-21: complete in `c0509cb`. Do not dispatch Task 1 ag
 
 Let the dev editor generate the new product metadata once. Do not replace generated metadata.
 
-- [ ] **Step 1: Carry forward the observed evidence.** The direct full-key candidate failed for saved prefabs. CLR `ReferenceEquals` failed legitimate owners. Do not rerun those wrong candidates to confirm them. Native matching passed all four reload combinations and an observed mid-Play reload. Read-only IL inspection of the installed SDK dispatcher showed unchanged argument-zero forwarding to every callback, no root reassignment, and no root clone. NDMF forwards that same root into `BuildContext`. This supports installed-host identity, not callback success or all-host behavior. No SDK dispatcher was executed.
-- [ ] **Step 2: Prepare the candidate gate before product edits.** Use a throwaway native snapshot and a probe-only NDMF pass under `Assets/AmuseTests_PlayIdentityProbe`. Persist cleanup state across reload. Use saved loose and prefab roots with optimizer components, including a nested root. Keep fixtures inactive from before Play entry through cleanup. Refuse if any unowned active-in-hierarchy avatar could auto-process. Use the public `RuntimeUtil.FindAvatarRoots(root: null, includeInactive: false)` scan across loaded scenes. It covers registered root types, including SDK descriptors and `NDMFAvatarRoot`. Do not name internal root-type fields.
-- [ ] **Step 3: Observe the in-place host join.** In Play, replay the temporary rename and fake sibling. Check every owned fixture hierarchy for connected prefab instances. If one remains, unpack only that Play copy completely with automated interaction, then prove its captured references still native-match. Never unpack, apply, or save a source prefab or scene. Pin `nadena.dev.ndmf.platform.AmbientPlatform.DefaultPlatform` and require `QualifiedName == WellKnownPlatforms.VRChatAvatar30`. Invoke `AvatarProcessor.ProcessAvatar(root, platform)` under `OverrideTemporaryDirectoryScope(null)`. Do not name internal `VRChatPlatform` or use a manual-bake clone.
+- [x] **Step 1: Carry forward the observed evidence.** The direct full-key candidate failed for saved prefabs. CLR `ReferenceEquals` failed legitimate owners. Do not rerun those wrong candidates to confirm them. Native matching passed all four reload combinations and an observed mid-Play reload. Read-only IL inspection of the installed SDK dispatcher showed unchanged argument-zero forwarding to every callback, no root reassignment, and no root clone. NDMF forwards that same root into `BuildContext`. This supports installed-host identity, not callback success or all-host behavior. No SDK dispatcher was executed.
+- [x] **Step 2: Prepare the candidate gate before product edits.** Use a throwaway native snapshot and a probe-only NDMF pass under `Assets/AmuseTests_PlayIdentityProbe`. Persist cleanup state across reload. Use saved loose and prefab roots with optimizer components, including a nested root. Keep fixtures inactive from before Play entry through cleanup. Refuse if any unowned active-in-hierarchy avatar could auto-process. Use the public `RuntimeUtil.FindAvatarRoots(root: null, includeInactive: false)` scan across loaded scenes. It covers registered root types, including SDK descriptors and `NDMFAvatarRoot`. Do not name internal root-type fields.
+- [x] **Step 3: Observe the in-place host join.** In Play, replay the temporary rename and fake sibling. Check every owned fixture hierarchy for connected prefab instances. If one remains, unpack only that Play copy completely with automated interaction, then prove its captured references still native-match. Never unpack, apply, or save a source prefab or scene. Pin `nadena.dev.ndmf.platform.AmbientPlatform.DefaultPlatform` and require `QualifiedName == WellKnownPlatforms.VRChatAvatar30`. Invoke `AvatarProcessor.ProcessAvatar(root, platform)` under `OverrideTemporaryDirectoryScope(null)`. Do not name internal `VRChatPlatform` or use a manual-bake clone.
 
 The probe pass observes the real `BuildContext.AvatarRootObject` at PlatformFinish and resolves its authored key from the throwaway snapshot. Its distinct row payloads use probe-owned session records, not inaccessible product internals. `NullAssetSaver` has no container, so AMUSE's `MissingBuildContextServices` refusal is expected and does not fail this identity-mechanism gate. Record the executed public plugin qualified names. Source plus IL supports the installed root flow without executing the SDK dispatcher. Stop for an unapproved environment or mechanism.
-- [ ] **Step 4: Complete the gate matrix.** Cover all four reload combinations, a Play script reload, canceled entry plus idle reload, second entry, and idle cleanup racing immediate entry. Process each fixture once per Play session. After reload, inspect recovery and records without reprocessing. Before second entry, remove a surviving fixture-only tag through `GetComponents<Component>()` and the exact full name `nadena.dev.ndmf.runtime.AlreadyProcessedTag`. Do not name its internal type in code or clear a foreign tag. Do not save that removal. Observe reloads. Capture and restore both option values and file bytes per leg. Remove all owned assets on every exit. No identifier output.
-- [ ] **Step 5: Implement the declared fixture extension, then write ownership regressions.** Generate the empty public scene fixture and its metadata once in the pinned dev editor before the runner starts. It contains no authored root, vendor asset, or private data. Do not handwrite scene YAML. Copy and open it per scope rather than save a source scene. Write `TwoSameNamedSavedRootsKeepTheirOwnRows` and `UnsavedRootsNeverBorrowARecord`. Add cases for clear isolation, rename, reorder, replacement, same-prefab twins, duplicate scene names, nested avatars, and unproved roots. Save only the owned copy after adding roots. Recompute from a retained destroyed Transform and prove no survivor is loaded or cleared. Do not require opaque-key eviction. Keep the assertions below.
+- [x] **Step 4: Complete the gate matrix.** Cover all four reload combinations, a Play script reload, canceled entry plus idle reload, second entry, and idle cleanup racing immediate entry. Process each fixture once per Play session. After reload, inspect recovery and records without reprocessing. Before second entry, remove a surviving fixture-only tag through `GetComponents<Component>()` and the exact full name `nadena.dev.ndmf.runtime.AlreadyProcessedTag`. Do not name its internal type in code or clear a foreign tag. Do not save that removal. Observe reloads. Capture and restore both option values and file bytes per leg. Remove all owned assets on every exit. No identifier output.
+- [x] **Step 5: Implement the declared fixture extension, then write ownership regressions.** Generate the empty public scene fixture and its metadata once in the pinned dev editor before the runner starts. It contains no authored root, vendor asset, or private data. Do not handwrite scene YAML. Copy and open it per scope rather than save a source scene. Write `TwoSameNamedSavedRootsKeepTheirOwnRows` and `UnsavedRootsNeverBorrowARecord`. Add cases for clear isolation, rename, reorder, replacement, same-prefab twins, duplicate scene names, nested avatars, and unproved roots. Save only the owned copy after adding roots. Recompute from a retained destroyed Transform and prove no survivor is loaded or cleared. Do not require opaque-key eviction. Keep the assertions below.
 
 ```csharp
 Assert.That(loadedFirst.avatarRows[0].sentence, Is.EqualTo("First result."));
@@ -134,15 +134,15 @@ Assert.That(loadedSecond.avatarRows[0].sentence, Is.EqualTo("Second result."));
 Assert.That(loadedSecondAfterFirstClear, Is.Not.Null);
 ```
 
-- [ ] **Step 6: Observe RED before production edits.** Run the two new ownership methods through the focused EditMode filter. Expect non-zero counts and a failure in wrong-root row attribution or unproved-root admission on the old name key. A compile error or missing runner is not RED.
-- [ ] **Step 7: Implement the native holder and one key rule.** Add the internal snapshot type and let the editor generate its metadata. Keep it non-persistent and `HideAndDontSave`. In Edit mode, return only the valid authored scene identity. In Play, use only a captured live native reference. Enumerate optimizer components in normal loaded saved scenes, including inactive and nested objects. Reject persistent assets, preview scenes, and invalid identities. The context-root activation gate stays unchanged. Do not add a scene-root parent filter, integer join, marker, alias, or generic registry. No holder is needed for an empty candidate set.
-- [ ] **Step 8: Wire the store-owned lifecycle.** Put `[InitializeOnLoad]` on the store. Subscribe independently of inspector instances. Recover any owned native snapshot before capture or teardown. Capture at `ExitingEditMode`. Use one private `SessionState` pending Boolean, re-arm the temporary update guard on load while entry is pending, and remove it when Play starts. On `EnteredEditMode`, recover and destroy only the owned snapshot and clear pending state. A Play-side reload retains the snapshot for lazy recovery.
-- [ ] **Step 9: Close idle and canceled-entry cleanup.** Use `EditorApplication.delayCall` for the idle-load check after native restoration. Recheck both Play flags before destruction so immediate entry retains its new snapshot. The pending guard uses the same idle predicate, clears its flag, and unsubscribes. Recover via `Resources.FindObjectsOfTypeAll<PlayModeRootIdentitySnapshot>()`, then filter exact type, non-persistence, and owned flags. Do not use a finder that hides `HideAndDontSave` objects. Multiple owned snapshots throw. Do not turn invariant failures into missing identity.
-- [ ] **Step 10: Migrate the old fixtures in the same cutover.** Delete clone-name normalization and the two obsolete suffix tests. Update the corrupt-payload prefix helper. Move the inspector Play-record fixture and `CaptureAndSavePlayModeBuildRecordAssignsUntouchableSentenceToUnappliedCandidate` to saved roots through the scope extension. Keep row, moved-triangle, and display assertions. Keep a valid-key precondition so a no-op save cannot replace the path. Add no helper-call or object-count tests.
-- [ ] **Step 11: Run focused checks.** Run `Alrauna.Amuse.Tests.Editor.Build.PlayModeBuildStoreTests`, `Alrauna.Amuse.Tests.Editor.AmuseAvatarOptimizerEditorTests`, and the named apply-record method. Require terminal non-zero results with no failure. Do not rerun unrelated apply cases for a fixture-only migration.
-- [ ] **Step 12: Smoke product code with admitted services.** Use the safe direct NDMF entry with a non-null owned output folder, `Assets/AmuseTests_PlayIdentitySmokeOutput`. Require it absent before creation and restore the output override before leaving Play. Do not reuse the null-saver mode for this positive smoke. Repeat the gate matrix on product code, store inside the rename, load each root's rows after exit, and verify fake-sibling clear isolation. Observe the actual inspector. Include reload recovery, cancellation, idle cleanup, immediate re-entry, and repeat Play. Prove reset and sweep leave the snapshot alive. Remove only owned output and preserve captured source bytes.
-- [ ] **Step 13: Update the documentation and obtain task review.** Explain authored-key and native-reference ownership, empty-key no-record cases, and Refresh isolation in README. Add one Unreleased reporting bullet after proof. Require spec compliance and quality approval, including the script and metadata unit.
-- [ ] **Step 14: Commit.** Commit only the listed task files as `fix(preview): isolate Play records by proved root identity`.
+- [x] **Step 6: Observe RED before production edits.** Run the two new ownership methods through the focused EditMode filter. Expect non-zero counts and a failure in wrong-root row attribution or unproved-root admission on the old name key. A compile error or missing runner is not RED.
+- [x] **Step 7: Implement the native holder and one key rule.** Add the internal snapshot type and let the editor generate its metadata. Keep it non-persistent and `HideAndDontSave`. In Edit mode, return only the valid authored scene identity. In Play, use only a captured live native reference. Enumerate optimizer components in normal loaded saved scenes, including inactive and nested objects. Reject persistent assets, preview scenes, and invalid identities. The context-root activation gate stays unchanged. Do not add a scene-root parent filter, integer join, marker, alias, or generic registry. No holder is needed for an empty candidate set.
+- [x] **Step 8: Wire the store-owned lifecycle.** Put `[InitializeOnLoad]` on the store. Subscribe independently of inspector instances. Recover any owned native snapshot before capture or teardown. Capture at `ExitingEditMode`. Use one private `SessionState` pending Boolean, re-arm the temporary update guard on load while entry is pending, and remove it when Play starts. On `EnteredEditMode`, recover and destroy only the owned snapshot and clear pending state. A Play-side reload retains the snapshot for lazy recovery.
+- [x] **Step 9: Close idle and canceled-entry cleanup.** Use `EditorApplication.delayCall` for the idle-load check after native restoration. Recheck both Play flags before destruction so immediate entry retains its new snapshot. The pending guard uses the same idle predicate, clears its flag, and unsubscribes. Recover via `Resources.FindObjectsOfTypeAll<PlayModeRootIdentitySnapshot>()`, then filter exact type, non-persistence, and owned flags. Do not use a finder that hides `HideAndDontSave` objects. Multiple owned snapshots throw. Do not turn invariant failures into missing identity.
+- [x] **Step 10: Migrate the old fixtures in the same cutover.** Delete clone-name normalization and the two obsolete suffix tests. Update the corrupt-payload prefix helper. Move the inspector Play-record fixture and `CaptureAndSavePlayModeBuildRecordAssignsUntouchableSentenceToUnappliedCandidate` to saved roots through the scope extension. Keep row, moved-triangle, and display assertions. Keep a valid-key precondition so a no-op save cannot replace the path. Add no helper-call or object-count tests.
+- [x] **Step 11: Run focused checks.** Run `Alrauna.Amuse.Tests.Editor.Build.PlayModeBuildStoreTests`, `Alrauna.Amuse.Tests.Editor.AmuseAvatarOptimizerEditorTests`, and the named apply-record method. Require terminal non-zero results with no failure. Do not rerun unrelated apply cases for a fixture-only migration.
+- [x] **Step 12: Smoke product code with admitted services.** Use the safe direct NDMF entry with a non-null owned output folder, `Assets/AmuseTests_PlayIdentitySmokeOutput`. Require it absent before creation and restore the output override before leaving Play. Do not reuse the null-saver mode for this positive smoke. Repeat the gate matrix on product code, store inside the rename, load each root's rows after exit, and verify fake-sibling clear isolation. Observe the actual inspector. Include reload recovery, cancellation, idle cleanup, immediate re-entry, and repeat Play. Prove reset and sweep leave the snapshot alive. Remove only owned output and preserve captured source bytes.
+- [x] **Step 13: Update the documentation and obtain task review.** Explain authored-key and native-reference ownership, empty-key no-record cases, and Refresh isolation in README. Add one Unreleased reporting bullet after proof. Require spec compliance and quality approval, including the script and metadata unit.
+- [x] **Step 14: Commit.** Commit only the listed task files as `fix(preview): isolate Play records by proved root identity`.
 
 ### Task 3: Share the policy key and reject invalidated runs
 
@@ -158,20 +158,20 @@ Assert.That(loadedSecondAfterFirstClear, Is.Not.Null);
 
 **Interfaces:** Add `internal bool ValidatePolicy(string livePolicyFingerprint)` and `internal bool PolicyInvalidated { get; }` on `AlphaSeparationDryRun`. The caller computes the live key through `PlayModeBuildStore.ComputePolicyFingerprint`. The inspector reuses the live key it already computed for Play lookup. The driver computes it once per step. `ValidatePolicy` compares the supplied key with the captured key, latches the first mismatch, cancels pending work, and returns false after invalidation. A new run starts with a clear latch. Keep the formatter unchanged.
 
-- [ ] **Step 1: Write validity regressions and observe RED.** Use the existing fixture's known computed row and counts as a no-op guard before changing policy. Complete a run, change one policy value, and reject old rows. Change policy during background work, observe invalidation, restore the old value, and keep rejection. Change `IgnoreOutOfRangeMaterialSlots` between renderer steps and reject mixed-policy output. Cover target changes and every early banner or structural-refusal return. Keep the existing unchanged-policy cache-hit case. Observe rows and available actions through existing hooks so the RED test does not require a new member to compile. Assert behavior, not fixed help-box prose or helper calls.
+- [x] **Step 1: Write validity regressions and observe RED.** Use the existing fixture's known computed row and counts as a no-op guard before changing policy. Complete a run, change one policy value, and reject old rows. Change policy during background work, observe invalidation, restore the old value, and keep rejection. Change `IgnoreOutOfRangeMaterialSlots` between renderer steps and reject mixed-policy output. Cover target changes and every early banner or structural-refusal return. Keep the existing unchanged-policy cache-hit case. Observe rows and available actions through existing hooks so the RED test does not require a new member to compile. Assert behavior, not fixed help-box prose or helper calls.
 
 ```csharp
 Assert.That(drawnRows.Any(row => row.Kind == MaterialTransformationRowKind.Slot), Is.False);
 Assert.That(drawnButtons, Does.Not.Contain("Compute"));
 ```
 
-- [ ] **Step 2: Implement the single captured policy lifetime.** Capture target and shared key before all early returns. Snapshot `IgnoreOutOfRangeMaterialSlots` with the other mapped settings. Delete `BuildPolicyFingerprint`. Validate before a step can publish or cache results. Reuse one live-key computation within that step. Keep controller and graph keys. Add no policy framework and no automatic recompute on repaint. Delete the incidental `ComputePolicyFingerprintProducesConsistentString` field-count test rather than repin it. In `DryRunCacheTests.DryRunPolicyFingerprint`, replace reflection and the private-method existence assertion with `PlayModeBuildStore.ComputePolicyFingerprint(component, BuildTarget.StandaloneWindows64)`. Keep its backfill setup and behavioral cutout, transparent, separator, target, and cache-hit assertions.
-- [ ] **Step 3: Integrate inspector precedence.** Pass the already computed live key to validation before displaying retained preview rows. Render `Settings changed. Select Refresh to compute new results.` for an invalidated run before the ordinary cancelled branch. Hide its Compute affordance. Refresh discards the old run through the existing flow. Closing and reopening the foldout does not clear the latch. Preserve ordinary user cancellation and error reporting.
-- [ ] **Step 4: Run focused checks.** Run the preview, inspector, build-store, and `Alrauna.Amuse.Tests.Editor.DryRun.DryRunCacheTests` fixtures. Use the existing `RepaintThroughHostWindow` and row/action hooks. Expect non-zero counts and no failure.
-- [ ] **Step 5: Smoke the actual inspector.** On a public synthetic root, complete a preview, edit policy, reopen the foldout, and observe the rejection without old rows. Exercise Review Focus 2. Callback assertions alone are not visual proof.
-- [ ] **Step 6: Update the documentation.** Explain the Refresh-only recovery in README. Add one Unreleased policy-validity bullet.
-- [ ] **Step 7: Obtain the task review.** Require spec compliance and quality approval.
-- [ ] **Step 8: Commit.** Commit as `fix(preview): reject runs after policy changes`.
+- [x] **Step 2: Implement the single captured policy lifetime.** Capture target and shared key before all early returns. Snapshot `IgnoreOutOfRangeMaterialSlots` with the other mapped settings. Delete `BuildPolicyFingerprint`. Validate before a step can publish or cache results. Reuse one live-key computation within that step. Keep controller and graph keys. Add no policy framework and no automatic recompute on repaint. Delete the incidental `ComputePolicyFingerprintProducesConsistentString` field-count test rather than repin it. In `DryRunCacheTests.DryRunPolicyFingerprint`, replace reflection and the private-method existence assertion with `PlayModeBuildStore.ComputePolicyFingerprint(component, BuildTarget.StandaloneWindows64)`. Keep its backfill setup and behavioral cutout, transparent, separator, target, and cache-hit assertions.
+- [x] **Step 3: Integrate inspector precedence.** Pass the already computed live key to validation before displaying retained preview rows. Render `Settings changed. Select Refresh to compute new results.` for an invalidated run before the ordinary cancelled branch. Hide its Compute affordance. Refresh discards the old run through the existing flow. Closing and reopening the foldout does not clear the latch. Preserve ordinary user cancellation and error reporting.
+- [x] **Step 4: Run focused checks.** Run the preview, inspector, build-store, and `Alrauna.Amuse.Tests.Editor.DryRun.DryRunCacheTests` fixtures. Use the existing `RepaintThroughHostWindow` and row/action hooks. Expect non-zero counts and no failure.
+- [x] **Step 5: Smoke the actual inspector.** On a public synthetic root, complete a preview, edit policy, reopen the foldout, and observe the rejection without old rows. Exercise Review Focus 2. Callback assertions alone are not visual proof.
+- [x] **Step 6: Update the documentation.** Explain the Refresh-only recovery in README. Add one Unreleased policy-validity bullet.
+- [x] **Step 7: Obtain the task review.** Require spec compliance and quality approval.
+- [x] **Step 8: Commit.** Commit as `fix(preview): reject runs after policy changes`.
 
 ### Task 4: Give recorded refusal causes display precedence
 
@@ -182,20 +182,20 @@ Assert.That(drawnButtons, Does.Not.Contain("Compute"));
 
 **Interfaces:** Keep `IsSlotDeferred(Renderer, int, SlotResolutionResult, CapturedMaterialSlotEvidence) -> bool`. Keep the first-blocker resolver and all evidence records unchanged.
 
-- [ ] **Step 1: Write real combined-cause regressions and observe RED.** Reuse `AttestedLockedMaterialReportsDeferredSentenceWithPolygonCount` and the existing animation-capture fixtures. Add invalid-swap plus locked-current and invalid-swap plus streaming-current cases. Add a streaming current material followed by a permanently unsupported swap material, so the swap is the recorded blocker. Include mixed sibling slots and an early renderer refusal with no slot results.
+- [x] **Step 1: Write real combined-cause regressions and observe RED.** Reuse `AttestedLockedMaterialReportsDeferredSentenceWithPolygonCount` and the existing animation-capture fixtures. Add invalid-swap plus locked-current and invalid-swap plus streaming-current cases. Add a streaming current material followed by a permanently unsupported swap material, so the swap is the recorded blocker. Include mixed sibling slots and an early renderer refusal with no slot results.
 
 ```csharp
 Assert.That(refusedRow.ProvenTriangles, Is.EqualTo(-1));
 Assert.That(rows.Any(row => row.Kind == MaterialTransformationRowKind.Renderer), Is.True);
 ```
 
-- [ ] **Step 2: Gate the existing capability checks by the recorded cause.** Closure failures and every other named permanent cause return false before material shape can override them. Permit the locked-current arm only for the recorded semantics-unknown locked-shader cause with a non-refused locked identity, corroborated by the existing current-material checks. A locked swap value with insufficient recorded recovery evidence stays refused. Preserve the valid locked-current case. For the existing streaming arm, require exactly the seam-only conditions named in PTM3. Do not add a streaming producer, new carrier, or later-blocker scan.
-- [ ] **Step 3: Preserve the actual streaming path.** Keep the resolved `MissingTextureEvidence` row behavior and avatar streaming note. Do not create a permanent test claiming a production streaming-only deferred row. A throwaway seam characterization may exercise the retained unnamed-cause branch.
-- [ ] **Step 4: Run the preview fixture.** Run `Alrauna.Amuse.Tests.Editor.DryRun.AlphaSeparationDryRunTests`. Expect non-zero tests and no failure.
-- [ ] **Step 5: Smoke the combined cause.** Pass the invalid-swap fixture through real capture and inspect the refusal row and renderer warning. The locked-only fixture must remain deferred. Review Focus 3 must report the swap refusal, not a promise about the current material.
-- [ ] **Step 6: Update Unreleased.** Record the named-cause reporting fix.
-- [ ] **Step 7: Obtain the task review.** Require spec compliance and quality approval.
-- [ ] **Step 8: Commit.** Commit as `fix(preview): preserve recorded refusal causes`.
+- [x] **Step 2: Gate the existing capability checks by the recorded cause.** Closure failures and every other named permanent cause return false before material shape can override them. Permit the locked-current arm only for the recorded semantics-unknown locked-shader cause with a non-refused locked identity, corroborated by the existing current-material checks. A locked swap value with insufficient recorded recovery evidence stays refused. Preserve the valid locked-current case. For the existing streaming arm, require exactly the seam-only conditions named in PTM3. Do not add a streaming producer, new carrier, or later-blocker scan.
+- [x] **Step 3: Preserve the actual streaming path.** Keep the resolved `MissingTextureEvidence` row behavior and avatar streaming note. Do not create a permanent test claiming a production streaming-only deferred row. A throwaway seam characterization may exercise the retained unnamed-cause branch.
+- [x] **Step 4: Run the preview fixture.** Run `Alrauna.Amuse.Tests.Editor.DryRun.AlphaSeparationDryRunTests`. Expect non-zero tests and no failure.
+- [x] **Step 5: Smoke the combined cause.** Pass the invalid-swap fixture through real capture and inspect the refusal row and renderer warning. The locked-only fixture must remain deferred. Review Focus 3 must report the swap refusal, not a promise about the current material.
+- [x] **Step 6: Update Unreleased.** Record the named-cause reporting fix.
+- [x] **Step 7: Obtain the task review.** Require spec compliance and quality approval.
+- [x] **Step 8: Commit.** Commit as `fix(preview): preserve recorded refusal causes`.
 
 ### Task 5: Remove the Poiyomi static initialization dependency
 
@@ -207,15 +207,15 @@ Assert.That(rows.Any(row => row.Kind == MaterialTransformationRowKind.Renderer),
 
 **Interfaces:** `PoiyomiAlphaInterpreter.AlphaRequiredSchemaProperties` becomes the only alpha schema field. Delete only the facade's `AlphaRequiredSchemaProperties` field. Keep the facade's private full-schema `RequiredSchemaProperties` array and its two facade consumers unchanged. Keep every evidence-request property and the used facade.
 
-- [ ] **Step 1: Retain the observed failure evidence.** The preflight loader at `Temp/AmuseStaticEntryProbe.cs` entered the unchanged interpreter first in a fresh bundled-Mono process and observed nested type-initialization failures ending in `ArgumentNullException`. Facade-first passed the required schema checks. Do not repeat the old run merely to confirm it.
-- [ ] **Step 2: Move the schema before request initialization.** Move the four-property array into the interpreter before all request initializers. Retarget the interpreter request builder and source attestation reader. Keep the values `shader_master_label`, `_ShaderOptimizerEnabled`, `_MainTex`, and `_Color`. Leave full-schema ownership and facade consumers intact. No lazy wrapper or new schema type.
-- [ ] **Step 3: Run focused semantics checks.** Run the Poiyomi semantics group `Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi`. Expect non-zero tests and no changed outcomes.
-- [ ] **Step 4: Prove both fresh entry orders.** Refresh the dev editor and wait for compilation before using the new assembly. Run the existing temporary loader in two new bundled-Mono processes. Enter interpreter first, then facade first in separate processes. Both must exit 0 and expose the required schema on both requests. This is the changed-path smoke, not a warmed type test. Do not add a permanent subprocess harness.
+- [x] **Step 1: Retain the observed failure evidence.** The preflight loader at `Temp/AmuseStaticEntryProbe.cs` entered the unchanged interpreter first in a fresh bundled-Mono process and observed nested type-initialization failures ending in `ArgumentNullException`. Facade-first passed the required schema checks. Do not repeat the old run merely to confirm it.
+- [x] **Step 2: Move the schema before request initialization.** Move the four-property array into the interpreter before all request initializers. Retarget the interpreter request builder and source attestation reader. Keep the values `shader_master_label`, `_ShaderOptimizerEnabled`, `_MainTex`, and `_Color`. Leave full-schema ownership and facade consumers intact. No lazy wrapper or new schema type.
+- [x] **Step 3: Run focused semantics checks.** Run the Poiyomi semantics group `Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi`. Expect non-zero tests and no changed outcomes.
+- [x] **Step 4: Prove both fresh entry orders.** Refresh the dev editor and wait for compilation before using the new assembly. Run the existing temporary loader in two new bundled-Mono processes. Enter interpreter first, then facade first in separate processes. Both must exit 0 and expose the required schema on both requests. This is the changed-path smoke, not a warmed type test. Do not add a permanent subprocess harness.
 
 The earlier loader file was removed. Recreate a minimal throwaway bundled-Mono reflection loader from the spec's PTM4 fresh-process requirements and Step 4's schema checks. Do not assume saved loader source exists. No permanent harness or repeated baseline run.
-- [ ] **Step 5: Update Unreleased.** Record the initialization-order fix.
-- [ ] **Step 6: Obtain the task review.** Require spec compliance and quality approval.
-- [ ] **Step 7: Commit.** Commit as `fix(poiyomi): own alpha schema before request initialization`.
+- [x] **Step 5: Update Unreleased.** Record the initialization-order fix.
+- [x] **Step 6: Obtain the task review.** Require spec compliance and quality approval.
+- [x] **Step 7: Commit.** Commit as `fix(poiyomi): own alpha schema before request initialization`.
 
 ### Task 6: Keep slot evidence with its resolution results
 
@@ -229,14 +229,14 @@ The earlier loader file was removed. Recreate a minimal throwaway bundled-Mono r
 
 **Interfaces:** Add `IReadOnlyList<CapturedMaterialSlotEvidence> Slots { get; }` to `ResolvedRuntimeStates`. Its constructor becomes `(RendererAnalysisRefusal refusal, IReadOnlyList<CapturedAlphaMaterial> currentMaterials, IReadOnlyList<CapturedMaterialSlotEvidence> slots, SlotResolutionResult[] slotResults)`. Remove the `slots` argument from `DryRunRowBuilder.BuildResolvedRefusalRows`. Keep `MaterialSlotsFor` for preparation's independent use. No old overload.
 
-- [ ] **Step 1: Characterize attribution at the real seam.** Extend existing resolver fixtures only where coverage is missing. Exercise typed renderer bindings, current material plus swap alternatives, a closure-failed slot, a valid sibling, all-slots-refused, and renderer-wide early refusal. Assert material attribution and outcomes. Do not assert reference equality, list construction count, or delegation.
-- [ ] **Step 2: Return the existing list without another construction or copy.** Populate `Slots` at all three constructor returns. Renderer-wide early refusal gets shared empty slot and result arrays. All-slots-refused keeps both lists. Successful and mixed cases keep order and existing current-material behavior.
-- [ ] **Step 3: Migrate every consumer and delete redundant state.** Use `resolved.Slots` in build and preview. Delete both duplicate `MaterialSlotsFor` calls and the preview `_inFlightSlots` field, assignment, and reset. Read the retained result's slots when rows complete. Let `BuildResolvedRefusalRows` read its result's slots. `BuildRows` keeps its slot parameter and receives the paired list. Update the obsolete attribution comments.
-- [ ] **Step 4: Run focused behavior checks.** Run resolver, preview, plugin, preparation, and apply groups. Preserve `RuntimeStateProductionEntry_PostClosureSlotRefusalKeepsTheValidSibling`, `RuntimeStateProductionEntry_AllSlotsClosureFailedStillRefuseTheRenderer`, and typed renderer closure cases.
-- [ ] **Step 5: Smoke slot attribution.** Build a public synthetic mixed-slot fixture and inspect correct slot attribution without source writes.
-- [ ] **Step 6: Update Unreleased.** Record the single-owner evidence change.
-- [ ] **Step 7: Obtain the task review.** Require spec compliance and quality approval.
-- [ ] **Step 8: Commit.** Commit as `refactor(analysis): retain slots with resolved states`.
+- [x] **Step 1: Characterize attribution at the real seam.** Extend existing resolver fixtures only where coverage is missing. Exercise typed renderer bindings, current material plus swap alternatives, a closure-failed slot, a valid sibling, all-slots-refused, and renderer-wide early refusal. Assert material attribution and outcomes. Do not assert reference equality, list construction count, or delegation.
+- [x] **Step 2: Return the existing list without another construction or copy.** Populate `Slots` at all three constructor returns. Renderer-wide early refusal gets shared empty slot and result arrays. All-slots-refused keeps both lists. Successful and mixed cases keep order and existing current-material behavior.
+- [x] **Step 3: Migrate every consumer and delete redundant state.** Use `resolved.Slots` in build and preview. Delete both duplicate `MaterialSlotsFor` calls and the preview `_inFlightSlots` field, assignment, and reset. Read the retained result's slots when rows complete. Let `BuildResolvedRefusalRows` read its result's slots. `BuildRows` keeps its slot parameter and receives the paired list. Update the obsolete attribution comments.
+- [x] **Step 4: Run focused behavior checks.** Run resolver, preview, plugin, preparation, and apply groups. Preserve `RuntimeStateProductionEntry_PostClosureSlotRefusalKeepsTheValidSibling`, `RuntimeStateProductionEntry_AllSlotsClosureFailedStillRefuseTheRenderer`, and typed renderer closure cases.
+- [x] **Step 5: Smoke slot attribution.** Build a public synthetic mixed-slot fixture and inspect correct slot attribution without source writes.
+- [x] **Step 6: Update Unreleased.** Record the single-owner evidence change.
+- [x] **Step 7: Obtain the task review.** Require spec compliance and quality approval.
+- [x] **Step 8: Commit.** Commit as `refactor(analysis): retain slots with resolved states`.
 
 ### Task 7: Use the typed row-kind wire contract everywhere
 
@@ -257,14 +257,14 @@ The earlier loader file was removed. Recreate a minimal throwaway bundled-Mono r
 
 **Interfaces:** Move `MaterialTransformationRowKind` to the Build namespace beside the DTO. Use `Banner = 0`, `Note = 1`, `Renderer = 2`, `Slot = 3`, `Errored = 4`. `SerializedTransformationRow.kind` uses that enum. Remove the old definition and cast.
 
-- [ ] **Step 1: Protect numeric payload behavior.** Deserialize synthetic JSON with each old numeric kind and draw the resulting row shape. Keep the real source/material row fields. Assert the expected `Kind` and inspector shape, not a test-only conversion echo. Cover all five assigned numbers without changing undefined-value behavior. This is compatibility characterization.
-- [ ] **Step 2: Cut over the enum and every writer.** Replace literals in the pass and apply code, including `row.kind == 3` and the apply slot-row initializer. Change the DTO and reader directly. No second enum, alias, or converter.
-- [ ] **Step 3: Migrate test fixtures and namespace-qualified uses.** Replace numeric DTO initializers, integer casts, and numeric comparisons in apply, plugin, store, and inspector tests. Update fully qualified `.DryRun.MaterialTransformationRowKind` references and imports in all consumers. Search both AMUSE packages for the old qualified name and numeric DTO uses before declaring the cutover complete.
-- [ ] **Step 4: Run payload consumer checks.** Run the store, row, preview, inspector, plugin, and apply groups. Expect non-zero counts and no failure.
-- [ ] **Step 5: Smoke the old numeric payloads.** Exercise Review Focus 4 through `JsonUtility` and the actual row drawer. The serialized numeric values must remain unchanged.
-- [ ] **Step 6: Update Unreleased.** Record the explicit row-contract maintenance change.
-- [ ] **Step 7: Obtain the task review.** Require spec compliance and quality approval.
-- [ ] **Step 8: Commit.** Commit as `refactor(reports): type stored transformation row kinds`.
+- [x] **Step 1: Protect numeric payload behavior.** Deserialize synthetic JSON with each old numeric kind and draw the resulting row shape. Keep the real source/material row fields. Assert the expected `Kind` and inspector shape, not a test-only conversion echo. Cover all five assigned numbers without changing undefined-value behavior. This is compatibility characterization.
+- [x] **Step 2: Cut over the enum and every writer.** Replace literals in the pass and apply code, including `row.kind == 3` and the apply slot-row initializer. Change the DTO and reader directly. No second enum, alias, or converter.
+- [x] **Step 3: Migrate test fixtures and namespace-qualified uses.** Replace numeric DTO initializers, integer casts, and numeric comparisons in apply, plugin, store, and inspector tests. Update fully qualified `.DryRun.MaterialTransformationRowKind` references and imports in all consumers. Search both AMUSE packages for the old qualified name and numeric DTO uses before declaring the cutover complete.
+- [x] **Step 4: Run payload consumer checks.** Run the store, row, preview, inspector, plugin, and apply groups. Expect non-zero counts and no failure.
+- [x] **Step 5: Smoke the old numeric payloads.** Exercise Review Focus 4 through `JsonUtility` and the actual row drawer. The serialized numeric values must remain unchanged.
+- [x] **Step 6: Update Unreleased.** Record the explicit row-contract maintenance change.
+- [x] **Step 7: Obtain the task review.** Require spec compliance and quality approval.
+- [x] **Step 8: Commit.** Commit as `refactor(reports): type stored transformation row kinds`.
 
 ### Task 8: Reuse the approved-identity rule in consent
 
@@ -274,13 +274,13 @@ The earlier loader file was removed. Recreate a minimal throwaway bundled-Mono r
 
 **Interfaces:** Keep `IsApprovedIdentityFailure(CapturedAlphaMaterial) -> bool` and `CollectTransferConsentCore` signatures. No new interface or test seam.
 
-- [ ] **Step 1: Select existing behavior protection.** Use `ApprovedVersionProducesNoSubjectOnTheConsentCore`, `ApprovedByteChangedMultiProducesNoSubject`, `ApprovedIdentityFailureAloneEarnsTheCauseFlag`, `ApprovedAndUnapprovedSameNamedMaterialsProduceOnlyTheOutOfRangeSubject`, and `ApprovedOnlyBuildGrantsNoShaderNames`. Keep state-refused and unsupported cases. Do not add a forwarding test.
-- [ ] **Step 2: Replace only the repeated predicate.** Call `IsApprovedIdentityFailure(captured[index])` after the existing attestation filter. Delete the duplicated approval and identity-refusal locals. Preserve captured-record invariants and all consent outputs.
-- [ ] **Step 3: Run the focused semantics fixture.** Run `Alrauna.Amuse.Tests.Editor.Semantics.UnityMaterialSemanticsTests`. Expect non-zero tests and no changed outputs.
-- [ ] **Step 4: Smoke real capture to consent.** Observe the same subjects, approved flag, and granted names for regular, Multi identity-refused, Multi state-refused, out-of-range, and unsupported inputs. Use public stand-in material fixtures and the real core.
-- [ ] **Step 5: Update Unreleased.** Record the shared-rule maintenance change.
-- [ ] **Step 6: Obtain the task review.** Require spec compliance and quality approval.
-- [ ] **Step 7: Commit.** Commit as `refactor(semantics): share approved identity failure rule`.
+- [x] **Step 1: Select existing behavior protection.** Use `ApprovedVersionProducesNoSubjectOnTheConsentCore`, `ApprovedByteChangedMultiProducesNoSubject`, `ApprovedIdentityFailureAloneEarnsTheCauseFlag`, `ApprovedAndUnapprovedSameNamedMaterialsProduceOnlyTheOutOfRangeSubject`, and `ApprovedOnlyBuildGrantsNoShaderNames`. Keep state-refused and unsupported cases. Do not add a forwarding test.
+- [x] **Step 2: Replace only the repeated predicate.** Call `IsApprovedIdentityFailure(captured[index])` after the existing attestation filter. Delete the duplicated approval and identity-refusal locals. Preserve captured-record invariants and all consent outputs.
+- [x] **Step 3: Run the focused semantics fixture.** Run `Alrauna.Amuse.Tests.Editor.Semantics.UnityMaterialSemanticsTests`. Expect non-zero tests and no changed outputs.
+- [x] **Step 4: Smoke real capture to consent.** Observe the same subjects, approved flag, and granted names for regular, Multi identity-refused, Multi state-refused, out-of-range, and unsupported inputs. Use public stand-in material fixtures and the real core.
+- [x] **Step 5: Update Unreleased.** Record the shared-rule maintenance change.
+- [x] **Step 6: Obtain the task review.** Require spec compliance and quality approval.
+- [x] **Step 7: Commit.** Commit as `refactor(semantics): share approved identity failure rule`.
 
 ### Task 9: Correct shader measurement-status prose
 
@@ -291,12 +291,12 @@ The earlier loader file was removed. Recreate a minimal throwaway bundled-Mono r
 
 **Interfaces:** No code, pin, schema, version, or fixture-value change.
 
-- [ ] **Step 1: Check the owning evidence.** Read the 2.4.1 row comments and the 2026-10-20 admission design. Keep single-shape Multi status separate from outstanding regular-family and opaque-tuple work. Do not rerun vendor measurements.
-- [ ] **Step 2: Correct only the stale statements.** Remove the universal two-shape claim. Retain each row's actual evidence status. Remove repeated version lists from the resolver and seam comments. Refer to the owning admitted rows instead.
-- [ ] **Step 3: Verify comment-only scope.** Review the exact diff. Confirm that no attestation literal or executable token changed. The comments are the documentation update. Do not add a source-text test, count test, or a changelog claim that measurements ran.
-- [ ] **Step 4: Run the document checks.** Sweep for forbidden identifiers and whitespace defects.
-- [ ] **Step 5: Obtain the task review.** Require comment-only scope and evidence accuracy approval.
-- [ ] **Step 6: Commit.** Commit as `docs(liltoon): keep measurement status with admitted rows`.
+- [x] **Step 1: Check the owning evidence.** Read the 2.4.1 row comments and the 2026-10-20 admission design. Keep single-shape Multi status separate from outstanding regular-family and opaque-tuple work. Do not rerun vendor measurements.
+- [x] **Step 2: Correct only the stale statements.** Remove the universal two-shape claim. Retain each row's actual evidence status. Remove repeated version lists from the resolver and seam comments. Refer to the owning admitted rows instead.
+- [x] **Step 3: Verify comment-only scope.** Review the exact diff. Confirm that no attestation literal or executable token changed. The comments are the documentation update. Do not add a source-text test, count test, or a changelog claim that measurements ran.
+- [x] **Step 4: Run the document checks.** Sweep for forbidden identifiers and whitespace defects.
+- [x] **Step 5: Obtain the task review.** Require comment-only scope and evidence accuracy approval.
+- [x] **Step 6: Commit.** Commit as `docs(liltoon): keep measurement status with admitted rows`.
 
 ### Task 10: Own session-cache reset membership once
 
@@ -311,13 +311,13 @@ The earlier loader file was removed. Recreate a minimal throwaway bundled-Mono r
 
 Let the dev editor generate the new metadata once when it imports the script. Do not replace an already generated metadata file.
 
-- [ ] **Step 1: Move the fixed seven calls without changing order.** Keep `UnityGeneratedTextureEvidence.ClearCache`, `UnityAlphaFieldEvidence.ClearCache`, `ReplacementTextureIdentity.ClearSession`, both replacement-tool version cache clears, lilToon's gather memo clear, and Poiyomi's source-hash memo clear.
-- [ ] **Step 2: Replace both lists.** Call `AmuseSessionCaches.Clear()` at the original build-entry position before the lifecycle-refusal return. Call it at the original clone-sweep teardown position. Do not merge the moments, add a registry, or alter clone destruction. The native Play identity snapshot is not a reset member or a clone. Do not register or destroy it here. Store lifecycle keeps it alive through both reset moments until Play exit.
-- [ ] **Step 3: Run lifecycle checks.** Run plugin and apply fixtures, including `SweepDestroysExactlyTheUnreferencedClones` and `PlannedSplitInvalidatedLateSweepsItsCloneWithoutAnyWrite`. Do not add reset-member-count or helper-call tests.
+- [x] **Step 1: Move the fixed seven calls without changing order.** Keep `UnityGeneratedTextureEvidence.ClearCache`, `UnityAlphaFieldEvidence.ClearCache`, `ReplacementTextureIdentity.ClearSession`, both replacement-tool version cache clears, lilToon's gather memo clear, and Poiyomi's source-hash memo clear.
+- [x] **Step 2: Replace both lists.** Call `AmuseSessionCaches.Clear()` at the original build-entry position before the lifecycle-refusal return. Call it at the original clone-sweep teardown position. Do not merge the moments, add a registry, or alter clone destruction. The native Play identity snapshot is not a reset member or a clone. Do not register or destroy it here. Store lifecycle keeps it alive through both reset moments until Play exit.
+- [x] **Step 3: Run lifecycle checks.** Run plugin and apply fixtures, including `SweepDestroysExactlyTheUnreferencedClones` and `PlannedSplitInvalidatedLateSweepsItsCloneWithoutAnyWrite`. Do not add reset-member-count or helper-call tests.
 - [ ] **Step 4: Smoke two builds.** Use two sequential public synthetic builds with changed texture input. Observe fresh output and teardown.
-- [ ] **Step 5: Update Unreleased.** Record the fixed-list ownership change.
-- [ ] **Step 6: Obtain the task review.** Require spec compliance and quality approval, including the script and `.meta` as one unit.
-- [ ] **Step 7: Commit.** Commit as `refactor(build): share the session cache reset list`.
+- [x] **Step 5: Update Unreleased.** Record the fixed-list ownership change.
+- [x] **Step 6: Obtain the task review.** Require spec compliance and quality approval, including the script and `.meta` as one unit.
+- [x] **Step 7: Commit.** Commit as `refactor(build): share the session cache reset list`.
 
 ### Task 11: Extend the research no-write tripwire
 
@@ -327,13 +327,13 @@ Let the dev editor generate the new metadata once when it imports the script. Do
 
 **Interfaces:** Add a test-local `FindOffences(string source) -> IReadOnlyList<string>` that performs the existing literal, pattern, and AssetDatabase checks. The production-source scan and synthetic snippet cases use that same implementation. No production guard or parser dependency.
 
-- [ ] **Step 1: Write synthetic forbidden-call cases and observe RED.** Include `File.WriteAllText`, `File.AppendAllText`, `File.Copy`, `new StreamWriter`, a `FileStream` opened for write, `PlayerPrefs.SetString`, `EditorPrefs.SetString`, `SessionState.SetString`, `HttpClient.PostAsync`, `UnityWebRequest.SendWebRequest`, and socket transmission. Assert a named offence for each source snippet. Include allowed `File.ReadAllText`, `File.OpenRead`, `Path.Combine`, an explicitly read-only `FileStream`, and the two allowed AssetDatabase lookups. Use source strings only. Do not execute a forbidden snippet.
-- [ ] **Step 2: Extend the existing fixed checks.** Add direct persistence and transmission forms needed by those cases. Keep production `Editor` scope, test-source exclusion, non-vacuous scan, current Unity mutation checks, and the existing asset lookup allowlist. Writable-stream checks must not reject an explicitly read-only stream. Keep regex/literal limits explicit. Do not claim this is a sandbox.
-- [ ] **Step 3: Run the focused guard and actual production scan.** Run `Alrauna.Amuse.Research.Tests.Editor.Collection.ResearchSourceApiBanTests`. Expect named offences for adversarial snippets, no offence for allowed snippets, and no offence in real research production source.
-- [ ] **Step 4: Run the full research assembly.** Expect a terminal aggregate with non-zero counts and no failure.
-- [ ] **Step 5: Update development test instructions.** State the tripwire's scope and limits. Do not add research content to the product changelog or archive.
-- [ ] **Step 6: Obtain the task review.** Require privacy coverage, preserved allowed reads, and no new framework.
-- [ ] **Step 7: Commit.** Commit as `test(research): reject direct persistence and transmission APIs`.
+- [x] **Step 1: Write synthetic forbidden-call cases and observe RED.** Include `File.WriteAllText`, `File.AppendAllText`, `File.Copy`, `new StreamWriter`, a `FileStream` opened for write, `PlayerPrefs.SetString`, `EditorPrefs.SetString`, `SessionState.SetString`, `HttpClient.PostAsync`, `UnityWebRequest.SendWebRequest`, and socket transmission. Assert a named offence for each source snippet. Include allowed `File.ReadAllText`, `File.OpenRead`, `Path.Combine`, an explicitly read-only `FileStream`, and the two allowed AssetDatabase lookups. Use source strings only. Do not execute a forbidden snippet.
+- [x] **Step 2: Extend the existing fixed checks.** Add direct persistence and transmission forms needed by those cases. Keep production `Editor` scope, test-source exclusion, non-vacuous scan, current Unity mutation checks, and the existing asset lookup allowlist. Writable-stream checks must not reject an explicitly read-only stream. Keep regex/literal limits explicit. Do not claim this is a sandbox.
+- [x] **Step 3: Run the focused guard and actual production scan.** Run `Alrauna.Amuse.Research.Tests.Editor.Collection.ResearchSourceApiBanTests`. Expect named offences for adversarial snippets, no offence for allowed snippets, and no offence in real research production source.
+- [x] **Step 4: Run the full research assembly.** Expect a terminal aggregate with non-zero counts and no failure.
+- [x] **Step 5: Update development test instructions.** State the tripwire's scope and limits. Do not add research content to the product changelog or archive.
+- [x] **Step 6: Obtain the task review.** Require privacy coverage, preserved allowed reads, and no new framework.
+- [x] **Step 7: Commit.** Commit as `test(research): reject direct persistence and transmission APIs`.
 
 ### Task 12: Remove the incidental lilToon property count
 
@@ -343,11 +343,11 @@ Let the dev editor generate the new metadata once when it imports the script. Do
 
 **Interfaces:** No production change. Keep the existing naming and uniqueness behavior.
 
-- [ ] **Step 1: Delete the exact-48 assertion.** Use the existing Poiyomi sibling's non-empty discovered-set check. Keep every property-value, underscore-prefix, and uniqueness assertion. Do not replace 48 with another count or add a source-text test for this edit.
-- [ ] **Step 2: Run existing contract coverage.** Run `Alrauna.Amuse.Tests.Editor.Semantics.ShaderSemanticsArchitectureTests` and the `.*LilToon.*` group pattern in the product assembly. A valid new property must not require a count edit. Do not invent a production property to prove that statement. An in-memory counterexample is enough if needed.
-- [ ] **Step 3: Update Unreleased.** State the durable property contract.
-- [ ] **Step 4: Obtain the task review.** Require preserved naming, uniqueness, and property behavior checks.
-- [ ] **Step 5: Commit.** Commit as `test(semantics): remove the incidental property count pin`.
+- [x] **Step 1: Delete the exact-48 assertion.** Use the existing Poiyomi sibling's non-empty discovered-set check. Keep every property-value, underscore-prefix, and uniqueness assertion. Do not replace 48 with another count or add a source-text test for this edit.
+- [x] **Step 2: Run existing contract coverage.** Run `Alrauna.Amuse.Tests.Editor.Semantics.ShaderSemanticsArchitectureTests` and the `.*LilToon.*` group pattern in the product assembly. A valid new property must not require a count edit. Do not invent a production property to prove that statement. An in-memory counterexample is enough if needed.
+- [x] **Step 3: Update Unreleased.** State the durable property contract.
+- [x] **Step 4: Obtain the task review.** Require preserved naming, uniqueness, and property behavior checks.
+- [x] **Step 5: Commit.** Commit as `test(semantics): remove the incidental property count pin`.
 
 ### Task 13: Register the website download action once
 
@@ -359,14 +359,14 @@ Let the dev editor generate the new metadata once when it imports the script. Do
 
 **Interfaces:** Keep the existing DOM and package URL data. One stable `change` listener reads a selected-URL variable. Every row-button click updates that variable from `event.currentTarget`. Open with `window.open(url, '_blank', 'noopener')`.
 
-- [ ] **Step 1: Retain the real-runtime before evidence.** The isolated Fluent 2.6.1 browser run observed one window action after the first menu open and two after the second. Mouse and Enter both emitted `change`. No need to rerun the old handler to confirm this. The owner authorized read-only access to the pinned CDN runtime and its module dependencies.
-- [ ] **Step 2: Make the smallest handler cutover.** Move download listener registration outside the row-button handler. Delete the per-open wrapper and incorrect removal. Store the URL on every row activation, including while the menu is open. Prevent that row click from also reaching the document's outside-menu close handler. Keep the chosen menu available. Use the row button as the geometry and URL owner. Do not add a click listener for the menu item or change unrelated modal code.
-- [ ] **Step 3: Run the actual browser surface with the pinned runtime.** Load source markup, the existing stylesheet and theme setup, and the changed handler block in an isolated page. Intercept `window.open`. Exercise mouse, keyboard opening, Enter activation, repeated close/open cycles, both rows, and the button's rendered content. Open the first row's menu, switch to the second row while open, then press Enter. Assert one action with the second row's URL and `noopener`. Verify outside clicks close the menu and keyboard opening keeps it on screen. Do not force a direct SVG click where Fluent disables SVG pointer events.
-- [ ] **Step 4: Observe visual proof.** Capture the real menu surface and confirm it remains usable after row switching. No package download, dependency install, vendoring, upload, or hosted deployment is required or authorized.
-- [ ] **Step 5: Close the probe tab.** Release the isolated browser surface.
-- [ ] **Step 6: Update Unreleased.** Record the listing download fix without claiming hosted execution.
-- [ ] **Step 7: Obtain the task review.** Require one action per activation, correct row ownership, and keyboard use.
-- [ ] **Step 8: Commit.** Commit as `fix(website): register one package download action`.
+- [x] **Step 1: Retain the real-runtime before evidence.** The isolated Fluent 2.6.1 browser run observed one window action after the first menu open and two after the second. Mouse and Enter both emitted `change`. No need to rerun the old handler to confirm this. The owner authorized read-only access to the pinned CDN runtime and its module dependencies.
+- [x] **Step 2: Make the smallest handler cutover.** Move download listener registration outside the row-button handler. Delete the per-open wrapper and incorrect removal. Store the URL on every row activation, including while the menu is open. Prevent that row click from also reaching the document's outside-menu close handler. Keep the chosen menu available. Use the row button as the geometry and URL owner. Do not add a click listener for the menu item or change unrelated modal code.
+- [x] **Step 3: Run the actual browser surface with the pinned runtime.** Load source markup, the existing stylesheet and theme setup, and the changed handler block in an isolated page. Intercept `window.open`. Exercise mouse, keyboard opening, Enter activation, repeated close/open cycles, both rows, and the button's rendered content. Open the first row's menu, switch to the second row while open, then press Enter. Assert one action with the second row's URL and `noopener`. Verify outside clicks close the menu and keyboard opening keeps it on screen. Do not force a direct SVG click where Fluent disables SVG pointer events.
+- [x] **Step 4: Observe visual proof.** Capture the real menu surface and confirm it remains usable after row switching. No package download, dependency install, vendoring, upload, or hosted deployment is required or authorized.
+- [x] **Step 5: Close the probe tab.** Release the isolated browser surface.
+- [x] **Step 6: Update Unreleased.** Record the listing download fix without claiming hosted execution.
+- [x] **Step 7: Obtain the task review.** Require one action per activation, correct row ownership, and keyboard use.
+- [x] **Step 8: Commit.** Commit as `fix(website): register one package download action`.
 
 ### Task 14: Verify the integrated branch and record the evidence
 
@@ -376,19 +376,19 @@ Let the dev editor generate the new metadata once when it imports the script. Do
 
 **Interfaces:** Consumes all finalized task changes. Produces observed acceptance evidence and the final whole-branch review.
 
-- [ ] **Step 1: Run both full assemblies once on the integrated code.** Run `Alrauna.Amuse.Tests.Editor` and `Alrauna.Amuse.Research.Tests.Editor`. Require terminal aggregate results with non-zero counts and no failure. Report warnings and errors. Do not substitute compilation or a partial failed job.
-- [ ] **Step 2: Smoke saved-root ownership on final code.** Repeat Task 2's safe in-place NDMF and native recovery matrix, including saved prefabs, nested roots, the rename window, all four domain/scene reload combinations, and mid-Play script reload. Include canceled entry, idle cleanup racing immediate entry, and a fresh second entry. Use public fixtures and preserve authored scene setup.
-- [ ] **Step 3: Smoke the final inspector.** Complete a preview, edit policy, reopen the foldout, and observe rejection with no stale rows. Include the observed-mismatch and revert case.
-- [ ] **Step 4: Smoke mixed refusal attribution.** Run the public mixed-slot build fixture. Confirm refusal scope and source mesh, material, animation, and importer preservation.
-- [ ] **Step 5: Smoke final cache lifetime.** Run two sequential synthetic builds with changed texture input. Confirm fresh output and transient teardown.
-- [ ] **Step 6: Smoke both final Poiyomi entry orders.** Use the fresh-process mechanism from PTM4 against the final compiled assembly. Require both schema checks to pass.
-- [ ] **Step 7: Smoke the final download menu.** Run the real Fluent mouse, Enter, repeated-open, and open-menu row-switch matrix. Observe one correct intercepted action per activation.
-- [ ] **Step 8: Check the release boundary locally.** Exercise the single-product package membership recipe. Expect zero test entries, zero research entries, and the production editor assembly definition present. Do not run or claim the hosted release workflow.
-- [ ] **Step 9: Request final adversarial whole-branch review.** Supply the finalized spec, plan, full branch diff package, and sanitized task ledger. Cover accuracy, safety and security, architecture, ponytail, latent bugs, and deferred findings. Fix important findings through a subagent, run covering checks, and obtain scoped confirmation. Stop for an owner choice rather than park a load-bearing defect silently.
-- [ ] **Step 10: Record final evidence.** Record observed counts, smoke outcomes, limits, review disposition, and unchanged user-owned files in this plan.
-- [ ] **Step 11: Run record checks.** Sweep changed documents and comments for forbidden identifiers. Run whitespace checks.
+- [x] **Step 1: Run both full assemblies once on the integrated code.** Run `Alrauna.Amuse.Tests.Editor` and `Alrauna.Amuse.Research.Tests.Editor`. Require terminal aggregate results with non-zero counts and no failure. Report warnings and errors. Do not substitute compilation or a partial failed job.
+- [x] **Step 2: Smoke saved-root ownership on final code.** Repeat Task 2's safe in-place NDMF and native recovery matrix, including saved prefabs, nested roots, the rename window, all four domain/scene reload combinations, and mid-Play script reload. Include canceled entry, idle cleanup racing immediate entry, and a fresh second entry. Use public fixtures and preserve authored scene setup.
+- [x] **Step 3: Smoke the final inspector.** Complete a preview, edit policy, reopen the foldout, and observe rejection with no stale rows. Include the observed-mismatch and revert case.
+- [x] **Step 4: Smoke mixed refusal attribution.** Run the public mixed-slot build fixture. Confirm refusal scope and source mesh, material, animation, and importer preservation.
+- [x] **Step 5: Smoke final cache lifetime.** Run two sequential synthetic builds with changed texture input. Confirm fresh output and transient teardown.
+- [x] **Step 6: Smoke both final Poiyomi entry orders.** Use the fresh-process mechanism from PTM4 against the final compiled assembly. Require both schema checks to pass.
+- [x] **Step 7: Smoke the final download menu.** Run the real Fluent mouse, Enter, repeated-open, and open-menu row-switch matrix. Observe one correct intercepted action per activation.
+- [x] **Step 8: Check the release boundary locally.** Exercise the single-product package membership recipe. Expect zero test entries, zero research entries, and the production editor assembly definition present. Do not run or claim the hosted release workflow.
+- [x] **Step 9: Request final adversarial whole-branch review.** Supply the finalized spec, plan, full branch diff package, and sanitized task ledger. Cover accuracy, safety and security, architecture, ponytail, latent bugs, and deferred findings. Fix important findings through a subagent, run covering checks, and obtain scoped confirmation. Stop for an owner choice rather than park a load-bearing defect silently.
+- [x] **Step 10: Record final evidence.** Record observed counts, smoke outcomes, limits, review disposition, and unchanged user-owned files in this plan.
+- [x] **Step 11: Run record checks.** Sweep changed documents and comments for forbidden identifiers. Run whitespace checks.
 - [ ] **Step 12: Commit the verification record.** Commit as `docs: record maintainability fix verification`. Do not push or merge.
-- [ ] **Step 13: Restore session-only review routing.** Restore its pre-run value without saving any permanent setting.
+- [x] **Step 13: Restore session-only review routing.** Restore its pre-run value without saving any permanent setting.
 
 ## Self-review checklist
 
@@ -489,3 +489,51 @@ No live dev bridge can verify the intended `Application.dataPath`. Further Unity
 The earlier byte captures lived only in the lost validation kernel. A new comparison against those captures is not possible. The user-owned shader settings file also changed from its earlier dirty-state record. Its current contents were left unchanged. A new native crash artifact remains untracked and unread. Its cause and ownership are not proved. The temporary review-role override is already the empty default. No routing setting was saved.
 
 Resume at Task 3. Open this repository in the dev editor and start its MCP bridge. Pin the exact project and capture the user-owned state as found. Recreate the validation helpers outside Unity's disposable temporary folder. Run the four focused fixtures and the actual inspector policy and Refresh smoke. Then finish task review, documentation, and the explicit Task 3 commit. Do not repeat Task 1, Task 2, or the observed nine-test RED just to confirm them.
+
+## Execution record on 2026-10-22
+
+All fourteen tasks are complete. The final whole-branch review approved the branch. Nothing was pushed or merged.
+
+Task 3: commit `6c2ab8c`. RED observed nine intended failures. GREEN ran four focused fixtures with 99 passed. The smoke used a floating property editor on a public synthetic root and exercised the policy rejection and Refresh path. Fix round 1 addressed three Minors in test files only. A ruling ordered those test-only fixes before the commit.
+
+Task 4: commit `ccec243`. RED observed three intended failures in 44 tests. GREEN ran 46 tests with 46 passed. The smoke passed the invalid swap with a locked current material through real capture. Four fix rounds followed the review. A ruling made the name-tag-only lock a refused identity, so its preview row says refused, and two gate characterizations cover the valid locked case.
+
+Task 5: commit `abc73cf`. The Poiyomi semantics group ran 335 passed. The smoke ran both fresh-process entry orders, and both exited 0. No fix round was needed.
+
+Task 6: commit `fa41f96`. The focused groups ran 347 passed. The smoke rendered a synthetic two-slot renderer with one row per slot beside the renderer refusal row. A ruling kept one early-refusal derivation because three existing plugin tests need per-slot capture facts there.
+
+Task 7: commit `13a0e10`. Characterization ran 63 passed before the cutover. The consumer groups ran 305 passed after it. The smoke parsed stored kinds 0 to 4 with JsonUtility, mapped them to their typed kinds through the real reader, and serialized a byte-equal record again. The real drawer showed stored typed rows in the Task 14 Play round trip.
+
+Task 8: commit `7223adc`. The focused semantics fixture ran 45 passed. The smoke used the five named real-core consent tests in that fixture, because the consent path has no live surface outside a build with an unverified version.
+
+Task 9: commit `bb0623f`. No test ran for this comment-only task. A line filter confirmed the comment-only scope, and the document checks passed. The review found one wording Minor, and a comment-only edit fixed it.
+
+Task 10: commit `a291a58`. Plugin and apply fixtures ran 169 passed. A ruling skipped the two-build actual-host smoke here and moved it to Task 14. Its Step 4 stays unticked.
+
+Task 11: commit `ba36ac8`. RED observed one intended failure that named 11 missed cases. The focused guard ran 4 passed. The full research assembly ran 147 total with 143 passed and 4 ignored for the absent vendor package. Fix round 1 addressed one Important and two Minors.
+
+Task 12: commit `2b46d9a`. The architecture fixture and every lilToon group ran 652 passed. Two CHANGELOG wording Minors were fixed in prose only.
+
+Task 13: commit `c441565`. Two headless browser runs recorded the action matrix. The smoke used the pinned Fluent runtime and covered mouse, Enter, repeated cycles, row switching while open, and keyboard placement, with a screenshot. Fix round 1 moved keyboard placement. Review fix round 2 made the menu follow the last activated row.
+
+### Task 14 on 2026-10-22
+
+The first full product run failed one test through test order. The store fixture left the user scene active after owned scene copies. The fix holds the prior scene as a handle, falls back to the scene that was active before any owned copy opened, and tears duplicate-name scopes down in reverse order. Committed as `9bf2f11`.
+
+| Run after the final fix wave | Runner total | Passed | Failed | Ignored | Inconclusive outside total |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Product assembly | 2858 | 2858 | 0 | 0 | 2 |
+| Research assembly | 147 | 143 | 0 | 4 | 0 |
+
+- Play round trip: Step 2 ran in a reduced scope of one reload mode with loose, nested, and saved-prefab roots. Every root kept its key and loaded its own record after exit. The other three reload combinations, mid-Play reload, canceled entry, and the race were last observed on 2026-10-21.
+- Inspector: a preview completed, a policy edit rejected rows, the foldout cycle kept the rejection, and Refresh computed a new run.
+- Mixed-slot and two-build NDMF smokes: one throwaway test file ran 2 passed and was deleted after the run. The first build separated the slot, and snapshots of the mesh, material, animation clip, and texture importer matched. The texture changed on disk before the second build, so this run does not prove that the session reset alone prevented reuse.
+- Poiyomi orders: fresh bundled-Mono processes entered interpreter first and facade first against the final assembly, and both exited 0.
+- Release zip: the local archive held 292 entries, zero test entries, zero research entries, and the production editor assembly definition. The hosted release workflow did not run.
+- Website: the committed `Website/app.js` passed the full mouse, Enter, cycle, row-switch, and keyboard-placement matrix.
+
+Final review: three lenses found no Critical issue and no Important code issue. The accuracy lens raised one Important record issue, and this section fixes it. One fix wave applied eleven selected minors as `da6ba76`. The scoped re-review marked every fixed item addressed and answered ready to merge. Step 12 stays unticked because the record commit belongs to the controller. The review declined five items. It declined a help-box sentence assertion because the brief forbids prose assertions. It declined deleting the forbidden snippet cases because they are plan-mandated RED guards. It declined removing the static scope bookkeeping because it keeps out-of-order teardown safe. It declined changing the early-refusal fallback condition because its comment states the intent. It declined the website scroll offset fix because that defect is pre-existing.
+
+User-owned files: the byte guard matched after every run. The guarded categories were project settings, package manifests, a saved scene and its metadata, and a crash file. The editor rewrote two player-setting lines after test runs. The controller restored both lines each time.
+
+Session-only review routing: no setting changed and nothing was saved.
