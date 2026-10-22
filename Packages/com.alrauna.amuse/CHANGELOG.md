@@ -16,6 +16,7 @@ All notable changes to AMUSE are documented in this file.
 - Capture tests for RGB24 and ARGB32 no longer pin a specific backend's sampling capability. RGB24 keeps its source-format Sample support exemption, and its test checks full-chain opaque alpha. ARGB32 follows the exact sampling gate. Without exact support, its test asserts the real capture refusal with no evidence. With exact support, it checks 255, which passes the opaque predicate, and 128 and 254, which do not.
 - The consent scan calls the shared approved-identity predicate instead of spelling its rule again. The earlier attestation filter stays in place. Consent subjects, granted names, and the approved-version flag keep their behavior.
 - The build passes reset the seven session caches through one shared helper. The fixed call list now lives in one place. The build-entry reset before the lifecycle refusal and the clone-sweep reset after teardown keep their separate moments and their order.
+- The lilToon property contract test no longer pins an exact constant count. The durable contract is at least one property constant, underscore-prefixed values, and unique values. A valid new property constant needs no test edit.
 
 ## [0.1.0-pre.10] - 2026-10-21
 
