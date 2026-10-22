@@ -1158,8 +1158,14 @@ namespace Alrauna.Amuse.Editor.DryRun
         }
 
         /// <summary>
-        /// Checks whether an unresolved slot evaluates at build time.
-        /// Attested locked materials and streaming textures evaluate at build time.
+        /// Checks whether an unresolved slot evaluates at build time. The
+        /// slot's recorded cause controls the answer. Only the recorded
+        /// semantics-unknown cause can defer, and only behind the live
+        /// current material checks: an attested locked current material,
+        /// or an unreadable streaming current texture behind an unnamed
+        /// capture refusal. A closure failure, a recorded lock refusal,
+        /// and every other named permanent cause refuse before material
+        /// shape can override them.
         /// </summary>
         internal static bool IsSlotDeferred(
             Renderer renderer,
@@ -1183,6 +1189,23 @@ namespace Alrauna.Amuse.Editor.DryRun
                 return false;
             }
 
+            // A recorded permanent cause owns the display. Only the
+            // semantics-unknown cause can defer. A recorded lock refusal
+            // refuses here: the build recovers a locked current material
+            // only when its recorded original shader identity attests, so
+            // the display must not promise a recovery the build cannot
+            // supply.
+            if (slotResult.Refusal !=
+                RendererAnalysisRefusal.AdmittedMaterialSemanticsUnknown)
+            {
+                return false;
+            }
+
+            // The locked arm stays confirmed from the current material
+            // alone: the recorded semantics-unknown cause plus the live
+            // attested locked identity. The name tag check below is
+            // display corroboration only. The build's own recovery
+            // precondition reads the recorded asset reference.
             if (LockedMaterialIdentity.RecognizedLockedIdentity(material) &&
                 (LockedMaterialIdentity.OriginalShaderAttested(material) ||
                  IsAttestedOriginalShader(material)))
@@ -1190,7 +1213,14 @@ namespace Alrauna.Amuse.Editor.DryRun
                 return true;
             }
 
-            if (HasUnreadableAlphaStreamingTexture(material))
+            // The streaming arm stays only for the unnamed capture refusal
+            // shape: the frontend named no reason, the capture named what
+            // it could not read, and the current material holds the
+            // unreadable streaming texture.
+            if (slotResult.UnknownReason == null &&
+                slotEvidence != null &&
+                slotEvidence.CaptureRefusals.Count > 0 &&
+                HasUnreadableAlphaStreamingTexture(material))
             {
                 return true;
             }

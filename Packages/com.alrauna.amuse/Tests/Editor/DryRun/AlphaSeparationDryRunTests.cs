@@ -1,6 +1,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Threading;
@@ -54,6 +55,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
         private int _captureCalls;
         private readonly List<MaterialEvidenceRequest> _seenRequests =
             new List<MaterialEvidenceRequest>();
+        private Shader _productionNamedPoiyomiStandIn;
 
         [SetUp]
         public void SetUp()
@@ -411,6 +413,15 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                         LilToonTransparentSourceEligibility
                             .ConversionEvidenceRequest);
                     return true;
+                }
+
+                if (material != null &&
+                    material.shader ==
+                        _productionNamedPoiyomiStandIn)
+                {
+                    return VerifiedPoiyomiTestSeams
+                        .SelectVerifiedFixtureRequest(
+                            material, out family, out alpha, out capture);
                 }
 
                 if (material != null &&
@@ -1200,19 +1211,11 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
         }
 
         [Test]
-        public void AttestedLockedMaterialReportsDeferredSentenceWithPolygonCount()
+        public void NameTagOnlyLockedMaterialReportsRefusedSentence()
         {
-            EnsurePoiyomiStandInShader();
-            EnsureLockedPoiyomiStandInShader();
-
             var root = _scope.Track(NewAvatarRoot("amuse-dry-run-locked-attested"));
             var optimizer = AddOptimizer(root);
-            var originalShader = Shader.Find(".poiyomi/Poiyomi Toon");
-            var original = _scope.Track(new Material(originalShader));
-            var locked = _scope.Track(new Material(original));
-            locked.shader = Shader.Find("Hidden/Locked/.poiyomi/Poiyomi Toon");
-            locked.SetFloat("_ShaderOptimizerEnabled", 1f);
-            locked.SetOverrideTag("OriginalShader", ".poiyomi/Poiyomi Toon");
+            var locked = NewNameTagOnlyLockedMaterial();
             var mesh = OneTriangleMesh();
             AddSkinnedRenderer(root, mesh, locked);
 
@@ -1231,13 +1234,17 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             var rows = SlotRows(dryRun);
             Assert.That(rows, Has.Count.EqualTo(1));
             Assert.That(
+                rows[0].ProvenTriangles, Is.EqualTo(-1),
+                "a lock whose recorded identity is refused must keep the " +
+                "refused display");
+            Assert.That(
                 rows[0].Sentence,
-                Is.EqualTo("Deferred: 0 out of 1 polygons may be moved (evaluates at build time)"));
+                Is.EqualTo("Refused: AMUSE currently does not support this material"));
             Assert.That(
                 dryRun.RendererRows.Any(
                     row => row.Kind == MaterialTransformationRowKind.Renderer),
-                Is.False,
-                "renderer refusal box must be suppressed when all slots are deferred");
+                Is.True,
+                "the renderer refusal row must accompany the refused slot");
         }
 
         [Test]
@@ -1294,6 +1301,465 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             }
 
             return shader;
+        }
+
+        // --- Recorded-cause display precedence (PTM3) -----------------------
+
+        /// <summary>
+        /// The name-tag-only locked fixture material. The locked stand-in
+        /// shader carries the optimizer flag, and the original shader tag
+        /// names the vendor shader without a resolvable asset reference.
+        /// The capture therefore records a refused locked identity.
+        /// </summary>
+        private Material NewNameTagOnlyLockedMaterial()
+        {
+            EnsurePoiyomiStandInShader();
+            EnsureLockedPoiyomiStandInShader();
+            var original = _scope.Track(
+                new Material(Shader.Find(".poiyomi/Poiyomi Toon")));
+            var locked = _scope.Track(new Material(original));
+            locked.shader = Shader.Find("Hidden/Locked/.poiyomi/Poiyomi Toon");
+            locked.SetFloat("_ShaderOptimizerEnabled", 1f);
+            locked.SetOverrideTag("OriginalShader", ".poiyomi/Poiyomi Toon");
+            return locked;
+        }
+
+        /// <summary>
+        /// A streaming texture the closed capture cannot decode in memory.
+        /// The import generates the alpha channel from grayscale, so the
+        /// source reader refuses that channel.
+        /// </summary>
+        private Texture2D ImportUnreadableStreamingMaskTexture()
+        {
+            var pixels = new Color32[TextureSize * TextureSize];
+            for (var y = 0; y < TextureSize; y++)
+            {
+                for (var x = 0; x < TextureSize; x++)
+                {
+                    pixels[y * TextureSize + x] =
+                        new Color32(255, 255, 255, 255);
+                }
+            }
+
+            return TestTextureImport.WritePng(
+                TempFolder + "/unreadable_streaming_mask.png",
+                TextureSize, TextureSize, pixels, importer =>
+                {
+                    importer.mipmapEnabled = false;
+                    importer.isReadable = false;
+                    importer.textureCompression =
+                        TextureImporterCompression.Uncompressed;
+                    importer.streamingMipmaps = true;
+                    importer.alphaSource =
+                        TextureImporterAlphaSource.FromGrayScale;
+                });
+        }
+
+        /// <summary>
+        /// The schema-complete Poiyomi fixture shader copied under the
+        /// vendor name the production selection map reads. The full
+        /// property schema survives the copy, so a material on it resolves
+        /// through the verified Poiyomi seam while the display-side
+        /// production selection recognizes the shader name.
+        /// </summary>
+        private Shader EnsureProductionNamedPoiyomiStandInShader()
+        {
+            if (_productionNamedPoiyomiStandIn != null)
+            {
+                return _productionNamedPoiyomiStandIn;
+            }
+
+            var sourcePath = AssetDatabase.GetAssetPath(
+                Shader.Find(PoiyomiFixtureTestBase.FixtureShaderName));
+            Assert.That(sourcePath, Is.Not.Empty,
+                "the schema-complete Poiyomi fixture shader must import");
+            var renamed = File.ReadAllText(sourcePath).Replace(
+                "Shader \"" + PoiyomiFixtureTestBase.FixtureShaderName + "\"",
+                "Shader \".poiyomi/Poiyomi Toon\"");
+            Assert.That(
+                renamed,
+                Does.Contain("Shader \".poiyomi/Poiyomi Toon\""),
+                "the schema copy must carry the production shader name");
+            _productionNamedPoiyomiStandIn = TestShaderWriter.WriteTestShader(
+                TempFolder + "/poiyomi_production_named.shader", renamed);
+            return _productionNamedPoiyomiStandIn;
+        }
+
+        /// <summary>
+        /// A transparent Poiyomi fixture material on the production-named
+        /// stand-in. Its unused alpha mask holds the unreadable streaming
+        /// texture, so the material carries the display-side streaming
+        /// shape while its own alpha still proves from the readable main
+        /// texture.
+        /// </summary>
+        private Material NewProductionNamedStreamingCurrent(
+            Texture2D mainTex)
+        {
+            var material = _scope.Track(new Material(
+                EnsureProductionNamedPoiyomiStandInShader()));
+            material.SetTexture("_MainTex", mainTex);
+            material.SetTextureScale("_MainTex", Vector2.one);
+            material.SetTextureOffset("_MainTex", Vector2.zero);
+            material.SetFloat("_Mode", 2f);
+            material.SetColor("_Color", new Color(1f, 1f, 1f, 0.5f));
+            material.SetFloat("_AlphaForceOpaque", 0f);
+            material.SetFloat("_MainAlphaMaskMode", 0f);
+            material.SetTexture(
+                "_AlphaMask", ImportUnreadableStreamingMaskTexture());
+            return material;
+        }
+
+        /// <summary>
+        /// A transparent Poiyomi fixture material on the production-named
+        /// stand-in whose main texture is the unreadable streaming texture.
+        /// The capture refuses that alpha field and names no frontend
+        /// reason, which is the retained unnamed-cause shape of the
+        /// streaming arm.
+        /// </summary>
+        private Material NewUnnamedStreamingCurrent()
+        {
+            var material = _scope.Track(new Material(
+                EnsureProductionNamedPoiyomiStandInShader()));
+            material.SetTexture(
+                "_MainTex", ImportUnreadableStreamingMaskTexture());
+            material.SetTextureScale("_MainTex", Vector2.one);
+            material.SetTextureOffset("_MainTex", Vector2.zero);
+            material.SetFloat("_Mode", 2f);
+            material.SetColor("_Color", new Color(1f, 1f, 1f, 0.5f));
+            material.SetFloat("_AlphaForceOpaque", 0f);
+            material.SetFloat("_MainAlphaMaskMode", 0f);
+            return material;
+        }
+
+        /// <summary>
+        /// One material-slot object curve on the Body renderer slot.
+        /// </summary>
+        private static void AddSlotSwap(
+            AnimationClip clip, int slotIndex,
+            params UnityEngine.Object[] values)
+        {
+            var keyframes = new ObjectReferenceKeyframe[values.Length];
+            for (var index = 0; index < values.Length; index++)
+            {
+                keyframes[index] = new ObjectReferenceKeyframe
+                {
+                    time = index,
+                    value = values[index],
+                };
+            }
+
+            AnimationUtility.SetObjectReferenceCurve(
+                clip,
+                EditorCurveBinding.PPtrCurve(
+                    "Body",
+                    typeof(SkinnedMeshRenderer),
+                    "m_Materials.Array.data[" + slotIndex + "]"),
+                keyframes);
+        }
+
+        /// <summary>
+        /// One controller layer whose default state plays the clip. The
+        /// additive mode marks every clip it plays as additive evidence.
+        /// </summary>
+        private static AnimatorController NewSingleLayerController(
+            string name, AnimationClip clip, bool additive)
+        {
+            var controller = new AnimatorController { name = name };
+            controller.AddLayer("L0");
+            var state = controller.layers[0].stateMachine.AddState("S0");
+            state.motion = clip;
+            controller.layers[0].stateMachine.defaultState = state;
+            if (additive)
+            {
+                var layers = controller.layers;
+                layers[0].blendingMode = AnimatorLayerBlendingMode.Additive;
+                controller.layers = layers;
+            }
+
+            return controller;
+        }
+
+        [Test]
+        public void InvalidSwapWithLockedCurrentReportsRefusedSentence()
+        {
+            var root = _scope.Track(
+                NewAvatarRoot("amuse-dry-run-swap-locked"));
+            var optimizer = AddOptimizer(root);
+            var locked = NewNameTagOnlyLockedMaterial();
+            var texture = ImportHalfTexture("swap_locked_main", 255);
+            var swapCandidate = NewCutoutMaterial(texture, 0.5f);
+            AddSkinnedRenderer(root, OneTriangleMesh(), locked);
+
+            var clip = _scope.Track(
+                new AnimationClip { name = "broken-swap-locked" });
+            AddSlotSwap(clip, 0, swapCandidate, null);
+            var controller = _scope.Track(NewSingleLayerController(
+                "broken-swap-locked-controller", clip, additive: false));
+            root.AddComponent<Animator>().runtimeAnimatorController =
+                controller;
+
+            var dryRun = NewDryRun(
+                new Fixture
+                {
+                    Root = root, Optimizer = optimizer, Renderer = null
+                },
+                null, FixtureSelector(), FixtureCapturer());
+            Run(dryRun);
+
+            var rows = SlotRows(dryRun);
+            Assert.That(rows, Has.Count.EqualTo(1));
+            Assert.That(rows[0].SlotIndex, Is.EqualTo(0));
+            Assert.That(
+                rows[0].ProvenTriangles, Is.EqualTo(-1),
+                "a recorded invalid-swap closure failure must not be " +
+                "replaced by a promise about the locked current material");
+            Assert.That(
+                rows[0].Sentence,
+                Is.EqualTo(
+                    "Refused: AMUSE currently does not support this material"));
+            Assert.That(
+                dryRun.RendererRows.Any(
+                    row => row.Kind == MaterialTransformationRowKind.Renderer),
+                Is.True,
+                "the renderer refusal row must accompany the refused slot");
+        }
+
+        [Test]
+        public void InvalidSwapWithStreamingCurrentReportsRefusedSentence()
+        {
+            var root = _scope.Track(
+                NewAvatarRoot("amuse-dry-run-swap-streaming"));
+            var optimizer = AddOptimizer(root);
+            var texture = ImportHalfTexture("swap_streaming_main", 255);
+            var current = NewProductionNamedStreamingCurrent(texture);
+            AddSkinnedRenderer(root, OneTriangleMesh(), current);
+
+            var clip = _scope.Track(
+                new AnimationClip { name = "broken-swap-streaming" });
+            AddSlotSwap(clip, 0, current, null);
+            var controller = _scope.Track(NewSingleLayerController(
+                "broken-swap-streaming-controller", clip, additive: false));
+            root.AddComponent<Animator>().runtimeAnimatorController =
+                controller;
+
+            var dryRun = NewDryRun(
+                new Fixture
+                {
+                    Root = root, Optimizer = optimizer, Renderer = null
+                },
+                null, FixtureSelector(), FixtureCapturer());
+            Run(dryRun);
+
+            var rows = SlotRows(dryRun);
+            Assert.That(rows, Has.Count.EqualTo(1));
+            Assert.That(rows[0].SlotIndex, Is.EqualTo(0));
+            Assert.That(
+                rows[0].ProvenTriangles, Is.EqualTo(-1),
+                "a recorded invalid-swap closure failure must not be " +
+                "replaced by a promise about the streaming current material");
+            Assert.That(
+                rows[0].Sentence,
+                Is.EqualTo(
+                    "Refused: AMUSE currently does not support this material"));
+            Assert.That(
+                dryRun.RendererRows.Any(
+                    row => row.Kind == MaterialTransformationRowKind.Renderer),
+                Is.True,
+                "the renderer refusal row must accompany the refused slot");
+            Assert.That(
+                dryRun.AvatarRows.Any(
+                    row => row.Sentence.Contains("streaming mipmaps")),
+                Is.True,
+                "the streaming disclosure must stay beside the refusal");
+        }
+
+        [Test]
+        public void UnsupportedSwapWithStreamingCurrentReportsRefusedSentence()
+        {
+            var root = _scope.Track(
+                NewAvatarRoot("amuse-dry-run-unsupported-swap"));
+            var optimizer = AddOptimizer(root);
+            var texture = ImportHalfTexture("unsupported_swap_main", 255);
+            var current = NewProductionNamedStreamingCurrent(texture);
+            var swap = _scope.Track(new Material(
+                Shader.Find("Hidden/InternalErrorShader")));
+            AddSkinnedRenderer(root, OneTriangleMesh(), current);
+
+            var clip = _scope.Track(
+                new AnimationClip { name = "unsupported-swap" });
+            AddSlotSwap(clip, 0, swap);
+            var controller = _scope.Track(NewSingleLayerController(
+                "unsupported-swap-controller", clip, additive: false));
+            root.AddComponent<Animator>().runtimeAnimatorController =
+                controller;
+
+            var dryRun = NewDryRun(
+                new Fixture
+                {
+                    Root = root, Optimizer = optimizer, Renderer = null
+                },
+                null, FixtureSelector(), FixtureCapturer());
+            Run(dryRun);
+
+            var rows = SlotRows(dryRun);
+            Assert.That(rows, Has.Count.EqualTo(1));
+            Assert.That(rows[0].SlotIndex, Is.EqualTo(0));
+            Assert.That(
+                rows[0].ProvenTriangles, Is.EqualTo(-1),
+                "the permanently unsupported swap material is the recorded " +
+                "blocker, so the streaming current material must not " +
+                "replace the refusal with a promise about itself");
+            Assert.That(
+                rows[0].Sentence,
+                Is.EqualTo(
+                    "Refused: AMUSE currently does not support this material"));
+            Assert.That(
+                dryRun.RendererRows.Any(
+                    row => row.Kind == MaterialTransformationRowKind.Renderer),
+                Is.True,
+                "the renderer refusal row must accompany the refused slot");
+            Assert.That(
+                dryRun.AvatarRows.Any(
+                    row => row.Sentence.Contains("streaming mipmaps")),
+                Is.True,
+                "the streaming disclosure must stay beside the refusal");
+        }
+
+        [Test]
+        public void MixedSiblingsKeepTheirOwnRowsBesideARefusedSlot()
+        {
+            var root = _scope.Track(
+                NewAvatarRoot("amuse-dry-run-mixed-siblings"));
+            var optimizer = AddOptimizer(root);
+            var streaming = NewUnnamedStreamingCurrent();
+            var texture = ImportHalfTexture("mixed_siblings_main", 255);
+            var cutout = NewCutoutMaterial(texture, 0.5f);
+            AddSkinnedRenderer(root, MixedTwoSlotMesh(), streaming, cutout);
+
+            var clip = _scope.Track(
+                new AnimationClip { name = "slot-one-broken-swap" });
+            AddSlotSwap(clip, 1, cutout, null);
+            var controller = _scope.Track(NewSingleLayerController(
+                "slot-one-broken-swap-controller", clip, additive: false));
+            root.AddComponent<Animator>().runtimeAnimatorController =
+                controller;
+
+            var dryRun = NewDryRun(
+                new Fixture
+                {
+                    Root = root, Optimizer = optimizer, Renderer = null
+                },
+                null, FixtureSelector(), FixtureCapturer());
+            Run(dryRun);
+
+            var rows = SlotRows(dryRun);
+            Assert.That(rows, Has.Count.EqualTo(2));
+            Assert.That(rows[0].SlotIndex, Is.EqualTo(0));
+            Assert.That(
+                rows[0].Sentence, Does.StartWith("Untouchable:"),
+                "the streaming sibling resolves and keeps its own verdict " +
+                "row beside the refused slot");
+            Assert.That(rows[0].ProvenTriangles, Is.EqualTo(0));
+            var refusedRow = rows[1];
+            Assert.That(refusedRow.SlotIndex, Is.EqualTo(1));
+            Assert.That(refusedRow.ProvenTriangles, Is.EqualTo(-1));
+            Assert.That(
+                refusedRow.Sentence,
+                Is.EqualTo(
+                    "Refused: AMUSE currently does not support this material"));
+            Assert.That(
+                dryRun.RendererRows.Any(
+                    row => row.Kind == MaterialTransformationRowKind.Renderer),
+                Is.False,
+                "a renderer with one resolved and one refused slot keeps " +
+                "its per-slot rows without a renderer refusal row");
+        }
+
+        [Test]
+        public void EarlyRendererRefusalWithNoSlotResultsKeepsRendererRowOnly()
+        {
+            var root = _scope.Track(
+                NewAvatarRoot("amuse-dry-run-early-refusal"));
+            var optimizer = AddOptimizer(root);
+            var texture = ImportHalfTexture("early_refusal_main", 255);
+            var cutout = NewCutoutMaterial(texture, 0.5f);
+            AddSkinnedRenderer(root, OneTriangleMesh(), cutout);
+
+            var clip = _scope.Track(
+                new AnimationClip { name = "additive-swap" });
+            AddSlotSwap(clip, 0, cutout);
+            var controller = _scope.Track(NewSingleLayerController(
+                "additive-swap-controller", clip, additive: true));
+            root.AddComponent<Animator>().runtimeAnimatorController =
+                controller;
+
+            var dryRun = NewDryRun(
+                new Fixture
+                {
+                    Root = root, Optimizer = optimizer, Renderer = null
+                },
+                null, FixtureSelector(), FixtureCapturer());
+            Run(dryRun);
+
+            Assert.That(
+                SlotRows(dryRun), Is.Empty,
+                "an early renderer refusal carries no slot results");
+            Assert.That(dryRun.RendererRows, Has.Count.EqualTo(1));
+            var refusedRow = dryRun.RendererRows.Single();
+            Assert.That(
+                refusedRow.Kind,
+                Is.EqualTo(MaterialTransformationRowKind.Renderer));
+            Assert.That(refusedRow.ProvenTriangles, Is.EqualTo(-1));
+        }
+
+        /// <summary>
+        /// The next two tests characterize the display gate directly. The
+        /// slot results come from the existing factory, so they pin the
+        /// gate's cause handling. They are not a production capture path
+        /// and claim no production streaming or lock behavior.
+        /// </summary>
+        [Test]
+        public void GateDefersRecordedSemanticsUnknownCauseForLockedCurrent()
+        {
+            var root = _scope.Track(
+                NewAvatarRoot("amuse-dry-run-gate-locked"));
+            var locked = NewNameTagOnlyLockedMaterial();
+            var renderer = AddSkinnedRenderer(
+                root, OneTriangleMesh(), locked);
+
+            var slotResult = SlotResolutionResult.Refused(
+                RendererAnalysisRefusal.AdmittedMaterialSemanticsUnknown);
+            var slotEvidence = new CapturedMaterialSlotEvidence(
+                0, new[] { 0 });
+
+            Assert.That(
+                AlphaSeparationDryRun.IsSlotDeferred(
+                    renderer, 0, slotResult, slotEvidence),
+                Is.True,
+                "the locked arm defers a recorded semantics-unknown cause " +
+                "behind the live attested locked identity");
+        }
+
+        [Test]
+        public void GateRefusesRecordedLockCauseForLockedCurrent()
+        {
+            var root = _scope.Track(
+                NewAvatarRoot("amuse-dry-run-gate-lock-refusal"));
+            var locked = NewNameTagOnlyLockedMaterial();
+            var renderer = AddSkinnedRenderer(
+                root, OneTriangleMesh(), locked);
+
+            var slotResult = SlotResolutionResult.Refused(
+                RendererAnalysisRefusal.LockedPoiyomiOriginalShaderUnattested);
+            var slotEvidence = new CapturedMaterialSlotEvidence(
+                0, new[] { 0 });
+
+            Assert.That(
+                AlphaSeparationDryRun.IsSlotDeferred(
+                    renderer, 0, slotResult, slotEvidence),
+                Is.False,
+                "a recorded lock refusal is a permanent cause the build " +
+                "does not recover, so the gate refuses it");
         }
 
         [Test]

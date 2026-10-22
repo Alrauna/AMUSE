@@ -7,6 +7,7 @@ All notable changes to AMUSE are documented in this file.
 ### Fixed
 - Play mode results are keyed by the proved global identity of each avatar root. Same-named roots, twins of one prefab, and roots in scenes with duplicate names keep separate results. A rename or a reorder keeps the record. A root without a proved identity, such as an avatar in an unsaved scene or a copy made during Play, holds no record.
 - The Show Material Transformations preview rejects a run after any setting change. This includes a change made while background work runs. Changing the setting back does not restore the rejected results. Refresh is the only recovery.
+- The Show Material Transformations preview keeps a recorded refusal cause on the slot row. A closure failure or another named permanent cause now keeps the refusal even when the current material is locked or holds an unreadable streaming texture. The deferred display stays for the valid locked current material and the unnamed streaming capture refusal.
 
 ### Changed
 - Capture tests for RGB24 and ARGB32 no longer pin a specific backend's sampling capability. RGB24 keeps its source-format Sample support exemption, and its test checks full-chain opaque alpha. ARGB32 follows the exact sampling gate. Without exact support, its test asserts the real capture refusal with no evidence. With exact support, it checks 255, which passes the opaque predicate, and 128 and 254, which do not.
