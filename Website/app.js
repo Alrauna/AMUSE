@@ -108,22 +108,23 @@ const setTheme = () => {
     rowMoreMenu.hidden = true;
   }
 
+  // The menu item keeps one stable action. It reads the URL stored by the last row-button click.
+  let selectedPackageUrl = null;
+  const downloadLink = rowMoreMenu.querySelector('#rowMoreMenuDownload');
+  downloadLink.addEventListener('change', () => {
+    window.open(selectedPackageUrl, '_blank', 'noopener');
+  });
+
   const rowMenuButtons = document.querySelectorAll('.rowMenuButton');
   rowMenuButtons.forEach(button => {
     button.addEventListener('click', e => {
+      selectedPackageUrl = e.currentTarget.dataset.packageUrl;
+      e.stopPropagation();
+      const buttonRect = e.currentTarget.getBoundingClientRect();
+      rowMoreMenu.style.top = `${buttonRect.bottom}px`;
+      rowMoreMenu.style.left = `${buttonRect.right - 120}px`;
       if (rowMoreMenu?.hidden) {
-        rowMoreMenu.style.top = `${e.clientY + e.target.clientHeight}px`;
-        rowMoreMenu.style.left = `${e.clientX - 120}px`;
         rowMoreMenu.hidden = false;
-
-        const downloadLink = rowMoreMenu.querySelector('#rowMoreMenuDownload');
-        const downloadListener = () => {
-          window.open(e?.target?.dataset?.packageUrl, '_blank');
-        }
-        downloadLink.addEventListener('change', () => {
-          downloadListener();
-          downloadLink.removeEventListener('change', downloadListener);
-        });
 
         setTimeout(() => {
           document.addEventListener('click', hideRowMoreMenu);
