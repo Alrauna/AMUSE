@@ -14,6 +14,7 @@ All notable changes to AMUSE are documented in this file.
 - Stored transformation rows now carry the typed `MaterialTransformationRowKind` through the whole record path. The build pass, the apply pass, the store reader, and the tests name the kind instead of a raw number. The stored numbers 0 through 4 stay unchanged, so old session records still load and draw the same rows.
 - Resolved runtime states carry their material slot evidence beside the per-slot results. The build pass and the preview read the paired evidence from the result and no longer derive the slot list a second time. A renderer-wide early refusal keeps empty slot evidence and empty per-slot results. Preparation keeps its own independent slot derivation.
 - Capture tests for RGB24 and ARGB32 no longer pin a specific backend's sampling capability. RGB24 keeps its source-format Sample support exemption, and its test checks full-chain opaque alpha. ARGB32 follows the exact sampling gate. Without exact support, its test asserts the real capture refusal with no evidence. With exact support, it checks 255, which passes the opaque predicate, and 128 and 254, which do not.
+- The consent scan calls the shared approved-identity predicate instead of spelling its rule again. The earlier attestation filter stays in place. Consent subjects, granted names, and the approved-version flag keep their behavior.
 
 ## [0.1.0-pre.10] - 2026-10-21
 

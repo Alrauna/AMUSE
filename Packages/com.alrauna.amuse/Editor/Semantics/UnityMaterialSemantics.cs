@@ -628,11 +628,7 @@ namespace Alrauna.Amuse.Editor.Semantics
                 // read is family-confined by construction — only the
                 // lilToon families carry the lilToon evidence or a Multi
                 // resolution.
-                var approved = CapturedVersionIsApproved(captured[index]);
-                var identityRefused = captured[index].MultiResolution == null ||
-                    captured[index].MultiResolution.Refusal ==
-                        LilToonMultiResolutionRefusal.AttestationFailed;
-                if (approved && identityRefused)
+                if (IsApprovedIdentityFailure(captured[index]))
                 {
                     anyApproved = true;
                     continue;
