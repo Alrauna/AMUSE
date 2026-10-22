@@ -2,44 +2,17 @@ using System;
 using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.DryRun;
 using Alrauna.Amuse.Runtime;
+using Alrauna.Amuse.Tests.Editor.Shared;
 using NUnit.Framework;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace Alrauna.Amuse.Tests.Editor.Build
 {
     public sealed class PlayModeBuildStoreTests
     {
-        [Test]
-        public void ComputeAvatarKeyStripsCloneSuffix()
-        {
-            var go = new GameObject("Avatar(Clone)");
-            try
-            {
-                var key = PlayModeBuildStore.ComputeAvatarKey(go.transform);
-                Assert.That(key, Does.EndWith("::Avatar"));
-            }
-            finally
-            {
-                UnityEngine.Object.DestroyImmediate(go);
-            }
-        }
-
-        [Test]
-        public void ComputeAvatarKeyStripsCloneSuffixWithSpace()
-        {
-            var go = new GameObject("Avatar (Clone)");
-            try
-            {
-                var key = PlayModeBuildStore.ComputeAvatarKey(go.transform);
-                Assert.That(key, Does.EndWith("::Avatar"));
-            }
-            finally
-            {
-                UnityEngine.Object.DestroyImmediate(go);
-            }
-        }
-
         [Test]
         public void ComputeAvatarKeyReturnsEmptyWhenNull()
         {
@@ -253,12 +226,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
-        // Mirrors the store's private "Amuse_PlayMode_" session prefix.
+        // Mirrors the store's private "Amuse_PlayMode_v2_" session prefix.
         private static string AvatarKey() => "MatrixScene::Avatar";
 
         private static string Fingerprint() => "fingerprint_matrix";
 
-        private static string StoreKey() => "Amuse_PlayMode_" + AvatarKey();
+        private static string StoreKey() => "Amuse_PlayMode_v2_" + AvatarKey();
 
         private static void SetStoredInt(
             AmuseAvatarOptimizer component, string field, int value)
@@ -385,6 +358,546 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(loaded.rendererRows.Length, Is.EqualTo(1));
             Assert.That(loaded.rendererRows[0].rendererPath, Is.EqualTo("SceneRoot/Accessory/Mesh"));
             Assert.That(loaded.rendererRows[0].sourceMaterialPath, Is.EqualTo("Assets/Materials/Accessory.mat"));
+        }
+
+        private const string OwnedSceneFolder = "Assets/AmuseTests_PlayOwnership";
+
+        private static SerializedTransformationRow SentenceRow(string sentence)
+        {
+            return new SerializedTransformationRow
+            {
+                kind = 0,
+                sentence = sentence
+            };
+        }
+
+        [Test]
+        public void TwoSameNamedSavedRootsKeepTheirOwnRows()
+        {
+            var scope = new TestTransientScope(OwnedSceneFolder);
+            var firstKey = "";
+            var secondKey = "";
+            try
+            {
+                scope.EnsureTempFolder();
+                var first = scope.CreateSavedSceneRoot("AMUSE Probe Shared Name");
+                var second = scope.CreateSavedSceneRoot("AMUSE Probe Shared Name");
+                var firstOptimizer = first.AddComponent<AmuseAvatarOptimizer>();
+                var secondOptimizer = second.AddComponent<AmuseAvatarOptimizer>();
+                scope.SaveOwnedScene();
+
+                firstKey = PlayModeBuildStore.ComputeAvatarKey(first.transform);
+                secondKey = PlayModeBuildStore.ComputeAvatarKey(second.transform);
+                Assert.That(firstKey, Is.Not.Empty, "a saved root has a proved key");
+                Assert.That(secondKey, Is.Not.Empty, "a saved root has a proved key");
+                Assert.That(
+                    secondKey, Is.Not.EqualTo(firstKey),
+                    "two same-named saved roots must not share one record key");
+
+                // equal policy on both roots, distinct rows per root
+                var fingerprint = PlayModeBuildStore.ComputePolicyFingerprint(
+                    firstOptimizer, EditorUserBuildSettings.activeBuildTarget);
+                Assert.That(
+                    PlayModeBuildStore.ComputePolicyFingerprint(
+                        secondOptimizer, EditorUserBuildSettings.activeBuildTarget),
+                    Is.EqualTo(fingerprint), "the two roots carry an equal policy");
+
+                PlayModeBuildStore.Save(new PlayModeBuildRecord
+                {
+                    avatarKey = firstKey,
+                    policyFingerprint = fingerprint,
+                    avatarRows = new[] { SentenceRow("First result.") },
+                    rendererRows = Array.Empty<SerializedTransformationRow>()
+                });
+                PlayModeBuildStore.Save(new PlayModeBuildRecord
+                {
+                    avatarKey = secondKey,
+                    policyFingerprint = fingerprint,
+                    avatarRows = new[] { SentenceRow("Second result.") },
+                    rendererRows = Array.Empty<SerializedTransformationRow>()
+                });
+
+                var loadedFirst = PlayModeBuildStore.TryLoad(firstKey, fingerprint);
+                var loadedSecond = PlayModeBuildStore.TryLoad(secondKey, fingerprint);
+                Assert.That(loadedFirst.avatarRows[0].sentence, Is.EqualTo("First result."));
+                Assert.That(loadedSecond.avatarRows[0].sentence, Is.EqualTo("Second result."));
+
+                PlayModeBuildStore.Clear(firstKey);
+                var loadedSecondAfterFirstClear =
+                    PlayModeBuildStore.TryLoad(secondKey, fingerprint);
+                Assert.That(loadedSecondAfterFirstClear, Is.Not.Null);
+                Assert.That(
+                    loadedSecondAfterFirstClear.avatarRows[0].sentence,
+                    Is.EqualTo("Second result."));
+            }
+            finally
+            {
+                // erase only the computed owned record keys before the scene
+                // teardown, so a failing assertion leaks no session rows
+                if (firstKey != "") PlayModeBuildStore.Clear(firstKey);
+                if (secondKey != "") PlayModeBuildStore.Clear(secondKey);
+                scope.TearDown();
+            }
+        }
+
+        [Test]
+        public void UnsavedRootsNeverBorrowARecord()
+        {
+            var container = default(Scene);
+            var ownsScene = false;
+            var prior = default(Scene);
+            var first = (GameObject)null;
+            var second = (GameObject)null;
+            try
+            {
+                // container: an already-loaded normal unsaved scene, or one
+                // this test creates when none exists. The scene is never saved.
+                for (var index = 0; index < SceneManager.sceneCount; index++)
+                {
+                    var candidate = SceneManager.GetSceneAt(index);
+                    if (candidate.path == "" && candidate.isLoaded &&
+                        !EditorSceneManager.IsPreviewScene(candidate))
+                    {
+                        container = candidate;
+                        break;
+                    }
+                }
+                if (!container.IsValid())
+                {
+                    // no untitled normal scene is loaded, so the additive
+                    // create cannot hit the untitled-scene refusal
+                    container = EditorSceneManager.NewScene(
+                        NewSceneSetup.EmptyScene, NewSceneMode.Additive);
+                    ownsScene = true;
+                }
+                Assert.That(
+                    container.path, Is.Empty,
+                    "the container must be a real unsaved scene");
+                prior = SceneManager.GetActiveScene();
+                SceneManager.SetActiveScene(container);
+                first = new GameObject("AMUSE Probe Unsaved");
+                second = new GameObject("AMUSE Probe Unsaved");
+
+                // fixture guards: with no scene asset, the committed identity
+                // contract is missing its scene identity part
+                var firstKey = PlayModeBuildStore.ComputeAvatarKey(first.transform);
+                var secondKey = PlayModeBuildStore.ComputeAvatarKey(second.transform);
+                Assert.That(
+                    firstKey, Is.Empty,
+                    "an unsaved root has no proved authored identity");
+                Assert.That(
+                    secondKey, Is.Empty,
+                    "an unsaved root has no proved authored identity");
+
+                // an empty key authorizes no save, load, or clear, so neither
+                // root can hold or take the rows of the other
+                PlayModeBuildStore.Save(new PlayModeBuildRecord
+                {
+                    avatarKey = firstKey,
+                    policyFingerprint = "fingerprint_unsaved",
+                    avatarRows = new[] { SentenceRow("Unsaved first result.") },
+                    rendererRows = Array.Empty<SerializedTransformationRow>()
+                });
+                PlayModeBuildStore.Save(new PlayModeBuildRecord
+                {
+                    avatarKey = secondKey,
+                    policyFingerprint = "fingerprint_unsaved",
+                    avatarRows = new[] { SentenceRow("Unsaved second result.") },
+                    rendererRows = Array.Empty<SerializedTransformationRow>()
+                });
+                Assert.That(
+                    PlayModeBuildStore.TryLoad(firstKey, "fingerprint_unsaved"),
+                    Is.Null, "an unsaved root never loads a record");
+                Assert.That(
+                    PlayModeBuildStore.TryLoad(secondKey, "fingerprint_unsaved"),
+                    Is.Null, "an unsaved root never loads the record of the other root");
+                PlayModeBuildStore.Clear(firstKey);
+                PlayModeBuildStore.Clear(secondKey);
+                Assert.That(
+                    PlayModeBuildStore.TryLoad(firstKey, "fingerprint_unsaved"),
+                    Is.Null);
+                Assert.That(
+                    PlayModeBuildStore.TryLoad(secondKey, "fingerprint_unsaved"),
+                    Is.Null);
+            }
+            finally
+            {
+                if (first != null) UnityEngine.Object.DestroyImmediate(first);
+                if (second != null) UnityEngine.Object.DestroyImmediate(second);
+                if (prior.IsValid() && prior.isLoaded &&
+                    SceneManager.GetActiveScene() == container)
+                {
+                    SceneManager.SetActiveScene(prior);
+                }
+                // only a scene this test created is ever closed, discarded
+                if (ownsScene && container.IsValid() && container.isLoaded)
+                {
+                    if (SceneManager.GetActiveScene() == container)
+                    {
+                        for (var index = 0; index < SceneManager.sceneCount; index++)
+                        {
+                            var candidate = SceneManager.GetSceneAt(index);
+                            if (candidate.path != container.path && candidate.isLoaded)
+                            {
+                                SceneManager.SetActiveScene(candidate);
+                                break;
+                            }
+                        }
+                    }
+                    EditorSceneManager.CloseScene(container, true);
+                }
+            }
+        }
+
+        [Test]
+        public void RenameAfterSaveKeepsTheRecord()
+        {
+            var scope = new TestTransientScope(OwnedSceneFolder);
+            var key = "";
+            try
+            {
+                scope.EnsureTempFolder();
+                var root = scope.CreateSavedSceneRoot("AMUSE Probe Rename");
+                root.AddComponent<AmuseAvatarOptimizer>();
+                scope.SaveOwnedScene();
+
+                key = PlayModeBuildStore.ComputeAvatarKey(root.transform);
+                Assert.That(key, Is.Not.Empty, "a saved root has a proved key");
+                PlayModeBuildStore.Save(new PlayModeBuildRecord
+                {
+                    avatarKey = key,
+                    policyFingerprint = "fingerprint_rename",
+                    avatarRows = new[] { SentenceRow("Rename result.") },
+                    rendererRows = Array.Empty<SerializedTransformationRow>()
+                });
+
+                root.name = "AMUSE Probe Renamed";
+                scope.SaveOwnedScene();
+                Assert.That(
+                    PlayModeBuildStore.ComputeAvatarKey(root.transform),
+                    Is.EqualTo(key), "a rename must not move the record key");
+                Assert.That(
+                    PlayModeBuildStore.TryLoad(key, "fingerprint_rename")
+                        .avatarRows[0].sentence,
+                    Is.EqualTo("Rename result."));
+            }
+            finally
+            {
+                if (key != "") PlayModeBuildStore.Clear(key);
+                scope.TearDown();
+            }
+        }
+
+        [Test]
+        public void ReorderAfterSaveKeepsTheRecord()
+        {
+            var scope = new TestTransientScope(OwnedSceneFolder);
+            var key = "";
+            try
+            {
+                scope.EnsureTempFolder();
+                var first = scope.CreateSavedSceneRoot("AMUSE Probe Reorder A");
+                var second = scope.CreateSavedSceneRoot("AMUSE Probe Reorder B");
+                first.AddComponent<AmuseAvatarOptimizer>();
+                second.AddComponent<AmuseAvatarOptimizer>();
+                scope.SaveOwnedScene();
+
+                key = PlayModeBuildStore.ComputeAvatarKey(first.transform);
+                Assert.That(key, Is.Not.Empty, "a saved root has a proved key");
+                PlayModeBuildStore.Save(new PlayModeBuildRecord
+                {
+                    avatarKey = key,
+                    policyFingerprint = "fingerprint_reorder",
+                    avatarRows = new[] { SentenceRow("Reorder result.") },
+                    rendererRows = Array.Empty<SerializedTransformationRow>()
+                });
+
+                first.transform.SetSiblingIndex(1);
+                scope.SaveOwnedScene();
+                Assert.That(
+                    PlayModeBuildStore.ComputeAvatarKey(first.transform),
+                    Is.EqualTo(key), "a reorder must not move the record key");
+                Assert.That(
+                    PlayModeBuildStore.TryLoad(key, "fingerprint_reorder")
+                        .avatarRows[0].sentence,
+                    Is.EqualTo("Reorder result."));
+            }
+            finally
+            {
+                if (key != "") PlayModeBuildStore.Clear(key);
+                scope.TearDown();
+            }
+        }
+
+        [Test]
+        public void DestroyedRootComputeTouchesNoSurvivor()
+        {
+            var scope = new TestTransientScope(OwnedSceneFolder);
+            var secondKey = "";
+            try
+            {
+                scope.EnsureTempFolder();
+                var first = scope.CreateSavedSceneRoot("AMUSE Probe Doomed");
+                var second = scope.CreateSavedSceneRoot("AMUSE Probe Doomed");
+                first.AddComponent<AmuseAvatarOptimizer>();
+                second.AddComponent<AmuseAvatarOptimizer>();
+                scope.SaveOwnedScene();
+
+                var secondKeyComputed =
+                    PlayModeBuildStore.ComputeAvatarKey(second.transform);
+                secondKey = secondKeyComputed;
+                Assert.That(secondKey, Is.Not.Empty, "a saved root has a proved key");
+                PlayModeBuildStore.Save(new PlayModeBuildRecord
+                {
+                    avatarKey = secondKey,
+                    policyFingerprint = "fingerprint_survivor",
+                    avatarRows = new[] { SentenceRow("Second result.") },
+                    rendererRows = Array.Empty<SerializedTransformationRow>()
+                });
+
+                var retained = first.transform;
+                UnityEngine.Object.DestroyImmediate(first.gameObject);
+                scope.SaveOwnedScene();
+
+                // the destroyed root proves no key, so a load or a clear
+                // through the retained reference is a no-op for the survivor
+                Assert.That(
+                    PlayModeBuildStore.ComputeAvatarKey(retained), Is.Empty,
+                    "a destroyed root has no proved authored identity");
+                Assert.That(
+                    PlayModeBuildStore.TryLoad(
+                        PlayModeBuildStore.ComputeAvatarKey(retained),
+                        "fingerprint_survivor"),
+                    Is.Null);
+                PlayModeBuildStore.Clear(
+                    PlayModeBuildStore.ComputeAvatarKey(retained));
+
+                Assert.That(
+                    PlayModeBuildStore.TryLoad(secondKey, "fingerprint_survivor")
+                        .avatarRows[0].sentence,
+                    Is.EqualTo("Second result."));
+            }
+            finally
+            {
+                if (secondKey != "") PlayModeBuildStore.Clear(secondKey);
+                scope.TearDown();
+            }
+        }
+
+        [Test]
+        public void ReplacedRootDoesNotJoinTheSurvivor()
+        {
+            var scope = new TestTransientScope(OwnedSceneFolder);
+            var survivorKey = "";
+            try
+            {
+                scope.EnsureTempFolder();
+                var replaced = scope.CreateSavedSceneRoot("AMUSE Probe Replace");
+                var survivor = scope.CreateSavedSceneRoot("AMUSE Probe Survivor");
+                replaced.AddComponent<AmuseAvatarOptimizer>();
+                survivor.AddComponent<AmuseAvatarOptimizer>();
+                scope.SaveOwnedScene();
+
+                survivorKey = PlayModeBuildStore.ComputeAvatarKey(survivor.transform);
+                Assert.That(survivorKey, Is.Not.Empty, "a saved root has a proved key");
+                PlayModeBuildStore.Save(new PlayModeBuildRecord
+                {
+                    avatarKey = survivorKey,
+                    policyFingerprint = "fingerprint_replaced",
+                    avatarRows = new[] { SentenceRow("Survivor result.") },
+                    rendererRows = Array.Empty<SerializedTransformationRow>()
+                });
+
+                var retained = replaced.transform;
+                UnityEngine.Object.DestroyImmediate(replaced.gameObject);
+                var replacement = scope.CreateSavedSceneRoot("AMUSE Probe Replace");
+                replacement.AddComponent<AmuseAvatarOptimizer>();
+                scope.SaveOwnedScene();
+
+                // the destroyed root proves no key, and the replacement never
+                // joins the survivor's key; opaque-key eviction is not required
+                Assert.That(
+                    PlayModeBuildStore.ComputeAvatarKey(retained), Is.Empty);
+                var replacementKey =
+                    PlayModeBuildStore.ComputeAvatarKey(replacement.transform);
+                Assert.That(
+                    replacementKey, Is.Not.EqualTo(survivorKey),
+                    "a replacement root must not join the survivor key");
+                Assert.That(
+                    PlayModeBuildStore.TryLoad(survivorKey, "fingerprint_replaced")
+                        .avatarRows[0].sentence,
+                    Is.EqualTo("Survivor result."));
+            }
+            finally
+            {
+                if (survivorKey != "") PlayModeBuildStore.Clear(survivorKey);
+                scope.TearDown();
+            }
+        }
+
+        [Test]
+        public void SamePrefabTwinsKeepTheirOwnRows()
+        {
+            var scope = new TestTransientScope(OwnedSceneFolder);
+            var firstKey = "";
+            var secondKey = "";
+            try
+            {
+                scope.EnsureTempFolder();
+                var source = scope.CreateSavedSceneRoot("AMUSE Probe Twin Source");
+                source.AddComponent<AmuseAvatarOptimizer>();
+                var asset = PrefabUtility.SaveAsPrefabAsset(
+                    source, OwnedSceneFolder + "/ProbeTwin.prefab");
+                UnityEngine.Object.DestroyImmediate(source);
+                Assert.That(asset, Is.Not.Null, "the twin prefab asset exists");
+
+                var first = (GameObject)PrefabUtility.InstantiatePrefab(asset);
+                var second = (GameObject)PrefabUtility.InstantiatePrefab(asset);
+                first.name = "AMUSE Probe Twin";
+                second.name = "AMUSE Probe Twin";
+                Assert.That(
+                    first.scene == second.scene,
+                    Is.True, "both twins must live in the owned scene");
+                scope.SaveOwnedScene();
+
+                firstKey = PlayModeBuildStore.ComputeAvatarKey(first.transform);
+                secondKey = PlayModeBuildStore.ComputeAvatarKey(second.transform);
+                Assert.That(firstKey, Is.Not.Empty, "a saved root has a proved key");
+                Assert.That(secondKey, Is.Not.Empty, "a saved root has a proved key");
+                Assert.That(
+                    secondKey, Is.Not.EqualTo(firstKey),
+                    "same-prefab twins must not share one record key");
+
+                PlayModeBuildStore.Save(new PlayModeBuildRecord
+                {
+                    avatarKey = firstKey,
+                    policyFingerprint = "fingerprint_twins",
+                    avatarRows = new[] { SentenceRow("First result.") },
+                    rendererRows = Array.Empty<SerializedTransformationRow>()
+                });
+                PlayModeBuildStore.Save(new PlayModeBuildRecord
+                {
+                    avatarKey = secondKey,
+                    policyFingerprint = "fingerprint_twins",
+                    avatarRows = new[] { SentenceRow("Second result.") },
+                    rendererRows = Array.Empty<SerializedTransformationRow>()
+                });
+                Assert.That(
+                    PlayModeBuildStore.TryLoad(firstKey, "fingerprint_twins")
+                        .avatarRows[0].sentence,
+                    Is.EqualTo("First result."));
+                Assert.That(
+                    PlayModeBuildStore.TryLoad(secondKey, "fingerprint_twins")
+                        .avatarRows[0].sentence,
+                    Is.EqualTo("Second result."));
+            }
+            finally
+            {
+                if (firstKey != "") PlayModeBuildStore.Clear(firstKey);
+                if (secondKey != "") PlayModeBuildStore.Clear(secondKey);
+                scope.TearDown();
+            }
+        }
+
+        [Test]
+        public void DuplicateSceneNamesKeepTheirOwnRows()
+        {
+            var scopeA = new TestTransientScope("Assets/AmuseTests_PlayOwnershipA");
+            var scopeB = new TestTransientScope("Assets/AmuseTests_PlayOwnershipB");
+            var firstKey = "";
+            var secondKey = "";
+            try
+            {
+                scopeA.EnsureTempFolder();
+                scopeB.EnsureTempFolder();
+                // both copies carry the same scene file name in different
+                // folders, so the scene names match while the identities do not
+                var first = scopeA.CreateSavedSceneRoot("AMUSE Probe Dup");
+                var second = scopeB.CreateSavedSceneRoot("AMUSE Probe Dup");
+                first.AddComponent<AmuseAvatarOptimizer>();
+                second.AddComponent<AmuseAvatarOptimizer>();
+                scopeA.SaveOwnedScene();
+                scopeB.SaveOwnedScene();
+
+                firstKey = PlayModeBuildStore.ComputeAvatarKey(first.transform);
+                secondKey = PlayModeBuildStore.ComputeAvatarKey(second.transform);
+                Assert.That(firstKey, Is.Not.Empty, "a saved root has a proved key");
+                Assert.That(secondKey, Is.Not.Empty, "a saved root has a proved key");
+                Assert.That(
+                    secondKey, Is.Not.EqualTo(firstKey),
+                    "duplicate scene names must not share one record key");
+
+                PlayModeBuildStore.Save(new PlayModeBuildRecord
+                {
+                    avatarKey = firstKey,
+                    policyFingerprint = "fingerprint_duplicate",
+                    avatarRows = new[] { SentenceRow("First result.") },
+                    rendererRows = Array.Empty<SerializedTransformationRow>()
+                });
+                PlayModeBuildStore.Save(new PlayModeBuildRecord
+                {
+                    avatarKey = secondKey,
+                    policyFingerprint = "fingerprint_duplicate",
+                    avatarRows = new[] { SentenceRow("Second result.") },
+                    rendererRows = Array.Empty<SerializedTransformationRow>()
+                });
+                Assert.That(
+                    PlayModeBuildStore.TryLoad(firstKey, "fingerprint_duplicate")
+                        .avatarRows[0].sentence,
+                    Is.EqualTo("First result."));
+                Assert.That(
+                    PlayModeBuildStore.TryLoad(secondKey, "fingerprint_duplicate")
+                        .avatarRows[0].sentence,
+                    Is.EqualTo("Second result."));
+            }
+            finally
+            {
+                if (firstKey != "") PlayModeBuildStore.Clear(firstKey);
+                if (secondKey != "") PlayModeBuildStore.Clear(secondKey);
+                try
+                {
+                    scopeA.TearDown();
+                }
+                finally
+                {
+                    scopeB.TearDown();
+                }
+            }
+        }
+
+        [Test]
+        public void NestedSavedRootKeepsItsRecord()
+        {
+            var scope = new TestTransientScope(OwnedSceneFolder);
+            var key = "";
+            try
+            {
+                scope.EnsureTempFolder();
+                var parent = scope.CreateSavedSceneRoot("AMUSE Probe Parent");
+                var nested = new GameObject("AMUSE Probe Nested");
+                nested.transform.SetParent(parent.transform, false);
+                nested.AddComponent<AmuseAvatarOptimizer>();
+                scope.SaveOwnedScene();
+
+                key = PlayModeBuildStore.ComputeAvatarKey(nested.transform);
+                Assert.That(key, Is.Not.Empty, "a nested saved root has a proved key");
+                PlayModeBuildStore.Save(new PlayModeBuildRecord
+                {
+                    avatarKey = key,
+                    policyFingerprint = "fingerprint_nested",
+                    avatarRows = new[] { SentenceRow("Nested result.") },
+                    rendererRows = Array.Empty<SerializedTransformationRow>()
+                });
+                Assert.That(
+                    PlayModeBuildStore.TryLoad(key, "fingerprint_nested")
+                        .avatarRows[0].sentence,
+                    Is.EqualTo("Nested result."));
+            }
+            finally
+            {
+                if (key != "") PlayModeBuildStore.Clear(key);
+                scope.TearDown();
+            }
         }
     }
 }

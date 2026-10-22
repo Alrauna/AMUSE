@@ -1,8 +1,11 @@
 using System;
+using System.Collections.Generic;
 using Alrauna.Amuse.Runtime;
 using nadena.dev.ndmf;
 using UnityEditor;
+using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace Alrauna.Amuse.Editor.Build
 {
@@ -29,21 +32,257 @@ namespace Alrauna.Amuse.Editor.Build
         public SerializedTransformationRow[] rendererRows;
     }
 
+    /// <summary>
+    /// Play records belong to one proved avatar root. The key is the full
+    /// valid global identity string of a saved scene root in edit mode, and
+    /// a captured native reference match in Play mode. An empty key
+    /// authorizes no save, load, or clear. The session prefix changed with
+    /// the proved key, so old name-key records cannot load.
+    /// </summary>
+    [InitializeOnLoad]
     internal static class PlayModeBuildStore
     {
-        private const string SessionPrefix = "Amuse_PlayMode_";
+        private const string SessionPrefix = "Amuse_PlayMode_v2_";
+        private const string PendingEntryKey = "Amuse_RootIdentity_PendingEntry";
 
+        // Recovered owned snapshot. The overloaded Unity null treats a
+        // destroyed snapshot as absent, so a stale field after a teardown or
+        // a domain reload rescans through the strict recovery.
+        private static PlayModeRootIdentitySnapshot _recovered;
+
+        static PlayModeBuildStore()
+        {
+            // The lifecycle subscribes once per domain, independent of any
+            // inspector instance.
+            EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
+            if (SessionState.GetBool(PendingEntryKey, false))
+            {
+                EditorApplication.update += PendingGuard;
+            }
+            if (!EditorApplication.isPlaying &&
+                !EditorApplication.isPlayingOrWillChangePlaymode)
+            {
+                // an orphan from an interrupted run is cleaned when the
+                // editor loads idle, never during a Play transition
+                EditorApplication.delayCall += IdleCheck;
+            }
+        }
+
+        private static void OnPlayModeStateChanged(PlayModeStateChange change)
+        {
+            if (change == PlayModeStateChange.ExitingEditMode)
+            {
+                CaptureSnapshotForEntry();
+            }
+            else if (change == PlayModeStateChange.EnteredPlayMode)
+            {
+                // a real entry: the pending wait is over
+                SessionState.SetBool(PendingEntryKey, false);
+                EditorApplication.update -= PendingGuard;
+            }
+            else if (change == PlayModeStateChange.EnteredEditMode)
+            {
+                // canceled entry or normal exit: recover and destroy now,
+                // but only while the editor is idle, so an immediate new
+                // entry keeps its fresh capture
+                if (!EditorApplication.isPlaying &&
+                    !EditorApplication.isPlayingOrWillChangePlaymode)
+                {
+                    DestroyOwnedSnapshot();
+                    SessionState.SetBool(PendingEntryKey, false);
+                    EditorApplication.update -= PendingGuard;
+                }
+                // the delayed check handles idle-load orphan cleanup only
+                EditorApplication.delayCall += IdleCheck;
+            }
+        }
+
+        /// <summary>
+        /// The reviewed idle predicate. A real Play start ends the pending
+        /// wait. An idle editor with a stuck pending flag runs the owned
+        /// idle cleanup. A Play transition in flight keeps waiting.
+        /// </summary>
+        private static void PendingGuard()
+        {
+            if (!SessionState.GetBool(PendingEntryKey, false))
+            {
+                EditorApplication.update -= PendingGuard;
+                return;
+            }
+            if (EditorApplication.isPlaying)
+            {
+                SessionState.SetBool(PendingEntryKey, false);
+                EditorApplication.update -= PendingGuard;
+                return;
+            }
+            if (!EditorApplication.isPlayingOrWillChangePlaymode)
+            {
+                IdleCheck();
+                SessionState.SetBool(PendingEntryKey, false);
+                EditorApplication.update -= PendingGuard;
+            }
+        }
+
+        /// <summary>
+        /// Runs after native restoration. Both Play flags are rechecked, the
+        /// owned snapshot is recovered and destroyed, the pending flag is
+        /// cleared, and the update guard is removed.
+        /// </summary>
+        private static void IdleCheck()
+        {
+            if (EditorApplication.isPlaying ||
+                EditorApplication.isPlayingOrWillChangePlaymode)
+            {
+                return;
+            }
+            DestroyOwnedSnapshot();
+            SessionState.SetBool(PendingEntryKey, false);
+            EditorApplication.update -= PendingGuard;
+        }
+
+        /// <summary>
+        /// Captures a fresh snapshot once per real entry, before the editor
+        /// leaves edit mode. A previous owned snapshot is destroyed first.
+        /// An empty candidate set creates no holder.
+        /// </summary>
+        private static void CaptureSnapshotForEntry()
+        {
+            DestroyOwnedSnapshot();
+            SessionState.SetBool(PendingEntryKey, true);
+            EditorApplication.update -= PendingGuard;
+            EditorApplication.update += PendingGuard;
+
+            var roots = new List<GameObject>();
+            var keys = new List<string>();
+            CollectAuthoredPairs(roots, keys);
+            if (roots.Count == 0) return;
+
+            var snapshot = ScriptableObject.CreateInstance<
+                PlayModeRootIdentitySnapshot>();
+            snapshot.hideFlags = HideFlags.HideAndDontSave;
+            snapshot.Initialize(roots.ToArray(), keys.ToArray());
+            _recovered = snapshot;
+        }
+
+        /// <summary>
+        /// Enumerates optimizer components in normal loaded saved scenes,
+        /// including inactive and nested objects. Persistent assets never
+        /// enter this scan, preview scenes and unsaved scenes are rejected,
+        /// and an invalid identity is rejected per root. The component
+        /// disallows duplicates on one object, and distinct objects cannot
+        /// share a global id, so no key dedup is needed.
+        /// </summary>
+        private static void CollectAuthoredPairs(
+            List<GameObject> roots, List<string> keys)
+        {
+            for (var index = 0; index < SceneManager.sceneCount; index++)
+            {
+                var scene = SceneManager.GetSceneAt(index);
+                if (!scene.IsValid() || !scene.isLoaded) continue;
+                if (string.IsNullOrEmpty(scene.path)) continue;
+                if (EditorSceneManager.IsPreviewScene(scene)) continue;
+                foreach (var sceneRoot in scene.GetRootGameObjects())
+                {
+                    foreach (var optimizer in sceneRoot
+                                 .GetComponentsInChildren<AmuseAvatarOptimizer>(
+                                     true))
+                    {
+                        var key = AuthoredKey(
+                            optimizer.transform.gameObject);
+                        if (key == null) continue;
+                        roots.Add(optimizer.transform.gameObject);
+                        keys.Add(key);
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// The proved authored identity: the full global id string of a
+        /// living scene object under the committed valid identity contract.
+        /// Persistent assets, invalid scenes, unloaded scenes, unsaved
+        /// scenes, and preview scenes are rejected before the global id is
+        /// read, so a scene without an asset yields null.
+        /// </summary>
+        private static string AuthoredKey(GameObject root)
+        {
+            if (root == null || EditorUtility.IsPersistent(root)) return null;
+            var scene = root.scene;
+            if (!scene.IsValid() || !scene.isLoaded) return null;
+            if (string.IsNullOrEmpty(scene.path)) return null;
+            if (EditorSceneManager.IsPreviewScene(scene)) return null;
+            var id = GlobalObjectId.GetGlobalObjectIdSlow(root);
+            if (id.identifierType != 2) return null;
+            if (id.assetGUID.Equals(default(UnityEditor.GUID))) return null;
+            if (id.targetObjectId == 0) return null;
+            return id.ToString();
+        }
+
+        /// <summary>
+        /// Full recovery scan by exact type, non-persistence, and the
+        /// HideAndDontSave flag. More than one owned snapshot is an
+        /// invariant failure. Capture and teardown always take this path so
+        /// a second owned snapshot is detected even while the cached field
+        /// is still alive.
+        /// </summary>
+        private static PlayModeRootIdentitySnapshot RecoverSnapshot()
+        {
+            PlayModeRootIdentitySnapshot found = null;
+            foreach (var candidate in
+                     Resources.FindObjectsOfTypeAll
+                         <PlayModeRootIdentitySnapshot>())
+            {
+                if (candidate == null) continue;
+                if (EditorUtility.IsPersistent(candidate)) continue;
+                if (candidate.hideFlags != HideFlags.HideAndDontSave) continue;
+                if (found != null)
+                {
+                    throw new InvalidOperationException(
+                        "multiple owned root identity snapshots");
+                }
+                found = candidate;
+            }
+            _recovered = found;
+            return found;
+        }
+
+        /// <summary>
+        /// Hot path for key computation: the cached snapshot is reused and
+        /// the full recovery scan only fills an absent cache.
+        /// </summary>
+        private static PlayModeRootIdentitySnapshot RecoverSnapshotCached()
+        {
+            if (_recovered != null) return _recovered;
+            return RecoverSnapshot();
+        }
+
+        private static void DestroyOwnedSnapshot()
+        {
+            var snapshot = RecoverSnapshot();
+            if (snapshot != null)
+            {
+                UnityEngine.Object.DestroyImmediate(snapshot);
+            }
+            _recovered = null;
+        }
+
+        /// <summary>
+        /// In edit mode the key is the recomputed authored scene identity.
+        /// In Play mode only a captured live native reference authorizes a
+        /// key; an uncaptured root gets no key and is never healed.
+        /// </summary>
         public static string ComputeAvatarKey(Transform avatarRoot)
         {
             if (avatarRoot == null) return string.Empty;
-            var rootName = avatarRoot.name;
-            if (rootName.EndsWith("(Clone)", StringComparison.Ordinal))
+            if (EditorApplication.isPlaying)
             {
-                rootName = rootName.Substring(0, rootName.Length - 7).TrimEnd();
+                // a session with an empty candidate set has no holder, and
+                // that state is the contract empty key, not a defect
+                var snapshot = RecoverSnapshotCached();
+                if (snapshot == null) return string.Empty;
+                return snapshot.KeyFor(avatarRoot.gameObject);
             }
-            var scenePath = avatarRoot.gameObject.scene.path;
-            if (string.IsNullOrEmpty(scenePath)) scenePath = avatarRoot.gameObject.scene.name;
-            return scenePath + "::" + rootName;
+            return AuthoredKey(avatarRoot.gameObject) ?? string.Empty;
         }
 
         public static string ComputePolicyFingerprint(

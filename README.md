@@ -95,6 +95,16 @@ replaced once by the transparent values. Every later edit sticks.
 Open the Show Material Transformations foldout on the AMUSE component to see what the Alpha Separator would do on this avatar. The nested Alpha Separator view runs the same proof on the avatar in the scene. Each material slot displays as two lines: the top line displays the target mesh renderer and source material side by side, and the bottom line reports the transformation status.
 The view reads the scene state. Other tools can change the avatar later during a build, and some tools add animations the build must obey. This view cannot see those changes. A run in Play mode or an upload shows the true result. The first open measures textures on the GPU. It can take a moment. The Refresh button recomputes everything.
 
+### Play mode results
+
+Enter Play mode and AMUSE measures the avatar in the scene. The inspector then shows the accurate Play mode result instead of the preview. A banner marks that state.
+
+Each result belongs to one avatar root. The key is the global identity of that root in the saved scene. During Play, the same root is matched by a live native reference, so a rename or a same-name copy during the build cannot swap results between avatars. Results live in the editor session and end with it.
+
+A root without a proved identity never holds a result. An avatar in a scene that was never saved, or a copy created during Play, reads as new. Its key is empty, so nothing saves, loads, or clears for it.
+
+The Refresh button is per root. It clears only the record of the avatar you refresh. Other avatars keep their own records.
+
 ## Reading the console reports
 
 One material on several slots prints one report line per slot. The repetition is deliberate, so a manual test can read the full list.

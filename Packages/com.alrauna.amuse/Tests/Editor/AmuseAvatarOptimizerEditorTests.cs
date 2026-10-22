@@ -612,45 +612,58 @@ namespace Alrauna.Amuse.Tests.Editor
         [Test]
         public void PlayModeRecordDisplaysBannerAndBypassesDryRun()
         {
-            var component = NewHiddenComponent();
-            var avatarKey = PlayModeBuildStore.ComputeAvatarKey(component.transform);
-            var fingerprint = PlayModeBuildStore.ComputePolicyFingerprint(
-                component, EditorUserBuildSettings.activeBuildTarget);
-
-            var record = new PlayModeBuildRecord
-            {
-                avatarKey = avatarKey,
-                policyFingerprint = fingerprint,
-                avatarRows = new SerializedTransformationRow[]
-                {
-                    new SerializedTransformationRow
-                    {
-                        kind = (int)MaterialTransformationRowKind.Note,
-                        sentence = "Play mode note row."
-                    }
-                },
-                rendererRows = new SerializedTransformationRow[0]
-            };
-            PlayModeBuildStore.Save(record);
-
-            var editor = (Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor)
-                UnityEditor.Editor.CreateEditor(component);
-            var editorType = typeof(Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor);
-            editorType.GetField("_settingsOpen", BindingFlags.NonPublic | BindingFlags.Instance)
-                ?.SetValue(editor, true);
-            editorType.GetField("_alphaSeparatorOpen", BindingFlags.NonPublic | BindingFlags.Instance)
-                ?.SetValue(editor, true);
-            editorType.GetField("_materialTransformationsOpen", BindingFlags.NonPublic | BindingFlags.Instance)
-                ?.SetValue(editor, true);
-            editorType.GetField("_alphaSeparationTransformationsOpen", BindingFlags.NonPublic | BindingFlags.Instance)
-                ?.SetValue(editor, true);
-
-            var helpBoxesDrawn = new List<string>();
-            Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor.OnHelpBoxDrawnForTest =
-                (msg, type) => helpBoxesDrawn.Add(msg);
-
+            var scope = new TestTransientScope("Assets/AmuseTests_PlayRecordBanner");
+            var avatarKey = "";
+            Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor editor = null;
             try
             {
+                scope.EnsureTempFolder();
+                var root = scope.CreateSavedSceneRoot("AMUSE play record banner fixture");
+                var component = root.AddComponent<
+                    Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                var reveal = new SerializedObject(component);
+                reveal.FindProperty("_advancedSettingsRevealed")
+                    .boolValue = true;
+                reveal.ApplyModifiedPropertiesWithoutUndo();
+                scope.SaveOwnedScene();
+
+                avatarKey = PlayModeBuildStore.ComputeAvatarKey(component.transform);
+                Assert.That(avatarKey, Is.Not.Empty, "a saved root has a proved key");
+                var fingerprint = PlayModeBuildStore.ComputePolicyFingerprint(
+                    component, EditorUserBuildSettings.activeBuildTarget);
+
+                var record = new PlayModeBuildRecord
+                {
+                    avatarKey = avatarKey,
+                    policyFingerprint = fingerprint,
+                    avatarRows = new SerializedTransformationRow[]
+                    {
+                        new SerializedTransformationRow
+                        {
+                            kind = (int)MaterialTransformationRowKind.Note,
+                            sentence = "Play mode note row."
+                        }
+                    },
+                    rendererRows = new SerializedTransformationRow[0]
+                };
+                PlayModeBuildStore.Save(record);
+
+                editor = (Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor)
+                    UnityEditor.Editor.CreateEditor(component);
+                var editorType = typeof(Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor);
+                editorType.GetField("_settingsOpen", BindingFlags.NonPublic | BindingFlags.Instance)
+                    ?.SetValue(editor, true);
+                editorType.GetField("_alphaSeparatorOpen", BindingFlags.NonPublic | BindingFlags.Instance)
+                    ?.SetValue(editor, true);
+                editorType.GetField("_materialTransformationsOpen", BindingFlags.NonPublic | BindingFlags.Instance)
+                    ?.SetValue(editor, true);
+                editorType.GetField("_alphaSeparationTransformationsOpen", BindingFlags.NonPublic | BindingFlags.Instance)
+                    ?.SetValue(editor, true);
+
+                var helpBoxesDrawn = new List<string>();
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor.OnHelpBoxDrawnForTest =
+                    (msg, type) => helpBoxesDrawn.Add(msg);
+
                 RenderInHostWindow(() => editor.OnInspectorGUI());
 
                 Assert.That(
@@ -665,9 +678,10 @@ namespace Alrauna.Amuse.Tests.Editor
             }
             finally
             {
-                PlayModeBuildStore.Clear(avatarKey);
+                if (avatarKey != "") PlayModeBuildStore.Clear(avatarKey);
                 Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor.OnHelpBoxDrawnForTest = null;
-                UnityEngine.Object.DestroyImmediate(editor);
+                if (editor != null) UnityEngine.Object.DestroyImmediate(editor);
+                scope.TearDown();
             }
         }
 
