@@ -1309,9 +1309,11 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
         /// The name-tag-only locked fixture material. The locked stand-in
         /// shader carries the optimizer flag, and the original shader tag
         /// names the vendor shader without a resolvable asset reference.
-        /// The capture therefore records a refused locked identity.
+        /// The capture therefore records a refused locked identity. The
+        /// tag defaults to the 9.3.64 release name.
         /// </summary>
-        private Material NewNameTagOnlyLockedMaterial()
+        private Material NewNameTagOnlyLockedMaterial(
+            string originalShaderTag = ".poiyomi/Poiyomi Toon")
         {
             EnsurePoiyomiStandInShader();
             EnsureLockedPoiyomiStandInShader();
@@ -1320,7 +1322,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             var locked = _scope.Track(new Material(original));
             locked.shader = Shader.Find("Hidden/Locked/.poiyomi/Poiyomi Toon");
             locked.SetFloat("_ShaderOptimizerEnabled", 1f);
-            locked.SetOverrideTag("OriginalShader", ".poiyomi/Poiyomi Toon");
+            locked.SetOverrideTag("OriginalShader", originalShaderTag);
             return locked;
         }
 
@@ -1760,6 +1762,31 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 Is.False,
                 "a recorded lock refusal is a permanent cause the build " +
                 "does not recover, so the gate refuses it");
+        }
+
+        // Characterization: the dry run must not promise a recovery the
+        // build refuses.
+        [Test]
+        public void LockedMaterialTaggedWithTheBundledShaderIsNotDeferred()
+        {
+            var root = _scope.Track(
+                NewAvatarRoot("amuse-dry-run-gate-locked-bundled"));
+            var locked = NewNameTagOnlyLockedMaterial(
+                ".poiyomi/Old Versions/9.3/Poiyomi Toon");
+            var renderer = AddSkinnedRenderer(
+                root, OneTriangleMesh(), locked);
+
+            var slotResult = SlotResolutionResult.Refused(
+                RendererAnalysisRefusal.AdmittedMaterialSemanticsUnknown);
+            var slotEvidence = new CapturedMaterialSlotEvidence(
+                0, new[] { 0 });
+
+            Assert.That(
+                AlphaSeparationDryRun.IsSlotDeferred(
+                    renderer, 0, slotResult, slotEvidence),
+                Is.False,
+                "a bundled original name has no admitted locked " +
+                "original row, so the gate does not defer the slot");
         }
 
         [Test]

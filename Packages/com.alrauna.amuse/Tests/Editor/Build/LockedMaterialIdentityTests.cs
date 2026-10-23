@@ -1,7 +1,9 @@
+using System.Linq;
 using NUnit.Framework;
 using UnityEngine;
 using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.Host;
+using Alrauna.Amuse.Editor.Semantics.Poiyomi;
 using Alrauna.Amuse.Tests.Editor.Shared;
 
 namespace Alrauna.Amuse.Tests.Editor.Build
@@ -145,6 +147,104 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(
                 refusal,
                 Is.EqualTo(RendererAnalysisRefusal.LockedPoiyomiOriginalShaderUnattested));
+        }
+
+        // --- Locked-original attestation (K8) ---------------------------
+
+        /// <summary>
+        /// Builds the evidence of one admitted row. The package arguments
+        /// skip the package gate, because the gate is not part of this
+        /// seam as of this task.
+        /// </summary>
+        private static PoiyomiSourceEvidence EvidenceOf(
+            PoiyomiAdmittedSource row)
+        {
+            return new PoiyomiSourceEvidence(
+                row.ShaderName,
+                isLocked: false,
+                hasReadableSource: true,
+                assetGuid: row.AssetGuid,
+                normalizedSourceHash: row.NormalizedSourceHash,
+                hasPackage: false,
+                packageName: null,
+                packageVersion: null,
+                hasRequiredSchema: true);
+        }
+
+        private static PoiyomiAdmittedSource ReleaseMainRow()
+        {
+            return PoiyomiSourceAttestation.AdmittedSources().Single(
+                row => !row.IsTwoPass && row.LockedOriginalAdmitted);
+        }
+
+        private static PoiyomiAdmittedSource BundledMainRow()
+        {
+            return PoiyomiSourceAttestation.AdmittedSources().Single(
+                row => !row.IsTwoPass && !row.LockedOriginalAdmitted);
+        }
+
+        [Test]
+        public void ReleaseMainRowWithMatchingTagAttestsTheLockedOriginal()
+        {
+            var row = ReleaseMainRow();
+
+            Assert.That(
+                LockedMaterialIdentity.AttestsLockedOriginal(
+                    row.ShaderName, EvidenceOf(row)),
+                Is.True,
+                "the 9.3.64 main row with a matching name tag is the " +
+                "admitted locked original");
+        }
+
+        // --- Falsifier 7: a precondition that reuses the identity gate ---
+        // Characterization in this task, because the identity gate still
+        // refuses the bundled name. It guards Task 5, where the bundled
+        // rows start to attest.
+        [Test]
+        public void BundledRowRefusesAsALockedOriginal()
+        {
+            var row = BundledMainRow();
+
+            Assert.That(
+                LockedMaterialIdentity.AttestsLockedOriginal(
+                    row.ShaderName, EvidenceOf(row)),
+                Is.False,
+                "a bundled row records no locked original admission, so " +
+                "it refuses as a locked original");
+        }
+
+        // --- Falsifier 8: a precondition that ignores the recorded name ---
+        [Test]
+        public void ReleaseMainEvidenceWithAnotherAdmittedTagRefuses()
+        {
+            // The tag names the 9.3.64 Two Pass shader. The resolved
+            // evidence is the 9.3.64 main row. An implementation that
+            // ignores the tag accepts this pair. The swap-in would then
+            // refuse the restore it promised.
+            var resolved = EvidenceOf(ReleaseMainRow());
+
+            Assert.That(
+                LockedMaterialIdentity.AttestsLockedOriginal(
+                    PoiyomiSourceAttestation.PoiyomiTwoPassShaderName,
+                    resolved),
+                Is.False,
+                "the name tag must equal the resolved shader name, so a " +
+                "tag that names another admitted shader refuses");
+        }
+
+        [TestCase(null)]
+        [TestCase("")]
+        public void MissingOriginalShaderTagRefuses(string tag)
+        {
+            // The resolved evidence is the 9.3.64 main row. An absent or
+            // empty tag names no original shader, so it never attests.
+            var resolved = EvidenceOf(ReleaseMainRow());
+
+            Assert.That(
+                LockedMaterialIdentity.AttestsLockedOriginal(tag, resolved),
+                Is.False,
+                "an absent or empty name tag never attests a locked " +
+                "original");
         }
     }
 }

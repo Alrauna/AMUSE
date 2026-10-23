@@ -201,6 +201,29 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             return false;
         }
 
+        // The locked-original name gate (K8.4, docs/superpowers/specs/
+        // 2026-10-23-poiyomi-per-shader-attestation-design.md). A tag
+        // passes only when a row with this name admits locked originals.
+        // The dry run reads the rows through this seam, so its accepted
+        // set cannot drift from the locked-original rule. As of
+        // 2026-10-23 the accepted set stays the two 9.3.64 release names.
+        internal static bool IsLockedOriginalAdmittedName(string shaderName)
+        {
+            for (var i = 0; i < AdmittedSourceRows.Length; i++)
+            {
+                var candidate = AdmittedSourceRows[i];
+                if (string.Equals(
+                    candidate.ShaderName,
+                    shaderName,
+                    StringComparison.Ordinal))
+                {
+                    return candidate.LockedOriginalAdmitted;
+                }
+            }
+
+            return false;
+        }
+
         private static readonly Dictionary<string, (DateTime LastWriteUtc, string Hash)>
             SourceHashMemo = new(StringComparer.Ordinal);
 
