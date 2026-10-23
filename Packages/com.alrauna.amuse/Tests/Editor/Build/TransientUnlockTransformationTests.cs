@@ -517,8 +517,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     root, mesh, locked, sibling));
             var clip = TransientUnlockTestLifecycle.AddMaterialSwapAnimation(
                 root, renderer, 0, locked);
-            // This name is a suffix of a presence-only property. A suffix
-            // of a requested property now refuses the renderer (K9).
+            // This name adds a rename suffix to a presence-only property.
             TransientUnlockTestLifecycle.AddSuffixedFloatBinding(
                 clip, root, renderer, "material._EmissionMap_ParityCape", 2f);
 

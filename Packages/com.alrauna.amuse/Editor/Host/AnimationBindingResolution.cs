@@ -291,20 +291,18 @@ namespace Alrauna.Amuse.Editor.Host
             return CouldAddressAny(property, relevance.ScalarProperties) ||
                    CouldAddressAny(property, relevance.ColorProperties) ||
                    CouldAddressAny(property, relevance.VectorProperties) ||
-                   CouldAddressAny(property, scaleOffsetProperties) ||
-                   CouldAddressAny(property, ScaleOffsetTextureStems(relevance));
+                   CouldAddressAny(
+                       property, ScaleOffsetTextureStems(scaleOffsetProperties));
         }
 
         private static IReadOnlyCollection<string> ScaleOffsetTextureStems(
-            MaterialEvidenceRequest relevance)
+            IReadOnlyCollection<string> scaleOffsetProperties)
         {
-            var properties = new List<string>();
-            foreach (var texture in relevance.TextureProperties)
+            var properties = new List<string>(scaleOffsetProperties.Count);
+            foreach (var property in scaleOffsetProperties)
             {
-                if ((texture.Evidence & TextureEvidenceKinds.ScaleOffset) != 0)
-                {
-                    properties.Add(texture.PropertyName);
-                }
+                properties.Add(property.Substring(
+                    0, property.Length - TextureScaleOffsetSuffix.Length));
             }
 
             return properties;
