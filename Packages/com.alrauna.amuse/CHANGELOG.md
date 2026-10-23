@@ -8,8 +8,8 @@ All notable changes to AMUSE are documented in this file.
 - Support for the 9.3 main and Two Pass shaders that Poiyomi 10.x packages bundle. The support is for unlocked materials.
 
 ### Fixed
-- A Poiyomi material animation binding of a proof-relevant property with a rename suffix now refuses its renderer. The suffix is the requested property name followed by an underscore.
-- A locked Poiyomi material refuses unless its recorded original shader name tag equals the resolved shader name.
+- A material animation binding of a proof-relevant property with a rename suffix now refuses its renderer. The rule is shader-independent and also covers lilToon. The binding name is a proof-relevant property name followed by an underscore and a suffix, for example `material._Color_<suffix>`. Bindings such as a texture's `_TexelSize` or `_HDR` on a texture whose scale-offset AMUSE reads also refuse.
+- A locked Poiyomi material refuses unless its recorded original shader name tag equals the resolved shader name. An orphan lock with no recorded original keeps its earlier behavior.
 - A locked material whose original resolves to a bundled Poiyomi shader refuses. The material keeps its original slot.
 - Play mode results are keyed by the proved global identity of each avatar root. Same-named roots, twins of one prefab, and roots in scenes with duplicate names keep separate results. A rename or a reorder keeps the record. A root without a proved identity, such as an avatar in an unsaved scene or a copy made during Play, holds no record.
 - The Show Material Transformations preview rejects a run after any setting change. This includes a change made while background work runs. Changing the setting back does not restore the rejected results. Select Refresh to compute new results.

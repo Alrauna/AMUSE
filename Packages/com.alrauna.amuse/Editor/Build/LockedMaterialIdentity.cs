@@ -183,7 +183,7 @@ namespace Alrauna.Amuse.Editor.Build
         /// identity. The pinned check also needs the recorded name tag to
         /// equal the resolved shader name, and the matched row to admit
         /// locked originals (K8.3). The transient unlock window's
-        /// precondition calls this; it is the same conjunction <see
+        /// precondition calls this. It is the same conjunction <see
         /// cref="PreCheckRefusal"/> applies, so the two paths cannot pin
         /// differently. Reads live state only and mutates nothing.
         /// </summary>

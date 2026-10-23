@@ -82,7 +82,11 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         // measured shader file. All four rows carry the measurement date
         // 2026-10-23. Rows one and two measure the 9.3.64 release. Rows
         // three and four measure the shader files that the 10.x package
-        // bundles. The bundled files reuse the 9.3.64 proof model (K4).
+        // bundles. They were measured from Poiyomi 10.0.20 through 10.0.27,
+        // which ship the same bundled bytes (docs/superpowers/
+        // investigations/2026-10-23-poiyomi-bundled-9-3-source-identity-
+        // investigation.md). The bundled files reuse the 9.3.64 proof
+        // model (K4).
         //
         // Admission rule (K5): a maintainer admits a new byte stream only
         // through the K5 procedure. Download the release from the official

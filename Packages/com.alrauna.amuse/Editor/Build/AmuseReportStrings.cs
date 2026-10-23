@@ -175,13 +175,20 @@ namespace Alrauna.Amuse.Editor.Build
                 "This renderer holds a locked material whose original " +
                 "shader AMUSE has not verified.",
             ["amuse.renderer.LockedPoiyomiOriginalShaderUnattested:description"] =
-                "The material is locked. The shader version the lock " +
-                "recorded is not a version AMUSE knows, or the lock " +
-                "records no original shader. AMUSE cannot read a locked " +
-                "material, so it changed nothing on this renderer.",
+                "The material is locked. AMUSE verifies the original " +
+                "shader that the lock recorded. The verification fails " +
+                "when the shader is missing, when its source is not " +
+                "verified, when the recorded name does not match the " +
+                "shader file, or when locked materials on that shader " +
+                "are not supported. That includes the bundled 9.3 " +
+                "shader that Poiyomi 10.x packages ship. AMUSE cannot " +
+                "read a locked material, so it changed nothing on this " +
+                "renderer.",
             ["amuse.renderer.LockedPoiyomiOriginalShaderUnattested:hint"] =
-                "Check that the original shader of the material is " +
-                "installed at the version the lock recorded.",
+                "Unlock the material, then run the build again. AMUSE " +
+                "converts the unlocked material when it supports its " +
+                "shader. Otherwise check that the original shader is " +
+                "installed and verified.",
 
             // --- Avatar-scoped animation refusals ---
             ["amuse.avatar.UnsupportedAnimatorControllerForm"] =
