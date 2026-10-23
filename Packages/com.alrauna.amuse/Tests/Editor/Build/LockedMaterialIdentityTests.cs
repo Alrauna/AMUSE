@@ -199,6 +199,16 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             var row = BundledMainRow();
 
+            // No-op guard: the bundled row evidence must pass the identity
+            // gate. Without this guard a broken identity gate would let the
+            // refusal assertion pass while proving nothing.
+            Assert.That(
+                PoiyomiSourceAttestation.TryVerifyPoiyomiIdentity(
+                    EvidenceOf(row), out _),
+                Is.True,
+                "the bundled row evidence must pass the identity gate, " +
+                "or this falsifier proves nothing");
+
             Assert.That(
                 LockedMaterialIdentity.AttestsLockedOriginal(
                     row.ShaderName, EvidenceOf(row)),
