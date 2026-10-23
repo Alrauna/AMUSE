@@ -4,7 +4,13 @@ All notable changes to AMUSE are documented in this file.
 
 ## [Unreleased] - 2026-10-21
 
+### Added
+- Support for the 9.3 main and Two Pass shaders that Poiyomi 10.x packages bundle. The support is for unlocked materials.
+
 ### Fixed
+- A Poiyomi material animation binding of a proof-relevant property with a rename suffix now refuses its renderer. The suffix is the requested property name followed by an underscore.
+- A locked Poiyomi material refuses unless its recorded original shader name tag equals the resolved shader name.
+- A locked material whose original resolves to a bundled Poiyomi shader refuses. The material keeps its original slot.
 - Play mode results are keyed by the proved global identity of each avatar root. Same-named roots, twins of one prefab, and roots in scenes with duplicate names keep separate results. A rename or a reorder keeps the record. A root without a proved identity, such as an avatar in an unsaved scene or a copy made during Play, holds no record.
 - The Show Material Transformations preview rejects a run after any setting change. This includes a change made while background work runs. Changing the setting back does not restore the rejected results. Select Refresh to compute new results.
 - The Show Material Transformations preview keeps a recorded refusal cause on the slot row. A closure failure or another named permanent cause now keeps the refusal even when the current material is locked or holds an unreadable streaming texture. The deferred display stays for the valid locked current material and the unnamed streaming capture refusal.
@@ -12,6 +18,9 @@ All notable changes to AMUSE are documented in this file.
 - The package listing download menu no longer stacks one download action per menu open. The menu item now holds one stable action that reads the package address stored by the last row-button click. The row button stores its own address on every activation, including when the menu is already open, and a row click no longer also closes the open menu. The download opens in a new tab without an opener relationship.
 
 ### Changed
+- Poiyomi attestation checks the shader file. The check covers the shader name, the file GUID, and the canonical digest. The package name and the package version no longer take part.
+- An old 9.x shader file can share a pinned GUID with different bytes. Such a file reports a modified source in the conversion detail.
+- The research probe finds the admitted shader file. The probe no longer looks up only the 9.3.64 shader name.
 - Stored transformation rows now carry the typed `MaterialTransformationRowKind` through the whole record path. The build pass, the apply pass, the store reader, and the tests name the kind instead of a raw number. The stored numbers 0 through 4 stay unchanged, so records stored earlier in this session still load and draw the same rows.
 - Resolved runtime states carry their material slot evidence beside the per-slot results. The build pass and the preview read the paired evidence from the result and no longer derive the slot list a second time. A renderer-wide early refusal keeps empty slot evidence and empty per-slot results. Preparation keeps its own independent slot derivation.
 - Capture tests for RGB24 and ARGB32 no longer pin a specific backend's sampling capability. RGB24 keeps its source-format Sample support exemption, and its test checks full-chain opaque alpha. ARGB32 follows the exact sampling gate. Without exact support, its test asserts the real capture refusal with no evidence. With exact support, it checks 255, which passes the opaque predicate, and 128 and 254, which do not.
