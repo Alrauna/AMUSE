@@ -301,15 +301,17 @@ namespace Alrauna.Amuse.Editor.Build
         }
 
         /// <summary>
-        /// The existing pinned Poiyomi identity, applied to the resolved
-        /// original shader asset: exact pinned name, canonical GUID,
-        /// package identity, and normalized source digest. The check
-        /// reuses the production identity conjunction, so these pins cannot
-        /// drift from the pins every other path applies. The verdict comes
-        /// from the locked-original seam, so the recorded name tag and the
-        /// row admission rule apply here too (K8.3). The schema check
-        /// is outside the precondition's pin list, so the evidence carries
-        /// the recorded schema state.
+        /// The pinned Poiyomi identity, applied to the resolved
+        /// original shader asset: the admitted source rows (K1, docs/
+        /// superpowers/specs/2026-10-23-poiyomi-per-shader-attestation-
+        /// design.md) decide name, GUID, and digest, and the digest gate
+        /// binds the three to one row. A new row needs the K5 admission
+        /// measurement first. The check reuses the production identity
+        /// conjunction, so these gates cannot drift from the gates every
+        /// other path applies. The verdict comes from the locked-original
+        /// seam, so the recorded name tag and the row admission rule apply
+        /// here too (K8.3). The schema check is outside the precondition's
+        /// gate list, so the evidence carries the recorded schema state.
         /// </summary>
         private static bool PassesPinnedPoiyomiIdentity(
             Shader resolved,
@@ -339,8 +341,6 @@ namespace Alrauna.Amuse.Editor.Build
 
             var hasGuid = AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
                 resolved, out var guid, out long _);
-            var package = UnityEditor.PackageManager.PackageInfo
-                .FindForAssetPath(assetPath);
 
             var evidence = new PoiyomiSourceEvidence(
                 resolved.name,
@@ -348,9 +348,6 @@ namespace Alrauna.Amuse.Editor.Build
                 hasReadableSource,
                 hasGuid ? guid?.ToLowerInvariant() : null,
                 normalizedHash,
-                package != null,
-                package?.name,
-                package?.version,
                 hasRequiredSchema: true);
 
             return AttestsLockedOriginal(originalShaderTag, evidence);

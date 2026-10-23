@@ -152,9 +152,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         // --- Locked-original attestation (K8) ---------------------------
 
         /// <summary>
-        /// Builds the evidence of one admitted row. The package arguments
-        /// skip the package gate, because the gate is not part of this
-        /// seam as of this task.
+        /// Builds the evidence of one admitted row.
         /// </summary>
         private static PoiyomiSourceEvidence EvidenceOf(
             PoiyomiAdmittedSource row)
@@ -165,9 +163,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 hasReadableSource: true,
                 assetGuid: row.AssetGuid,
                 normalizedSourceHash: row.NormalizedSourceHash,
-                hasPackage: false,
-                packageName: null,
-                packageVersion: null,
                 hasRequiredSchema: true);
         }
 
@@ -197,9 +192,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         // --- Falsifier 7: a precondition that reuses the identity gate alone ---
-        // Characterization in this task, because the identity gate still
-        // refuses the bundled name. It guards Task 5, where the bundled
-        // rows start to attest.
+        // The bundled rows attest through the identity gate now, so this
+        // falsifier guards the row admission rule itself.
         [Test]
         public void BundledRowRefusesAsALockedOriginal()
         {

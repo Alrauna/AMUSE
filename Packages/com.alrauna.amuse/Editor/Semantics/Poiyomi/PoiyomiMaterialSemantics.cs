@@ -22,14 +22,12 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
     /// </summary>
     internal static class PoiyomiMaterialSemantics
     {
-        // --- Pinned canonical source identity (Poiyomi Toon Shader 9.3.64) ---
-        // Tag commit e125e1c33cbfb860f59330799dd4d10a1097242d. See the design
-        // doc's authoritative research basis before changing any constant.
+        // Named row values of the admitted source rows (K1,
+        // docs/superpowers/specs/2026-10-23-poiyomi-per-shader-attestation-
+        // design.md). The row table in PoiyomiSourceAttestation owns the
+        // full rows. A new row needs the K5 admission measurement first.
         internal const string PoiyomiToonShaderName = PoiyomiSourceAttestation.PoiyomiToonShaderName;
-        internal const string PoiyomiPackageName = PoiyomiSourceAttestation.PoiyomiPackageName;
-        internal const string PoiyomiPackageVersion = PoiyomiSourceAttestation.PoiyomiPackageVersion;
         internal const string CanonicalShaderGuid = PoiyomiSourceAttestation.CanonicalShaderGuid;
-        internal const string CanonicalNormalizedSourceHash = PoiyomiSourceAttestation.CanonicalNormalizedSourceHash;
         internal const string PoiyomiTwoPassShaderName = PoiyomiSourceAttestation.PoiyomiTwoPassShaderName;
         internal const string TwoPassCanonicalShaderGuid = PoiyomiSourceAttestation.TwoPassCanonicalShaderGuid;
 
@@ -118,11 +116,14 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         {
             RequireAnalyzableMaterial(material);
 
-            var isTwoPass = material.shader != null &&
-                string.Equals(
-                    material.shader.name,
-                    PoiyomiTwoPassShaderName,
-                    StringComparison.Ordinal);
+            // One name-routing predicate decides the Two Pass choice from
+            // the admitted row set (K3.2).
+            var isTwoPass = false;
+            if (material.shader != null)
+            {
+                PoiyomiSourceAttestation.TryClassifyShaderName(
+                    material.shader.name, out isTwoPass);
+            }
 
             var request = isTwoPass
                 ? FullTwoPassMaterialEvidenceRequest
@@ -611,7 +612,6 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
     internal enum PoiyomiSemanticDiagnosticCode
     {
         UnsupportedShader,
-        UnsupportedVersion,
         ModifiedShaderSource,
         MissingSourceEvidence,
         UnsupportedFeature,

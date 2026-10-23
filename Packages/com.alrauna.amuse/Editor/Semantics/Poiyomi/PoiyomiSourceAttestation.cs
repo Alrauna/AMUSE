@@ -16,9 +16,6 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         internal bool HasReadableSource { get; }
         internal string AssetGuid { get; }
         internal string NormalizedSourceHash { get; }
-        internal bool HasPackage { get; }
-        internal string PackageName { get; }
-        internal string PackageVersion { get; }
         internal bool HasRequiredSchema { get; }
 
         internal PoiyomiSourceEvidence(
@@ -27,9 +24,6 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             bool hasReadableSource,
             string assetGuid,
             string normalizedSourceHash,
-            bool hasPackage,
-            string packageName,
-            string packageVersion,
             bool hasRequiredSchema)
         {
             ShaderName = shaderName;
@@ -37,9 +31,6 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             HasReadableSource = hasReadableSource;
             AssetGuid = assetGuid;
             NormalizedSourceHash = normalizedSourceHash;
-            HasPackage = hasPackage;
-            PackageName = packageName;
-            PackageVersion = packageVersion;
             HasRequiredSchema = hasRequiredSchema;
         }
     }
@@ -74,20 +65,17 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
     internal static class PoiyomiSourceAttestation
     {
+        // Named row values. The row table below owns the full rows (K1,
+        // docs/superpowers/specs/2026-10-23-poiyomi-per-shader-attestation-
+        // design.md). A new row needs the K5 admission measurement first.
         internal const string PoiyomiToonShaderName = ".poiyomi/Poiyomi Toon";
-        internal const string PoiyomiPackageName = "com.poiyomi.toon";
-        internal const string PoiyomiPackageVersion = "9.3.64";
         internal const string CanonicalShaderGuid =
             "9444ce77bf4418748b1e8591b9d97f85";
-        internal const string CanonicalNormalizedSourceHash =
-            "31f2ff15615c5e2ac9b05fea08b6310731394d1b5a928b16048e7bde8f8b1755";
 
         internal const string PoiyomiTwoPassShaderName =
             ".poiyomi/Poiyomi Toon Two Pass";
         internal const string TwoPassCanonicalShaderGuid =
             "eda2412ac7ab2db45a47a521f6d7d8a6";
-        internal const string TwoPassCanonicalNormalizedSourceHash =
-            "b1d9ecd3072d21db97001dd23f88d089996b809e4039891a05f64d2ffcd4df67";
 
         // The admitted shader files (K1, K4, docs/superpowers/specs/
         // 2026-10-23-poiyomi-per-shader-attestation-design.md). One row per
@@ -104,6 +92,10 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         // property declarations pass the K5 checks. Record the measurement
         // in a dated investigation. Until then a changed byte stream
         // refuses materials fail-closed.
+        private const string ReleaseMainNormalizedSourceHash =
+            "31f2ff15615c5e2ac9b05fea08b6310731394d1b5a928b16048e7bde8f8b1755";
+        private const string ReleaseTwoPassNormalizedSourceHash =
+            "b1d9ecd3072d21db97001dd23f88d089996b809e4039891a05f64d2ffcd4df67";
         private const string BundledMainNormalizedSourceHash =
             "c812d4d39ce3352b6198fdfcb5de87eb07678739a4bce7e4afd18cea28be19f4";
         private const string BundledTwoPassNormalizedSourceHash =
@@ -115,13 +107,13 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 PoiyomiToonShaderName,
                 false,
                 CanonicalShaderGuid,
-                CanonicalNormalizedSourceHash,
+                ReleaseMainNormalizedSourceHash,
                 true),
             new PoiyomiAdmittedSource(
                 PoiyomiTwoPassShaderName,
                 true,
                 TwoPassCanonicalShaderGuid,
-                TwoPassCanonicalNormalizedSourceHash,
+                ReleaseTwoPassNormalizedSourceHash,
                 true),
             new PoiyomiAdmittedSource(
                 ".poiyomi/Old Versions/9.3/Poiyomi Toon",
@@ -261,15 +253,11 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             in PoiyomiSourceEvidence evidence,
             out PoiyomiSemanticDiagnostic diagnostic)
         {
-            var isTwoPass = string.Equals(
-                evidence.ShaderName,
-                PoiyomiTwoPassShaderName,
-                StringComparison.Ordinal);
-            if (!isTwoPass &&
-                !string.Equals(
-                    evidence.ShaderName,
-                    PoiyomiToonShaderName,
-                    StringComparison.Ordinal))
+            // The gates follow the K2.1 table, in order (docs/superpowers/
+            // specs/2026-10-23-poiyomi-per-shader-attestation-design.md).
+            // The bytes are the whole semantic surface, so no package gate
+            // exists (K2.2).
+            if (!TryClassifyShaderName(evidence.ShaderName, out _))
             {
                 diagnostic = PoiyomiMaterialSemantics.MaterialDiagnostic(
                     PoiyomiSemanticDiagnosticCode.UnsupportedShader,
@@ -293,13 +281,26 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 return false;
             }
 
-            var expectedGuid = isTwoPass
-                ? TwoPassCanonicalShaderGuid
-                : CanonicalShaderGuid;
-            if (!string.Equals(
-                    evidence.AssetGuid,
-                    expectedGuid,
-                    StringComparison.Ordinal))
+            // The GUID gate: some row with this name has this GUID.
+            var guidAdmitted = false;
+            for (var i = 0; i < AdmittedSourceRows.Length; i++)
+            {
+                var candidate = AdmittedSourceRows[i];
+                if (string.Equals(
+                        candidate.ShaderName,
+                        evidence.ShaderName,
+                        StringComparison.Ordinal) &&
+                    string.Equals(
+                        candidate.AssetGuid,
+                        evidence.AssetGuid,
+                        StringComparison.Ordinal))
+                {
+                    guidAdmitted = true;
+                    break;
+                }
+            }
+
+            if (!guidAdmitted)
             {
                 diagnostic = PoiyomiMaterialSemantics.MaterialDiagnostic(
                     PoiyomiSemanticDiagnosticCode.MissingSourceEvidence,
@@ -307,38 +308,15 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 return false;
             }
 
-            if (evidence.HasPackage)
-            {
-                if (!string.Equals(
-                        evidence.PackageName,
-                        PoiyomiPackageName,
-                        StringComparison.Ordinal))
-                {
-                    diagnostic = PoiyomiMaterialSemantics.MaterialDiagnostic(
-                        PoiyomiSemanticDiagnosticCode.MissingSourceEvidence,
-                        $"package name '{evidence.PackageName}'");
-                    return false;
-                }
-
-                if (!string.Equals(
-                        evidence.PackageVersion,
-                        PoiyomiPackageVersion,
-                        StringComparison.Ordinal))
-                {
-                    diagnostic = PoiyomiMaterialSemantics.MaterialDiagnostic(
-                        PoiyomiSemanticDiagnosticCode.UnsupportedVersion,
-                        $"package version '{evidence.PackageVersion}'");
-                    return false;
-                }
-            }
-
-            var expectedHash = isTwoPass
-                ? TwoPassCanonicalNormalizedSourceHash
-                : CanonicalNormalizedSourceHash;
-            if (!string.Equals(
+            // The digest gate binds name, GUID, and digest to one row
+            // (K2.3). The 9.3.64 file and a bundled file live at the same
+            // path, so a package update can pair a fresh name with a stale
+            // digest. The binding refuses that pair.
+            if (!TryMatchAdmittedSource(
+                    evidence.ShaderName,
+                    evidence.AssetGuid,
                     evidence.NormalizedSourceHash,
-                    expectedHash,
-                    StringComparison.Ordinal))
+                    out _))
             {
                 diagnostic = PoiyomiMaterialSemantics.MaterialDiagnostic(
                     PoiyomiSemanticDiagnosticCode.ModifiedShaderSource,
@@ -411,18 +389,12 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 }
             }
 
-            var package =
-                UnityEditor.PackageManager.PackageInfo.FindForAssetPath(assetPath);
-
             return new PoiyomiSourceEvidence(
                 shaderName,
                 isLocked,
                 hasReadableSource,
                 assetGuid,
                 normalizedHash,
-                package != null,
-                package?.name,
-                package?.version,
                 HasRequiredSchema(evidence, requiredSchemaProperties));
         }
 

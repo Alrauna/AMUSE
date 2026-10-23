@@ -182,27 +182,29 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             return PoiyomiSourceAttestation.ComputeNormalizedSourceHash(source);
         }
 
+        // A digest argument of UsePin resolves to the 9.3.64 main row
+        // digest. An explicit null stays null.
+        private const string UsePin = "\0use-pinned-digest";
+
         private static PoiyomiSourceEvidence Evidence(
             string shaderName = PoiyomiMaterialSemantics.PoiyomiToonShaderName,
             bool isLocked = false,
             bool hasReadableSource = true,
             string assetGuid = PoiyomiMaterialSemantics.CanonicalShaderGuid,
-            string normalizedSourceHash =
-                PoiyomiMaterialSemantics.CanonicalNormalizedSourceHash,
-            bool hasPackage = true,
-            string packageName = PoiyomiMaterialSemantics.PoiyomiPackageName,
-            string packageVersion = PoiyomiMaterialSemantics.PoiyomiPackageVersion,
+            string normalizedSourceHash = UsePin,
             bool hasRequiredSchema = true)
         {
+            var pinnedDigest = PoiyomiSourceAttestation
+                .AdmittedSources()[0].NormalizedSourceHash;
+
             return new PoiyomiSourceEvidence(
                 shaderName,
                 isLocked,
                 hasReadableSource,
                 assetGuid,
-                normalizedSourceHash,
-                hasPackage,
-                packageName,
-                packageVersion,
+                ReferenceEquals(normalizedSourceHash, UsePin)
+                    ? pinnedDigest
+                    : normalizedSourceHash,
                 hasRequiredSchema);
         }
 
@@ -336,19 +338,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         }
 
         [Test]
-        public void Identity_LegacyInstallWithoutPackage_IsSupported()
-        {
-            // A legacy Assets/_PoiyomiShaders install has no package metadata;
-            // the GUID and exact source hash remain the proof.
-            var supported = PoiyomiSourceAttestation.TryVerifyPoiyomiIdentity(
-                Evidence(hasPackage: false, packageName: null, packageVersion: null),
-                out var diagnostic);
-
-            Assert.That(supported, Is.True);
-            Assert.That(diagnostic, Is.Null);
-        }
-
-        [Test]
         public void Identity_WrongShaderName_IsUnsupportedShader()
         {
             AssertUnsupported(
@@ -407,22 +396,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         }
 
         [Test]
-        public void Identity_WrongPackageName_IsMissingSourceEvidence()
-        {
-            AssertUnsupported(
-                Evidence(packageName: "com.example.other"),
-                PoiyomiSemanticDiagnosticCode.MissingSourceEvidence);
-        }
-
-        [Test]
-        public void Identity_WrongPackageVersion_IsUnsupportedVersion()
-        {
-            AssertUnsupported(
-                Evidence(packageVersion: "9.3.63"),
-                PoiyomiSemanticDiagnosticCode.UnsupportedVersion);
-        }
-
-        [Test]
         public void Identity_ModifiedSourceHash_IsModifiedShaderSource()
         {
             AssertUnsupported(
@@ -440,6 +413,71 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             AssertUnsupported(
                 Evidence(hasRequiredSchema: false),
                 PoiyomiSemanticDiagnosticCode.ModifiedShaderSource);
+        }
+
+        [TestCase(0)] // 9.3.64 main (characterization)
+        [TestCase(1)] // 9.3.64 Two Pass (characterization)
+        [TestCase(2)] // bundled main
+        [TestCase(3)] // bundled Two Pass
+        public void Identity_EveryAdmittedRowIsSupported(int rowIndex)
+        {
+            var row = PoiyomiSourceAttestation.AdmittedSources()[rowIndex];
+
+            var supported = PoiyomiSourceAttestation.TryVerifyPoiyomiIdentity(
+                Evidence(
+                    shaderName: row.ShaderName,
+                    assetGuid: row.AssetGuid,
+                    normalizedSourceHash: row.NormalizedSourceHash),
+                out var diagnostic);
+
+            Assert.That(supported, Is.True);
+            Assert.That(diagnostic, Is.Null);
+        }
+
+        // --- Falsifier 5: a digest gate that accepts any admitted digest
+        // for an admitted name ---
+        [Test]
+        public void Identity_BundledNameWithReleaseDigest_IsModifiedShaderSource()
+        {
+            // The bundled main name carries the 9.3.64 main digest. A
+            // digest lookup that ignores the name admits this pair.
+            var releaseDigest = PoiyomiSourceAttestation
+                .AdmittedSources()[0].NormalizedSourceHash;
+
+            AssertUnsupported(
+                Evidence(
+                    shaderName: ".poiyomi/Old Versions/9.3/Poiyomi Toon",
+                    normalizedSourceHash: releaseDigest),
+                PoiyomiSemanticDiagnosticCode.ModifiedShaderSource);
+        }
+
+        // Characterization: the reverse pairing refuses the same way.
+        [Test]
+        public void Identity_ReleaseNameWithBundledDigest_IsModifiedShaderSource()
+        {
+            var bundledDigest = PoiyomiSourceAttestation
+                .AdmittedSources()[2].NormalizedSourceHash;
+
+            AssertUnsupported(
+                Evidence(normalizedSourceHash: bundledDigest),
+                PoiyomiSemanticDiagnosticCode.ModifiedShaderSource);
+        }
+
+        // --- Falsifier 6: a GUID gate that accepts any admitted GUID ---
+        [Test]
+        public void Identity_BundledMainNameWithTwoPassGuid_IsMissingSourceEvidence()
+        {
+            // No admitted row pairs the bundled main name with the Two
+            // Pass GUID. The GUID gate refuses before the digest gate.
+            var bundledDigest = PoiyomiSourceAttestation
+                .AdmittedSources()[2].NormalizedSourceHash;
+
+            AssertUnsupported(
+                Evidence(
+                    shaderName: ".poiyomi/Old Versions/9.3/Poiyomi Toon",
+                    assetGuid: PoiyomiMaterialSemantics.TwoPassCanonicalShaderGuid,
+                    normalizedSourceHash: bundledDigest),
+                PoiyomiSemanticDiagnosticCode.MissingSourceEvidence);
         }
 
         [Test]
