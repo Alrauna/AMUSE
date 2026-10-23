@@ -282,10 +282,32 @@ namespace Alrauna.Amuse.Editor.Host
             MaterialEvidenceRequest relevance,
             IReadOnlyCollection<string> scaleOffsetProperties)
         {
+            // K9 (docs/superpowers/specs/2026-10-23-poiyomi-per-shader-
+            // attestation-design.md). Thry writes rename-marked keyframes
+            // under a suffixed name. The proof must never treat such a
+            // curve as irrelevant. The float check also covers the stems
+            // of the derived scale-offset properties. A texture requested
+            // without scale-offset evidence stays out of the float check.
             return CouldAddressAny(property, relevance.ScalarProperties) ||
                    CouldAddressAny(property, relevance.ColorProperties) ||
                    CouldAddressAny(property, relevance.VectorProperties) ||
-                   CouldAddressAny(property, scaleOffsetProperties);
+                   CouldAddressAny(property, scaleOffsetProperties) ||
+                   CouldAddressAny(property, ScaleOffsetTextureStems(relevance));
+        }
+
+        private static IReadOnlyCollection<string> ScaleOffsetTextureStems(
+            MaterialEvidenceRequest relevance)
+        {
+            var properties = new List<string>();
+            foreach (var texture in relevance.TextureProperties)
+            {
+                if ((texture.Evidence & TextureEvidenceKinds.ScaleOffset) != 0)
+                {
+                    properties.Add(texture.PropertyName);
+                }
+            }
+
+            return properties;
         }
 
         private static bool CouldAddressAny(
@@ -300,7 +322,9 @@ namespace Alrauna.Amuse.Editor.Host
                 if (text.Length > property.Length &&
                     text.StartsWith(property, StringComparison.Ordinal) &&
                     (text[property.Length] == '.' ||
-                     text[property.Length] == '['))
+                     text[property.Length] == '[' ||
+                     // K9: the rename suffix starts with an underscore.
+                     text[property.Length] == '_'))
                 {
                     return true;
                 }

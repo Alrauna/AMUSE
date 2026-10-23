@@ -556,8 +556,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     body, mesh, locked, unLocked);
             var clip = TransientUnlockTestLifecycle.AddMaterialSwapAnimation(
                 root, renderer, 0, locked);
+            // This name is a suffix of a presence-only property. A suffix
+            // of a requested property now refuses the renderer (K9).
             TransientUnlockTestLifecycle.AddSuffixedFloatBinding(
-                clip, root, renderer, "material._MainTex_Cape", 2f);
+                clip, root, renderer, "material._EmissionMap_Cape", 2f);
 
             AvatarProcessor.ProcessAvatar(
                 root, TransientUnlockTestPlatform.Instance);
@@ -609,7 +611,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 clip, EditorCurveBinding.FloatCurve(
                     bodyPath,
                     typeof(SkinnedMeshRenderer),
-                    "material._MainTex_Cape"));
+                    "material._EmissionMap_Cape"));
             Assert.That(suffixed, Is.Not.Null,
                 "the suffixed binding must survive the cycle");
             Assert.That(suffixed.keys[suffixed.keys.Length - 1].value,

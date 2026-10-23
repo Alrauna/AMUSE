@@ -597,6 +597,89 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 Is.EqualTo(ProofRelevantBindingResolution.Irrelevant));
         }
 
+        // --- Falsifier 1: a classifier that treats a rename-suffixed
+        // binding as Irrelevant ---
+        [TestCase("material._Cutoff_Body")]
+        [TestCase("material._Color_Body.a")]
+        [TestCase("material._MainTexPan_Body.x")]
+        [TestCase("material[0]._Cutoff_Body")]
+        public void RenameSuffixedRequestedPropertyFailsClosed(string property)
+        {
+            Assert.That(
+                UnityAnimationEvidenceCapture.ResolveProofRelevant(
+                    Bound(property), "Body", Relevance(), out _),
+                Is.EqualTo(
+                    ProofRelevantBindingResolution
+                        .UnrecognizedMaterialBinding));
+        }
+
+        // --- Falsifier 2: a float check that leaves out scale-offset
+        // texture names ---
+        [Test]
+        public void RenameSuffixedTextureScaleOffsetFailsClosed()
+        {
+            Assert.That(
+                UnityAnimationEvidenceCapture.ResolveProofRelevant(
+                    Bound("material._MainTex_Body_ST.x"),
+                    "Body",
+                    RelevanceWithTexture(),
+                    out _),
+                Is.EqualTo(
+                    ProofRelevantBindingResolution
+                        .UnrecognizedMaterialBinding));
+        }
+
+        // --- Falsifier 3: an object-binding check that ignores rename
+        // suffixes ---
+        [Test]
+        public void RenameSuffixedTextureObjectBindingIsUnrecognized()
+        {
+            var binding = new CapturedObjectBinding(
+                "Body",
+                typeof(SkinnedMeshRenderer).FullName,
+                "material._MainTex_Body",
+                Array.Empty<int>());
+
+            Assert.That(
+                UnityAnimationEvidenceCapture
+                    .IsUnrecognizedObjectMaterialBinding(
+                        binding, "Body", RelevanceWithTexture()),
+                Is.True);
+        }
+
+        // Characterization: generated resolution runs first.
+        [Test]
+        public void TextureScaleOffsetComponentStillResolves()
+        {
+            Assert.That(
+                UnityAnimationEvidenceCapture.ResolveProofRelevant(
+                    Bound("material._MainTex_ST.x"),
+                    "Body",
+                    RelevanceWithTexture(),
+                    out var reference),
+                Is.EqualTo(ProofRelevantBindingResolution.RendererWide));
+            Assert.That(
+                reference.Kind,
+                Is.EqualTo(AnimatedPropertyKind.TextureScaleOffsetComponent));
+        }
+
+        // Characterization: a requested name that extends another requested
+        // name keeps its resolution.
+        [Test]
+        public void RequestedVectorThatExtendsATextureNameStillResolves()
+        {
+            Assert.That(
+                UnityAnimationEvidenceCapture.ResolveProofRelevant(
+                    Bound("material._MainTex_ScrollRotate.x"),
+                    "Body",
+                    RelevanceWithTexture(),
+                    out var reference),
+                Is.EqualTo(ProofRelevantBindingResolution.RendererWide));
+            Assert.That(
+                reference.Kind,
+                Is.EqualTo(AnimatedPropertyKind.VectorComponent));
+        }
+
         [TestCase("body", "material._Cutoff")]
         [TestCase("Body", "material._cutoff")]
         public void RendererPathAndPropertyComparisonsAreOrdinal(
@@ -2117,6 +2200,26 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 new[] { "_Color" },
                 new[] { "_MainTexPan" },
                 Array.Empty<TexturePropertyEvidenceRequest>());
+        }
+
+        // Relevance() plus "_MainTex" requested with scale-offset and source
+        // identity, and "_MainTex_ScrollRotate" as an extra requested vector.
+        private static MaterialEvidenceRequest RelevanceWithTexture()
+        {
+            return new MaterialEvidenceRequest(
+                false,
+                false,
+                new[] { "_PresenceOnly" },
+                new[] { "_Cutoff" },
+                new[] { "_Color" },
+                new[] { "_MainTexPan", "_MainTex_ScrollRotate" },
+                new[]
+                {
+                    new TexturePropertyEvidenceRequest(
+                        "_MainTex",
+                        TextureEvidenceKinds.ScaleOffset |
+                        TextureEvidenceKinds.SourceIdentity),
+                });
         }
 
         private static CapturedFloatBinding Bound(string property)
