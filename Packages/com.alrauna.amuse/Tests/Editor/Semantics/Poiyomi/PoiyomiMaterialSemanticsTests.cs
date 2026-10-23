@@ -442,6 +442,191 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 PoiyomiSemanticDiagnosticCode.ModifiedShaderSource);
         }
 
+        [Test]
+        public void AdmittedSourcesAreTheFourMeasuredRows()
+        {
+            var rows = PoiyomiSourceAttestation.AdmittedSources();
+
+            Assert.That(
+                rows.Count,
+                Is.EqualTo(4),
+                "A new row needs the K5 admission measurement first.");
+
+            Assert.That(rows[0].ShaderName, Is.EqualTo(".poiyomi/Poiyomi Toon"));
+            Assert.That(rows[0].IsTwoPass, Is.False);
+            Assert.That(
+                rows[0].AssetGuid,
+                Is.EqualTo(PoiyomiMaterialSemantics.CanonicalShaderGuid));
+            Assert.That(
+                rows[0].NormalizedSourceHash,
+                Is.EqualTo(
+                    "31f2ff15615c5e2ac9b05fea08b6310731394d1b5a928b16048e7bde8f8b1755"));
+            Assert.That(rows[0].LockedOriginalAdmitted, Is.True);
+
+            Assert.That(
+                rows[1].ShaderName,
+                Is.EqualTo(".poiyomi/Poiyomi Toon Two Pass"));
+            Assert.That(rows[1].IsTwoPass, Is.True);
+            Assert.That(
+                rows[1].AssetGuid,
+                Is.EqualTo(PoiyomiMaterialSemantics.TwoPassCanonicalShaderGuid));
+            Assert.That(
+                rows[1].NormalizedSourceHash,
+                Is.EqualTo(
+                    "b1d9ecd3072d21db97001dd23f88d089996b809e4039891a05f64d2ffcd4df67"));
+            Assert.That(rows[1].LockedOriginalAdmitted, Is.True);
+
+            Assert.That(
+                rows[2].ShaderName,
+                Is.EqualTo(".poiyomi/Old Versions/9.3/Poiyomi Toon"));
+            Assert.That(rows[2].IsTwoPass, Is.False);
+            Assert.That(
+                rows[2].AssetGuid,
+                Is.EqualTo(PoiyomiMaterialSemantics.CanonicalShaderGuid));
+            Assert.That(
+                rows[2].NormalizedSourceHash,
+                Is.EqualTo(
+                    "c812d4d39ce3352b6198fdfcb5de87eb07678739a4bce7e4afd18cea28be19f4"));
+            Assert.That(rows[2].LockedOriginalAdmitted, Is.False);
+
+            Assert.That(
+                rows[3].ShaderName,
+                Is.EqualTo(".poiyomi/Old Versions/9.3/Poiyomi Toon Two Pass"));
+            Assert.That(rows[3].IsTwoPass, Is.True);
+            Assert.That(
+                rows[3].AssetGuid,
+                Is.EqualTo(PoiyomiMaterialSemantics.TwoPassCanonicalShaderGuid));
+            Assert.That(
+                rows[3].NormalizedSourceHash,
+                Is.EqualTo(
+                    "4fd1d8c1e35bd4e81a21c1dd6545ceb022542b67aa9996cb8341da7f3b64b65f"));
+            Assert.That(rows[3].LockedOriginalAdmitted, Is.False);
+        }
+
+        [Test]
+        public void RowsSharingANameShareTheTwoPassFlag()
+        {
+            var rows = PoiyomiSourceAttestation.AdmittedSources();
+
+            for (var i = 0; i < rows.Count; i++)
+            {
+                for (var j = i + 1; j < rows.Count; j++)
+                {
+                    if (!string.Equals(
+                        rows[i].ShaderName,
+                        rows[j].ShaderName,
+                        StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    Assert.That(
+                        rows[j].IsTwoPass,
+                        Is.EqualTo(rows[i].IsTwoPass),
+                        "rows that share a name must share the Two Pass flag");
+                }
+            }
+        }
+
+        [Test]
+        public void EveryRowHasAHexGuidAndAHexDigest()
+        {
+            var rows = PoiyomiSourceAttestation.AdmittedSources();
+
+            for (var i = 0; i < rows.Count; i++)
+            {
+                Assert.That(
+                    rows[i].AssetGuid,
+                    Does.Match("^[0-9a-f]{32}$"),
+                    $"row {i} GUID must be 32 lowercase hex characters");
+                Assert.That(
+                    rows[i].NormalizedSourceHash,
+                    Does.Match("^[0-9a-f]{64}$"),
+                    $"row {i} digest must be 64 lowercase hex characters");
+            }
+        }
+
+        [TestCase(".poiyomi/Old Versions/9.3/Poiyomi Toon", false)]
+        [TestCase(".poiyomi/Old Versions/9.3/Poiyomi Toon Two Pass", true)]
+        [TestCase(".poiyomi/Poiyomi Toon", false)]
+        [TestCase(".poiyomi/Poiyomi Toon Two Pass", true)]
+        public void AdmittedNamesClassifyWithTheirTwoPassFlag(
+            string name, bool expected)
+        {
+            var classified = PoiyomiSourceAttestation.TryClassifyShaderName(
+                name,
+                out var isTwoPass);
+
+            Assert.That(classified, Is.True);
+            Assert.That(isTwoPass, Is.EqualTo(expected));
+        }
+
+        [TestCase(".poiyomi/Old Versions/9.0/Poiyomi Toon")]
+        [TestCase(".poiyomi/Old Versions/9.3/Poiyomi Toon World")]
+        [TestCase(".poiyomi/Poiyomi Toon Two Pas")]
+        [TestCase(null)]
+        public void OtherNamesDoNotClassify(string name)
+        {
+            Assert.That(
+                PoiyomiSourceAttestation.TryClassifyShaderName(name, out _),
+                Is.False);
+        }
+
+        // --- Falsifier 4: a matcher that admits any known digest regardless
+        // of the name ---
+        [Test]
+        public void MatchRequiresNameGuidAndDigestOfOneRow()
+        {
+            // A package update can pair a fresh name with a stale digest.
+            // The match binds all three values to one row.
+            Assert.That(
+                PoiyomiSourceAttestation.TryMatchAdmittedSource(
+                    ".poiyomi/Old Versions/9.3/Poiyomi Toon",
+                    PoiyomiMaterialSemantics.CanonicalShaderGuid,
+                    "31f2ff15615c5e2ac9b05fea08b6310731394d1b5a928b16048e7bde8f8b1755",
+                    out _),
+                Is.False);
+
+            Assert.That(
+                PoiyomiSourceAttestation.TryMatchAdmittedSource(
+                    ".poiyomi/Poiyomi Toon",
+                    PoiyomiMaterialSemantics.CanonicalShaderGuid,
+                    "c812d4d39ce3352b6198fdfcb5de87eb07678739a4bce7e4afd18cea28be19f4",
+                    out _),
+                Is.False);
+
+            Assert.That(
+                PoiyomiSourceAttestation.TryMatchAdmittedSource(
+                    ".poiyomi/Old Versions/9.3/Poiyomi Toon",
+                    PoiyomiMaterialSemantics.TwoPassCanonicalShaderGuid,
+                    "c812d4d39ce3352b6198fdfcb5de87eb07678739a4bce7e4afd18cea28be19f4",
+                    out _),
+                Is.False);
+
+            var matched = PoiyomiSourceAttestation.TryMatchAdmittedSource(
+                ".poiyomi/Old Versions/9.3/Poiyomi Toon",
+                PoiyomiMaterialSemantics.CanonicalShaderGuid,
+                "c812d4d39ce3352b6198fdfcb5de87eb07678739a4bce7e4afd18cea28be19f4",
+                out var row);
+
+            Assert.That(matched, Is.True);
+            Assert.That(row.LockedOriginalAdmitted, Is.False);
+        }
+
+        [Test]
+        public void AdmittedSources_ReturnsAReadOnlyView()
+        {
+            var rows = PoiyomiSourceAttestation.AdmittedSources();
+
+            Assert.That(PoiyomiSourceAttestation.AdmittedSources(), Is.SameAs(rows));
+            Assert.That(
+                rows,
+                Is.Not.InstanceOf<PoiyomiAdmittedSource[]>(),
+                "callers must not be able to mutate the row table");
+            Assert.Throws<NotSupportedException>(
+                () => ((ICollection<PoiyomiAdmittedSource>)rows).Clear());
+        }
+
         private static void AssertUnsupported(
             PoiyomiSourceEvidence evidence,
             PoiyomiSemanticDiagnosticCode expectedCode)
