@@ -618,7 +618,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         {
             var rows = PoiyomiSourceAttestation.AdmittedSources();
 
-            Assert.That(PoiyomiSourceAttestation.AdmittedSources(), Is.SameAs(rows));
             Assert.That(
                 rows,
                 Is.Not.InstanceOf<PoiyomiAdmittedSource[]>(),

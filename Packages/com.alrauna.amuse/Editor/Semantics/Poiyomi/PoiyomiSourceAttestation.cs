@@ -89,7 +89,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         internal const string TwoPassCanonicalNormalizedSourceHash =
             "b1d9ecd3072d21db97001dd23f88d089996b809e4039891a05f64d2ffcd4df67";
 
-        // The admitted shader files (K1, K4; docs/superpowers/specs/
+        // The admitted shader files (K1, K4, docs/superpowers/specs/
         // 2026-10-23-poiyomi-per-shader-attestation-design.md). One row per
         // measured shader file. All four rows carry the measurement date
         // 2026-10-23. Rows one and two measure the 9.3.64 release. Rows
