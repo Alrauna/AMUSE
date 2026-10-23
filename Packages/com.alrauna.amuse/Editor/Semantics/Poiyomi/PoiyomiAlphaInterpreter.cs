@@ -121,6 +121,16 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 ["_OutlineALColorEnabled"] = "Outline",
             };
 
+        // The alpha request initializers below read this schema. It lives
+        // here so interpreter type initialization never enters the facade.
+        internal static readonly string[] AlphaRequiredSchemaProperties =
+        {
+            "shader_master_label",
+            PoiyomiProperties.ShaderOptimizerEnabled,
+            PoiyomiProperties.MainTex,
+            PoiyomiProperties.Color,
+        };
+
         internal static MaterialEvidenceRequest AlphaEvidenceRequest { get; } =
             CreateAlphaEvidenceRequest(declareCutoutCutoff: true);
 
@@ -201,7 +211,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             return new MaterialEvidenceRequest(
                 shaderName: true,
                 activeColorSpace: false,
-                presenceProperties: PoiyomiMaterialSemantics.AlphaRequiredSchemaProperties,
+                presenceProperties: AlphaRequiredSchemaProperties,
                 scalarProperties: scalars,
                 colorProperties: new[] { PoiyomiProperties.Color, PoiyomiProperties.LineColor },
                 vectorProperties: new[]

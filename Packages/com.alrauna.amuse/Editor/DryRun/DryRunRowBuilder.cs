@@ -13,8 +13,7 @@ namespace Alrauna.Amuse.Editor.DryRun
             Renderer renderer,
             string rendererPath,
             string rendererTypeName,
-            RuntimeStateResolution.ResolvedRuntimeStates resolved,
-            IReadOnlyList<CapturedMaterialSlotEvidence> slots)
+            RuntimeStateResolution.ResolvedRuntimeStates resolved)
         {
             var rows = new List<MaterialTransformationRow>();
             var allDeferred = true;
@@ -30,7 +29,9 @@ namespace Alrauna.Amuse.Editor.DryRun
                 }
 
                 hasUnresolved = true;
-                var slotEvidence = slotIndex < slots.Count ? slots[slotIndex] : null;
+                // The slot evidence rides on the same result, so slot i of
+                // one is slot i of the other by construction.
+                var slotEvidence = resolved.Slots[slotIndex];
                 if (!AlphaSeparationDryRun.IsSlotDeferred(renderer, slotIndex, resolved.SlotResults[slotIndex], slotEvidence))
                 {
                     allDeferred = false;
@@ -70,12 +71,15 @@ namespace Alrauna.Amuse.Editor.DryRun
             {
                 if (!slotResults[slotIndex].IsResolved)
                 {
+                    // The slot evidence rides on the same result, so slot
+                    // i of one is slot i of the other by construction. A
+                    // mismatch is an invariant defect and must throw.
                     rows.Add(RefusedSlotRow(
                         renderer,
                         rendererPath,
                         rendererTypeName,
                         slotResults[slotIndex],
-                        slotIndex < slots.Count ? slots[slotIndex] : null,
+                        slots[slotIndex],
                         slotIndex,
                         rendererName));
                     continue;

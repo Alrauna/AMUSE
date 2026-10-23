@@ -392,7 +392,8 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         // official 2.4.1 tag tree on 2026-10-20 by the recipe below,
         // licensed by reproducing the 2.4.0 pin from the 2.4.0 tag tree
         // (spec B1). The 2.4.0 digest lives in the AdmittedPackageVersions
-        // row literal. Installed-shape confirmation is outstanding.
+        // row literal. The installed-shape status is recorded in the row
+        // block below.
         internal const string IncludeTreeDigest =
             "063f08cdc225ffc488d874c81860de376d5a9f9ad1c906ca84aa59f6193f0625";
 
@@ -415,11 +416,14 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         // fields, and Shader/Includes/openlit_core.hlsl. The 2.4.1 row is
         // computed from the official 2.4.1 tag tree by the recipe below.
         // The anchor reproduced the 2.4.0 digest from the 2.4.0 tag tree
-        // on 2026-10-20. The installed-shape follow-up re-measures, from
-        // two installed 2.4.1 shapes: the include tree, the shader, pass,
-        // and extended family digests, the Multi container digests, the
-        // GUIDs, the `_lilToonVersion` stamp, and the opaque-target tuple
-        // per the mandate at Editor/Semantics/LilToon/LilToonOpaqueTarget.cs:26-30.
+        // on 2026-10-20. The production gather from one installed
+        // 2.4.1 shape on that day confirmed this include tree digest and
+        // held the GUIDs and the `_lilToonVersion` stamp. The 2.4.1 Multi
+        // row below records its measured columns from that shape. Still
+        // outstanding when a second settings shape is obtainable: the
+        // regular shader, pass, and extended family digests, and the
+        // opaque-target tuple per the mandate style at
+        // Editor/Semantics/LilToon/LilToonOpaqueTarget.cs:26-30.
         // Never re-derive the generated shader and pass digests from the
         // lilToon repository, whose committed generated shaders are stale
         // relative to their own tag's generator. Include-tree rows may
@@ -2768,9 +2772,9 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         /// outline wrapper, one row each. Each row resolves by container
         /// name and asset GUID and maps the container to its digest column;
         /// the digests themselves live in <see cref="AdmittedMultiVersions"/>,
-        /// one column value per admitted version. Every digest there was
-        /// measured from installed shapes across at least two real settings
-        /// shapes; no placeholder digest ships here.
+        /// one column value per admitted version. Every digest there is
+        /// a measured value, and the comment on that row list owns each
+        /// row's evidence status. No placeholder digest ships here.
         /// </summary>
         private static readonly
             (string ShaderName, string ShaderGuid, LilToonMultiContainerColumn Column)[]

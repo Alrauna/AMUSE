@@ -312,6 +312,21 @@ namespace Alrauna.Amuse.Editor
                     return;
                 }
 
+                // The already computed live key validates the retained
+                // run before any row draws. Invalidation outranks the
+                // ordinary cancelled branch, so a rejected run never
+                // offers Compute. Refresh above discards the run
+                // through the existing flow.
+                if (_dryRun != null && !_dryRun.ValidatePolicy(fingerprint))
+                {
+                    const string settingsSentence =
+                        "Settings changed. Select Refresh to compute new results.";
+                    EditorGUILayout.HelpBox(settingsSentence, MessageType.Info);
+                    OnHelpBoxDrawnForTest?.Invoke(
+                        settingsSentence, MessageType.Info);
+                    return;
+                }
+
                 if (_dryRun == null)
                 {
                     _dryRun = new AlphaSeparationDryRun(

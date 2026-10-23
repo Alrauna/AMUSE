@@ -84,6 +84,7 @@ namespace Alrauna.Amuse.Editor.DryRun
         private string _graphFingerprint;
         private string _avatarKey;
         private bool _avatarCacheHit;
+        private bool _policyInvalidated;
 
         // The mapped policy values the build derives once per pass. The
         // dry run derives them once per open, from the same helpers.
@@ -100,6 +101,7 @@ namespace Alrauna.Amuse.Editor.DryRun
         private bool _cutoutSeparatorEnabled;
         private bool _transparentSeparatorEnabled;
         private bool _allowDepthTestChange;
+        private bool _ignoreOutOfRangeMaterialSlots;
 
         private int _rendererIndex;
         private DryRunState _state = DryRunState.Idle;
@@ -113,7 +115,6 @@ namespace Alrauna.Amuse.Editor.DryRun
         private IReadOnlyList<BlockStateEntry> _inFlightBlockState;
         private CapturedAnimationEvidence _inFlightEvidence;
         private RuntimeStateResolution.ResolvedRuntimeStates _inFlightResolved;
-        private IReadOnlyList<CapturedMaterialSlotEvidence> _inFlightSlots;
         private string _inFlightRendererKey;
         private string _inFlightCompositeKey;
         private bool _inFlightRefreshOnly;
@@ -130,6 +131,7 @@ namespace Alrauna.Amuse.Editor.DryRun
         internal bool Done { get; private set; }
         internal DryRunState State => _state;
         internal bool IsCancelled { get; private set; }
+        internal bool PolicyInvalidated => _policyInvalidated;
         internal int TotalRendererCount { get; private set; }
         internal int CurrentRendererIndex => _rendererIndex;
 
@@ -188,6 +190,13 @@ namespace Alrauna.Amuse.Editor.DryRun
             _state = DryRunState.Idle;
             IsCancelled = false;
 
+            // The target and the shared policy key are captured before
+            // every early return, so a completed banner run still
+            // carries the key its later validation needs.
+            _activeTarget = _buildTargetProvider();
+            _policyFingerprint = PlayModeBuildStore.ComputePolicyFingerprint(
+                _component, _activeTarget);
+
             // The switches short-circuit before any enumeration, so a
             // switched-off avatar proves no renderer and costs no capture.
             if (_component.AmuseDisabled)
@@ -214,7 +223,6 @@ namespace Alrauna.Amuse.Editor.DryRun
                 return;
             }
 
-            _activeTarget = _buildTargetProvider();
             if (!PlatformAlphaSamplingPolicy.TrySelect(
                     _activeTarget,
                     _component.AcceptDesktopAnisotropyDifferences,
@@ -252,7 +260,6 @@ namespace Alrauna.Amuse.Editor.DryRun
 
             MapPolicy();
 
-            _policyFingerprint = BuildPolicyFingerprint();
             _controllerFingerprint = BuildControllerFingerprint();
             _graphFingerprint = BuildGraphFingerprint();
             _avatarKey = DryRunFingerprint.Avatar(InputsFor());
@@ -382,6 +389,8 @@ namespace Alrauna.Amuse.Editor.DryRun
             _transparentSeparatorEnabled =
                 _component.TransparentSeparatorEnabled;
             _allowDepthTestChange = _component.AllowDepthTestChange;
+            _ignoreOutOfRangeMaterialSlots =
+                _component.IgnoreOutOfRangeMaterialSlots;
             _bounds = AlphaPolicyBounds.From(
                 RuntimeStateResolution.OpaquePercentFrom(
                     _component.MinimumOpaqueAlphaPercent),
@@ -417,6 +426,15 @@ namespace Alrauna.Amuse.Editor.DryRun
             {
                 _state = DryRunState.Completed;
                 Done = true;
+                return false;
+            }
+
+            // One live-key computation per step. A mismatch against the
+            // key captured at Begin latches the run invalid before the
+            // step can publish rows, cache results, or start further work.
+            if (!ValidatePolicy(PlayModeBuildStore.ComputePolicyFingerprint(
+                    _component, _buildTargetProvider())))
+            {
                 return false;
             }
 
@@ -490,6 +508,31 @@ namespace Alrauna.Amuse.Editor.DryRun
             RepaintRequested?.Invoke();
         }
 
+        /// <summary>
+        /// Compares the supplied live key with the key captured at
+        /// Begin. The first mismatch latches the run invalid and
+        /// cancels pending work through the existing cancellation
+        /// path. Every later call returns false until a new run opens,
+        /// so a restored policy cannot resurrect the rejected run.
+        /// </summary>
+        internal bool ValidatePolicy(string livePolicyFingerprint)
+        {
+            if (_policyInvalidated)
+            {
+                return false;
+            }
+
+            if (!string.Equals(
+                    livePolicyFingerprint, _policyFingerprint,
+                    StringComparison.Ordinal))
+            {
+                _policyInvalidated = true;
+                Cancel();
+            }
+
+            return !_policyInvalidated;
+        }
+
         private void ClearInFlight()
         {
             if (_inFlightTask == null || _inFlightTask.IsCompleted)
@@ -507,7 +550,6 @@ namespace Alrauna.Amuse.Editor.DryRun
             _inFlightBlockState = null;
             _inFlightEvidence = null;
             _inFlightResolved = null;
-            _inFlightSlots = null;
             _inFlightRendererKey = null;
             _inFlightCompositeKey = null;
             _inFlightRefreshOnly = false;
@@ -599,7 +641,6 @@ namespace Alrauna.Amuse.Editor.DryRun
             IReadOnlyList<BlockStateEntry> blockState;
             CapturedAnimationEvidence evidence;
             RuntimeStateResolution.ResolvedRuntimeStates resolved;
-            IReadOnlyList<CapturedMaterialSlotEvidence> slots;
             UnityRendererAlphaExtraction extraction;
 
             try
@@ -635,15 +676,11 @@ namespace Alrauna.Amuse.Editor.DryRun
                     _densityCapPercent,
                     blockState,
                     rendererTypeName);
-                slots = RuntimeStateResolution.MaterialSlotsFor(
-                    evidence, rendererPath,
-                    UnityAnimationEvidenceCapture.MaterialSlotBindingParser,
-                    rendererTypeName);
 
                 if (resolved.Refusal != RendererAnalysisRefusal.None)
                 {
                     var refusalRows = DryRunRowBuilder.BuildResolvedRefusalRows(
-                        renderer, rendererPath, rendererTypeName, resolved, slots);
+                        renderer, rendererPath, rendererTypeName, resolved);
                     _rendererRows.AddRange(refusalRows);
                     if (!refreshOnly && _avatarKey != null)
                     {
@@ -706,7 +743,6 @@ namespace Alrauna.Amuse.Editor.DryRun
             _inFlightBlockState = blockState;
             _inFlightEvidence = evidence;
             _inFlightResolved = resolved;
-            _inFlightSlots = slots;
             _inFlightRendererKey = rendererKey;
             _inFlightCompositeKey = composite;
             _inFlightRefreshOnly = refreshOnly;
@@ -820,7 +856,7 @@ namespace Alrauna.Amuse.Editor.DryRun
                     _inFlightRendererTypeName,
                     verdicts,
                     _inFlightResolved.SlotResults,
-                    _inFlightSlots,
+                    _inFlightResolved.Slots,
                     _inFlightRendererName);
 
                 _rendererRows.AddRange(rows);
@@ -869,7 +905,7 @@ namespace Alrauna.Amuse.Editor.DryRun
                     _bounds,
                     out admittedLive,
                     capturer,
-                    _component.IgnoreOutOfRangeMaterialSlots,
+                    _ignoreOutOfRangeMaterialSlots,
                     rendererTypeName,
                     LockedMaterialIdentity.PreCheckRefusal,
                     null,
@@ -888,7 +924,7 @@ namespace Alrauna.Amuse.Editor.DryRun
                 _selectRequest,
                 capturer,
                 out admittedLive,
-                _component.IgnoreOutOfRangeMaterialSlots,
+                _ignoreOutOfRangeMaterialSlots,
                 rendererTypeName,
                 LockedMaterialIdentity.PreCheckRefusal,
                 null,
@@ -1114,8 +1150,14 @@ namespace Alrauna.Amuse.Editor.DryRun
         }
 
         /// <summary>
-        /// Checks whether an unresolved slot evaluates at build time.
-        /// Attested locked materials and streaming textures evaluate at build time.
+        /// Checks whether an unresolved slot evaluates at build time. The
+        /// slot's recorded cause controls the answer. Only the recorded
+        /// semantics-unknown cause can defer, and only behind the live
+        /// current material checks: an attested locked current material,
+        /// or an unreadable streaming current texture behind an unnamed
+        /// capture refusal. A closure failure, a recorded lock refusal,
+        /// and every other named permanent cause refuse before material
+        /// shape can override them.
         /// </summary>
         internal static bool IsSlotDeferred(
             Renderer renderer,
@@ -1139,6 +1181,23 @@ namespace Alrauna.Amuse.Editor.DryRun
                 return false;
             }
 
+            // A recorded permanent cause owns the display. Only the
+            // semantics-unknown cause can defer. A recorded lock refusal
+            // refuses here: the build recovers a locked current material
+            // only when its recorded original shader identity attests, so
+            // the display must not promise a recovery the build cannot
+            // supply.
+            if (slotResult.Refusal !=
+                RendererAnalysisRefusal.AdmittedMaterialSemanticsUnknown)
+            {
+                return false;
+            }
+
+            // The locked arm stays confirmed from the current material
+            // alone: the recorded semantics-unknown cause plus the live
+            // attested locked identity. The name tag check below is
+            // display corroboration only. The build's own recovery
+            // precondition reads the recorded asset reference.
             if (LockedMaterialIdentity.RecognizedLockedIdentity(material) &&
                 (LockedMaterialIdentity.OriginalShaderAttested(material) ||
                  IsAttestedOriginalShader(material)))
@@ -1146,7 +1205,14 @@ namespace Alrauna.Amuse.Editor.DryRun
                 return true;
             }
 
-            if (HasUnreadableAlphaStreamingTexture(material))
+            // The streaming arm stays only for the unnamed capture refusal
+            // shape: the frontend named no reason, the capture named what
+            // it could not read, and the current material holds the
+            // unreadable streaming texture.
+            if (slotResult.UnknownReason == null &&
+                slotEvidence != null &&
+                slotEvidence.CaptureRefusals.Count > 0 &&
+                HasUnreadableAlphaStreamingTexture(material))
             {
                 return true;
             }
@@ -1396,38 +1462,6 @@ namespace Alrauna.Amuse.Editor.DryRun
                 _policyFingerprint,
                 _controllerFingerprint,
                 _graphFingerprint);
-        }
-
-        private string BuildPolicyFingerprint()
-        {
-            var values = new object[]
-            {
-                _component.AmuseDisabled,
-                _component.AlphaSeparatorEnabled,
-                _component.CutoutSeparatorEnabled,
-                _component.TransparentSeparatorEnabled,
-                _component.PreserveTransparencyMaxMipLevel,
-                _component.PreserveTransparencyMinTextureSize,
-                _component.MinimumOpaqueCoveragePercent,
-                _component.MinimumOpaqueCoverageToPreservePercent,
-                _component.CutoutPreserveTransparencyMaxMipLevel,
-                _component.CutoutPreserveTransparencyMinTextureSize,
-                _component.CutoutMinimumOpaqueCoveragePercent,
-                _component.CutoutMinimumOpaqueCoverageToPreservePercent,
-                _component.MinimumOpaqueAlphaPercent,
-                _component.PolygonAlphaUpperClampPercent,
-                _component.PolygonMinimumOpaqueCoveragePercent,
-                _component.AcceptDesktopAnisotropyDifferences,
-                _component.AcceptMobileAnisotropyDifferences,
-                _component.IgnoreOutOfRangeMaterialSlots,
-                _component.AllowDepthTestChange
-            };
-            return string.Join(
-                BodySeparator,
-                values.Select(value =>
-                    value is bool flag
-                        ? (flag ? "1" : "0")
-                        : Convert.ToString(value, CultureInfo.InvariantCulture)));
         }
 
         private string BuildControllerFingerprint()

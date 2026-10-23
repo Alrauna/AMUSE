@@ -37,7 +37,10 @@ namespace Alrauna.Amuse.Tests.Editor
         [TearDown]
         public void TearDown()
         {
-            if (_window != null)
+            // A render can close the shared repaint host window through
+            // RenderInHostWindow, so the truthiness read skips the
+            // destroyed instance.
+            if (_window)
             {
                 _window.Close();
             }
@@ -612,45 +615,58 @@ namespace Alrauna.Amuse.Tests.Editor
         [Test]
         public void PlayModeRecordDisplaysBannerAndBypassesDryRun()
         {
-            var component = NewHiddenComponent();
-            var avatarKey = PlayModeBuildStore.ComputeAvatarKey(component.transform);
-            var fingerprint = PlayModeBuildStore.ComputePolicyFingerprint(
-                component, EditorUserBuildSettings.activeBuildTarget);
-
-            var record = new PlayModeBuildRecord
-            {
-                avatarKey = avatarKey,
-                policyFingerprint = fingerprint,
-                avatarRows = new SerializedTransformationRow[]
-                {
-                    new SerializedTransformationRow
-                    {
-                        kind = (int)MaterialTransformationRowKind.Note,
-                        sentence = "Play mode note row."
-                    }
-                },
-                rendererRows = new SerializedTransformationRow[0]
-            };
-            PlayModeBuildStore.Save(record);
-
-            var editor = (Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor)
-                UnityEditor.Editor.CreateEditor(component);
-            var editorType = typeof(Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor);
-            editorType.GetField("_settingsOpen", BindingFlags.NonPublic | BindingFlags.Instance)
-                ?.SetValue(editor, true);
-            editorType.GetField("_alphaSeparatorOpen", BindingFlags.NonPublic | BindingFlags.Instance)
-                ?.SetValue(editor, true);
-            editorType.GetField("_materialTransformationsOpen", BindingFlags.NonPublic | BindingFlags.Instance)
-                ?.SetValue(editor, true);
-            editorType.GetField("_alphaSeparationTransformationsOpen", BindingFlags.NonPublic | BindingFlags.Instance)
-                ?.SetValue(editor, true);
-
-            var helpBoxesDrawn = new List<string>();
-            Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor.OnHelpBoxDrawnForTest =
-                (msg, type) => helpBoxesDrawn.Add(msg);
-
+            var scope = new TestTransientScope("Assets/AmuseTests_PlayRecordBanner");
+            var avatarKey = "";
+            Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor editor = null;
             try
             {
+                scope.EnsureTempFolder();
+                var root = scope.CreateSavedSceneRoot("AMUSE play record banner fixture");
+                var component = root.AddComponent<
+                    Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                var reveal = new SerializedObject(component);
+                reveal.FindProperty("_advancedSettingsRevealed")
+                    .boolValue = true;
+                reveal.ApplyModifiedPropertiesWithoutUndo();
+                scope.SaveOwnedScene();
+
+                avatarKey = PlayModeBuildStore.ComputeAvatarKey(component.transform);
+                Assert.That(avatarKey, Is.Not.Empty, "a saved root has a proved key");
+                var fingerprint = PlayModeBuildStore.ComputePolicyFingerprint(
+                    component, EditorUserBuildSettings.activeBuildTarget);
+
+                var record = new PlayModeBuildRecord
+                {
+                    avatarKey = avatarKey,
+                    policyFingerprint = fingerprint,
+                    avatarRows = new SerializedTransformationRow[]
+                    {
+                        new SerializedTransformationRow
+                        {
+                            kind = MaterialTransformationRowKind.Note,
+                            sentence = "Play mode note row."
+                        }
+                    },
+                    rendererRows = new SerializedTransformationRow[0]
+                };
+                PlayModeBuildStore.Save(record);
+
+                editor = (Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor)
+                    UnityEditor.Editor.CreateEditor(component);
+                var editorType = typeof(Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor);
+                editorType.GetField("_settingsOpen", BindingFlags.NonPublic | BindingFlags.Instance)
+                    ?.SetValue(editor, true);
+                editorType.GetField("_alphaSeparatorOpen", BindingFlags.NonPublic | BindingFlags.Instance)
+                    ?.SetValue(editor, true);
+                editorType.GetField("_materialTransformationsOpen", BindingFlags.NonPublic | BindingFlags.Instance)
+                    ?.SetValue(editor, true);
+                editorType.GetField("_alphaSeparationTransformationsOpen", BindingFlags.NonPublic | BindingFlags.Instance)
+                    ?.SetValue(editor, true);
+
+                var helpBoxesDrawn = new List<string>();
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor.OnHelpBoxDrawnForTest =
+                    (msg, type) => helpBoxesDrawn.Add(msg);
+
                 RenderInHostWindow(() => editor.OnInspectorGUI());
 
                 Assert.That(
@@ -665,9 +681,10 @@ namespace Alrauna.Amuse.Tests.Editor
             }
             finally
             {
-                PlayModeBuildStore.Clear(avatarKey);
+                if (avatarKey != "") PlayModeBuildStore.Clear(avatarKey);
                 Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor.OnHelpBoxDrawnForTest = null;
-                UnityEngine.Object.DestroyImmediate(editor);
+                if (editor != null) UnityEngine.Object.DestroyImmediate(editor);
+                scope.TearDown();
             }
         }
 
@@ -682,7 +699,7 @@ namespace Alrauna.Amuse.Tests.Editor
                 {
                     new SerializedTransformationRow
                     {
-                        kind = (int)MaterialTransformationRowKind.Note,
+                        kind = MaterialTransformationRowKind.Note,
                         sentence = "cache probe note."
                     }
                 },
@@ -802,6 +819,93 @@ namespace Alrauna.Amuse.Tests.Editor
                 Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor.OnMaterialObjectFieldDrawnForTest = null;
                 AssetDatabase.DeleteAsset(fallbackMatPath);
                 UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void StoredNumericRowsDrawTheirRowShapesThroughTheRealDrawer()
+        {
+            // The fixture carries the wire numbers from the stored
+            // record. This test checks how a stored numeric Slot row
+            // draws through the real drawer.
+            var rows = new List<MaterialTransformationRow>();
+            foreach (var wireKind in new[] { 0, 1, 2, 3, 4 })
+            {
+                rows.Add(MaterialTransformationRow.FromSerialized(
+                    JsonUtility.FromJson<SerializedTransformationRow>(
+                        DryRun.MaterialTransformationRowTests
+                            .SerializedRowJson(wireKind))));
+            }
+
+            var dummyRoot = new GameObject("NumericWireAvatarRoot").transform;
+            _scope.Track(dummyRoot.gameObject);
+
+            string pathLabel = null;
+            GUIStyle pathStyle = null;
+            var rendererFieldFired = false;
+            var materialFieldFired = false;
+            UnityEngine.Object drawnMaterial = null;
+
+            Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                .OnRendererLabelDrawnForTest = (label, style) =>
+                {
+                    pathLabel = label;
+                    pathStyle = style;
+                };
+            Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                .OnRendererObjectFieldDrawnForTest =
+                (obj, type, allowScene) => rendererFieldFired = true;
+            Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                .OnMaterialObjectFieldDrawnForTest =
+                (obj, type, allowScene) =>
+                {
+                    materialFieldFired = true;
+                    drawnMaterial = obj;
+                };
+
+            try
+            {
+                var draw = typeof(Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor)
+                    .GetMethod(
+                        "DrawTransformationRow",
+                        BindingFlags.NonPublic | BindingFlags.Static);
+                RenderInHostWindow(() =>
+                {
+                    foreach (var row in rows)
+                    {
+                        draw.Invoke(null, new object[] { row, dummyRoot });
+                    }
+                });
+
+                Assert.That(
+                    pathLabel,
+                    Is.EqualTo("Armature/Body"),
+                    "the stored slot row must draw its renderer path label");
+                Assert.That(
+                    pathStyle,
+                    Is.EqualTo(EditorStyles.boldLabel),
+                    "a missing renderer must draw the bold path label");
+                Assert.That(
+                    rendererFieldFired,
+                    Is.False,
+                    "a missing renderer must draw no renderer object field");
+                Assert.That(
+                    materialFieldFired,
+                    Is.True,
+                    "the stored slot row must draw its material object field");
+                Assert.That(
+                    drawnMaterial,
+                    Is.Null,
+                    "an unloadable source path must draw no material");
+            }
+            finally
+            {
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                    .OnRendererLabelDrawnForTest = null;
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                    .OnRendererObjectFieldDrawnForTest = null;
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                    .OnMaterialObjectFieldDrawnForTest = null;
             }
         }
 
@@ -1107,10 +1211,402 @@ namespace Alrauna.Amuse.Tests.Editor
                 "the foldout exposed no separator-off banner row");
             Assert.That(
                 rows.Any(
-                    row => row.Kind == Alrauna.Amuse.Editor.DryRun
-                        .MaterialTransformationRowKind.Renderer),
+                    row => row.Kind == MaterialTransformationRowKind
+                        .Renderer),
                 Is.False,
                 "the separator-off view computed a renderer row");
+        }
+
+        // --- Policy validity --------------------------------------------------
+
+        private static MeshRenderer AttachRefusedSlotRenderer(
+            Alrauna.Amuse.Runtime.AmuseAvatarOptimizer component,
+            TestTransientScope scope)
+        {
+            var renderer = component.gameObject.AddComponent<MeshRenderer>();
+            var filter = component.gameObject.AddComponent<MeshFilter>();
+            var mesh = new Mesh();
+            mesh.vertices = new Vector3[]
+            {
+                Vector3.zero, Vector3.up, Vector3.right
+            };
+            mesh.triangles = new int[] { 0, 1, 2 };
+            scope.Track(mesh);
+            filter.sharedMesh = mesh;
+            var material = new Material(Shader.Find("Hidden/InternalErrorShader"));
+            scope.Track(material);
+            renderer.sharedMaterials = new Material[] { material };
+            return renderer;
+        }
+
+        /// <summary>
+        /// A policy change after a completed preview must reject the
+        /// retained rows. The view must hide them and hide the
+        /// Compute affordance. The known refused slot row of the
+        /// unchanged fixture stands as the no-op guard.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator CompletedPreviewRejectsItsRowsAfterAPolicyChange()
+        {
+            var component = NewHiddenComponent();
+            AttachRefusedSlotRenderer(component, _scope);
+
+            yield return RepaintThroughHostWindow(component, DryRunFinished, true);
+
+            var editor = (Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor)
+                _hostedEditor;
+            Assert.That(editor.DryRun, Is.Not.Null, "dry run must be instantiated");
+            Assert.That(
+                editor.DryRun.RendererRows.Any(
+                    row => row.Kind == MaterialTransformationRowKind.Slot),
+                Is.True,
+                "the unchanged fixture must paint its known slot row");
+
+            SetSwitch(component, "_cutoutSeparatorEnabled", false);
+
+            var drawn = new DrawnView();
+            drawn.Install();
+            try
+            {
+                _window.CompletionProbe = () => true;
+                yield return RepaintOnce();
+
+                Assert.That(_window.Painted, Is.True,
+                    "the rejected render never painted");
+                Assert.That(
+                    drawn.Rows.Any(
+                        row => row.Kind == MaterialTransformationRowKind.Slot),
+                    Is.False,
+                    "a policy change must reject the completed run's rows");
+                Assert.That(
+                    drawn.Buttons,
+                    Does.Not.Contain("Compute"),
+                    "an invalidated run must hide its Compute affordance");
+            }
+            finally
+            {
+                drawn.Uninstall();
+            }
+        }
+
+        /// <summary>
+        /// A closed and reopened foldout must not clear the policy
+        /// rejection. The rejected run keeps its rows hidden after
+        /// the toggle.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator ReopeningTheFoldoutDoesNotClearThePolicyRejection()
+        {
+            var component = NewHiddenComponent();
+            AttachRefusedSlotRenderer(component, _scope);
+
+            yield return RepaintThroughHostWindow(component, DryRunFinished, true);
+
+            var editor = (Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor)
+                _hostedEditor;
+            Assert.That(
+                editor.DryRun.RendererRows.Any(
+                    row => row.Kind == MaterialTransformationRowKind.Slot),
+                Is.True,
+                "the unchanged fixture must paint its known slot row");
+
+            SetSwitch(component, "_cutoutSeparatorEnabled", false);
+
+            var editorType =
+                typeof(Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor);
+
+            var drawn = new DrawnView();
+            drawn.Install();
+            try
+            {
+                // Render once while the foldout is still open. The
+                // open view must latch the change and hide the old rows.
+                _window.CompletionProbe = () => true;
+                yield return RepaintOnce();
+
+                Assert.That(_window.Painted, Is.True,
+                    "the open render after the change never painted");
+                Assert.That(
+                    drawn.Rows.Any(
+                        row => row.Kind == MaterialTransformationRowKind.Slot),
+                    Is.False,
+                    "the open view must hide the rejected rows");
+                Assert.That(
+                    editor.DryRun.PolicyInvalidated, Is.True,
+                    "the open render must latch the rejection");
+
+                editorType.GetField(
+                        "_materialTransformationsOpen",
+                        BindingFlags.NonPublic | BindingFlags.Instance)
+                    ?.SetValue(editor, false);
+                yield return RepaintOnce();
+
+                Assert.That(_window.Painted, Is.True,
+                    "the closed-foldout render never painted");
+                Assert.That(
+                    drawn.Rows, Is.Empty,
+                    "a closed foldout must paint no rows");
+
+                editorType.GetField(
+                        "_materialTransformationsOpen",
+                        BindingFlags.NonPublic | BindingFlags.Instance)
+                    ?.SetValue(editor, true);
+                yield return RepaintOnce();
+
+                Assert.That(_window.Painted, Is.True,
+                    "the reopened render never painted");
+                Assert.That(
+                    drawn.Rows.Any(
+                        row => row.Kind == MaterialTransformationRowKind.Slot),
+                    Is.False,
+                    "reopening the foldout must not resurrect the " +
+                    "rejected rows");
+                Assert.That(
+                    drawn.Buttons,
+                    Does.Not.Contain("Compute"),
+                    "the reopened view must keep the Compute affordance hidden");
+                Assert.That(
+                    editor.DryRun.PolicyInvalidated, Is.True,
+                    "reopening the foldout must not clear the latch");
+            }
+            finally
+            {
+                drawn.Uninstall();
+            }
+        }
+
+        /// <summary>
+        /// The switched-off avatar stops at its banner before any
+        /// compute. A policy change after that completed run must
+        /// reject the retained banner row the same way it rejects
+        /// result rows.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator AmuseOffPreviewRejectsItsBannerAfterAPolicyChange()
+        {
+            var component = NewHiddenComponent();
+            SetSwitch(component, "_amuseDisabled", true);
+
+            yield return RepaintThroughHostWindow(component, DryRunFinished, true);
+
+            var editor = (Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor)
+                _hostedEditor;
+            Assert.That(editor.DryRun, Is.Not.Null, "dry run must be created");
+            Assert.That(
+                editor.DryRun.Done, Is.True,
+                "the switched-off run must complete at its banner");
+            var offBanner = Alrauna.Amuse.Editor.DryRun.RowText.BannerSentence(
+                Alrauna.Amuse.Editor.DryRun.BannerKind.AmuseOff);
+            Assert.That(
+                editor.DryRun.AvatarRows.Any(row => row.Sentence == offBanner),
+                Is.True,
+                "the switched-off banner must be the retained row");
+
+            SetSwitch(component, "_cutoutSeparatorEnabled", false);
+
+            var drawn = new DrawnView();
+            drawn.Install();
+            try
+            {
+                _window.CompletionProbe = () => true;
+                yield return RepaintOnce();
+
+                Assert.That(_window.Painted, Is.True,
+                    "the rejected render never painted");
+                Assert.That(
+                    drawn.Rows, Is.Empty,
+                    "the stale banner must not repaint after a policy change");
+                Assert.That(
+                    drawn.Buttons,
+                    Does.Not.Contain("Compute"),
+                    "an invalidated run must hide its Compute affordance");
+            }
+            finally
+            {
+                drawn.Uninstall();
+            }
+        }
+
+        /// <summary>
+        /// The separator-off avatar stops at its banner before any
+        /// compute. A policy change after that completed run must
+        /// reject the retained banner row the same way it rejects
+        /// result rows.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator SeparatorOffPreviewRejectsItsBannerAfterAPolicyChange()
+        {
+            var component = NewHiddenComponent();
+            SetSwitch(component, "_alphaSeparatorEnabled", false);
+
+            yield return RepaintThroughHostWindow(component, DryRunFinished, true);
+
+            var editor = (Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor)
+                _hostedEditor;
+            Assert.That(editor.DryRun, Is.Not.Null, "dry run must be created");
+            Assert.That(
+                editor.DryRun.Done, Is.True,
+                "the separator-off run must complete at its banner");
+            var offBanner = Alrauna.Amuse.Editor.DryRun.RowText.BannerSentence(
+                Alrauna.Amuse.Editor.DryRun.BannerKind.SeparatorOff);
+            Assert.That(
+                editor.DryRun.AvatarRows.Any(row => row.Sentence == offBanner),
+                Is.True,
+                "the separator-off banner must be the retained row");
+
+            SetSwitch(component, "_cutoutSeparatorEnabled", false);
+
+            var drawn = new DrawnView();
+            drawn.Install();
+            try
+            {
+                _window.CompletionProbe = () => true;
+                yield return RepaintOnce();
+
+                Assert.That(_window.Painted, Is.True,
+                    "the rejected render never painted");
+                Assert.That(
+                    drawn.Rows, Is.Empty,
+                    "the stale banner must not repaint after a policy change");
+                Assert.That(
+                    drawn.Buttons,
+                    Does.Not.Contain("Compute"),
+                    "an invalidated run must hide its Compute affordance");
+            }
+            finally
+            {
+                drawn.Uninstall();
+            }
+        }
+
+        /// <summary>
+        /// A component on a child stops at its placement banner before
+        /// any compute. A policy change after that completed run must
+        /// reject the retained banner row the same way it rejects
+        /// result rows.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator ChildPlacementPreviewRejectsItsBannerAfterAPolicyChange()
+        {
+            var component = NewHiddenComponent();
+            var child = new GameObject("misplaced fixture");
+            child.hideFlags = HideFlags.HideAndDontSave;
+            child.transform.SetParent(component.transform, false);
+            var misplaced = child.AddComponent<
+                Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+
+            yield return RepaintThroughHostWindow(
+                misplaced, DryRunFinished, true);
+
+            var editor = (Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor)
+                _hostedEditor;
+            Assert.That(editor.DryRun, Is.Not.Null, "dry run must be created");
+            Assert.That(
+                editor.DryRun.Done, Is.True,
+                "the misplaced run must complete at its banner");
+            var placementBanner =
+                Alrauna.Amuse.Editor.DryRun.RowText.BannerSentence(
+                    Alrauna.Amuse.Editor.DryRun.BannerKind.RootRequired);
+            Assert.That(
+                editor.DryRun.AvatarRows.Any(
+                    row => row.Sentence == placementBanner),
+                Is.True,
+                "the placement banner must be the retained row");
+
+            SetSwitch(misplaced, "_cutoutSeparatorEnabled", false);
+
+            var drawn = new DrawnView();
+            drawn.Install();
+            try
+            {
+                _window.CompletionProbe = () => true;
+                yield return RepaintOnce();
+
+                Assert.That(_window.Painted, Is.True,
+                    "the rejected render never painted");
+                Assert.That(
+                    drawn.Rows, Is.Empty,
+                    "the stale banner must not repaint after a policy change");
+                Assert.That(
+                    drawn.Buttons,
+                    Does.Not.Contain("Compute"),
+                    "an invalidated run must hide its Compute affordance");
+            }
+            finally
+            {
+                drawn.Uninstall();
+            }
+        }
+
+        /// <summary>
+        /// A structural refusal stops at its avatar row before any
+        /// compute. A policy change after that completed run must
+        /// reject the retained structural row the same way it rejects
+        /// result rows.
+        /// </summary>
+        [UnityTest]
+        public IEnumerator StructuralRefusalPreviewRejectsItsRowAfterAPolicyChange()
+        {
+            var component = NewHiddenComponent();
+            var clip = _scope.Track(new AnimationClip { name = "event-clip" });
+            AnimationUtility.SetAnimationEvents(
+                clip,
+                new[]
+                {
+                    new AnimationEvent
+                    {
+                        time = 0f,
+                        functionName = "AmuseInspectorPolicyEvent"
+                    }
+                });
+            var controller = _scope.Track(
+                new UnityEditor.Animations.AnimatorController { name = "event" });
+            controller.AddLayer("L0");
+            controller.layers[0].stateMachine.AddState("S0").motion = clip;
+            var animator = component.gameObject.AddComponent<Animator>();
+            animator.runtimeAnimatorController = controller;
+
+            yield return RepaintThroughHostWindow(component, DryRunFinished, true);
+
+            var editor = (Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor)
+                _hostedEditor;
+            Assert.That(editor.DryRun, Is.Not.Null, "dry run must be created");
+            Assert.That(
+                editor.DryRun.Done, Is.True,
+                "the structural run must complete at its refusal row");
+            Assert.That(
+                editor.DryRun.RendererRows, Is.Empty,
+                "the structural refusal must stop before any renderer");
+            Assert.That(
+                editor.DryRun.AvatarRows.Any(
+                    row => row.Kind == MaterialTransformationRowKind.Banner),
+                Is.True,
+                "the structural refusal must be the retained row");
+
+            SetSwitch(component, "_cutoutSeparatorEnabled", false);
+
+            var drawn = new DrawnView();
+            drawn.Install();
+            try
+            {
+                _window.CompletionProbe = () => true;
+                yield return RepaintOnce();
+
+                Assert.That(_window.Painted, Is.True,
+                    "the rejected render never painted");
+                Assert.That(
+                    drawn.Rows, Is.Empty,
+                    "the stale structural row must not repaint after " +
+                    "a policy change");
+                Assert.That(
+                    drawn.Buttons,
+                    Does.Not.Contain("Compute"),
+                    "an invalidated run must hide its Compute affordance");
+            }
+            finally
+            {
+                drawn.Uninstall();
+            }
         }
 
         /// <summary>
@@ -1196,6 +1692,35 @@ namespace Alrauna.Amuse.Tests.Editor
         }
 
         /// <summary>
+        /// The drawn rows and buttons one render pass collects through
+        /// the existing editor hooks. Uninstall is mandatory in a
+        /// finally block, so one test's draws never reach the next test.
+        /// </summary>
+        private sealed class DrawnView
+        {
+            internal readonly List<MaterialTransformationRow> Rows =
+                new List<MaterialTransformationRow>();
+            internal readonly List<string> Buttons = new List<string>();
+
+            internal void Install()
+            {
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                    .OnTransformationRowDrawnForTest = (row, avatarRoot) =>
+                        Rows.Add(row);
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                    .OnButtonDrawnForTest = name => Buttons.Add(name);
+            }
+
+            internal void Uninstall()
+            {
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                    .OnTransformationRowDrawnForTest = null;
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                    .OnButtonDrawnForTest = null;
+            }
+        }
+
+        /// <summary>
         /// The completion probe the repaint host window calls after
         /// every painted pass. The run field starts null before the
         /// foldout drive creates it, so null reads as not done.
@@ -1261,6 +1786,25 @@ namespace Alrauna.Amuse.Tests.Editor
             }
             Assert.That(_window.Painted, Is.True,
                 "the repaint host window never painted");
+        }
+
+        /// <summary>
+        /// One forced repaint through the open host window. The
+        /// helper sets the default completion probe, clears the
+        /// painted flag, and waits for the next paint. The caller
+        /// keeps its own paint assertion.
+        /// </summary>
+        private IEnumerator RepaintOnce()
+        {
+            _window.CompletionProbe = () => true;
+            _window.Painted = false;
+            _window.Repaint();
+            for (var frame = 0;
+                 frame < 60 && !_window.Painted;
+                 frame++)
+            {
+                yield return null;
+            }
         }
 
         /// <summary>

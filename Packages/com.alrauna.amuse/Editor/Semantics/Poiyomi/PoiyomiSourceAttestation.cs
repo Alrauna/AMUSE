@@ -199,7 +199,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             CapturedMaterialEvidence evidence)
         {
             return GatherSourceEvidence(
-                shader, evidence, PoiyomiMaterialSemantics.AlphaRequiredSchemaProperties);
+                shader, evidence, PoiyomiAlphaInterpreter.AlphaRequiredSchemaProperties);
         }
 
         internal static PoiyomiSourceEvidence GatherSourceEvidence(

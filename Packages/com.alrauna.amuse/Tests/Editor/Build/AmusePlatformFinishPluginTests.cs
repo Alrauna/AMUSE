@@ -7785,7 +7785,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 RendererAnalysisRefusal.MissingMesh, 1, 2, null);
 
             var slotRows = state.PlayModeRendererRows
-                .Where(row => row.kind == 3).ToList();
+                .Where(row => row.kind == MaterialTransformationRowKind.Slot).ToList();
             Assert.That(slotRows.Count, Is.EqualTo(2));
             Assert.That(
                 slotRows.All(row => row.sentence.Contains("mesh")),
@@ -7816,7 +7816,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 plan, slotResults, null);
 
             var slotRows = state.PlayModeRendererRows
-                .Where(row => row.kind == 3).ToList();
+                .Where(row => row.kind == MaterialTransformationRowKind.Slot).ToList();
             Assert.That(slotRows.Count, Is.EqualTo(1));
             Assert.That(
                 slotRows.All(row => row.sentence.Contains("mesh")),
@@ -7885,7 +7885,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     "preparation, so the apply holds a plan to execute");
 
                 var rows = amuse.PlayModeRendererRows
-                    .Where(r => r.kind == 3 && r.slotIndex == 0)
+                    .Where(r => r.kind == MaterialTransformationRowKind.Slot && r.slotIndex == 0)
                     .ToList();
                 Assert.That(rows, Has.Count.EqualTo(1),
                     "the resolved folded slot must record one play row");

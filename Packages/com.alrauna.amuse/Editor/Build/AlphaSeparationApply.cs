@@ -1053,13 +1053,7 @@ namespace Alrauna.Amuse.Editor.Build
                 }
             }
 
-            UnityGeneratedTextureEvidence.ClearCache();
-            UnityAlphaFieldEvidence.ClearCache();
-            ReplacementTextureIdentity.ClearSession();
-            ReplacementTextureAttestation.Versions.ClearVersionCacheForSession();
-            AaoAtlasTextureAttestation.Versions.ClearVersionCacheForSession();
-            Semantics.LilToon.LilToonSourceAttestation.ClearGatherMemo();
-            Semantics.Poiyomi.PoiyomiSourceAttestation.ClearSourceHashMemo();
+            AmuseSessionCaches.Clear();
         }
         internal static HashSet<(string path, int slot)> CollectAppliedSlots(
             AmusePlatformFinishState state)
@@ -1141,7 +1135,7 @@ namespace Alrauna.Amuse.Editor.Build
             for (var i = 0; i < state.PlayModeRendererRows.Count; i++)
             {
                 var row = state.PlayModeRendererRows[i];
-                if (row.kind == 3 && row.provenTriangles > 0)
+                if (row.kind == MaterialTransformationRowKind.Slot && row.provenTriangles > 0)
                 {
                     if (appliedSlots.Contains((row.rendererPath, row.slotIndex)))
                     {
@@ -1233,7 +1227,7 @@ namespace Alrauna.Amuse.Editor.Build
 
                             state.PlayModeRendererRows.Add(new SerializedTransformationRow
                             {
-                                kind = 3,
+                                kind = MaterialTransformationRowKind.Slot,
                                 rendererPath = effectivePath,
                                 rendererTypeName = rendererTypeName,
                                 sourceMaterialPath = sourcePath,

@@ -6066,7 +6066,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var state = new AmusePlatformFinishState();
             state.PlayModeRendererRows.Add(new SerializedTransformationRow
             {
-                kind = 3,
+                kind = MaterialTransformationRowKind.Slot,
                 rendererPath = "SceneRoot/Renderer",
                 slotIndex = 0,
                 movedTriangles = 0,
@@ -6075,7 +6075,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             });
             state.PlayModeRendererRows.Add(new SerializedTransformationRow
             {
-                kind = 3,
+                kind = MaterialTransformationRowKind.Slot,
                 rendererPath = "SceneRoot/Renderer",
                 slotIndex = 1,
                 movedTriangles = 0,
@@ -6201,7 +6201,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             state.PlayModeRendererRows.Add(new SerializedTransformationRow
             {
-                kind = 3,
+                kind = MaterialTransformationRowKind.Slot,
                 rendererPath = rendererPath,
                 slotIndex = 0,
                 movedTriangles = 0,
@@ -6210,7 +6210,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             });
             state.PlayModeRendererRows.Add(new SerializedTransformationRow
             {
-                kind = 3,
+                kind = MaterialTransformationRowKind.Slot,
                 rendererPath = rendererPath,
                 slotIndex = 1,
                 movedTriangles = 0,
@@ -6372,7 +6372,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             state.PlayModeRendererRows.Add(new SerializedTransformationRow
             {
-                kind = 3,
+                kind = MaterialTransformationRowKind.Slot,
                 rendererPath = rendererPath,
                 slotIndex = 0,
                 movedTriangles = 0,
@@ -6381,7 +6381,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             });
             state.PlayModeRendererRows.Add(new SerializedTransformationRow
             {
-                kind = 3,
+                kind = MaterialTransformationRowKind.Slot,
                 rendererPath = rendererPath,
                 slotIndex = 1,
                 movedTriangles = 0,
@@ -6390,7 +6390,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             });
             state.PlayModeRendererRows.Add(new SerializedTransformationRow
             {
-                kind = 3,
+                kind = MaterialTransformationRowKind.Slot,
                 rendererPath = rendererPath,
                 slotIndex = 2,
                 movedTriangles = 0,
@@ -6516,11 +6516,17 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             AlphaSeparationApply.ApplyFinalization(finalization, state);
             state.AppliedFinalization = finalization;
 
-            var root = Track(new GameObject("AMUSE unapplied candidate avatar"));
-            var context = new BuildContext(root, null);
-            var avatarKey = PlayModeBuildStore.ComputeAvatarKey(root.transform);
+            var scope = new TestTransientScope("Assets/AmuseTests_UnappliedCandidate");
+            var avatarKey = "";
             try
             {
+                scope.EnsureTempFolder();
+                var root = scope.CreateSavedSceneRoot("AMUSE unapplied candidate avatar");
+                scope.SaveOwnedScene();
+                var context = new BuildContext(root, null);
+                avatarKey = PlayModeBuildStore.ComputeAvatarKey(root.transform);
+                Assert.That(avatarKey, Is.Not.Empty, "a saved root has a proved key");
+
                 AlphaSeparationApply.CaptureAndSavePlayModeBuildRecord(context, state);
 
                 var unappliedRow = state.PlayModeRendererRows.Single(r => r.slotIndex == 1);
@@ -6531,7 +6537,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                PlayModeBuildStore.Clear(avatarKey);
+                if (avatarKey != "") PlayModeBuildStore.Clear(avatarKey);
+                scope.TearDown();
             }
         }
     }

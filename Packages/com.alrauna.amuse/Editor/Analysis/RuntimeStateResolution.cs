@@ -101,15 +101,27 @@ namespace Alrauna.Amuse.Editor.Analysis
             internal ResolvedRuntimeStates(
                 RendererAnalysisRefusal refusal,
                 IReadOnlyList<CapturedAlphaMaterial> currentMaterials,
+                IReadOnlyList<CapturedMaterialSlotEvidence> slots,
                 SlotResolutionResult[] slotResults)
             {
                 Refusal = refusal;
                 CurrentMaterials = currentMaterials;
+                Slots = slots;
                 SlotResults = slotResults;
             }
 
             internal RendererAnalysisRefusal Refusal { get; }
             internal IReadOnlyList<CapturedAlphaMaterial> CurrentMaterials { get; }
+
+            /// <summary>
+            /// The captured slot evidence the per-slot results were resolved
+            /// from. Index <c>i</c> here pairs with index <c>i</c> of
+            /// <see cref="SlotResults"/>, so a consumer can attribute a slot's
+            /// outcome to its own admitted materials without a second
+            /// construction. A renderer- or avatar-scoped early refusal
+            /// leaves this empty.
+            /// </summary>
+            internal IReadOnlyList<CapturedMaterialSlotEvidence> Slots { get; }
 
             /// <summary>
             /// One retained result per material slot: either that slot's
@@ -332,9 +344,12 @@ namespace Alrauna.Amuse.Editor.Analysis
             if (firstSlotRefusal != RendererAnalysisRefusal.None &&
                 !anySlotResolved)
             {
+                // An all-slots-refused renderer keeps both its slot evidence
+                // and its per-slot results, positionally paired.
                 return new ResolvedRuntimeStates(
                     firstSlotRefusal,
                     Array.Empty<CapturedAlphaMaterial>(),
+                    slots,
                     slotResults);
             }
 
@@ -352,9 +367,14 @@ namespace Alrauna.Amuse.Editor.Analysis
                     : null;
             }
 
+            // The same slot list the loop resolved from rides on the result:
+            // one construction, no copy, so build and preview attribute a
+            // slot's outcome to its own admitted materials without calling
+            // MaterialSlotsFor a second time.
             return new ResolvedRuntimeStates(
                 RendererAnalysisRefusal.None,
                 currentMaterials,
+                slots,
                 slotResults);
         }
 
@@ -404,9 +424,13 @@ namespace Alrauna.Amuse.Editor.Analysis
         internal static ResolvedRuntimeStates Refused(
             RendererAnalysisRefusal refusal)
         {
+            // Renderer-scoped early refusals resolved no slot, so both
+            // per-slot lists stay shared empty arrays. No slot list is
+            // constructed before this point just to fill the property.
             return new ResolvedRuntimeStates(
                 refusal,
                 Array.Empty<CapturedAlphaMaterial>(),
+                Array.Empty<CapturedMaterialSlotEvidence>(),
                 Array.Empty<SlotResolutionResult>());
         }
 
