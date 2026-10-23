@@ -196,7 +196,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "admitted locked original");
         }
 
-        // --- Falsifier 7: a precondition that reuses the identity gate ---
+        // --- Falsifier 7: a precondition that reuses the identity gate alone ---
         // Characterization in this task, because the identity gate still
         // refuses the bundled name. It guards Task 5, where the bundled
         // rows start to attest.
@@ -213,7 +213,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "it refuses as a locked original");
         }
 
-        // --- Falsifier 8: a precondition that ignores the recorded name ---
+        // --- Falsifier 8: a precondition that ignores the recorded original name ---
         [Test]
         public void ReleaseMainEvidenceWithAnotherAdmittedTagRefuses()
         {

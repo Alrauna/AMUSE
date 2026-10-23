@@ -1197,7 +1197,10 @@ namespace Alrauna.Amuse.Editor.DryRun
             // alone: the recorded semantics-unknown cause plus the live
             // attested locked identity. The name tag check below is
             // display corroboration only. The build's own recovery
-            // precondition reads the recorded asset reference.
+            // precondition reads the recorded asset reference. The
+            // attested check also needs the recorded name tag to equal
+            // the resolved shader name, and the matched row to admit
+            // locked originals (K8.3).
             if (LockedMaterialIdentity.RecognizedLockedIdentity(material) &&
                 (LockedMaterialIdentity.OriginalShaderAttested(material) ||
                  IsAttestedOriginalShader(material)))

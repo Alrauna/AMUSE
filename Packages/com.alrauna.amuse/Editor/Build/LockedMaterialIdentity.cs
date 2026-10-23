@@ -126,8 +126,10 @@ namespace Alrauna.Amuse.Editor.Build
         /// stays on the generic path: a material that is not locked, a
         /// locked serialization that names no original shader, or a locked
         /// serialization whose original shader resolves and passes the
-        /// pinned identity. It reads serialization state only. It never
-        /// mutates the material, the shader, or any asset.
+        /// pinned identity. The pinned check also needs the recorded name
+        /// tag to equal the resolved shader name, and the matched row to
+        /// admit locked originals (K8.3). It reads serialization state
+        /// only. It never mutates the material, the shader, or any asset.
         /// </summary>
         internal static RendererAnalysisRefusal PreCheckRefusal(
             Material material)
@@ -178,8 +180,10 @@ namespace Alrauna.Amuse.Editor.Build
         /// <summary>
         /// Whether the live material's recorded original shader resolves
         /// through the AssetDatabase and passes the pinned Poiyomi
-        /// identity. The transient unlock window's precondition calls
-        /// this; it is the same conjunction <see
+        /// identity. The pinned check also needs the recorded name tag to
+        /// equal the resolved shader name, and the matched row to admit
+        /// locked originals (K8.3). The transient unlock window's
+        /// precondition calls this; it is the same conjunction <see
         /// cref="PreCheckRefusal"/> applies, so the two paths cannot pin
         /// differently. Reads live state only and mutates nothing.
         /// </summary>
