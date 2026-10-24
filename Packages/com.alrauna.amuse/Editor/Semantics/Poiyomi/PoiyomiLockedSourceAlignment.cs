@@ -559,6 +559,22 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         }
 
         /// <summary>
+        /// Counts one surviving line against the active lookahead window
+        /// and reports when the window runs out (A3.7). The counter is
+        /// negative when no window is active, so the walk runs unbounded.
+        /// </summary>
+        private static bool LookaheadWindowRanOut(WalkState state)
+        {
+            if (state.LookaheadRemaining < 0)
+            {
+                return false;
+            }
+
+            state.LookaheadRemaining--;
+            return state.LookaheadRemaining == 0;
+        }
+
+        /// <summary>
         /// Walks one original line range forward over the generated lines
         /// and returns the consumed generated position. Block starts hand
         /// over to the two hypothesis resolution (A3.7). When a lookahead
@@ -628,7 +644,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                         ConsumeDefineRun(state);
                     }
 
-                    if (state.LookaheadRemaining == 0)
+                    if (LookaheadWindowRanOut(state))
                     {
                         return state.GenIndex;
                     }
@@ -646,7 +662,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     state.GenIndex++;
                     state.OriginalIndex = origIndex + 1;
                     origIndex++;
-                    if (state.LookaheadRemaining == 0)
+                    if (LookaheadWindowRanOut(state))
                     {
                         return state.GenIndex;
                     }
@@ -656,7 +672,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
                 WalkOrdinaryLine(state, origIndex);
                 origIndex = state.OriginalIndex;
-                if (state.LookaheadRemaining == 0)
+                if (LookaheadWindowRanOut(state))
                 {
                     return state.GenIndex;
                 }
@@ -802,7 +818,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     }
                 }
 
-                throw new RefusalException(BlockUnclosedDetail, state.OriginalLines[startIndex].Number);
+                throw new RefusalException(BlockUnclosedDetail, state.OriginalLines[startIndex].Number, true);
             }
 
             var ifDepth = 1;
@@ -833,7 +849,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 }
             }
 
-            throw new RefusalException(BlockUnclosedDetail, state.OriginalLines[startIndex].Number);
+            throw new RefusalException(BlockUnclosedDetail, state.OriginalLines[startIndex].Number, true);
         }
 
         /// <summary>
@@ -910,8 +926,14 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     keptResult.OriginalIndex = extent.EndIndex + 1;
                 }
             }
-            catch (RefusalException)
+            catch (RefusalException refusal)
             {
+                // An undecided nested block kills no hypothesis. The
+                // alignment refuses as a whole (A3.7).
+                if (refusal.Undecided)
+                {
+                    throw;
+                }
             }
 
             WalkState removedResult = null;
@@ -930,8 +952,12 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 removedResult = removed;
                 removedResult.OriginalIndex = extent.EndIndex + 1;
             }
-            catch (RefusalException)
+            catch (RefusalException refusal)
             {
+                if (refusal.Undecided)
+                {
+                    throw;
+                }
             }
 
             var candidates = new List<BlockCandidate>();
@@ -980,8 +1006,14 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                                 : candidate.State.GrowthBoundary;
                             WalkRange(candidate.State, candidate.State.OriginalIndex, growthEnd);
                         }
-                        catch (RefusalException)
+                        catch (RefusalException refusal)
                         {
+                            if (refusal.Undecided)
+                            {
+                                state.LookaheadRemaining = enclosingLookahead;
+                                throw;
+                            }
+
                             candidate.Dead = true;
                             continue;
                         }
@@ -1021,7 +1053,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     if (allAtEnd)
                     {
                         state.LookaheadRemaining = enclosingLookahead;
-                        throw new RefusalException(BlockTieDetail, startLine.Number);
+                        throw new RefusalException(BlockTieDetail, startLine.Number, true);
                     }
                 }
             }
@@ -2606,15 +2638,29 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         private sealed class RefusalException : Exception
         {
             internal RefusalException(string detail, int originalLine)
+                : this(detail, originalLine, false)
+            {
+            }
+
+            internal RefusalException(string detail, int originalLine, bool undecided)
                 : base(detail)
             {
                 Detail = detail;
                 OriginalLine = originalLine;
+                Undecided = undecided;
             }
 
             internal string Detail { get; }
 
             internal int OriginalLine { get; }
+
+            /// <summary>
+            /// True when the refusal says the text cannot decide an
+            /// outcome. A hypothesis trial never swallows it, because an
+            /// undecided nested block must refuse the whole alignment
+            /// (A3.7).
+            /// </summary>
+            internal bool Undecided { get; }
         }
 
         /// <summary>

@@ -1031,6 +1031,91 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Assert.That(result.Source.States["_A"], Is.EqualTo(LockedPropertyState.Live));
         }
 
+        // --- Falsifier 8: an implementation that never counts the window ---
+        // An implementation that walks each candidate to the end of the
+        // walk range in one step kills both hypotheses in one round and
+        // refuses with the wrong sentence. The bounded window adopts the
+        // surviving hypothesis first, and the main walk then refuses at
+        // the first line past the window. The guard keeps the text
+        // consistent past the window and aligns as Removed.
+
+        [Test]
+        public void LookaheadWindowStopsAtEightSurvivingLines()
+        {
+            var (guardOriginal, guardGenerated) = ProgramPair(
+                "        _A (\"A\", Float) = 0",
+                "            //ifex _A==0\n            o.Albedo = _A;\n            //endex"
+                    + "\n            o.Albedo = _A;\n            o.Emission = _A;\n            o.Emission = _A;"
+                    + "\n            o.Emission = _A;\n            o.Emission = _A;\n            o.Emission = _A;"
+                    + "\n            o.Emission = _A;\n            o.Emission = _A;\n            o.Specular = _A;"
+                    + "\n            o.Emission = _A;\n            o.Alpha = 1;",
+                "            o.Albedo = _A;\n            o.Emission = _A;\n            o.Emission = _A;"
+                    + "\n            o.Emission = _A;\n            o.Emission = _A;\n            o.Emission = _A;"
+                    + "\n            o.Emission = _A;\n            o.Emission = _A;\n            o.Specular = _A;"
+                    + "\n            o.Emission = _A;\n            o.Alpha = 1;");
+            var properties = new[] { Prop("_A", ShaderPropertyType.Float) };
+            var guard = Align(guardOriginal, guardGenerated, properties);
+            Assert.That(guard.Succeeded, Is.True, guard.RefusalDetail ?? "refused");
+            Assert.That(guard.Source.Blocks.Count, Is.EqualTo(1));
+            Assert.That(guard.Source.Blocks[0].Outcome, Is.EqualTo(LockedBlockOutcome.Removed));
+
+            // The generated line past the window breaks only the removed
+            // interpretation. The window adopts the removed hypothesis at
+            // eight surviving lines, and the main walk refuses at the
+            // ninth one. The break reuses a known identifier, so the
+            // suffix search stays out of the way.
+            var generated = guardGenerated.Replace("o.Specular = _A;", "o.Emission = _A;");
+            var result = Align(guardOriginal, generated, properties);
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(result.Source, Is.Null);
+            Assert.That(result.RefusalDetail, Is.EqualTo(LineMismatchDetail));
+            Assert.That(result.OriginalLine, Is.EqualTo(LineOf(guardOriginal, "o.Specular = _A;")));
+        }
+
+        // --- Falsifier 9: an implementation that treats an undecided nested block as a dead hypothesis ---
+        // An implementation that swallows the tie refusal of a nested
+        // block records Removed for the outer block on text that grounds
+        // no outcome. The tie must refuse the whole alignment. The guard
+        // decides the nested block, and the outer block then records
+        // Removed.
+
+        [Test]
+        public void NestedTieRefusesTheWholeAlignment()
+        {
+            var guardProgram = "            //ifex _A==0\n            //ifex _B==0\n            o.Emission = _B;"
+                + "\n            //endex"
+                + "\n            o.Albedo = _B;\n            o.Albedo = _B;\n            o.Albedo = _B;"
+                + "\n            //endex"
+                + "\n            o.Albedo = _B;\n            o.Albedo = _B;\n            o.Albedo = _B;";
+            var (guardOriginal, guardGenerated) = ProgramPair(
+                "        _A (\"A\", Float) = 0\n        _B (\"B\", Float) = 0",
+                guardProgram,
+                "            o.Albedo = _B;\n            o.Albedo = _B;\n            o.Albedo = _B;");
+            var properties = new[]
+            {
+                Prop("_A", ShaderPropertyType.Float),
+                Prop("_B", ShaderPropertyType.Float)
+            };
+            var guard = Align(guardOriginal, guardGenerated, properties);
+            Assert.That(guard.Succeeded, Is.True, guard.RefusalDetail ?? "refused");
+            Assert.That(guard.Source.Blocks.Count, Is.EqualTo(2));
+            Assert.That(guard.Source.Blocks[0].Outcome, Is.EqualTo(LockedBlockOutcome.Removed));
+            Assert.That(guard.Source.Blocks[1].Outcome, Is.EqualTo(LockedBlockOutcome.NotEvaluated));
+
+            var (original, generated) = ProgramPair(
+                "        _A (\"A\", Float) = 0\n        _B (\"B\", Float) = 0",
+                "            //ifex _A==0\n            //ifex _B==0\n            o.Albedo = _B;\n            o.Alpha = _B;\n            //endex"
+                    + "\n            o.Albedo = _B;\n            o.Alpha = _B;\n            o.Albedo = _B;\n            o.Alpha = _B;"
+                    + "\n            //endex"
+                    + "\n            o.Albedo = _B;\n            o.Alpha = _B;\n            o.Albedo = _B;\n            o.Alpha = _B;",
+                "            o.Albedo = _B;\n            o.Alpha = _B;\n            o.Albedo = _B;\n            o.Alpha = _B;"
+                    + "\n            o.Albedo = _B;\n            o.Alpha = _B;");
+            var result = Align(original, generated, properties);
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(result.Source, Is.Null);
+            Assert.That(result.RefusalDetail, Is.EqualTo(BlockTieDetail));
+        }
+
         [Test]
         public void TieAtTheEndOfTheFileRefuses()
         {
