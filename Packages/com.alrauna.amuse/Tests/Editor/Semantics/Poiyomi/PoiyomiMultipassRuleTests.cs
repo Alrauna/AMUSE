@@ -121,23 +121,24 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         }
 
         /// <summary>
-        /// The Two Pass shader is a pinned identity in its own right: its
-        /// name, GUID, and measured normalized source hash verify against
-        /// the pinned 9.3.64 package exactly like the plain Toon shader.
-        /// Falsifies refusing the variant on its name after S10 pinned it.
+        /// The Two Pass shader is an admitted identity in its own right:
+        /// its name, GUID, and measured normalized source hash match one
+        /// admitted row, exactly like the plain Toon shader. Falsifies
+        /// refusing the variant on its name after S10 pinned it.
         /// </summary>
         [Test]
         public void TwoPassIdentityVerifiesAgainstItsOwnPins()
         {
+            // The digest comes from the 9.3.64 Two Pass row.
+            var twoPassDigest = PoiyomiSourceAttestation
+                .AdmittedSources()[1].NormalizedSourceHash;
+
             var evidence = new PoiyomiSourceEvidence(
                 ".poiyomi/Poiyomi Toon Two Pass",
                 false,
                 true,
                 "eda2412ac7ab2db45a47a521f6d7d8a6",
-                "b1d9ecd3072d21db97001dd23f88d089996b809e4039891a05f64d2ffcd4df67",
-                true,
-                "com.poiyomi.toon",
-                "9.3.64",
+                twoPassDigest,
                 true);
 
             Assert.That(
@@ -148,8 +149,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         }
 
         /// <summary>
-        /// The pins themselves are measured data: the Two Pass constants must
-        /// equal the official v9.3.64 values so a silent repin is impossible.
+        /// The pins themselves are measured data: the Two Pass name and
+        /// GUID constants must equal the official v9.3.64 values so a
+        /// silent repin is impossible. The row-set pin test owns every
+        /// digest.
         /// </summary>
         [Test]
         public void TwoPassPins_AreTheMeasuredValues()
@@ -160,11 +163,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Assert.That(
                 PoiyomiMaterialSemantics.TwoPassCanonicalShaderGuid,
                 Is.EqualTo("eda2412ac7ab2db45a47a521f6d7d8a6"));
-            Assert.That(
-                PoiyomiSourceAttestation
-                    .TwoPassCanonicalNormalizedSourceHash,
-                Is.EqualTo(
-                    "b1d9ecd3072d21db97001dd23f88d089996b809e4039891a05f64d2ffcd4df67"));
         }
     }
 }

@@ -1168,6 +1168,86 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         }
 
         [Test]
+        public void BundledShaderName_SelectsPoiyomiFamily()
+        {
+            // The bundled 9.3 main name routes like the 9.3.64 name.
+            const string bundledName =
+                ".poiyomi/Old Versions/9.3/Poiyomi Toon";
+            var material = NewMaterial(
+                "bundled-poiyomi.shader",
+                bundledName,
+                PoiyomiProperties());
+
+            var selected = UnityMaterialSemantics
+                .TrySelectAlphaMaterialRequests(
+                    material,
+                    out var family,
+                    out var request,
+                    out _);
+
+            Assert.That(selected, Is.True);
+            Assert.That(
+                family, Is.EqualTo(CapturedAlphaMaterialFamily.Poiyomi));
+            Assert.That(
+                request,
+                Is.SameAs(PoiyomiMaterialSemantics.AlphaEvidenceRequest),
+                "selection must hand back the family's existing request");
+        }
+
+        [Test]
+        public void BundledTwoPassShaderName_SelectsPoiyomiTwoPassFamily()
+        {
+            const string bundledTwoPassName =
+                ".poiyomi/Old Versions/9.3/Poiyomi Toon Two Pass";
+            var material = NewMaterial(
+                "bundled-two-pass.shader",
+                bundledTwoPassName,
+                PoiyomiTwoPassProperties());
+
+            var selected = UnityMaterialSemantics
+                .TrySelectAlphaMaterialRequests(
+                    material,
+                    out var family,
+                    out var request,
+                    out _);
+
+            Assert.That(selected, Is.True);
+            Assert.That(
+                family,
+                Is.EqualTo(CapturedAlphaMaterialFamily.PoiyomiTwoPass));
+            Assert.That(
+                request,
+                Is.SameAs(
+                    PoiyomiMaterialSemantics.TwoPassAlphaEvidenceRequest),
+                "selection must hand back the Two Pass family's own request");
+        }
+
+        // Characterization: a bundled name no row admits stays unsupported.
+        [Test]
+        public void BundledWorldShaderName_SelectsUnsupportedFamily()
+        {
+            const string worldName =
+                ".poiyomi/Old Versions/9.3/Poiyomi Toon World";
+            var material = NewMaterial(
+                "bundled-world.shader",
+                worldName,
+                PoiyomiProperties());
+
+            var selected = UnityMaterialSemantics
+                .TrySelectAlphaMaterialRequests(
+                    material,
+                    out var family,
+                    out var alphaRelevance,
+                    out var captureSchema);
+
+            Assert.That(selected, Is.False);
+            Assert.That(
+                family, Is.EqualTo(CapturedAlphaMaterialFamily.Unsupported));
+            Assert.That(alphaRelevance, Is.Null);
+            Assert.That(captureSchema, Is.Null);
+        }
+
+        [Test]
         public void Legacy90Material_ProducesZeroTransferConsentSubjects()
         {
             const string legacy90Name = ".poiyomi/Old Versions/9.0/Poiyomi Toon";

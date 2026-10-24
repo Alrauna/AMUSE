@@ -822,24 +822,22 @@ namespace Alrauna.Amuse.Editor.Semantics
             MaterialEvidenceRequest alpha) ClassifyShaderName(
             string shaderName)
         {
-            if (string.Equals(
-                    shaderName,
-                    PoiyomiMaterialSemantics.PoiyomiToonShaderName,
-                    StringComparison.Ordinal))
+            // One name-routing predicate routes every admitted name to its
+            // family (K3, docs/superpowers/specs/2026-10-23-poiyomi-per-
+            // shader-attestation-design.md). The requests do not change.
+            if (PoiyomiSourceAttestation.TryClassifyShaderName(
+                    shaderName, out var isTwoPass))
             {
+                if (isTwoPass)
+                {
+                    return (
+                        CapturedAlphaMaterialFamily.PoiyomiTwoPass,
+                        PoiyomiMaterialSemantics.TwoPassAlphaEvidenceRequest);
+                }
+
                 return (
                     CapturedAlphaMaterialFamily.Poiyomi,
                     PoiyomiMaterialSemantics.AlphaEvidenceRequest);
-            }
-
-            if (string.Equals(
-                    shaderName,
-                    PoiyomiMaterialSemantics.PoiyomiTwoPassShaderName,
-                    StringComparison.Ordinal))
-            {
-                return (
-                    CapturedAlphaMaterialFamily.PoiyomiTwoPass,
-                    PoiyomiMaterialSemantics.TwoPassAlphaEvidenceRequest);
             }
 
             if (string.Equals(
@@ -1118,8 +1116,9 @@ namespace Alrauna.Amuse.Editor.Semantics
                         PoiyomiSourceAttestation.TryVerifyPoiyomiIdentity(
                             material.PoiyomiEvidence, out _);
                 case CapturedAlphaMaterialFamily.PoiyomiTwoPass:
-                    // The conjunction attests each Poiyomi identity against
-                    // its own pinned GUID and digest, so the Two Pass
+                    // The admitted source rows (K1, docs/superpowers/specs/
+                    // 2026-10-23-poiyomi-per-shader-attestation-design.md)
+                    // attest each Poiyomi identity, so the Two Pass
                     // original verifies through the same call.
                     return !verifyIdentity ||
                         PoiyomiSourceAttestation.TryVerifyPoiyomiIdentity(

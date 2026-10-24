@@ -1415,16 +1415,19 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         /// <summary>
         /// The canonical Opaque tuple in <see cref="PoiyomiOpaqueConversion"/>
         /// was derived by reading the <c>_Mode</c> preset 0
-        /// <c>on_value_actions</c> metadata inside the attested vendor shader
-        /// whose identity these two constants pin. The repository ships no
-        /// vendor source and no parser, so nothing else can notice that the
-        /// pinned source changed underneath the recipe.
+        /// <c>on_value_actions</c> metadata inside the admitted 9.3.64 vendor
+        /// shader. The admitted source rows in
+        /// <see cref="PoiyomiSourceAttestation"/> pin that source identity.
+        /// The repository ships no vendor source and no parser, so nothing
+        /// else can notice that an admitted source changed underneath the
+        /// recipe.
         /// <para>
-        /// <strong>If either constant changes, the canonical Opaque tuple MUST
-        /// be re-derived from the newly attested vendor source before this
-        /// expectation is updated.</strong> Updating these literals to make the
-        /// test pass, without re-reading the new preset actions, silently
-        /// converts a drift signal into a stale recipe.
+        /// <strong>A row set change needs the K5 admission measurement
+        /// first. Re-derive the canonical Opaque tuple from the newly
+        /// measured vendor source before the row set changes.</strong>
+        /// Updating these literals to make the test pass, without re-reading
+        /// the new preset actions, silently converts a drift signal into a
+        /// stale recipe.
         /// </para>
         /// <para>
         /// Stated literally rather than read from production, so the pin tests
@@ -1437,12 +1440,28 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Assert.That(
                 PoiyomiMaterialSemantics.CanonicalShaderGuid,
                 Is.EqualTo("9444ce77bf4418748b1e8591b9d97f85"),
-                "Re-derive the canonical Opaque tuple before changing this pin.");
+                "Re-derive the canonical Opaque tuple before changing this pin. " +
+                "A new row needs the K5 admission measurement first.");
+
+            var digests = PoiyomiSourceAttestation.AdmittedSources()
+                .Select(row => row.NormalizedSourceHash)
+                .ToList();
             Assert.That(
-                PoiyomiMaterialSemantics.CanonicalNormalizedSourceHash,
-                Is.EqualTo(
-                    "31f2ff15615c5e2ac9b05fea08b6310731394d1b5a928b16048e7bde8f8b1755"),
-                "Re-derive the canonical Opaque tuple before changing this pin.");
+                digests,
+                Is.EquivalentTo(new[]
+                {
+                    "31f2ff15615c5e2ac9b05fea08b6310731394d1b5a928b16048e7bde8f8b1755",
+                    "b1d9ecd3072d21db97001dd23f88d089996b809e4039891a05f64d2ffcd4df67",
+                    "c812d4d39ce3352b6198fdfcb5de87eb07678739a4bce7e4afd18cea28be19f4",
+                    "4fd1d8c1e35bd4e81a21c1dd6545ceb022542b67aa9996cb8341da7f3b64b65f",
+                }),
+                "Re-derive the canonical Opaque tuple before changing this pin. " +
+                "A new row needs the K5 admission measurement first.");
+            Assert.That(
+                digests,
+                Has.Count.EqualTo(4),
+                "Re-derive the canonical Opaque tuple before changing this pin. " +
+                "A new row needs the K5 admission measurement first.");
         }
 
         // --- Conversion source evidence -------------------------------------

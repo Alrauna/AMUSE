@@ -121,7 +121,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
     /// <summary>
     /// The pinned Poiyomi opaque-conversion core: decides whether an attested
-    /// unlocked Poiyomi Toon 9.3.64 material may be normalized to its canonical
+    /// unlocked Poiyomi Toon 9.3 material may be normalized to its canonical
     /// Opaque counterpart, and prepares a transient validated clone when it may.
     /// <para>
     /// Semantics describe output facts; conversion decides mutation. This class
@@ -130,12 +130,12 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
     /// </para>
     /// <para>
     /// The recipe below was derived from the vendor's own <c>_Mode</c> preset 0
-    /// <c>on_value_actions</c> metadata inside the attested shader source, whose
-    /// identity is pinned by
-    /// <see cref="PoiyomiMaterialSemantics.CanonicalShaderGuid"/> and
-    /// <see cref="PoiyomiMaterialSemantics.CanonicalNormalizedSourceHash"/>.
-    /// <strong>Changing either pin requires re-deriving this tuple from the new
-    /// source before the pin is updated.</strong>
+    /// <c>on_value_actions</c> metadata inside the admitted 9.3.64 shader
+    /// source. The admitted source rows in <see cref="PoiyomiSourceAttestation"/>
+    /// pin the source identity (K1, docs/superpowers/specs/2026-10-23-
+    /// poiyomi-per-shader-attestation-design.md). The row set may grow only
+    /// through the K5 admission measurement. Re-derive this tuple from the
+    /// newly measured source before the row set changes.
     /// </para>
     /// <para>
     /// This is one shader, one direction, one version. It is deliberately not a
@@ -582,7 +582,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// Narrow conversion entry to the shared Poiyomi source-evidence
         /// gatherer, passing conversion's own schema. Verification stays
         /// <see cref="PoiyomiSourceAttestation.TryVerifyPoiyomiIdentity"/>, so
-        /// hashing, GUID and package lookup, locked-state gathering, and the
+        /// hashing, GUID lookup, locked-state gathering, and the
         /// identity conjunction are reused rather than duplicated.
         /// <para>
         /// It takes already-captured evidence and deliberately offers no

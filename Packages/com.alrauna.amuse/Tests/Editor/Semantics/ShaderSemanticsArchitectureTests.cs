@@ -17,8 +17,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
     {
         private static readonly Regex HexGuidRegex =
             new("^[0-9a-fA-F]{32}$", RegexOptions.Compiled);
-        private static readonly Regex HexSha256Regex =
-            new("^[0-9a-fA-F]{64}$", RegexOptions.Compiled);
 
         [Test]
         public void SemanticsDirectoryContainsZeroRuntimeDataFiles()
@@ -105,10 +103,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 Is.True, "Poiyomi CanonicalShaderGuid must be a 32-character hex string.");
             Assert.That(HexGuidRegex.IsMatch(PoiyomiSourceAttestation.TwoPassCanonicalShaderGuid),
                 Is.True, "Poiyomi TwoPassCanonicalShaderGuid must be a 32-character hex string.");
-            Assert.That(HexSha256Regex.IsMatch(PoiyomiSourceAttestation.CanonicalNormalizedSourceHash),
-                Is.True, "Poiyomi CanonicalNormalizedSourceHash must be a 64-character hex string.");
-            Assert.That(HexSha256Regex.IsMatch(PoiyomiSourceAttestation.TwoPassCanonicalNormalizedSourceHash),
-                Is.True, "Poiyomi TwoPassCanonicalNormalizedSourceHash must be a 64-character hex string.");
         }
     }
 }

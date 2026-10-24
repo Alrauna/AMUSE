@@ -56,13 +56,15 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
         }
 
         /// <summary>
-        /// Gate case 1. Attestation is version-scoped per family:
-        /// PoiyomiMaterialSemantics pins 9.3.64 exactly, while
+        /// Gate case 1. Attestation is scoped per family: Poiyomi attests
+        /// by shader file, so its reported shader must match an admitted
+        /// row by name, GUID, and digest (K6, docs/superpowers/specs/
+        /// 2026-10-23-poiyomi-per-shader-attestation-design.md).
         /// LilToonSourceAttestation admits a measured set of versions
         /// (AdmittedRows), and a version outside the admitted set makes
-        /// every material of that family unattested. An installed family at
-        /// a version AMUSE does not attest is therefore a gate failure, not
-        /// a census result.
+        /// every material of that family unattested. An installed family
+        /// outside its attested scope is therefore a gate failure, not a
+        /// census result.
         /// </summary>
         [Test]
         public void AnInstalledFamilyMatchesTheVersionAmuseAttests()
@@ -108,14 +110,20 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
                 }
                 else
                 {
+                    // Poiyomi attests by shader file, not by a package
+                    // version. The reported shader must match an admitted
+                    // row (K6.4).
                     Assert.That(
-                        presence.InstalledPackageVersion,
-                        Is.EqualTo(presence.ExpectedPackageVersion),
+                        presence.MatchesAdmittedSource,
+                        Is.True,
                         presence.ExpectedPackageName
-                        + " is installed at a version AMUSE does not attest. "
-                        + "Every material of this family will be unattested, "
-                        + "and a census run would measure the mismatch rather "
-                        + "than AMUSE.");
+                        + " is installed, but its reported shader "
+                        + presence.Shader.name
+                        + " matches no admitted Poiyomi row. No admitted "
+                        + "Poiyomi shader file is installed. Every material "
+                        + "of this family will be unattested, and a census "
+                        + "run would measure the mismatch rather than "
+                        + "AMUSE.");
                 }
             }
 
@@ -523,7 +531,9 @@ namespace Alrauna.Amuse.Research.Tests.Editor.Calibration
         {
             var installed = CensusVendorProbe.ProbeAll()
                 .Where(p => p.IsInstalled)
-                .Select(p => p.ExpectedPackageName + " " + p.InstalledPackageVersion)
+                .Select(p => p.InstalledPackageVersion != null
+                    ? p.ExpectedPackageName + " " + p.InstalledPackageVersion
+                    : p.ExpectedPackageName + " shader " + p.Shader.name)
                 .ToList();
 
             if (installed.Count == 0)

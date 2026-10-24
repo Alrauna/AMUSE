@@ -126,8 +126,10 @@ namespace Alrauna.Amuse.Editor.Build
         /// stays on the generic path: a material that is not locked, a
         /// locked serialization that names no original shader, or a locked
         /// serialization whose original shader resolves and passes the
-        /// pinned identity. It reads serialization state only. It never
-        /// mutates the material, the shader, or any asset.
+        /// pinned identity. The pinned check also needs the recorded name
+        /// tag to equal the resolved shader name, and the matched row to
+        /// admit locked originals (K8.3). It reads serialization state
+        /// only. It never mutates the material, the shader, or any asset.
         /// </summary>
         internal static RendererAnalysisRefusal PreCheckRefusal(
             Material material)
@@ -151,7 +153,8 @@ namespace Alrauna.Amuse.Editor.Build
                 return RendererAnalysisRefusal.None;
             }
 
-            return ResolvesToAttestedPoiyomi(identity.OriginalShaderGuid)
+            return ResolvesToAttestedPoiyomi(
+                identity.OriginalShaderGuid, identity.OriginalShader)
                 ? RendererAnalysisRefusal.None
                 : RendererAnalysisRefusal
                     .LockedPoiyomiOriginalShaderUnattested;
@@ -177,8 +180,10 @@ namespace Alrauna.Amuse.Editor.Build
         /// <summary>
         /// Whether the live material's recorded original shader resolves
         /// through the AssetDatabase and passes the pinned Poiyomi
-        /// identity. The transient unlock window's precondition calls
-        /// this; it is the same conjunction <see
+        /// identity. The pinned check also needs the recorded name tag to
+        /// equal the resolved shader name, and the matched row to admit
+        /// locked originals (K8.3). The transient unlock window's
+        /// precondition calls this. It is the same conjunction <see
         /// cref="PreCheckRefusal"/> applies, so the two paths cannot pin
         /// differently. Reads live state only and mutates nothing.
         /// </summary>
@@ -196,7 +201,8 @@ namespace Alrauna.Amuse.Editor.Build
                 return false;
             }
 
-            return ResolvesToAttestedPoiyomi(identity.OriginalShaderGuid);
+            return ResolvesToAttestedPoiyomi(
+                identity.OriginalShaderGuid, identity.OriginalShader);
         }
 
         /// <summary>
@@ -230,12 +236,15 @@ namespace Alrauna.Amuse.Editor.Build
         /// <summary>
         /// Decides the original-shader precondition: the recorded GUID must
         /// resolve through the AssetDatabase to a shader asset that passes
-        /// the pinned Poiyomi identity. An unresolvable GUID and a resolved
-        /// but unattested shader both answer false, and both carry the same
-        /// named refusal by design. Both mean the original shader this lock
-        /// names is not usable.
+        /// the locked-original seam. The recorded name tag travels with the
+        /// GUID (K8.2). An unresolvable GUID and a resolved but unattested
+        /// shader both answer false, and both carry the same named refusal
+        /// by design. Both mean the original shader this lock names is not
+        /// usable.
         /// </summary>
-        private static bool ResolvesToAttestedPoiyomi(string originalGuid)
+        private static bool ResolvesToAttestedPoiyomi(
+            string originalGuid,
+            string originalShaderTag)
         {
             Shader resolved = null;
             if (!string.IsNullOrEmpty(originalGuid))
@@ -250,19 +259,63 @@ namespace Alrauna.Amuse.Editor.Build
             }
 
             return resolved != null &&
-                PassesPinnedPoiyomiIdentity(resolved);
+                PassesPinnedPoiyomiIdentity(resolved, originalShaderTag);
         }
 
         /// <summary>
-        /// The existing pinned Poiyomi identity, applied to the resolved
-        /// original shader asset: exact pinned name, canonical GUID,
-        /// package identity, and normalized source digest. The check
-        /// reuses the production identity conjunction, so these pins cannot
-        /// drift from the pins every other path applies. The schema check
-        /// is outside the precondition's pin list, so the evidence carries
-        /// the recorded schema state.
+        /// The locked-original seam (K8.3, docs/superpowers/specs/
+        /// 2026-10-23-poiyomi-per-shader-attestation-design.md). It
+        /// carries both rules of the locked-original precondition. The
+        /// name rule: the tag must be present and must equal the resolved
+        /// shader name. The row rule: the matched admitted row must admit
+        /// locked originals. Reason: thryeditor 2.74 locks write a suffix
+        /// tag that reconstruction does not read, and the swap-in
+        /// restores only when the recorded name equals the restored
+        /// shader name. The precheck applies the swap-in's name rule, so
+        /// it cannot promise a recovery the swap-in refuses.
         /// </summary>
-        private static bool PassesPinnedPoiyomiIdentity(Shader resolved)
+        internal static bool AttestsLockedOriginal(
+            string originalShaderTag,
+            in PoiyomiSourceEvidence resolved)
+        {
+            if (string.IsNullOrEmpty(originalShaderTag) ||
+                !string.Equals(
+                    originalShaderTag,
+                    resolved.ShaderName,
+                    StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            if (!PoiyomiSourceAttestation.TryVerifyPoiyomiIdentity(
+                    resolved, out _))
+            {
+                return false;
+            }
+
+            return PoiyomiSourceAttestation.TryMatchAdmittedSource(
+                resolved.ShaderName,
+                resolved.AssetGuid,
+                resolved.NormalizedSourceHash,
+                out var row) && row.LockedOriginalAdmitted;
+        }
+
+        /// <summary>
+        /// The pinned Poiyomi identity, applied to the resolved
+        /// original shader asset: the admitted source rows (K1, docs/
+        /// superpowers/specs/2026-10-23-poiyomi-per-shader-attestation-
+        /// design.md) decide name, GUID, and digest, and the digest gate
+        /// binds the three to one row. A new row needs the K5 admission
+        /// measurement first. The check reuses the production identity
+        /// conjunction, so these gates cannot drift from the gates every
+        /// other path applies. The verdict comes from the locked-original
+        /// seam, so the recorded name tag and the row admission rule apply
+        /// here too (K8.3). The schema check is outside the precondition's
+        /// gate list, so the evidence carries the recorded schema state.
+        /// </summary>
+        private static bool PassesPinnedPoiyomiIdentity(
+            Shader resolved,
+            string originalShaderTag)
         {
             var assetPath = AssetDatabase.GetAssetPath(resolved);
             var hasReadableSource = false;
@@ -288,8 +341,6 @@ namespace Alrauna.Amuse.Editor.Build
 
             var hasGuid = AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
                 resolved, out var guid, out long _);
-            var package = UnityEditor.PackageManager.PackageInfo
-                .FindForAssetPath(assetPath);
 
             var evidence = new PoiyomiSourceEvidence(
                 resolved.name,
@@ -297,13 +348,9 @@ namespace Alrauna.Amuse.Editor.Build
                 hasReadableSource,
                 hasGuid ? guid?.ToLowerInvariant() : null,
                 normalizedHash,
-                package != null,
-                package?.name,
-                package?.version,
                 hasRequiredSchema: true);
 
-            return PoiyomiSourceAttestation.TryVerifyPoiyomiIdentity(
-                evidence, out _);
+            return AttestsLockedOriginal(originalShaderTag, evidence);
         }
     }
 }

@@ -1197,7 +1197,10 @@ namespace Alrauna.Amuse.Editor.DryRun
             // alone: the recorded semantics-unknown cause plus the live
             // attested locked identity. The name tag check below is
             // display corroboration only. The build's own recovery
-            // precondition reads the recorded asset reference.
+            // precondition reads the recorded asset reference. The
+            // attested check also needs the recorded name tag to equal
+            // the resolved shader name, and the matched row to admit
+            // locked originals (K8.3).
             if (LockedMaterialIdentity.RecognizedLockedIdentity(material) &&
                 (LockedMaterialIdentity.OriginalShaderAttested(material) ||
                  IsAttestedOriginalShader(material)))
@@ -1221,14 +1224,18 @@ namespace Alrauna.Amuse.Editor.DryRun
         }
 
         /// <summary>
-        /// Checks whether the original shader tag names a supported shader.
+        /// Checks whether the original shader tag names an admitted locked
+        /// original. The check reads the admitted rows (K8.4,
+        /// docs/superpowers/specs/2026-10-23-poiyomi-per-shader-
+        /// attestation-design.md), so the dry run cannot promise a
+        /// recovery the build refuses.
         /// </summary>
         private static bool IsAttestedOriginalShader(Material material)
         {
             var tag = material.GetTag(
                 LockedMaterialIdentity.OriginalShaderTagName, true, null);
-            return tag == PoiyomiMaterialSemantics.PoiyomiToonShaderName ||
-                   tag == PoiyomiMaterialSemantics.PoiyomiTwoPassShaderName;
+            return PoiyomiSourceAttestation
+                .IsLockedOriginalAdmittedName(tag);
         }
 
         private static bool HasUnreadableAlphaStreamingTexture(Material material)
