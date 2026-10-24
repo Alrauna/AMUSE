@@ -209,6 +209,53 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         }
 
         /// <summary>
+        /// A comparison wrapped in parentheses sits outside the fact 10
+        /// forms. The paren must refuse, never turn an operand into the
+        /// zero reading. Falsifies an evaluator that resolves the operand
+        /// fragment next to the paren as 0 and answers the comparison.
+        /// </summary>
+        [Test]
+        public void ParenthesizedComparisonIsUnsupported()
+        {
+            var values = new SyntheticValues().WithNumber("_A", 1f);
+            var outcome = Evaluate("(_A==0)", values);
+            Assert.That(outcome, Is.EqualTo(PoiyomiLockConditionOutcome.Unsupported),
+                "A paren around the comparison is outside the accepted forms.");
+        }
+
+        /// <summary>
+        /// A comparison of an isNotAnimated call sits outside the fact 10
+        /// forms. The call clause must end at its close paren. Falsifies an
+        /// evaluator that returns true at the close paren and never reads
+        /// the comparison behind it.
+        /// </summary>
+        [Test]
+        public void ComparisonAfterIsNotAnimatedIsUnsupported()
+        {
+            var outcome = Evaluate("isNotAnimated(_A)==0", new SyntheticValues());
+            Assert.That(outcome, Is.EqualTo(PoiyomiLockConditionOutcome.Unsupported),
+                "A comparison of a call is outside the accepted forms.");
+        }
+
+        /// <summary>
+        /// A condition that still carries its marker prefix is outside the
+        /// accepted forms. The marker text is not an operand. Falsifies an
+        /// evaluator that resolves the marker fragment as 0 and answers
+        /// the comparison at every value.
+        /// </summary>
+        [Test]
+        public void MarkerPrefixInsideTheConditionIsUnsupported()
+        {
+            var holding = Evaluate("//ifex _A==0", new SyntheticValues().WithNumber("_A", 0f));
+            Assert.That(holding, Is.EqualTo(PoiyomiLockConditionOutcome.Unsupported),
+                "The marker prefix is outside the accepted forms.");
+
+            var failing = Evaluate("//ifex _A==0", new SyntheticValues().WithNumber("_A", 1f));
+            Assert.That(failing, Is.EqualTo(PoiyomiLockConditionOutcome.Unsupported),
+                "The verdict stays Unsupported at every value.");
+        }
+
+        /// <summary>
         /// An operand that is not a declared property and not a number
         /// reads 0 (fact 9). The text compares that 0, so the verdict
         /// follows the comparison. Falsifies an evaluator that refuses an

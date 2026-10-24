@@ -34,14 +34,14 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
     /// <summary>
     /// Evaluates one ifex lock condition text with the grammar of spec fact
     /// 9. The text splits at the first top-level join `&&` or `||` with no
-    /// precedence. A comparison operand that is not a declared property and
-    /// not a number reads 0. A texture operand makes the comparison false.
-    /// RenderQueue reads the render queue. isNotAnimated counts as true,
-    /// because the vendor removal proves that the clause held at lock time
-    /// (A6.2). A condition outside the accepted forms of spec fact 10 is
-    /// Unsupported, so the caller refuses. Trailing text after the final
-    /// operand is ignored, as the one fact 10 condition with a trailing
-    /// comment requires.
+    /// precedence. An operand must be one bare identifier or one number.
+    /// A bare identifier that is not a declared property reads 0. A texture
+    /// operand makes the comparison false. RenderQueue reads the render
+    /// queue. isNotAnimated counts as true, because the vendor removal
+    /// proves that the clause held at lock time (A6.2). Only a number may
+    /// carry trailing comment text, as the one fact 10 condition with a
+    /// trailing comment requires. A condition outside the accepted forms of
+    /// spec fact 10 is Unsupported, so the caller refuses.
     /// </summary>
     internal static class PoiyomiLockCondition
     {
@@ -145,12 +145,13 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 // The clause holds, because the removal proves it held at
                 // lock time (A6.2). The operand text is not read.
                 if (IsName(text, start, nameEnd, IsNotAnimatedName) &&
-                    HoldsCloseParen(text, nameEnd, end))
+                    EndsAtBalancedCloseParen(text, nameEnd, end))
                 {
                     return PoiyomiLockConditionOutcome.True;
                 }
 
-                // Any other function sits outside the accepted forms.
+                // Any other function, or text after the close paren, sits
+                // outside the accepted forms.
                 return PoiyomiLockConditionOutcome.Unsupported;
             }
 
@@ -223,6 +224,18 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             var numberLength = NumberPrefixLength(text, start, end);
             if (numberLength > 0)
             {
+                var remainderStart = start + numberLength;
+                var isCommentTail = remainderStart + 2 <= end &&
+                    text[remainderStart] == '/' &&
+                    text[remainderStart + 1] == '/';
+                if (remainderStart != end && !isCommentTail)
+                {
+                    // The number does not end the operand and the rest is
+                    // no comment tail. The text sits outside the forms
+                    // (A6.2).
+                    return Operand.Malformed();
+                }
+
                 // Trailing text after the number is ignored (fact 10).
                 var literal = text.Substring(start, numberLength);
                 return Operand.FromNumber(
@@ -230,11 +243,12 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
 
             var nameEnd = IdentifierEnd(text, start, end);
-            if (nameEnd == start)
+            if (nameEnd == start || nameEnd != end)
             {
-                // The operand is not a number and not an identifier. It
-                // reads 0 (fact 9).
-                return Operand.Zero();
+                // The operand is not one bare identifier. It is outside
+                // the accepted forms, so it never falls back to a number
+                // (A6.2).
+                return Operand.Malformed();
             }
 
             if (IsName(text, start, nameEnd, RenderQueueName))
@@ -261,8 +275,8 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 return Operand.FromNumber(number);
             }
 
-            // The operand is not a declared property and not a number. It
-            // reads 0 (fact 9).
+            // The bare identifier is not a declared property and not a
+            // number. It reads 0 (fact 9).
             return Operand.Zero();
         }
 
@@ -492,17 +506,33 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             return true;
         }
 
-        private static bool HoldsCloseParen(string text, int openIndex, int end)
+        /// <summary>
+        /// True when the range after the open paren holds balanced parens
+        /// and the leaf ends at its close paren. Text after the close paren
+        /// fails, so a call can never hide a comparison behind it.
+        /// </summary>
+        private static bool EndsAtBalancedCloseParen(string text, int openIndex, int end)
         {
+            // The open paren at openIndex is already consumed, so the walk
+            // starts one level deep.
+            var depth = 1;
             for (var i = openIndex + 1; i < end; i++)
             {
-                if (text[i] == ')')
+                if (text[i] == '(')
                 {
-                    return true;
+                    depth++;
+                }
+                else if (text[i] == ')')
+                {
+                    depth--;
+                    if (depth < 0)
+                    {
+                        return false;
+                    }
                 }
             }
 
-            return false;
+            return depth == 0 && text[end - 1] == ')';
         }
 
         private static void TrimRange(string text, ref int start, ref int end)
