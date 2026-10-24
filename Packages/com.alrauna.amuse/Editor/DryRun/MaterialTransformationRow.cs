@@ -30,6 +30,9 @@ namespace Alrauna.Amuse.Editor.DryRun
     {
         StreamingMipmaps,
         LockedMaterials,
+        // The locked mirror note (A8.5): a locked material the build
+        // refuses is not shown as deferred.
+        LockedMaterialNotReproducible,
         ApprovedUnverifiedSource,
         EditorOnly,
         RefreshOnly,
@@ -262,6 +265,11 @@ namespace Alrauna.Amuse.Editor.DryRun
                 case NoteKind.RefreshOnly:
                     return "Some textures change every frame. This view "
                         + "computes them on Refresh only.";
+                case NoteKind.LockedMaterialNotReproducible:
+                    return "Some locked materials cannot be rebuilt from "
+                        + "their recorded source. A build will not convert "
+                        + "those materials. This view does not promise a "
+                        + "conversion for them.";
                 default:
                     throw new ArgumentOutOfRangeException(
                         nameof(kind), kind, "Unknown note kind.");

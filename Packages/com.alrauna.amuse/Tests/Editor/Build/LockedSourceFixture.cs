@@ -80,6 +80,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             generatedLineEdits =
                 new List<KeyValuePair<string, string>>();
 
+        private readonly List<string> removedIfexConditions =
+            new List<string>();
+
         private readonly string pinnedId;
         private bool built;
         private Shader original;
@@ -205,6 +208,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             generatedLineEdits.Add(new KeyValuePair<string, string>(
                 startsWith, replacement));
+            return this;
+        }
+
+        /// <summary>
+        /// Removes one ifex block from the partner only: the marker, the
+        /// body lines, and the end marker. The original keeps the block,
+        /// so the aligner records the removed outcome for it, exactly
+        /// the way a lock the condition removed writes the pair (fact 9).
+        /// </summary>
+        internal LockedSourceFixture WithRemovedIfexBlock(string condition)
+        {
+            removedIfexConditions.Add(condition);
             return this;
         }
 
@@ -411,8 +426,34 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "\r", string.Empty).Split('\n');
             var result = new List<string>(sourceLines.Length);
             var inProgram = false;
+            var skippingBlock = false;
             foreach (var rawLine in sourceLines)
             {
+                var trimmedLine = rawLine.Trim();
+                if (skippingBlock)
+                {
+                    if (trimmedLine == "//endex")
+                    {
+                        skippingBlock = false;
+                    }
+
+                    continue;
+                }
+
+                foreach (var condition in removedIfexConditions)
+                {
+                    if (trimmedLine == "//ifex " + condition)
+                    {
+                        skippingBlock = true;
+                        break;
+                    }
+                }
+
+                if (skippingBlock)
+                {
+                    continue;
+                }
+
                 if (rawLine.Trim() == "CGPROGRAM" ||
                     rawLine.Trim() == "CGINCLUDE")
                 {
@@ -722,6 +763,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "bakes:" + string.Join("|", bakeTexts),
                 "defines:" + string.Join("|", addedDefines),
                 "edits:" + string.Join("|", editTexts),
+                "blocks:" + string.Join("|", removedIfexConditions),
             };
             return string.Join(";", parts);
         }

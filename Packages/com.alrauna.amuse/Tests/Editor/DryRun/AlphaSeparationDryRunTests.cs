@@ -75,6 +75,9 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             _filteringPin.Dispose();
             DryRunCache.Clear();
             _scope.TearDown();
+            LockedSourceFixture.DeleteFolder();
+            LockedSourceAlignmentMemo.Clear();
+            AssetDatabase.Refresh();
         }
 
         // --- Fixture helpers -------------------------------------------------
@@ -1787,6 +1790,362 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 Is.False,
                 "a bundled original name has no admitted locked " +
                 "original row, so the gate does not defer the slot");
+        }
+
+        // --- Locked mirror gate (A8.5) ---------------------------------------
+
+        /// <summary>
+        /// One locked gate scene: the alignable fixture pair on one
+        /// renderer slot. The recorded name tag names an admitted locked
+        /// original, so the display-only locked arm trips the way a real
+        /// 9.3.64 lock trips it. The recorded GUID keeps the resolvable
+        /// synthetic original the mirror reads.
+        /// </summary>
+        private sealed class LockedGatePair
+        {
+            internal LockedSourceFixture Fixture;
+            internal Material Locked;
+            internal Renderer Renderer;
+            internal string RendererPath;
+        }
+
+        private LockedGatePair NewLockedGatePair(
+            string fixtureId, Action<LockedSourceFixture> configure)
+        {
+            var fixture = new LockedSourceFixture(fixtureId);
+            configure?.Invoke(fixture);
+            var locked = _scope.Track(fixture.Locked("LockedCape"));
+            locked.SetOverrideTag(
+                LockedMaterialIdentity.OriginalShaderTagName,
+                ".poiyomi/Poiyomi Toon");
+            var root = _scope.Track(NewAvatarRoot(
+                "amuse-dry-run-locked-gate-" + fixtureId));
+            var renderer = AddSkinnedRenderer(
+                root, OneTriangleMesh(), locked);
+            return new LockedGatePair
+            {
+                Fixture = fixture,
+                Locked = locked,
+                Renderer = renderer,
+                RendererPath = AnimationUtility.CalculateTransformPath(
+                    renderer.transform, root.transform),
+            };
+        }
+
+        /// <summary>
+        /// The falsifier guard: the fixture pair aligns, the reproduction
+        /// builds a plan, and the plan view stays consistent. A refusal
+        /// in a test then names the defect under test and never a broken
+        /// fixture.
+        /// </summary>
+        private static void AssertLockedGateGuard(
+            LockedSourceFixture fixture, Material locked)
+        {
+            var originalText = LockedMaterialIdentity.ReadOriginalText(
+                fixture.Original);
+            Assert.That(originalText, Is.Not.Null,
+                "fixture guard: the original text must be readable");
+            var properties = LockedSourceAlignmentMemo.PropertiesOf(
+                fixture.Original, originalText);
+            var aligned = LockedSourceAlignmentMemo.GetOrAlign(
+                fixture.Partner, fixture.Original, properties);
+            Assert.That(aligned.Succeeded, Is.True,
+                "fixture guard: the pair must align, but the aligner " +
+                "refused with " +
+                (aligned.RefusalDetail ?? "no sentence"));
+            var lockedView = new UnityLockedMaterialValues(locked);
+            var reproduction = LockedSourceReproduction.Build(
+                aligned.Source, properties, lockedView);
+            Assert.That(reproduction.Succeeded, Is.True,
+                "fixture guard: the plan must build, but the " +
+                "reproduction refused with " +
+                (reproduction.RefusalDetail ?? "no sentence"));
+            var consistency = LockedSourceReproduction.CheckConsistency(
+                aligned.Source,
+                properties,
+                new LockedPlanView(lockedView, reproduction.Plan));
+            Assert.That(consistency, Is.Null,
+                "fixture guard: the plan view must stay consistent, " +
+                "but the check returned " + (consistency ?? "no sentence"));
+        }
+
+        private static SlotResolutionResult SemanticsUnknownResult()
+        {
+            return SlotResolutionResult.Refused(
+                RendererAnalysisRefusal.AdmittedMaterialSemanticsUnknown);
+        }
+
+        private static CapturedMaterialSlotEvidence GateSlotEvidence()
+        {
+            return new CapturedMaterialSlotEvidence(0, new[] { 0 });
+        }
+
+        private static MaterialEvidenceRequest GateRequest()
+        {
+            return new MaterialEvidenceRequest(
+                false, false,
+                Array.Empty<string>(),
+                Array.Empty<string>(),
+                Array.Empty<string>(),
+                Array.Empty<string>(),
+                Array.Empty<TexturePropertyEvidenceRequest>());
+        }
+
+        private static CapturedAnimationEvidence EmptyGateEvidence()
+        {
+            return new CapturedAnimationEvidence(
+                GateRequest(),
+                Array.Empty<CapturedClipEvidence>(),
+                Array.Empty<CapturedAlphaMaterial>(),
+                new[] { 0 },
+                false);
+        }
+
+        private static CapturedAnimationEvidence GateEvidenceWithFloatBinding(
+            string rendererPath, string propertyName)
+        {
+            return new CapturedAnimationEvidence(
+                GateRequest(),
+                new[]
+                {
+                    new CapturedClipEvidence(
+                        "gate_clip", false, false,
+                        new[]
+                        {
+                            new CapturedFloatBinding(
+                                rendererPath,
+                                typeof(SkinnedMeshRenderer).FullName,
+                                propertyName, true, new[] { 1f }),
+                        },
+                        Array.Empty<CapturedObjectBinding>()),
+                },
+                Array.Empty<CapturedAlphaMaterial>(),
+                new[] { 0 },
+                false);
+        }
+
+        private static bool GateAnswer(
+            Renderer renderer,
+            CapturedAnimationEvidence evidence,
+            string rendererPath,
+            List<NoteKind> notes)
+        {
+            return AlphaSeparationDryRun.IsSlotDeferred(
+                renderer, 0, SemanticsUnknownResult(), GateSlotEvidence(),
+                evidence, rendererPath, notes.Add);
+        }
+
+        [Test]
+        public void DryRunDefersAnAlignableLockedSlot()
+        {
+            LockedSourceFixture.DeleteFolder();
+            AssetDatabase.Refresh();
+            LockedSourceAlignmentMemo.Clear();
+            var pair = NewLockedGatePair("gate7_defer", null);
+            AssertLockedGateGuard(pair.Fixture, pair.Locked);
+
+            var notes = new List<NoteKind>();
+            Assert.That(
+                GateAnswer(pair.Renderer, EmptyGateEvidence(),
+                    pair.RendererPath, notes),
+                Is.True,
+                "an alignable locked pair with no refusal defers");
+            Assert.That(notes, Is.Empty,
+                "an alignable locked pair adds no note");
+        }
+
+        // --- Falsifier 15: dry-run promise ---
+        // A gate that answers the locked arm from the identity alone
+        // promises a conversion for a locked material the build refuses
+        // (A8.5, Review Focus 5). Every case below differs from the
+        // guard scene by one defect, and the guard scene defers.
+        [Test]
+        public void DryRunDoesNotDeferALockedSlotThatTheBuildRefuses()
+        {
+            LockedSourceFixture.DeleteFolder();
+            AssetDatabase.Refresh();
+            LockedSourceAlignmentMemo.Clear();
+
+            // The no-op guard: the same scene without the defect defers
+            // the slot, so every refusal below names its own defect.
+            var guard = NewLockedGatePair("gate7_guard", null);
+            AssertLockedGateGuard(guard.Fixture, guard.Locked);
+            var guardNotes = new List<NoteKind>();
+            Assert.That(
+                GateAnswer(guard.Renderer, EmptyGateEvidence(),
+                    guard.RendererPath, guardNotes),
+                Is.True,
+                "the alignable pair without a defect must defer");
+            Assert.That(guardNotes, Is.Empty,
+                "the alignable pair must add no note");
+
+            // Case 1: the alignment refuses. One generated line the
+            // vendor never writes breaks the pair.
+            var broken = NewLockedGatePair("gate7_align", fixture =>
+                fixture.WithGeneratedLine(
+                    "shader_master_label",
+                    "        shader_master_label " +
+                    "(\"Another Label\", Float) = 0"));
+            var brokenNotes = new List<NoteKind>();
+            Assert.That(
+                GateAnswer(broken.Renderer, EmptyGateEvidence(),
+                    broken.RendererPath, brokenNotes),
+                Is.False,
+                "a pair that does not align must not defer");
+            Assert.That(brokenNotes,
+                Does.Contain(NoteKind.LockedMaterialNotReproducible));
+
+            // Case 2: the reproduction refuses. The lock recorded no
+            // mask define, and the mask is assigned on the locked
+            // material after the lock.
+            var repro = NewLockedGatePair("gate7_repro", fixture =>
+                fixture.WithProgramLines(
+                    "            #if defined(PROP_ALPHAMASK)",
+                    "            sampler2D _AlphaMask;",
+                    "            #endif"));
+            repro.Locked.SetTexture(
+                "_AlphaMask", ImportHalfTexture("gate7_mask", 255));
+            var reproNotes = new List<NoteKind>();
+            Assert.That(
+                GateAnswer(repro.Renderer, EmptyGateEvidence(),
+                    repro.RendererPath, reproNotes),
+                Is.False,
+                "a pair whose plan refuses must not defer");
+            Assert.That(reproNotes,
+                Does.Contain(NoteKind.LockedMaterialNotReproducible));
+
+            // Case 3: the consistency check refuses. The lock removed a
+            // block whose comparison no longer holds on the reproduced
+            // values.
+            var consistency = NewLockedGatePair("gate7_consistency",
+                fixture =>
+                {
+                    fixture.WithFragmentLines(
+                        "            //ifex _AlphaMod>0.5",
+                        "            i.uv.x += 0.25;",
+                        "            //endex");
+                    fixture.WithRemovedIfexBlock("_AlphaMod>0.5");
+                });
+            var consistencyNotes = new List<NoteKind>();
+            Assert.That(
+                GateAnswer(consistency.Renderer, EmptyGateEvidence(),
+                    consistency.RendererPath, consistencyNotes),
+                Is.False,
+                "a pair whose removed block no longer holds must not " +
+                "defer");
+            Assert.That(consistencyNotes,
+                Does.Contain(NoteKind.LockedMaterialNotReproducible));
+
+            // Case 4: a property block (A9). The build opens no pair
+            // for the locked material, so the view must not promise one.
+            var blocked = NewLockedGatePair("gate7_block", null);
+            var block = new MaterialPropertyBlock();
+            block.SetColor("_Color", new Color(1f, 0f, 0f, 1f));
+            blocked.Renderer.SetPropertyBlock(block);
+            Assert.That(
+                blocked.Renderer.HasPropertyBlock(), Is.True,
+                "fixture guard: the renderer must carry the block");
+            var blockedNotes = new List<NoteKind>();
+            Assert.That(
+                GateAnswer(blocked.Renderer, EmptyGateEvidence(),
+                    blocked.RendererPath, blockedNotes),
+                Is.False,
+                "a locked slot behind a property block must not defer");
+            Assert.That(blockedNotes,
+                Does.Contain(NoteKind.LockedMaterialNotReproducible));
+
+            // Case 5: an animation mismatch (A10). The lock left the
+            // animated property unused, so the unlocked copy would
+            // honor a curve the locked original never reads.
+            var animated = NewLockedGatePair("gate7_anim", null);
+            var mismatchNotes = new List<NoteKind>();
+            Assert.That(
+                GateAnswer(
+                    animated.Renderer,
+                    GateEvidenceWithFloatBinding(
+                        animated.RendererPath, "material._AlphaMod"),
+                    animated.RendererPath,
+                    mismatchNotes),
+                Is.False,
+                "a locked slot whose binding reads an unused property " +
+                "must not defer");
+            Assert.That(mismatchNotes,
+                Does.Contain(NoteKind.LockedMaterialNotReproducible));
+
+            // The near-miss of case 5: the same binding on another path
+            // names no property of this locked material.
+            var clean = NewLockedGatePair("gate7_anim_clean", null);
+            var cleanNotes = new List<NoteKind>();
+            Assert.That(
+                GateAnswer(
+                    clean.Renderer,
+                    GateEvidenceWithFloatBinding(
+                        "Other", "material._AlphaMod"),
+                    clean.RendererPath,
+                    cleanNotes),
+                Is.True,
+                "a binding on another path must not refuse the slot");
+            Assert.That(cleanNotes, Is.Empty,
+                "a passing mirror adds no note");
+        }
+
+        // --- Falsifier: a fingerprint that ignores the locked shader
+        // files serves rows of the old lock after a same-path relock ---
+        [Test]
+        public void RelockToTheSamePathChangesTheCacheFingerprint()
+        {
+            LockedSourceFixture.DeleteFolder();
+            AssetDatabase.Refresh();
+
+            var fixture = new LockedSourceFixture("gate7_relock");
+            var locked = _scope.Track(fixture.Locked("RelockCape"));
+            var before = AlphaSeparationDryRun.LockedShaderIdentityPart(
+                locked);
+
+            // The relock writes a different generated text to the same
+            // asset path, the way a second lock cycle overwrites the
+            // lock.
+            var relocked = new LockedSourceFixture("gate7_relock");
+            relocked.WithGeneratedLine(
+                "shader_master_label",
+                "        shader_master_label " +
+                "(\"Another Label\", Float) = 0");
+            Assert.That(
+                AssetDatabase.GetAssetPath(relocked.Partner),
+                Is.EqualTo(AssetDatabase.GetAssetPath(fixture.Partner)),
+                "fixture guard: the relock must target the same asset " +
+                "path");
+
+            var after = AlphaSeparationDryRun.LockedShaderIdentityPart(
+                locked);
+            Assert.That(after, Is.Not.EqualTo(before),
+                "a relock at the same path must move the cache " +
+                "fingerprint");
+
+            // The original side moves the fingerprint too. A variant
+            // pair owns its original asset, so a rebuilt variant
+            // rewrites that original at the same path.
+            var variant = new LockedSourceFixture("gate7_relock_original");
+            variant.WithProgramLines("            // relock probe one");
+            var lockedVariant = _scope.Track(
+                variant.Locked("RelockOriginalCape"));
+            var beforeOriginal =
+                AlphaSeparationDryRun.LockedShaderIdentityPart(
+                    lockedVariant);
+            var rebuilt = new LockedSourceFixture("gate7_relock_original");
+            rebuilt.WithProgramLines("            // relock probe two");
+            Assert.That(
+                AssetDatabase.GetAssetPath(rebuilt.Original),
+                Is.EqualTo(AssetDatabase.GetAssetPath(variant.Original)),
+                "fixture guard: the rebuilt variant must target the " +
+                "same original asset path");
+
+            var afterOriginal =
+                AlphaSeparationDryRun.LockedShaderIdentityPart(
+                    lockedVariant);
+            Assert.That(afterOriginal, Is.Not.EqualTo(beforeOriginal),
+                "a changed original at the same path must move the " +
+                "cache fingerprint");
         }
 
         [Test]

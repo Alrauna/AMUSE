@@ -9,11 +9,14 @@ namespace Alrauna.Amuse.Editor.DryRun
 {
     internal static class DryRunRowBuilder
     {
-        internal static IReadOnlyList<MaterialTransformationRow> BuildResolvedRefusalRows(
-            Renderer renderer,
-            string rendererPath,
-            string rendererTypeName,
-            RuntimeStateResolution.ResolvedRuntimeStates resolved)
+        internal static IReadOnlyList<MaterialTransformationRow>
+            BuildResolvedRefusalRows(
+                Renderer renderer,
+                string rendererPath,
+                string rendererTypeName,
+                RuntimeStateResolution.ResolvedRuntimeStates resolved,
+                CapturedAnimationEvidence evidence = null,
+                Action<NoteKind> noteOnce = null)
         {
             var rows = new List<MaterialTransformationRow>();
             var allDeferred = true;
@@ -32,7 +35,10 @@ namespace Alrauna.Amuse.Editor.DryRun
                 // The slot evidence rides on the same result, so slot i of
                 // one is slot i of the other by construction.
                 var slotEvidence = resolved.Slots[slotIndex];
-                if (!AlphaSeparationDryRun.IsSlotDeferred(renderer, slotIndex, resolved.SlotResults[slotIndex], slotEvidence))
+                if (!AlphaSeparationDryRun.IsSlotDeferred(
+                        renderer, slotIndex,
+                        resolved.SlotResults[slotIndex], slotEvidence,
+                        evidence, rendererPath, noteOnce))
                 {
                     allDeferred = false;
                 }
@@ -64,7 +70,9 @@ namespace Alrauna.Amuse.Editor.DryRun
             IReadOnlyList<SlotTransformVerdict> verdicts,
             SlotResolutionResult[] slotResults,
             IReadOnlyList<CapturedMaterialSlotEvidence> slots,
-            string rendererName)
+            string rendererName,
+            CapturedAnimationEvidence evidence = null,
+            Action<NoteKind> noteOnce = null)
         {
             var rows = new List<MaterialTransformationRow>();
             for (var slotIndex = 0; slotIndex < slotResults.Length; slotIndex++)
@@ -81,7 +89,9 @@ namespace Alrauna.Amuse.Editor.DryRun
                         slotResults[slotIndex],
                         slots[slotIndex],
                         slotIndex,
-                        rendererName));
+                        rendererName,
+                        evidence,
+                        noteOnce));
                     continue;
                 }
 
@@ -116,10 +126,14 @@ namespace Alrauna.Amuse.Editor.DryRun
             SlotResolutionResult result,
             CapturedMaterialSlotEvidence slot,
             int slotIndex,
-            string rendererName)
+            string rendererName,
+            CapturedAnimationEvidence evidence = null,
+            Action<NoteKind> noteOnce = null)
         {
             var totalTriangles = AlphaSeparationDryRun.SubmeshPolygonCount(renderer, slotIndex);
-            if (AlphaSeparationDryRun.IsSlotDeferred(renderer, slotIndex, result, slot))
+            if (AlphaSeparationDryRun.IsSlotDeferred(
+                    renderer, slotIndex, result, slot,
+                    evidence, rendererPath, noteOnce))
             {
                 return MaterialTransformationRow.Slot(
                     rendererPath,

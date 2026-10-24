@@ -680,7 +680,8 @@ namespace Alrauna.Amuse.Editor.DryRun
                 if (resolved.Refusal != RendererAnalysisRefusal.None)
                 {
                     var refusalRows = DryRunRowBuilder.BuildResolvedRefusalRows(
-                        renderer, rendererPath, rendererTypeName, resolved);
+                        renderer, rendererPath, rendererTypeName, resolved,
+                        evidence, AddNoteOnce);
                     _rendererRows.AddRange(refusalRows);
                     if (!refreshOnly && _avatarKey != null)
                     {
@@ -857,7 +858,9 @@ namespace Alrauna.Amuse.Editor.DryRun
                     verdicts,
                     _inFlightResolved.SlotResults,
                     _inFlightResolved.Slots,
-                    _inFlightRendererName);
+                    _inFlightRendererName,
+                    _inFlightEvidence,
+                    AddNoteOnce);
 
                 _rendererRows.AddRange(rows);
                 if (!_inFlightRefreshOnly && _avatarKey != null)
@@ -1150,6 +1153,190 @@ namespace Alrauna.Amuse.Editor.DryRun
         }
 
         /// <summary>
+        /// One cache fingerprint part per locked material: the identity
+        /// of the generated shader and of the recorded original shader
+        /// (A8.5). A relock at the same asset path moves the generated
+        /// identity, so the renderer cache cannot serve rows of the old
+        /// lock.
+        /// </summary>
+        internal static string LockedShaderIdentityPart(Material material)
+        {
+            if (material == null || material.shader == null)
+            {
+                return "null" + BodySeparator + "null";
+            }
+
+            var original = LockedOriginalShaderOf(material);
+            return AssetIdentity(material.shader)
+                + BodySeparator
+                + (original != null ? AssetIdentity(original) : "null");
+        }
+
+        /// <summary>
+        /// Resolves the recorded original shader of one locked material
+        /// through its recorded GUID tag (A8.5). Null when the tag is
+        /// missing or the GUID resolves to no shader asset. The read is
+        /// read-only.
+        /// </summary>
+        private static Shader LockedOriginalShaderOf(Material material)
+        {
+            if (material == null)
+            {
+                return null;
+            }
+
+            var recordedGuid = material.GetTag(
+                LockedMaterialIdentity.OriginalShaderGuidTagName,
+                true,
+                null);
+            if (string.IsNullOrEmpty(recordedGuid))
+            {
+                return null;
+            }
+
+            var originalPath =
+                AssetDatabase.GUIDToAssetPath(recordedGuid);
+            return string.IsNullOrEmpty(originalPath)
+                ? null
+                : AssetDatabase.LoadAssetAtPath<Shader>(originalPath);
+        }
+
+        /// <summary>
+        /// The raw material binding property names of the float and
+        /// object reference bindings on one renderer path, over the
+        /// clips the dry run already captured (A10.1). The per-path
+        /// filter matches the build's collection, so both gates read
+        /// the same names.
+        /// </summary>
+        private static IReadOnlyCollection<string>
+            MaterialBindingNamesFor(
+                CapturedAnimationEvidence evidence,
+                string rendererPath)
+        {
+            var names = new HashSet<string>(StringComparer.Ordinal);
+            if (evidence == null || rendererPath == null)
+            {
+                return names;
+            }
+
+            foreach (var clip in evidence.Clips)
+            {
+                foreach (var binding in clip.FloatBindings)
+                {
+                    if (string.Equals(
+                            binding.Path,
+                            rendererPath,
+                            StringComparison.Ordinal))
+                    {
+                        names.Add(binding.PropertyName);
+                    }
+                }
+
+                foreach (var binding in clip.ObjectBindings)
+                {
+                    if (string.Equals(
+                            binding.Path,
+                            rendererPath,
+                            StringComparison.Ordinal))
+                    {
+                        names.Add(binding.PropertyName);
+                    }
+                }
+            }
+
+            return names;
+        }
+
+        /// <summary>
+        /// The dry-run mirror of the locked proof pipeline (A8.5). It
+        /// runs the aligner through the session memo, builds the
+        /// reproduction plan from the live values of the locked
+        /// material, checks the plan view, and mirrors the property
+        /// block and animation admission rules of the build. The method
+        /// returns true when the mirror refuses, and then the row never
+        /// promises a conversion the build refuses. A pair the mirror
+        /// cannot check keeps the display deferral, because the
+        /// name-tag-only arm stays display-only.
+        /// </summary>
+        private static bool LockedMirrorRefuses(
+            Renderer renderer,
+            Material material,
+            CapturedAnimationEvidence evidence,
+            string rendererPath,
+            Action<NoteKind> noteOnce)
+        {
+            var original = LockedOriginalShaderOf(material);
+            if (original == null)
+            {
+                // No recorded original resolves, so the mirror has no
+                // pair to check. The display-only arm keeps its answer.
+                return false;
+            }
+
+            // A generated shader that does not compile bakes nothing
+            // the aligner can trust (A2.3).
+            if (ShaderUtil.ShaderHasError(material.shader))
+            {
+                return RefuseMirror(noteOnce);
+            }
+
+            var generatedText = LockedMaterialIdentity.ReadOriginalText(
+                material.shader);
+            var originalText = LockedMaterialIdentity.ReadOriginalText(
+                original);
+            if (generatedText == null || originalText == null)
+            {
+                return RefuseMirror(noteOnce);
+            }
+
+            var properties = LockedSourceAlignmentMemo.PropertiesOf(
+                original, originalText);
+            var aligned = LockedSourceAlignmentMemo.GetOrAlign(
+                material.shader, original, properties);
+            if (!aligned.Succeeded)
+            {
+                return RefuseMirror(noteOnce);
+            }
+
+            var lockedView = new UnityLockedMaterialValues(material);
+            var reproduction = LockedSourceReproduction.Build(
+                aligned.Source, properties, lockedView);
+            if (!reproduction.Succeeded)
+            {
+                return RefuseMirror(noteOnce);
+            }
+
+            var consistency = LockedSourceReproduction.CheckConsistency(
+                aligned.Source,
+                properties,
+                new LockedPlanView(lockedView, reproduction.Plan));
+            if (consistency != null)
+            {
+                return RefuseMirror(noteOnce);
+            }
+
+            // The A9 and A10 admission mirror, over the same renderer
+            // fact and the same per-path binding names the build reads
+            // (A9, A10.1).
+            var admission = LockedMaterialAdmission.Decide(
+                aligned.Source,
+                renderer != null && renderer.HasPropertyBlock(),
+                MaterialBindingNamesFor(evidence, rendererPath));
+            if (admission != AlphaSeparationSlotRefusal.None)
+            {
+                return RefuseMirror(noteOnce);
+            }
+
+            return false;
+        }
+
+        private static bool RefuseMirror(Action<NoteKind> noteOnce)
+        {
+            noteOnce?.Invoke(NoteKind.LockedMaterialNotReproducible);
+            return true;
+        }
+
+        /// <summary>
         /// Checks whether an unresolved slot evaluates at build time. The
         /// slot's recorded cause controls the answer. Only the recorded
         /// semantics-unknown cause can defer, and only behind the live
@@ -1163,7 +1350,10 @@ namespace Alrauna.Amuse.Editor.DryRun
             Renderer renderer,
             int slotIndex,
             SlotResolutionResult slotResult,
-            CapturedMaterialSlotEvidence slotEvidence)
+            CapturedMaterialSlotEvidence slotEvidence,
+            CapturedAnimationEvidence evidence = null,
+            string rendererPath = null,
+            Action<NoteKind> noteOnce = null)
         {
             if (renderer == null || renderer.sharedMaterials == null)
             {
@@ -1200,11 +1390,21 @@ namespace Alrauna.Amuse.Editor.DryRun
             // precondition reads the recorded asset reference. The
             // attested check also needs the recorded name tag to equal
             // the resolved shader name, and the matched row to admit
-            // locked originals (K8.3).
+            // locked originals (K8.3). The mirror of A8.5 then runs the
+            // same proof pipeline the build runs on the pair, so a
+            // locked material the build refuses is not shown as
+            // deferred. The name-tag-only arm stays display-only.
             if (LockedMaterialIdentity.RecognizedLockedIdentity(material) &&
                 (LockedMaterialIdentity.OriginalShaderAttested(material) ||
                  IsAttestedOriginalShader(material)))
             {
+                if (LockedMirrorRefuses(
+                        renderer, material, evidence, rendererPath,
+                        noteOnce))
+                {
+                    return false;
+                }
+
                 return true;
             }
 
@@ -1534,6 +1734,14 @@ namespace Alrauna.Amuse.Editor.DryRun
             foreach (var material in renderer.sharedMaterials)
             {
                 parts.Add(AssetIdentity(material));
+                if (LockedMaterialIdentity.RecognizedLockedIdentity(
+                        material))
+                {
+                    // The mirror reads the generated text and the
+                    // original text of a locked material, so both file
+                    // identities join the renderer key (A8.5).
+                    parts.Add(LockedShaderIdentityPart(material));
+                }
             }
 
             foreach (var material in admittedLive)
