@@ -790,6 +790,126 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "the clean locked material still swapped to its clone");
         }
 
+        // --- Falsifier: a gate that collects every binding of a clip
+        // instead of the bindings on the renderer path refuses a locked
+        // material for a curve that animates another renderer ---
+
+        /// <summary>
+        /// One clip animates a renamed property on the path of renderer C
+        /// and swaps the slot of renderer A. The locked material on path
+        /// A must swap in, and the same binding on its own path must
+        /// refuse. The named wrong implementation collects every binding
+        /// of every clip that touches the renderer path, so the other
+        /// renderer's curve refuses this locked material beyond the
+        /// designed A10.4 cost.
+        /// </summary>
+        [Test]
+        public void ABindingOnAnotherRendererPathDoesNotRefuseThisLockedMaterial()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(
+                TransientUnlockTestLifecycle.TempFolder);
+            TransientUnlockTestKnobs.SkipClose = true;
+
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE multi path fixture"));
+            var fixture = new LockedSourceFixture();
+            fixture.WithRename("S");
+            var admitted = Track(fixture.Locked("PathACape"));
+            var refused = Track(fixture.Locked("PathCCape"));
+
+            // No-op guard before the build: both materials must be
+            // recognized locked materials.
+            Assert.That(
+                LockedMaterialIdentity.RecognizedLockedIdentity(admitted),
+                Is.True,
+                "fixture guard: the admitted material must be a " +
+                "recognized locked material");
+            Assert.That(
+                LockedMaterialIdentity.RecognizedLockedIdentity(refused),
+                Is.True,
+                "fixture guard: the refused material must be a " +
+                "recognized locked material");
+
+            var meshA = Track(TransientUnlockTestLifecycle.OneSlotMesh());
+            var rendererA =
+                TransientUnlockTestLifecycle.AddRenderer(
+                    root, meshA, admitted);
+            var meshC = Track(TransientUnlockTestLifecycle.OneSlotMesh());
+            var rendererC =
+                TransientUnlockTestLifecycle.AddRenderer(
+                    root, meshC, refused);
+            rendererA.gameObject.name = "AMUSE path A host";
+            rendererC.gameObject.name = "AMUSE path C host";
+
+            // One clip with two paths: the material swap on the path of
+            // A, and the renamed float binding on the path of C.
+            var clip = Track(new AnimationClip
+            {
+                name = "AMUSE multi path curves",
+            });
+            AnimationUtility.SetObjectReferenceCurve(
+                clip,
+                EditorCurveBinding.PPtrCurve(
+                    "AMUSE path A host",
+                    typeof(SkinnedMeshRenderer),
+                    "m_Materials.Array.data[0]"),
+                new[]
+                {
+                    new ObjectReferenceKeyframe
+                    {
+                        time = 0f,
+                        value = admitted,
+                    },
+                });
+            AnimationUtility.SetEditorCurve(
+                clip,
+                EditorCurveBinding.FloatCurve(
+                    "AMUSE path C host",
+                    typeof(SkinnedMeshRenderer),
+                    "material._AlphaForceOpaque_S"),
+                AnimationCurve.Constant(0f, 1f, 1f));
+            AlphaSeparationTestLifecycle.NewController(
+                root, "AMUSE multi path graph", clip);
+
+            var context = AvatarProcessor.ProcessAvatar(
+                root, TransientUnlockTestPlatform.Instance);
+            var state = context.GetState<AmusePlatformFinishState>();
+
+            // Guard: the same binding on the locked material's own path
+            // must refuse, so the fixture reaches the gate with a real
+            // curve.
+            Assert.That(
+                state.SlotRefusalCount(
+                    AlphaSeparationSlotRefusal
+                        .LockedMaterialAnimationMismatch),
+                Is.EqualTo(1),
+                "fixture guard: the binding on the locked material's " +
+                "own path must refuse");
+            Assert.That(rendererC.sharedMaterials[0],
+                Is.EqualTo(refused),
+                "the refused slot keeps its original locked material");
+
+            // The subject: the locked material on the untouched path
+            // swaps in, because the clip's other path is not its
+            // admission set.
+            Assert.That(
+                TransientUnlockTestKnobs.LastSwapSummary.ClonesCreated,
+                Is.EqualTo(1),
+                "fixture guard: the untouched locked material must open " +
+                "its pair");
+            Assert.That(
+                TransientUnlockTestKnobs.LastSwapSummary.SlotsSwapped,
+                Is.EqualTo(1),
+                "the locked material on the untouched path must swap in");
+            Assert.That(rendererA.sharedMaterials[0],
+                Is.Not.SameAs(admitted),
+                "the locked material on the untouched path swapped to " +
+                "its clone");
+            Assert.That(
+                TransientUnlockTestKnobs.Window.OpenPairs,
+                Has.Count.EqualTo(1),
+                "only the untouched locked material opens a pair");
+        }
+
         private static string Sha256OfFile(string path)
         {
             using var stream = File.OpenRead(path);

@@ -506,13 +506,33 @@ namespace Alrauna.Amuse.Editor.Build
                              .GetClipsForObjectPath(rendererPath)
                              .ToList())
                 {
+                    // A clip that touches many paths contributes only its
+                    // bindings on this renderer path (A10.1). The
+                    // per-path lookup returns every clip that touches the
+                    // path, and a clip can carry curves for other paths.
                     foreach (var binding in clip.GetFloatCurveBindings())
                     {
+                        if (!string.Equals(
+                                binding.path,
+                                rendererPath,
+                                StringComparison.Ordinal))
+                        {
+                            continue;
+                        }
+
                         names.Add(binding.propertyName);
                     }
 
                     foreach (var binding in clip.GetObjectCurveBindings())
                     {
+                        if (!string.Equals(
+                                binding.path,
+                                rendererPath,
+                                StringComparison.Ordinal))
+                        {
+                            continue;
+                        }
+
                         names.Add(binding.propertyName);
                     }
                 }

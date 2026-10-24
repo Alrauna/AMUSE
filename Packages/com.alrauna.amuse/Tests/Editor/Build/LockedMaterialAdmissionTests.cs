@@ -204,6 +204,19 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
+        public void ANullBindingCollectionIsAProgrammingError()
+        {
+            var source = Source(
+                States(("_B", LockedPropertyState.Baked)));
+
+            Assert.Throws<ArgumentNullException>(
+                () => LockedMaterialAdmission.Decide(
+                    source, false, null),
+                "a null binding collection is a caller defect, not an " +
+                "admission");
+        }
+
+        [Test]
         public void ANameWithoutTheMaterialPrefixPasses()
         {
             var source = Source(

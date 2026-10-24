@@ -49,7 +49,10 @@ namespace Alrauna.Amuse.Editor.Build
 
             if (materialBindingPropertyNames == null)
             {
-                return AlphaSeparationSlotRefusal.None;
+                // A null binding collection is a caller defect, not an
+                // admission.
+                throw new ArgumentNullException(
+                    nameof(materialBindingPropertyNames));
             }
 
             foreach (var raw in materialBindingPropertyNames)
