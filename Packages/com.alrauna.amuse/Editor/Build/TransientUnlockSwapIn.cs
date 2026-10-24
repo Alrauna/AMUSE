@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Alrauna.Amuse.Editor.Host;
+using Alrauna.Amuse.Editor.Semantics.Poiyomi;
 using nadena.dev.ndmf;
 using nadena.dev.ndmf.animator;
 using UnityEditor;
@@ -261,14 +262,19 @@ namespace Alrauna.Amuse.Editor.Build
 
             var outcome = restore(clone);
             mismatchReason = RestoreMismatchReason(locked, clone, attests);
-            if (outcome == TransientUnlockRestoreOutcome.Succeeded &&
+            if (outcome.Outcome ==
+                    TransientUnlockRestoreOutcome.Succeeded &&
                 mismatchReason == null)
             {
                 return clone;
             }
 
             UnityEngine.Object.DestroyImmediate(clone, true);
-            mismatchReason ??= "the restore reported failure";
+            // The restore detail is the sentence of the broken step, so
+            // it wins over the generic sentence (A8.2).
+            mismatchReason = !string.IsNullOrEmpty(outcome.Detail)
+                ? outcome.Detail
+                : mismatchReason ?? "the restore reported failure";
             return null;
         }
 
@@ -344,7 +350,30 @@ namespace Alrauna.Amuse.Editor.Build
                 return "the generated locked shader asset is missing";
             }
 
-            return null;
+            // The seventh fact re-runs the define split and the removed
+            // block checks on the finished clone, from the memoized
+            // aligned facts. It never rebuilds the plan (A8.3).
+            var aligned = LockedSourceAlignmentMemo.Peek(locked.shader);
+            if (aligned == null)
+            {
+                return "the aligned facts are not memoized for the " +
+                    "generated shader";
+            }
+
+            var originalText = LockedMaterialIdentity.ReadOriginalText(
+                original);
+            if (originalText == null)
+            {
+                return "the recorded original shader file is not " +
+                    "readable";
+            }
+
+            var properties = LockedSourceAlignmentMemo.PropertiesOf(
+                original, originalText);
+            return LockedSourceReproduction.CheckConsistency(
+                aligned,
+                properties,
+                new UnityLockedMaterialValues(clone));
         }
 
         /// <summary>

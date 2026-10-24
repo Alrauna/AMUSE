@@ -5,25 +5,6 @@ using UnityEngine;
 namespace Alrauna.Amuse.Editor.Build
 {
     /// <summary>
-    /// The outcome of one restore call. A completed reconstruction is
-    /// Succeeded. Every named refusal is Failed. A Failed outcome is an
-    /// expected named failure, never a defect.
-    /// </summary>
-    internal enum TransientUnlockRestoreOutcome
-    {
-        Succeeded,
-        Failed,
-    }
-
-    /// <summary>
-    /// Restores one locked clone to its unlocked form in memory through
-    /// <see cref="LockedMaterialReconstruction"/>. Implementations must
-    /// never mutate the locked original.
-    /// </summary>
-    internal delegate TransientUnlockRestoreOutcome
-        TransientUnlockRestoreDelegate(Material lockedClone);
-
-    /// <summary>
     /// The transient unlock window's machine-side availability has two
     /// members. <see cref="CreateProductionRestore"/> returns the
     /// in-memory production restore. The restore reconstructs the
@@ -49,17 +30,15 @@ namespace Alrauna.Amuse.Editor.Build
         /// original-shader attestation before any clone exists, so the
         /// reconstruction starts from an attested original. The
         /// conversion is unchanged: a completed reconstruction is
-        /// <see cref="TransientUnlockRestoreOutcome.Succeeded"/>, every
-        /// named refusal is <see cref="TransientUnlockRestoreOutcome.Failed"/>.
+        /// <see cref="TransientUnlockRestoreOutcome.Succeeded"/> with a
+        /// null detail, every named refusal is
+        /// <see cref="TransientUnlockRestoreOutcome.Failed"/> and
+        /// carries the fixed sentence of the broken step (A8.2).
         /// </summary>
         internal static TransientUnlockRestoreDelegate CreateProductionRestore()
         {
             return clone => LockedMaterialReconstruction.TryApply(
-                clone,
-                _ => true,
-                out _)
-                ? TransientUnlockRestoreOutcome.Succeeded
-                : TransientUnlockRestoreOutcome.Failed;
+                clone, _ => true);
         }
 
         /// <summary>

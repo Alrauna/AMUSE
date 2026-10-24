@@ -301,6 +301,39 @@ namespace Alrauna.Amuse.Editor.Build
         }
 
         /// <summary>
+        /// The one shared reader for the text of a shader asset
+        /// (Constraints, A1.1). Attestation and alignment must see the
+        /// same bytes, so both read through this method. Null when the
+        /// asset has no readable file.
+        /// </summary>
+        internal static string ReadOriginalText(Shader shader)
+        {
+            if (shader == null)
+            {
+                return null;
+            }
+
+            var assetPath = AssetDatabase.GetAssetPath(shader);
+            if (string.IsNullOrEmpty(assetPath) || !File.Exists(assetPath))
+            {
+                return null;
+            }
+
+            try
+            {
+                return File.ReadAllText(assetPath, Encoding.UTF8);
+            }
+            catch (IOException)
+            {
+                return null;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
         /// The pinned Poiyomi identity, applied to the resolved
         /// original shader asset: the admitted source rows (K1, docs/
         /// superpowers/specs/2026-10-23-poiyomi-per-shader-attestation-
@@ -312,32 +345,19 @@ namespace Alrauna.Amuse.Editor.Build
         /// seam, so the recorded name tag and the row admission rule apply
         /// here too (K8.3). The schema check is outside the precondition's
         /// gate list, so the evidence carries the recorded schema state.
+        /// The text comes from the one shared reader, so attestation and
+        /// alignment see the same bytes.
         /// </summary>
         private static bool PassesPinnedPoiyomiIdentity(
             Shader resolved,
             string originalShaderTag)
         {
-            var assetPath = AssetDatabase.GetAssetPath(resolved);
-            var hasReadableSource = false;
-            string normalizedHash = null;
-            if (!string.IsNullOrEmpty(assetPath) && File.Exists(assetPath))
-            {
-                try
-                {
-                    normalizedHash = PoiyomiSourceAttestation
-                        .ComputeNormalizedSourceHash(
-                            File.ReadAllText(assetPath, Encoding.UTF8));
-                    hasReadableSource = true;
-                }
-                catch (IOException)
-                {
-                    hasReadableSource = false;
-                }
-                catch (UnauthorizedAccessException)
-                {
-                    hasReadableSource = false;
-                }
-            }
+            var sourceText = ReadOriginalText(resolved);
+            var hasReadableSource = sourceText != null;
+            var normalizedHash = hasReadableSource
+                ? PoiyomiSourceAttestation.ComputeNormalizedSourceHash(
+                    sourceText)
+                : null;
 
             var hasGuid = AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
                 resolved, out var guid, out long _);

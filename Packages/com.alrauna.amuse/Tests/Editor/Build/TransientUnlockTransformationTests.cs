@@ -420,10 +420,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// The restore-mismatch refusal reaches the NDMF console as the
         /// broken fact, not the bare cause name: the entry for a member
         /// that failed verification through an unresolvable recorded GUID
-        /// renders the first broken fact from the restore verification
-        /// contract. The unresolvable GUID leaves the locked shader
-        /// bound, so the name fact precedes the GUID fact for this
-        /// shape.
+        /// renders the refusal sentence of the restore itself, because
+        /// the restore detail is the sentence of the first broken step
+        /// (A8.2). The unresolvable GUID is that first broken step for
+        /// this shape.
         /// </summary>
         [Test]
         public void
@@ -487,8 +487,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(message, Does.Contain(renderer.gameObject.name));
             Assert.That(message, Does.Contain("slot 0"));
             Assert.That(message, Does.Contain(
-                    "the clone shader name does not match the " +
-                    "recorded original shader name"),
+                    "the recorded original shader GUID does not " +
+                    "resolve to a shader asset"),
                 "the console description must carry the broken fact, " +
                 "not the bare cause name");
         }

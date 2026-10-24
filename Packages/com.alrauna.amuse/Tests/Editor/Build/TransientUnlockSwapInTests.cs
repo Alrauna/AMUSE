@@ -454,6 +454,123 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "without a grant the avatar keeps its locked materials");
         }
 
+        /// <summary>
+        /// The alignment refusal of the reconstruction reaches the slot
+        /// refusal with its own sentence (A8.2, A8.3). The named wrong
+        /// implementation records the generic mismatch sentence instead
+        /// of the reconstruction sentence. The pair refuses at the
+        /// generated label line, so the recorded detail must equal the
+        /// aligner's line sentence.
+        /// </summary>
+        [Test]
+        public void AlignmentRefusalDetailReachesTheSlotRefusal()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(
+                TransientUnlockTestLifecycle.TempFolder);
+            TransientUnlockTestKnobs.SkipClose = true;
+
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE alignment refusal fixture"));
+            var fixture = new LockedSourceFixture();
+            fixture.WithGeneratedLine(
+                "shader_master_label",
+                "        shader_master_label " +
+                "(\"Another Label\", Float) = 0");
+            var locked = Track(fixture.Locked("AlignmentRefusalCape"));
+            var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());
+            TransientUnlockTestLifecycle.AddRenderer(root, mesh, locked);
+
+            var reports = ErrorReport.CaptureErrors(() =>
+                AvatarProcessor.ProcessAvatar(
+                    root, TransientUnlockTestPlatform.Instance));
+            var messageFound = false;
+            foreach (var report in reports)
+            {
+                if (report.TheError is SimpleError simple &&
+                    simple.ToMessage().Contains(
+                        "A generated line does not match the " +
+                        "expected line."))
+                {
+                    messageFound = true;
+                }
+            }
+
+            Assert.That(
+                TransientUnlockTestKnobs.LastSwapSummary.RestoreMismatchSlots,
+                Is.EqualTo(1),
+                "the refused restore must take the mismatch slot");
+            Assert.That(
+                TransientUnlockTestKnobs.LastSwapSummary.SlotsSwapped,
+                Is.Zero,
+                "an unaligned pair never swaps in");
+            Assert.That(messageFound, Is.True,
+                "the slot refusal must carry the reconstruction " +
+                "sentence");
+        }
+
+        /// <summary>
+        /// The seventh fact catches a consistency break after a restore
+        /// that reported success (A8.3). The delegate runs the production
+        /// reconstruction and then drops the keyword define the pair
+        /// carries, so A5.9 breaks on the finished clone. The named wrong
+        /// implementation trusts the success outcome and swaps the broken
+        /// clone in.
+        /// </summary>
+        [Test]
+        public void SeventhFactCatchesAConsistencyBreakAfterRestore()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(
+                TransientUnlockTestLifecycle.TempFolder);
+            TransientUnlockTestKnobs.SkipClose = true;
+
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE seventh fact fixture"));
+            var fixture = new LockedSourceFixture();
+            fixture.WithAddedDefine("AMUSE_SEVENTH_MARKER");
+            var locked = Track(fixture.Locked("SeventhCape"));
+            var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());
+            var renderer = TransientUnlockTestLifecycle.AddRenderer(
+                root, mesh, locked);
+
+            // The scripted restore: the real reconstruction first, then
+            // the break. The reported outcome stays success.
+            TransientUnlockTestKnobs.RestoreOverride = clone =>
+            {
+                var production =
+                    TransientUnlockAvailability.CreateProductionRestore();
+                var result = production(clone);
+                if (result.Outcome ==
+                    TransientUnlockRestoreOutcome.Failed)
+                {
+                    return result;
+                }
+
+                clone.shaderKeywords = System.Array.Empty<string>();
+                return TransientUnlockRestoreResult.Succeeded();
+            };
+
+            try
+            {
+                AvatarProcessor.ProcessAvatar(
+                    root, TransientUnlockTestPlatform.Instance);
+            }
+            finally
+            {
+                TransientUnlockTestKnobs.RestoreOverride = null;
+            }
+
+            Assert.That(renderer, Is.Not.Null,
+                "fixture guard: the renderer must survive the build");
+            Assert.That(
+                TransientUnlockTestKnobs.LastSwapSummary.RestoreMismatchSlots,
+                Is.EqualTo(1),
+                "the seventh fact must catch the consistency break");
+            Assert.That(
+                TransientUnlockTestKnobs.LastSwapSummary.SlotsSwapped,
+                Is.Zero,
+                "a broken clone never swaps in");
+            Assert.That(
+                TransientUnlockTestKnobs.Window.OpenPairs, Is.Empty);
+        }
+
         private static string Sha256OfFile(string path)
         {
             using var stream = File.OpenRead(path);

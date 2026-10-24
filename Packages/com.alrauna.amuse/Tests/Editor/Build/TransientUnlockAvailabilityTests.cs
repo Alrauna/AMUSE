@@ -20,6 +20,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         public void SetUp()
         {
             Thry.ThryEditor.ShaderOptimizer.Reset();
+            LockedSourceFixture.DeleteFolder();
             TransientUnlockTestLifecycle.OpenFixtureScene();
         }
 
@@ -28,6 +29,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             _scope.TearDown();
             TransientUnlockTestLifecycle.DiscardFixtureScene();
+            LockedSourceFixture.DeleteFolder();
             Thry.ThryEditor.ShaderOptimizer.Reset();
         }
 
@@ -48,15 +50,17 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 TransientUnlockAvailability.CreateProductionRestore();
             Assert.That(restore, Is.Not.Null);
 
-            var outcome = restore(clone);
+            var result = restore(clone);
 
-            Assert.That(outcome,
+            Assert.That(result.Outcome,
                 Is.EqualTo(TransientUnlockRestoreOutcome.Succeeded));
+            Assert.That(result.Detail, Is.Null,
+                "a completed reconstruction carries no detail");
             Assert.That(
                 clone.shader.name,
                 Is.EqualTo(
                     TransientUnlockTestLifecycle
-                        .OriginalStandInShaderName),
+                        .FixtureOriginalShaderName),
                 "the reconstruction must rebind the recorded original " +
                 "shader");
             Assert.That(
