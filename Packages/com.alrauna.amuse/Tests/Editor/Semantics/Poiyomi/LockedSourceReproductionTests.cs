@@ -166,28 +166,54 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 return textures.TryGetValue(propertyName, out value);
             }
 
-            /// <summary>Applies the plan like the build applies it (A8.1).</summary>
-            internal FakeValues Apply(LockedReproductionPlan plan)
+            internal FakeValues WithoutTexture(string name)
+            {
+                textures.Remove(name);
+                return this;
+            }
+
+            /// <summary>
+            /// Applies the plan like the build applies it (A8.1). The
+            /// vanished names are the saved names that the generated
+            /// shader declares and the original shader does not declare.
+            /// They are no slots after the swap.
+            /// </summary>
+            internal FakeValues Apply(
+                LockedReproductionPlan plan,
+                params string[] vanishedNames)
             {
                 var view = new FakeValues();
+                var gone = new HashSet<string>(vanishedNames);
                 foreach (var entry in floats)
                 {
-                    view.floats[entry.Key] = entry.Value;
+                    if (!gone.Contains(entry.Key))
+                    {
+                        view.floats[entry.Key] = entry.Value;
+                    }
                 }
 
                 foreach (var entry in vectors)
                 {
-                    view.vectors[entry.Key] = entry.Value;
+                    if (!gone.Contains(entry.Key))
+                    {
+                        view.vectors[entry.Key] = entry.Value;
+                    }
                 }
 
                 foreach (var entry in colors)
                 {
-                    view.colors[entry.Key] = entry.Value;
+                    if (!gone.Contains(entry.Key))
+                    {
+                        view.colors[entry.Key] = entry.Value;
+                    }
                 }
 
                 foreach (var entry in textures)
                 {
-                    view.textures[entry.Key] = entry.Value;
+                    if (!gone.Contains(entry.Key))
+                    {
+                        view.textures[entry.Key] = entry.Value;
+                    }
                 }
 
                 foreach (var entry in plan.FloatWrites)
@@ -343,12 +369,13 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             AlignedLockedSource source,
             LockedSourceProperty[] properties,
             FakeValues locked,
-            LockedReproductionPlan plan)
+            LockedReproductionPlan plan,
+            params string[] vanishedNames)
         {
             var detail = LockedSourceReproduction.CheckConsistency(
                 source,
                 properties,
-                locked.Apply(plan));
+                locked.Apply(plan, vanishedNames));
             Assert.That(
                 detail,
                 Is.Null,
@@ -372,7 +399,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 
             Assert.That(plan.FloatWrites["_P"], Is.EqualTo(0.75f),
                 "The renamed value moves to the plain name.");
-            AssertConsistent(source, properties, locked, plan);
+            AssertConsistent(source, properties, locked, plan, "S_P");
         }
 
         /// <summary>
@@ -418,7 +445,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Assert.That(plan.TextureScaleOffsetWrites["_Tex"],
                 Is.EqualTo(new Vector4(2f, 3f, 0.25f, 0.5f)),
                 "The renamed scale and offset move to the plain name.");
-            AssertConsistent(source, properties, locked, plan);
+            AssertConsistent(source, properties, locked, plan, "S_Tex", "S_Tex_S_ST");
         }
 
         // --- Falsifier 8: baked value edited after lock ---
@@ -736,6 +763,48 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             AssertRefusal(result, PropDefineDetail);
         }
 
+        /// <summary>
+        /// A renamed texture write that the applier omits hides the PROP
+        /// define of the run. The check reads the reproduced view by
+        /// plain names only, so the renamed slot is no read, and the
+        /// keyword part of the run must still be carried by the keywords
+        /// of the view (A5.9).
+        /// </summary>
+        [Test]
+        public void OmittedRenamedTextureWriteRefusesThePropCheck()
+        {
+            var properties = new[] { Prop("_Tex", ShaderPropertyType.Texture) };
+            var source = Source(
+                States(("_Tex", LockedPropertyState.Renamed)),
+                renamed: Names(("_Tex", "S_Tex")),
+                runs: Runs(new[] { "PROP_TEX", "OPTIMIZER_ENABLED" }),
+                surviving: "float4 PROP_TEX;");
+            var locked = new FakeValues().WithTexture(
+                "S_Tex",
+                new LockedTextureValue("token-f", 4, 4, Vector2.one, Vector2.zero));
+
+            var plan = BuiltPlan(source, properties, locked);
+            Assert.That(plan.TextureWrites.ContainsKey("_Tex"), Is.True,
+                "The build plans the texture write under the plain name.");
+
+            // The faithful view carries the write under the plain name.
+            // The renamed slot is no slot of the original shader.
+            var faithful = locked.Apply(plan, "S_Tex");
+            Assert.That(
+                LockedSourceReproduction.CheckConsistency(source, properties, faithful),
+                Is.Null,
+                "The faithful view passes the check.");
+
+            // The applier omits the texture write.
+            var omitted = faithful.WithoutTexture("_Tex");
+            var detail = LockedSourceReproduction.CheckConsistency(
+                source,
+                properties,
+                omitted);
+            Assert.That(detail, Is.EqualTo(PropDefineDetail),
+                "The missing texture write refuses the check.");
+        }
+
         // --- Falsifier 10: shared generated shader ---
         // An implementation that reads the keyword list from the
         // OriginalKeywords tag writes an empty list and fails. The tag of
@@ -909,6 +978,93 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Assert.That(plan.FloatWrites["_A"], Is.EqualTo(3f),
                 "The equality fixes the compared value.");
             AssertConsistent(source, properties, locked, plan);
+        }
+
+        // --- Falsifier 12: fixed value overrides enum text ---
+        // An implementation that writes the fixed value of A6.3 without
+        // comparing it to the recorded enum text hides the disagreement.
+        // The guards prove the fixture reaches the path. The state is
+        // Unused, the block is Removed, and the enum value exists.
+        [Test]
+        public void FixedValueThatDisagreesWithEnumTextRefuses()
+        {
+            var properties = new[] { Prop("_P", ShaderPropertyType.Float) };
+            var source = Source(
+                States(("_P", LockedPropertyState.Unused)),
+                enumValues: Enums(("_P", 2)),
+                blocks: Blocks(Block(
+                    LockedBlockKind.Ifex,
+                    LockedBlockOutcome.Removed,
+                    "_P!=2",
+                    35)));
+
+            Assert.That(source.States["_P"], Is.EqualTo(LockedPropertyState.Unused),
+                "The operand state is Unused.");
+            Assert.That(source.Blocks[0].Outcome, Is.EqualTo(LockedBlockOutcome.Removed),
+                "The block is Removed.");
+            Assert.That(source.EnumValues.ContainsKey("_P"), Is.True,
+                "The fixture holds the enum value.");
+
+            var result = LockedSourceReproduction.Build(
+                source,
+                properties,
+                new FakeValues());
+            AssertRefusal(result, EnumBakedDetail);
+
+            // No-op guard: the agreeing enum text takes the fixed value
+            // and stays consistent.
+            var agreeingSource = Source(
+                States(("_P", LockedPropertyState.Unused)),
+                enumValues: Enums(("_P", 0)),
+                blocks: Blocks(Block(
+                    LockedBlockKind.Ifex,
+                    LockedBlockOutcome.Removed,
+                    "_P!=2",
+                    35)));
+            var agreeingLocked = new FakeValues();
+            var agreeingPlan = BuiltPlan(agreeingSource, properties, agreeingLocked);
+            Assert.That(agreeingPlan.FloatWrites["_P"], Is.EqualTo(0f),
+                "The agreeing enum text keeps the fixed write.");
+            AssertConsistent(agreeingSource, properties, agreeingLocked, agreeingPlan);
+        }
+
+        // --- Falsifier 13: fixed value overrides a live bracket ---
+        // An implementation that writes the fixed value of A6.3 without
+        // comparing it to the live bracket value changes what the
+        // bracket renders. The guards prove the fixture reaches the
+        // path. The bracket read survives, and the live value differs
+        // from the fixed default of zero.
+        [Test]
+        public void FixedValueThatDisagreesWithALiveBracketRefuses()
+        {
+            var properties = new[] { Prop("_P", ShaderPropertyType.Float) };
+            var source = Source(
+                States(("_P", LockedPropertyState.Unused)),
+                brackets: Names(("_P", "_P")),
+                blocks: Blocks(Block(
+                    LockedBlockKind.Ifex,
+                    LockedBlockOutcome.Removed,
+                    "_P!=2",
+                    40)));
+            var locked = new FakeValues().WithFloat("_P", 1f);
+
+            Assert.That(source.BracketReads.ContainsKey("_P"), Is.True,
+                "The fixture holds the bracket read.");
+            Assert.That(
+                locked.TryGetFloat("_P", out var live) && live != 0f,
+                Is.True,
+                "The live value differs from the fixed default.");
+
+            var result = LockedSourceReproduction.Build(source, properties, locked);
+            AssertRefusal(result, BracketBakedDetail);
+
+            // No-op guard: the agreeing live value takes the fixed value
+            // and stays consistent.
+            var agreeingLocked = new FakeValues().WithFloat("_P", 0f);
+            var agreeingPlan = BuiltPlan(source, properties, agreeingLocked);
+            Assert.That(agreeingPlan.FloatWrites["_P"], Is.EqualTo(0f),
+                "The agreeing live value keeps the fixed write.");
+            AssertConsistent(source, properties, agreeingLocked, agreeingPlan);
         }
 
         /// <summary>

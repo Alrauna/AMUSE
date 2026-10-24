@@ -215,7 +215,23 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                         if (fixedValues.TryGetValue(property.Name, out var fixedValue))
                         {
                             // The removed block contract fixes the value
-                            // (A6.3).
+                            // (A6.3). The locked material still renders
+                            // its recorded enum text and its surviving
+                            // bracket read (A5.6, A5.7). A disagreement
+                            // means the material would read two values.
+                            if (source.EnumValues.TryGetValue(property.Name, out var fixedEnum)
+                                && fixedEnum != fixedValue)
+                            {
+                                return Refuse(EnumBakedDetail);
+                            }
+
+                            if (source.BracketReads.ContainsKey(property.Name)
+                                && (!locked.TryGetFloat(property.Name, out var fixedLive)
+                                    || fixedLive != fixedValue))
+                            {
+                                return Refuse(BracketBakedDetail);
+                            }
+
                             floatWrites[property.Name] = fixedValue;
                         }
                         else if (source.EnumValues.TryGetValue(property.Name, out var enumValue))
@@ -279,8 +295,8 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
             // The keyword and PROP split of the define runs (A5.9). The
             // PROP part must match the textures. All keyword parts must
-            // agree.
-            var expectedProps = ExpectedPropDefines(source, properties, locked);
+            // agree. The locked view reads renamed texture names.
+            var expectedProps = ExpectedPropDefines(source, properties, locked, true);
             List<string> keywordPart = null;
             foreach (var run in source.DefineRuns)
             {
@@ -328,7 +344,9 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// (A5.9, A6). The method returns null when the values stay
         /// consistent. Otherwise it returns one fixed detail sentence.
         /// The build passes the finished clone. The dry run passes its
-        /// plan view (A8.1).
+        /// plan view (A8.1). The reproduced view reads the plain names
+        /// only, because the renamed names are no slots of the original
+        /// shader after the swap.
         /// </summary>
         internal static string CheckConsistency(
             AlignedLockedSource source,
@@ -351,8 +369,9 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
 
             // The PROP part must match the textures after the plan
-            // (A5.9). The keyword part must agree across the runs.
-            var expectedProps = ExpectedPropDefines(source, properties, reproduced);
+            // (A5.9). The keyword part must agree across the runs. The
+            // view side reads plain names only.
+            var expectedProps = ExpectedPropDefines(source, properties, reproduced, false);
             List<string> keywordPart = null;
             foreach (var run in source.DefineRuns)
             {
@@ -368,6 +387,18 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 else if (!SameNames(keywordPart, runKeywords))
                 {
                     return KeywordPartDetail;
+                }
+
+                // The clone carries the keyword part of every run
+                // (A5.9). A PROP define that slides into the keyword
+                // part marks a texture that the view lost, because the
+                // build split the run with the full texture list.
+                foreach (var name in runKeywords)
+                {
+                    if (!ContainsName(reproduced.Keywords, name))
+                    {
+                        return PropDefineDetail;
+                    }
                 }
             }
 
@@ -744,12 +775,16 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// Lists the PROP defines that the textures expect (A5.9). The
         /// list walks the property order. Only an assigned texture
         /// counts, and only when its define occurs in the surviving text
-        /// (fact 8).
+        /// (fact 8). The locked view reads the renamed name. The
+        /// reproduced view reads the plain name only, because the
+        /// renamed names are no slots of the original shader after the
+        /// swap.
         /// </summary>
         private static List<string> ExpectedPropDefines(
             AlignedLockedSource source,
             IReadOnlyList<LockedSourceProperty> properties,
-            ILockedMaterialValues values)
+            ILockedMaterialValues values,
+            bool allowRenamedName)
         {
             var expected = new List<string>();
             foreach (var property in properties)
@@ -759,7 +794,16 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     continue;
                 }
 
-                if (!TryTextureOnU(source, values, property.Name, out var texture)
+                var readName = property.Name;
+                if (allowRenamedName
+                    && source.States.TryGetValue(property.Name, out var state)
+                    && state == LockedPropertyState.Renamed
+                    && source.RenamedNames.TryGetValue(property.Name, out var renamedName))
+                {
+                    readName = renamedName;
+                }
+
+                if (!values.TryGetTexture(readName, out var texture)
                     || texture.IdentityToken == null)
                 {
                     continue;
