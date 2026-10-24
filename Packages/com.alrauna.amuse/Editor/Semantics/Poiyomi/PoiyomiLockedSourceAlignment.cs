@@ -78,6 +78,22 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         private const string EraDisagreementDetail =
             "Aligning eras disagree on the aligned facts.";
 
+        private const string BlockAlignmentDetail =
+            "Neither outcome of a block matches the generated text.";
+
+        private const string BlockTieDetail =
+            "A block outcome stays undecided.";
+
+        private const string BlockUnclosedDetail =
+            "A block in the original text never closes.";
+
+        private const string OptimizerMissingDetail =
+            "A program block misses the optimizer define.";
+
+        // The base lookahead window after a block in surviving original
+        // lines (A3.7). The window grows by itself on a tie.
+        private const int LookaheadWindow = 8;
+
         // The closed set of Unity include files the aligner accepts
         // (A3.8). Any other include refuses.
         private static readonly string[] UnityIncludes =
@@ -544,14 +560,13 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
         /// <summary>
         /// Walks one original line range forward over the generated lines
-        /// and returns the consumed generated position. The walk reads its
-        /// per-property decisions from the shared walk state, so a later
-        /// change can call this method on a sub range for one block
-        /// hypothesis without committing the other outcome (A3.7).
+        /// and returns the consumed generated position. Block starts hand
+        /// over to the two hypothesis resolution (A3.7). When a lookahead
+        /// window is active in the walk state, the walk stops after the
+        /// window runs out of surviving lines.
         /// </summary>
         private static int WalkRange(WalkState state, int origStart, int origEnd)
         {
-            var propertiesLines = new HashSet<int>(PropertiesLineIndices(state.OriginalLines));
             var origIndex = origStart;
             while (origIndex < origEnd)
             {
@@ -570,6 +585,14 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     }
 
                     origIndex++;
+                    state.OriginalIndex = origIndex;
+                    continue;
+                }
+
+                if (TryBlockStart(trimmed, out var blockKind, out var blockText))
+                {
+                    ResolveBlock(state, origIndex, blockKind, blockText);
+                    origIndex = state.OriginalIndex;
                     continue;
                 }
 
@@ -577,6 +600,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 {
                     // A comment line leaves nothing (fact 2).
                     origIndex++;
+                    state.OriginalIndex = origIndex;
                     continue;
                 }
 
@@ -584,6 +608,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 {
                     // Every shader feature pragma line is deleted (fact 12).
                     origIndex++;
+                    state.OriginalIndex = origIndex;
                     continue;
                 }
 
@@ -594,6 +619,8 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     state.SurvivingLines.Add(line.Text);
                     state.LastConsumedOriginalNumber = line.Number;
                     state.GenIndex++;
+                    state.OriginalIndex = origIndex + 1;
+                    origIndex++;
                     if (trimmed == "CGPROGRAM")
                     {
                         state.FlushDefineRun();
@@ -601,7 +628,11 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                         ConsumeDefineRun(state);
                     }
 
-                    origIndex++;
+                    if (state.LookaheadRemaining == 0)
+                    {
+                        return state.GenIndex;
+                    }
+
                     continue;
                 }
 
@@ -613,48 +644,513 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     state.SurvivingLines.Add(line.Text);
                     state.LastConsumedOriginalNumber = line.Number;
                     state.GenIndex++;
+                    state.OriginalIndex = origIndex + 1;
                     origIndex++;
+                    if (state.LookaheadRemaining == 0)
+                    {
+                        return state.GenIndex;
+                    }
+
+                    continue;
+                }
+
+                WalkOrdinaryLine(state, origIndex);
+                origIndex = state.OriginalIndex;
+                if (state.LookaheadRemaining == 0)
+                {
+                    return state.GenIndex;
+                }
+            }
+
+            state.OriginalIndex = origIndex;
+            return state.GenIndex;
+        }
+
+        /// <summary>
+        /// Walks one line that is no block marker and no dropped line. The
+        /// program, Properties, and ShaderLab rules decide the expected
+        /// generated text. A program line that turns whitespace only after
+        /// the branch marker deletion drops and counts as no surviving
+        /// line (A3.3).
+        /// </summary>
+        private static void WalkOrdinaryLine(WalkState state, int origIndex)
+        {
+            var line = state.OriginalLines[origIndex];
+            if (state.InProgram)
+            {
+                // The branch markers are substrings that the vendor
+                // deletes on program lines (fact 13).
+                var edited = line.Text
+                    .Replace("UNITY_BRANCH", string.Empty)
+                    .Replace("[branch]", string.Empty);
+                if (edited.Trim().Length == 0)
+                {
+                    state.OriginalIndex = origIndex + 1;
+                    return;
+                }
+
+                MatchProgramLine(state, edited, line.Number);
+            }
+            else if (state.PropertiesLineSet.Contains(origIndex))
+            {
+                MatchPropertiesLine(state, line);
+            }
+            else
+            {
+                MatchShaderLabLine(state, line);
+            }
+
+            state.SurvivingLines.Add(line.Text);
+            state.LastConsumedOriginalNumber = line.Number;
+            state.GenIndex++;
+            state.OriginalIndex = origIndex + 1;
+        }
+
+        /// <summary>
+        /// Detects a block start line. An ifex marker is the comment form
+        /// of fact 2. An ifdef or ifndef directive without an ampersand or
+        /// a pipe is a block of fact 11. A directive with a join operator
+        /// is no block and walks as a plain line (A3.7).
+        /// </summary>
+        private static bool TryBlockStart(string trimmed, out LockedBlockKind kind, out string conditionOrKeyword)
+        {
+            kind = LockedBlockKind.Ifex;
+            conditionOrKeyword = null;
+            if (IsIfexStart(trimmed))
+            {
+                kind = LockedBlockKind.Ifex;
+                conditionOrKeyword = trimmed.Substring(6).TrimStart();
+                return true;
+            }
+
+            var first = FirstToken(trimmed);
+            if ((first == "#ifdef" || first == "#ifndef")
+                && trimmed.IndexOf('&') < 0
+                && trimmed.IndexOf('|') < 0)
+            {
+                kind = first == "#ifdef" ? LockedBlockKind.Ifdef : LockedBlockKind.Ifndef;
+                conditionOrKeyword = trimmed.Substring(first.Length).Trim();
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool IsIfexStart(string trimmed)
+        {
+            return trimmed.Length >= 6
+                && trimmed.StartsWith("//ifex", StringComparison.Ordinal)
+                && (trimmed.Length == 6 || trimmed[6] == ' ');
+        }
+
+        private static bool IsEndex(string trimmed)
+        {
+            return trimmed.Length >= 7
+                && trimmed.StartsWith("//endex", StringComparison.Ordinal)
+                && (trimmed.Length == 7 || trimmed[7] == ' ');
+        }
+
+        /// <summary>The line spans of one block in original line indices.</summary>
+        private readonly struct BlockExtent
+        {
+            internal BlockExtent(int bodyStart, int bodyEnd, int elseIndex, int endIndex)
+            {
+                BodyStart = bodyStart;
+                BodyEnd = bodyEnd;
+                ElseIndex = elseIndex;
+                EndIndex = endIndex;
+            }
+
+            internal int BodyStart { get; }
+
+            /// <summary>Exclusive end of the body before an else line.</summary>
+            internal int BodyEnd { get; }
+
+            /// <summary>Index of the else line. Negative when none exists.</summary>
+            internal int ElseIndex { get; }
+
+            /// <summary>Index of the endif line of an ifdef block.</summary>
+            internal int EndIndex { get; }
+        }
+
+        /// <summary>
+        /// Finds the extent of one block. Nested directives deepen the
+        /// count. An elif line is never special, so it stays part of the
+        /// body before an else (fact 11).
+        /// </summary>
+        private static BlockExtent FindBlockExtent(WalkState state, int startIndex, LockedBlockKind kind)
+        {
+            if (kind == LockedBlockKind.Ifex)
+            {
+                var depth = 1;
+                for (var i = startIndex + 1; i < state.OriginalLines.Count; i++)
+                {
+                    var trimmed = state.OriginalLines[i].Text.Trim();
+                    if (IsIfexStart(trimmed))
+                    {
+                        depth++;
+                        continue;
+                    }
+
+                    if (IsEndex(trimmed))
+                    {
+                        depth--;
+                        if (depth == 0)
+                        {
+                            return new BlockExtent(startIndex + 1, i, -1, i);
+                        }
+                    }
+                }
+
+                throw new RefusalException(BlockUnclosedDetail, state.OriginalLines[startIndex].Number);
+            }
+
+            var ifDepth = 1;
+            var elseIndex = -1;
+            for (var i = startIndex + 1; i < state.OriginalLines.Count; i++)
+            {
+                var first = FirstToken(state.OriginalLines[i].Text.Trim());
+                if (first == "#ifdef" || first == "#ifndef" || first == "#if")
+                {
+                    ifDepth++;
+                    continue;
+                }
+
+                if (first == "#endif")
+                {
+                    ifDepth--;
+                    if (ifDepth == 0)
+                    {
+                        return new BlockExtent(startIndex + 1, elseIndex < 0 ? i : elseIndex, elseIndex, i);
+                    }
+
+                    continue;
+                }
+
+                if (first == "#else" && ifDepth == 1 && elseIndex < 0)
+                {
+                    elseIndex = i;
+                }
+            }
+
+            throw new RefusalException(BlockUnclosedDetail, state.OriginalLines[startIndex].Number);
+        }
+
+        /// <summary>
+        /// One candidate of the block resolution with its walk position
+        /// inside the lookahead growth (A3.7).
+        /// </summary>
+        private sealed class BlockCandidate
+        {
+            internal BlockCandidate(WalkState state)
+            {
+                State = state;
+            }
+
+            internal WalkState State { get; }
+
+            internal bool Dead { get; set; }
+
+            internal bool AtEnd { get; set; }
+        }
+
+        /// <summary>
+        /// Decides one block by two hypotheses (A3.7). The kept hypothesis
+        /// walks the directive line, the body, and the endif line. The
+        /// removed hypothesis skips the block and walks only the else body
+        /// of an ifdef block. Each trial works on a clone, so the losing
+        /// outcome commits nothing. When both align, a lookahead window of
+        /// surviving lines decides. The window grows on a tie. A tie at
+        /// the end of the file refuses.
+        /// </summary>
+        private static void ResolveBlock(WalkState state, int startIndex, LockedBlockKind kind, string conditionOrKeyword)
+        {
+            var startLine = state.OriginalLines[startIndex];
+            var extent = FindBlockExtent(state, startIndex, kind);
+            var enclosingLookahead = state.LookaheadRemaining;
+            var inheritedBoundary = state.GrowthBoundary;
+
+            // A trial must walk its whole body. The enclosing window count
+            // returns after the adoption. The trials bound every nested
+            // lookahead at this block, because the survival of the lines
+            // past the block is the enclosing decision, not this one.
+            state.LookaheadRemaining = -1;
+            WalkState keptResult = null;
+            try
+            {
+                var kept = state.Clone();
+                kept.GrowthBoundary = extent.EndIndex;
+                if (kind != LockedBlockKind.Ifex)
+                {
+                    WalkOrdinaryLine(kept, startIndex);
+                }
+
+                if (extent.BodyEnd > extent.BodyStart)
+                {
+                    WalkRange(kept, extent.BodyStart, extent.BodyEnd);
+                }
+
+                if (kind != LockedBlockKind.Ifex)
+                {
+                    if (extent.ElseIndex >= 0)
+                    {
+                        WalkOrdinaryLine(kept, extent.ElseIndex);
+                        if (extent.EndIndex > extent.ElseIndex + 1)
+                        {
+                            WalkRange(kept, extent.ElseIndex + 1, extent.EndIndex);
+                        }
+                    }
+
+                    WalkOrdinaryLine(kept, extent.EndIndex);
+                }
+
+                keptResult = kept;
+                if (keptResult.OriginalIndex < extent.EndIndex + 1)
+                {
+                    keptResult.OriginalIndex = extent.EndIndex + 1;
+                }
+            }
+            catch (RefusalException)
+            {
+            }
+
+            WalkState removedResult = null;
+            try
+            {
+                var removed = state.Clone();
+                removed.GrowthBoundary = extent.EndIndex;
+                RecordSkippedBlocks(removed, extent.BodyStart, extent.ElseIndex < 0 ? extent.EndIndex : extent.ElseIndex);
+                if (kind != LockedBlockKind.Ifex
+                    && extent.ElseIndex >= 0
+                    && extent.EndIndex > extent.ElseIndex + 1)
+                {
+                    WalkRange(removed, extent.ElseIndex + 1, extent.EndIndex);
+                }
+
+                removedResult = removed;
+                removedResult.OriginalIndex = extent.EndIndex + 1;
+            }
+            catch (RefusalException)
+            {
+            }
+
+            var candidates = new List<BlockCandidate>();
+            if (keptResult != null)
+            {
+                candidates.Add(new BlockCandidate(keptResult));
+            }
+
+            if (removedResult != null)
+            {
+                candidates.Add(new BlockCandidate(removedResult));
+            }
+
+            if (candidates.Count == 0)
+            {
+                state.LookaheadRemaining = enclosingLookahead;
+                throw new RefusalException(BlockAlignmentDetail, startLine.Number);
+            }
+
+            // Both outcomes consume nothing when the body holds no
+            // surviving line. The block is then unobservable (A3.7).
+            var bodySurviving = BodyHasSurvivingLine(state, extent.BodyStart, extent.BodyEnd);
+            var winner = candidates[0].State;
+            var decidedByLookahead = false;
+            if (candidates.Count == 2 && bodySurviving)
+            {
+                decidedByLookahead = true;
+                while (true)
+                {
+                    foreach (var candidate in candidates)
+                    {
+                        if (candidate.Dead || candidate.AtEnd)
+                        {
+                            continue;
+                        }
+
+                        // The lookahead judges the lines after this block.
+                        // Their survival follows from the enclosing block,
+                        // so the walk stops at the inherited boundary.
+                        candidate.State.GrowthBoundary = inheritedBoundary;
+                        candidate.State.LookaheadRemaining = LookaheadWindow;
+                        try
+                        {
+                            var growthEnd = candidate.State.GrowthBoundary < 0
+                                ? candidate.State.OriginalLines.Count
+                                : candidate.State.GrowthBoundary;
+                            WalkRange(candidate.State, candidate.State.OriginalIndex, growthEnd);
+                        }
+                        catch (RefusalException)
+                        {
+                            candidate.Dead = true;
+                            continue;
+                        }
+
+                        if (candidate.State.LookaheadRemaining > 0)
+                        {
+                            // The walk ended before the window ran out, so
+                            // the candidate reached the end of the walk
+                            // range.
+                            candidate.AtEnd = true;
+                        }
+                    }
+
+                    candidates.RemoveAll(candidate => candidate.Dead);
+                    if (candidates.Count == 0)
+                    {
+                        state.LookaheadRemaining = enclosingLookahead;
+                        throw new RefusalException(BlockAlignmentDetail, startLine.Number);
+                    }
+
+                    if (candidates.Count == 1)
+                    {
+                        winner = candidates[0].State;
+                        break;
+                    }
+
+                    var allAtEnd = true;
+                    foreach (var candidate in candidates)
+                    {
+                        if (!candidate.AtEnd)
+                        {
+                            allAtEnd = false;
+                            break;
+                        }
+                    }
+
+                    if (allAtEnd)
+                    {
+                        state.LookaheadRemaining = enclosingLookahead;
+                        throw new RefusalException(BlockTieDetail, startLine.Number);
+                    }
+                }
+            }
+
+            LockedBlockOutcome outcome;
+            if (candidates.Count == 2 && !bodySurviving)
+            {
+                outcome = LockedBlockOutcome.Unobservable;
+            }
+            else if (!decidedByLookahead)
+            {
+                outcome = keptResult != null ? LockedBlockOutcome.Kept : LockedBlockOutcome.Removed;
+            }
+            else
+            {
+                outcome = ReferenceEquals(winner, keptResult) ? LockedBlockOutcome.Kept : LockedBlockOutcome.Removed;
+            }
+
+            // The record holds the outcome with its condition or keyword
+            // text and the 1 based original line of the block start. It
+            // lands at the position of the block start, so the nested
+            // records of the adopted winner follow it (A3.7, A4.4).
+            var recordStart = state.Blocks.Count;
+            winner.Blocks.Insert(recordStart, new LockedBlockRecord(kind, outcome, conditionOrKeyword, startLine.Number));
+            state.AdoptFrom(winner);
+            state.LookaheadRemaining = enclosingLookahead;
+            state.GrowthBoundary = inheritedBoundary;
+            if (state.OriginalIndex < extent.EndIndex + 1)
+            {
+                state.OriginalIndex = extent.EndIndex + 1;
+            }
+        }
+
+        /// <summary>
+        /// Records every nested block start inside a skipped removed body.
+        /// A block inside a removed block is never evaluated (fact 9), so
+        /// the record only marks it NotEvaluated (A3.7).
+        /// </summary>
+        private static void RecordSkippedBlocks(WalkState state, int bodyStart, int bodyEnd)
+        {
+            var inBlockComment = false;
+            for (var i = bodyStart; i < bodyEnd; i++)
+            {
+                var trimmed = state.OriginalLines[i].Text.Trim();
+                if (inBlockComment)
+                {
+                    if (trimmed.EndsWith("*/", StringComparison.Ordinal))
+                    {
+                        inBlockComment = false;
+                    }
+
+                    continue;
+                }
+
+                if (trimmed.StartsWith("/*", StringComparison.Ordinal))
+                {
+                    if (!trimmed.EndsWith("*/", StringComparison.Ordinal))
+                    {
+                        inBlockComment = true;
+                    }
+
+                    continue;
+                }
+
+                if (TryBlockStart(trimmed, out var kind, out var text))
+                {
+                    state.Blocks.Add(new LockedBlockRecord(
+                        kind, LockedBlockOutcome.NotEvaluated, text, state.OriginalLines[i].Number));
+                }
+            }
+        }
+
+        /// <summary>
+        /// Reports whether the block body holds at least one line that
+        /// survives the deletion rules (A3.7). The rules mirror the drop
+        /// paths of the walk.
+        /// </summary>
+        private static bool BodyHasSurvivingLine(WalkState state, int bodyStart, int bodyEnd)
+        {
+            var inBlockComment = false;
+            for (var i = bodyStart; i < bodyEnd; i++)
+            {
+                var text = state.OriginalLines[i].Text;
+                var trimmed = text.Trim();
+                if (inBlockComment)
+                {
+                    if (trimmed.EndsWith("*/", StringComparison.Ordinal))
+                    {
+                        inBlockComment = false;
+                    }
+
+                    continue;
+                }
+
+                if (trimmed.StartsWith("/*", StringComparison.Ordinal))
+                {
+                    if (!trimmed.EndsWith("*/", StringComparison.Ordinal))
+                    {
+                        inBlockComment = true;
+                    }
+
+                    continue;
+                }
+
+                if (trimmed.StartsWith("//", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (trimmed.StartsWith("#pragma shader_feature", StringComparison.Ordinal))
+                {
                     continue;
                 }
 
                 if (state.InProgram)
                 {
-                    // The branch markers are substrings that the vendor
-                    // deletes on program lines (fact 13). A line that
-                    // turns whitespace-only drops (A3.3).
-                    var edited = line.Text
+                    var edited = text
                         .Replace("UNITY_BRANCH", string.Empty)
                         .Replace("[branch]", string.Empty);
                     if (edited.Trim().Length == 0)
                     {
-                        origIndex++;
                         continue;
                     }
-
-                    MatchProgramLine(state, edited, line.Number);
-                    state.SurvivingLines.Add(line.Text);
-                    state.LastConsumedOriginalNumber = line.Number;
-                    state.GenIndex++;
-                    origIndex++;
-                    continue;
                 }
 
-                if (propertiesLines.Contains(origIndex))
-                {
-                    MatchPropertiesLine(state, line);
-                }
-                else
-                {
-                    MatchShaderLabLine(state, line);
-                }
-
-                state.SurvivingLines.Add(line.Text);
-                state.LastConsumedOriginalNumber = line.Number;
-                state.GenIndex++;
-                origIndex++;
+                return true;
             }
 
-            return state.GenIndex;
+            return false;
         }
 
         private static void ExpectGeneratedLine(WalkState state, LineRef line)
@@ -704,7 +1200,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
             var edited = ApplyLockButtonDefault(line.Text);
             var gen = state.GeneratedLines[state.GenIndex].Text;
-            var hasName = TryPropertiesName(line.Text, out var name, out _);
+            var hasName = TryPropertiesName(line.Text, out var name, out var nameStart);
             if (hasName && state.Declared.ContainsKey(name))
             {
                 var decided = state.RenamedDecided.TryGetValue(name, out var value) ? (bool?)value : null;
@@ -720,16 +1216,41 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
                 if (decided == true)
                 {
-                    if (gen != RenameLineWithNames(state, edited, null))
+                    if (gen == RenameLineWithNames(state, edited, null))
                     {
-                        throw new RefusalException(LineMismatchDetail, line.Number);
+                        return;
                     }
 
-                    return;
+                    // The duplicate set keeps the plain line and inserts
+                    // the renamed copy after it (fact 7, A3.6).
+                    if (state.Suffix != null
+                        && gen == edited
+                        && KeepsPlainAndRenamedCopy(line.Text, nameStart, name.Length)
+                        && RenamedCopyFollows(state, edited, name))
+                    {
+                        state.GenIndex++;
+                        return;
+                    }
+
+                    throw new RefusalException(LineMismatchDetail, line.Number);
                 }
 
                 if (gen == edited)
                 {
+                    // The duplicate set keeps the plain line and inserts
+                    // the renamed copy right after it. Only a one line
+                    // definition with a one word type gets the copy.
+                    // Range types and multi line definitions keep only the
+                    // renamed line (fact 7, A3.6).
+                    if (state.Suffix != null
+                        && KeepsPlainAndRenamedCopy(line.Text, nameStart, name.Length)
+                        && RenamedCopyFollows(state, edited, name))
+                    {
+                        state.GenIndex++;
+                        state.DecideRenamed(name);
+                        return;
+                    }
+
                     state.DecideNotRenamed(name);
                     return;
                 }
@@ -746,6 +1267,94 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
 
             throw new RefusalException(LineMismatchDetail, line.Number);
+        }
+
+        /// <summary>
+        /// Reports whether the next generated line is the exact renamed
+        /// copy of the plain line (A3.6).
+        /// </summary>
+        private static bool RenamedCopyFollows(WalkState state, string editedLine, string name)
+        {
+            var next = state.GenIndex + 1;
+            if (next >= state.GeneratedLines.Count)
+            {
+                return false;
+            }
+
+            return state.GeneratedLines[next].Text == RenameLineWithNames(state, editedLine, new[] { name });
+        }
+
+        /// <summary>
+        /// Reports whether the Properties definition is one line with a
+        /// one word type. Only such a definition keeps the plain line and
+        /// the renamed copy. A Range type and a multi line definition keep
+        /// only the renamed line (fact 7, A3.6).
+        /// </summary>
+        private static bool KeepsPlainAndRenamedCopy(string lineText, int nameStart, int nameLength)
+        {
+            var open = lineText.IndexOf('(', nameStart + nameLength);
+            if (open < 0)
+            {
+                return false;
+            }
+
+            var depth = 0;
+            var close = -1;
+            for (var i = open; i < lineText.Length; i++)
+            {
+                if (lineText[i] == '(')
+                {
+                    depth++;
+                    continue;
+                }
+
+                if (lineText[i] == ')')
+                {
+                    depth--;
+                    if (depth == 0)
+                    {
+                        close = i;
+                        break;
+                    }
+                }
+            }
+
+            if (close < 0)
+            {
+                // The display text closes on a later line, so the
+                // definition spans lines.
+                return false;
+            }
+
+            if (lineText.IndexOf('=', close + 1) < 0)
+            {
+                // The default value sits on a later line, so the
+                // definition spans lines.
+                return false;
+            }
+
+            var inner = lineText.Substring(open + 1, close - open - 1);
+            var comma = inner.IndexOf(',');
+            if (comma < 0)
+            {
+                return false;
+            }
+
+            var type = inner.Substring(comma + 1).TrimStart();
+            var typeEnd = 0;
+            while (typeEnd < type.Length && (char.IsLetterOrDigit(type[typeEnd]) || type[typeEnd] == '_'))
+            {
+                typeEnd++;
+            }
+
+            if (typeEnd == 0)
+            {
+                return false;
+            }
+
+            // One word means the type token takes the whole rest of the
+            // display text. A Range form holds parentheses after it.
+            return type.Substring(typeEnd).Trim().Length == 0;
         }
 
         private static void MatchShaderLabLine(WalkState state, LineRef line)
@@ -1508,6 +2117,17 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 throw new RefusalException(UnconsumedLineDetail, state.LastConsumedOriginalNumber);
             }
 
+            // Every program block must carry the optimizer define. A lock
+            // made under another render pipeline bakes nothing and refuses
+            // (A2.4).
+            foreach (var run in state.DefineRuns)
+            {
+                if (!run.Contains("OPTIMIZER_ENABLED"))
+                {
+                    throw new RefusalException(OptimizerMissingDetail, 0);
+                }
+            }
+
             // The vendor writes enum text only for a baked property
             // (fact 13). A5.6 also accepts enum text for a property with
             // no surviving use, so only a present non literal use refuses.
@@ -1548,7 +2168,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 new Dictionary<string, int>(state.EnumValues),
                 new Dictionary<string, string>(state.BracketReads),
                 defineRuns,
-                new List<LockedBlockRecord>(),
+                new List<LockedBlockRecord>(state.Blocks),
                 string.Join("\n", state.SurvivingLines));
         }
 
@@ -1563,7 +2183,31 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 && SamePairs(left.BakedLiterals, right.BakedLiterals)
                 && SamePairs(left.EnumValues, right.EnumValues)
                 && SamePairs(left.BracketReads, right.BracketReads)
-                && SameRuns(left.DefineRuns, right.DefineRuns);
+                && SameRuns(left.DefineRuns, right.DefineRuns)
+                && SameBlocks(left.Blocks, right.Blocks);
+        }
+
+        private static bool SameBlocks(
+            IReadOnlyList<LockedBlockRecord> left,
+            IReadOnlyList<LockedBlockRecord> right)
+        {
+            if (left.Count != right.Count)
+            {
+                return false;
+            }
+
+            for (var i = 0; i < left.Count; i++)
+            {
+                if (left[i].Kind != right[i].Kind
+                    || left[i].Outcome != right[i].Outcome
+                    || left[i].OriginalLine != right[i].OriginalLine
+                    || !string.Equals(left[i].ConditionOrKeyword, right[i].ConditionOrKeyword, StringComparison.Ordinal))
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         private static bool SamePairs<T>(
@@ -2006,14 +2650,18 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 }
 
                 IntDeclared = FindIntDeclared(originalLines, Declared);
-                RenamedDecided = new Dictionary<string, bool>(StringComparer.Ordinal);
-                RenamedNames = new Dictionary<string, string>(StringComparer.Ordinal);
-                MatchKinds = new Dictionary<string, MatchKind>(StringComparer.Ordinal);
-                Literals = new Dictionary<string, string>(StringComparer.Ordinal);
-                EnumValues = new Dictionary<string, int>(StringComparer.Ordinal);
-                BracketReads = new Dictionary<string, string>(StringComparer.Ordinal);
-                DefineRuns = new List<List<string>>();
-                SurvivingLines = new List<string>();
+                renamedDecided = new Dictionary<string, bool>(StringComparer.Ordinal);
+                renamedNames = new Dictionary<string, string>(StringComparer.Ordinal);
+                matchKinds = new Dictionary<string, MatchKind>(StringComparer.Ordinal);
+                literals = new Dictionary<string, string>(StringComparer.Ordinal);
+                enumValues = new Dictionary<string, int>(StringComparer.Ordinal);
+                bracketReads = new Dictionary<string, string>(StringComparer.Ordinal);
+                defineRuns = new List<List<string>>();
+                survivingLines = new List<string>();
+                blocks = new List<LockedBlockRecord>();
+                PropertiesLineSet = new HashSet<int>(PropertiesLineIndices(originalLines));
+                LookaheadRemaining = -1;
+                GrowthBoundary = -1;
             }
 
             internal string OriginalText { get; }
@@ -2034,29 +2682,172 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
             internal HashSet<string> IntDeclared { get; }
 
-            internal Dictionary<string, bool> RenamedDecided { get; }
+            /// <summary>The indices of the Properties block lines.</summary>
+            internal HashSet<int> PropertiesLineSet { get; }
 
-            internal Dictionary<string, string> RenamedNames { get; }
+            private Dictionary<string, bool> renamedDecided;
 
-            internal Dictionary<string, MatchKind> MatchKinds { get; }
+            internal Dictionary<string, bool> RenamedDecided
+            {
+                get { return renamedDecided; }
+            }
 
-            internal Dictionary<string, string> Literals { get; }
+            private Dictionary<string, string> renamedNames;
 
-            internal Dictionary<string, int> EnumValues { get; }
+            internal Dictionary<string, string> RenamedNames
+            {
+                get { return renamedNames; }
+            }
 
-            internal Dictionary<string, string> BracketReads { get; }
+            private Dictionary<string, MatchKind> matchKinds;
 
-            internal List<List<string>> DefineRuns { get; }
+            internal Dictionary<string, MatchKind> MatchKinds
+            {
+                get { return matchKinds; }
+            }
+
+            private Dictionary<string, string> literals;
+
+            internal Dictionary<string, string> Literals
+            {
+                get { return literals; }
+            }
+
+            private Dictionary<string, int> enumValues;
+
+            internal Dictionary<string, int> EnumValues
+            {
+                get { return enumValues; }
+            }
+
+            private Dictionary<string, string> bracketReads;
+
+            internal Dictionary<string, string> BracketReads
+            {
+                get { return bracketReads; }
+            }
+
+            private List<List<string>> defineRuns;
+
+            internal List<List<string>> DefineRuns
+            {
+                get { return defineRuns; }
+            }
 
             internal List<string> OpenDefineRun { get; set; }
 
-            internal List<string> SurvivingLines { get; }
+            // The surviving line list is shared between hypothesis clones
+            // until one of them adds a line. Copy on write keeps the clone
+            // cost flat for the big shader texts (A3.7).
+            private List<string> survivingLines;
+
+            private bool survivingLinesShared;
+
+            internal List<string> SurvivingLines
+            {
+                get
+                {
+                    if (survivingLinesShared)
+                    {
+                        survivingLines = new List<string>(survivingLines);
+                        survivingLinesShared = false;
+                    }
+
+                    return survivingLines;
+                }
+            }
+
+            // The block record list shares the same copy on write rule.
+            private List<LockedBlockRecord> blocks;
+
+            private bool blocksShared;
+
+            internal List<LockedBlockRecord> Blocks
+            {
+                get
+                {
+                    if (blocksShared)
+                    {
+                        blocks = new List<LockedBlockRecord>(blocks);
+                        blocksShared = false;
+                    }
+
+                    return blocks;
+                }
+            }
+
+            /// <summary>The index of the next unwalked original line.</summary>
+            internal int OriginalIndex { get; set; }
+
+            /// <summary>
+            /// Remaining surviving lines of the active lookahead window.
+            /// Negative when no window is active (A3.7).
+            /// </summary>
+            internal int LookaheadRemaining { get; set; }
+
+            /// <summary>
+            /// The index that bounds a lookahead walk. A nested block never
+            /// judges lines whose survival the enclosing block decides.
+            /// Negative when no boundary exists (A3.7).
+            /// </summary>
+            internal int GrowthBoundary { get; set; }
 
             internal int GenIndex { get; set; }
 
             internal int LastConsumedOriginalNumber { get; set; }
 
             internal bool InProgram { get; set; }
+
+            /// <summary>
+            /// Copies the walk state for one block hypothesis trial. The
+            /// line lists and the property tables are immutable after the
+            /// start, so the clone shares them. The mutable containers get
+            /// fresh copies (A3.7).
+            /// </summary>
+            internal WalkState Clone()
+            {
+                var copy = (WalkState)MemberwiseClone();
+                copy.renamedDecided = new Dictionary<string, bool>(renamedDecided, StringComparer.Ordinal);
+                copy.renamedNames = new Dictionary<string, string>(renamedNames, StringComparer.Ordinal);
+                copy.matchKinds = new Dictionary<string, MatchKind>(matchKinds, StringComparer.Ordinal);
+                copy.literals = new Dictionary<string, string>(literals, StringComparer.Ordinal);
+                copy.enumValues = new Dictionary<string, int>(enumValues, StringComparer.Ordinal);
+                copy.bracketReads = new Dictionary<string, string>(bracketReads, StringComparer.Ordinal);
+                copy.defineRuns = new List<List<string>>(defineRuns);
+                copy.OpenDefineRun = OpenDefineRun == null ? null : new List<string>(OpenDefineRun);
+                copy.survivingLines = survivingLines;
+                copy.survivingLinesShared = true;
+                survivingLinesShared = true;
+                copy.blocks = blocks;
+                copy.blocksShared = true;
+                blocksShared = true;
+                return copy;
+            }
+
+            /// <summary>
+            /// Takes every mutable field from the winning hypothesis trial
+            /// (A3.7).
+            /// </summary>
+            internal void AdoptFrom(WalkState winner)
+            {
+                renamedDecided = winner.renamedDecided;
+                renamedNames = winner.renamedNames;
+                matchKinds = winner.matchKinds;
+                literals = winner.literals;
+                enumValues = winner.enumValues;
+                bracketReads = winner.bracketReads;
+                defineRuns = winner.defineRuns;
+                OpenDefineRun = winner.OpenDefineRun;
+                survivingLines = winner.survivingLines;
+                survivingLinesShared = winner.survivingLinesShared;
+                blocks = winner.blocks;
+                blocksShared = winner.blocksShared;
+                OriginalIndex = winner.OriginalIndex;
+                LookaheadRemaining = winner.LookaheadRemaining;
+                GenIndex = winner.GenIndex;
+                LastConsumedOriginalNumber = winner.LastConsumedOriginalNumber;
+                InProgram = winner.InProgram;
+            }
 
             internal bool IsTexture(string name)
             {

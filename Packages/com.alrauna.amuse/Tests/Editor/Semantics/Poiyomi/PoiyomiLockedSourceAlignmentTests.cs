@@ -36,6 +36,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         private const string IncludeDetail =
             "The original text includes a file outside the Unity include set.";
 
+        private const string BlockTieDetail =
+            "A block outcome stays undecided.";
+
+        private const string OptimizerMissingDetail =
+            "A program block misses the optimizer define.";
+
         // --- Falsifier 1: an implementation that folds inner whitespace ---
         // An implementation that trims or folds runs of spaces inside a line
         // before the compare aligns the mutated pair and fails the refusal
@@ -239,6 +245,81 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             return (original, generated);
         }
 
+        /// <summary>
+        /// Builds a one pass pair where the program body of the generated
+        /// text is written by hand. The block markers are comment lines, so
+        /// a removed or kept block only changes which body lines survive.
+        /// </summary>
+        private static (string Original, string Generated) ProgramPair(
+            string propertiesLines,
+            string programLines,
+            string generatedProgramLines)
+        {
+            var originalLines = new List<string>
+            {
+                "Shader \"Custom/Small\"",
+                "{",
+                "    Properties",
+                "    {",
+                "        [ThryShaderOptimizerLockButton] _Lock (\"Lock\", Float) = 0"
+            };
+            if (!string.IsNullOrEmpty(propertiesLines))
+            {
+                originalLines.AddRange(propertiesLines.Split('\n'));
+            }
+
+            originalLines.Add("    }");
+            originalLines.Add("    SubShader");
+            originalLines.Add("    {");
+            originalLines.Add("        Tags { \"RenderType\" = \"Opaque\" }");
+            originalLines.Add("        Pass");
+            originalLines.Add("        {");
+            originalLines.Add("            CGPROGRAM");
+            originalLines.Add("            #pragma vertex vert");
+            if (!string.IsNullOrEmpty(programLines))
+            {
+                originalLines.AddRange(programLines.Split('\n'));
+            }
+
+            originalLines.Add("            ENDCG");
+            originalLines.Add("        }");
+            originalLines.Add("    }");
+            originalLines.Add("}");
+
+            var generatedLines = new List<string>
+            {
+                "Shader \"Hidden/Locked/Custom/Small/k1\"",
+                "{",
+                "    Properties",
+                "    {",
+                "        [ThryShaderOptimizerLockButton] _Lock (\"Lock\", Float) = 1"
+            };
+            if (!string.IsNullOrEmpty(propertiesLines))
+            {
+                generatedLines.AddRange(propertiesLines.Split('\n'));
+            }
+
+            generatedLines.Add("    }");
+            generatedLines.Add("    SubShader");
+            generatedLines.Add("    {");
+            generatedLines.Add("        Tags { \"RenderType\" = \"Opaque\" }");
+            generatedLines.Add("        Pass");
+            generatedLines.Add("        {");
+            generatedLines.Add("            CGPROGRAM");
+            generatedLines.Add(" #define OPTIMIZER_ENABLED ");
+            generatedLines.Add("            #pragma vertex vert");
+            if (!string.IsNullOrEmpty(generatedProgramLines))
+            {
+                generatedLines.AddRange(generatedProgramLines.Split('\n'));
+            }
+
+            generatedLines.Add("            ENDCG");
+            generatedLines.Add("        }");
+            generatedLines.Add("    }");
+            generatedLines.Add("}");
+            return (Join(originalLines), Join(generatedLines));
+        }
+
         private static LockedSourceProperty Prop(string name, ShaderPropertyType type)
         {
             return new LockedSourceProperty(name, type, false, false, 0f);
@@ -328,6 +409,25 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             for (var i = 0; i < left.DefineRuns.Count; i++)
             {
                 if (!left.DefineRuns[i].SequenceEqual(right.DefineRuns[i]))
+                {
+                    return false;
+                }
+            }
+
+            if (left.Blocks.Count != right.Blocks.Count)
+            {
+                return false;
+            }
+
+            for (var i = 0; i < left.Blocks.Count; i++)
+            {
+                if (left.Blocks[i].Kind != right.Blocks[i].Kind
+                    || left.Blocks[i].Outcome != right.Blocks[i].Outcome
+                    || left.Blocks[i].OriginalLine != right.Blocks[i].OriginalLine
+                    || !string.Equals(
+                        left.Blocks[i].ConditionOrKeyword,
+                        right.Blocks[i].ConditionOrKeyword,
+                        System.StringComparison.Ordinal))
                 {
                     return false;
                 }
@@ -823,6 +923,396 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Assert.That(result.Succeeded, Is.False);
             Assert.That(result.Source, Is.Null);
             Assert.That(result.RefusalDetail, Is.EqualTo(SuffixAmbiguousDetail));
+        }
+
+        [Test]
+        public void KeptIfexBlockIsRecordedKept()
+        {
+            var (original, generated) = ProgramPair(
+                "        _A (\"A\", Float) = 0",
+                "            //ifex _A==0\n            o.Albedo = _A;\n            //endex\n            o.Alpha = 1;",
+                "            o.Albedo = _A;\n            o.Alpha = 1;");
+            var result = Align(original, generated, new[] { Prop("_A", ShaderPropertyType.Float) });
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Blocks.Count, Is.EqualTo(1));
+            var block = result.Source.Blocks[0];
+            Assert.That(block.Kind, Is.EqualTo(LockedBlockKind.Ifex));
+            Assert.That(block.Outcome, Is.EqualTo(LockedBlockOutcome.Kept));
+            Assert.That(block.ConditionOrKeyword, Is.EqualTo("_A==0"));
+            Assert.That(block.OriginalLine, Is.EqualTo(LineOf(original, "//ifex _A==0")));
+            Assert.That(result.Source.States["_A"], Is.EqualTo(LockedPropertyState.Live));
+        }
+
+        [Test]
+        public void RemovedIfexBlockIsRecordedRemoved()
+        {
+            var (original, generated) = ProgramPair(
+                "        _A (\"A\", Float) = 0",
+                "            //ifex _A==0\n            o.Albedo = _A;\n            //endex\n            o.Alpha = 1;",
+                "            o.Alpha = 1;");
+            var result = Align(original, generated, new[] { Prop("_A", ShaderPropertyType.Float) });
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Blocks.Count, Is.EqualTo(1));
+            var block = result.Source.Blocks[0];
+            Assert.That(block.Kind, Is.EqualTo(LockedBlockKind.Ifex));
+            Assert.That(block.Outcome, Is.EqualTo(LockedBlockOutcome.Removed));
+            Assert.That(block.ConditionOrKeyword, Is.EqualTo("_A==0"));
+            Assert.That(block.OriginalLine, Is.EqualTo(LineOf(original, "//ifex _A==0")));
+            Assert.That(result.Source.States["_A"], Is.EqualTo(LockedPropertyState.Unused));
+        }
+
+        [Test]
+        public void IfexBlockWithOnlyCommentsIsUnobservable()
+        {
+            var (original, generated) = ProgramPair(
+                "        _A (\"A\", Float) = 0",
+                "            //ifex _A==0\n            // just a note\n            //endex\n            o.Alpha = 1;",
+                "            o.Alpha = 1;");
+            var result = Align(original, generated, new[] { Prop("_A", ShaderPropertyType.Float) });
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Blocks.Count, Is.EqualTo(1));
+            Assert.That(result.Source.Blocks[0].Outcome, Is.EqualTo(LockedBlockOutcome.Unobservable));
+            Assert.That(result.Source.Blocks[0].ConditionOrKeyword, Is.EqualTo("_A==0"));
+        }
+
+        [Test]
+        public void NestedBlockInsideARemovedBlockIsNotEvaluated()
+        {
+            var (original, generated) = ProgramPair(
+                "        _A (\"A\", Float) = 0\n        _B (\"B\", Float) = 0",
+                "            //ifex _A==0\n            o.Albedo = _A;\n            //ifex _B==0"
+                    + "\n            o.Albedo = _B;\n            //endex\n            //endex\n            o.Alpha = 1;",
+                "            o.Alpha = 1;");
+            var properties = new[]
+            {
+                Prop("_A", ShaderPropertyType.Float),
+                Prop("_B", ShaderPropertyType.Float)
+            };
+            var result = Align(original, generated, properties);
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Blocks.Count, Is.EqualTo(2));
+            Assert.That(result.Source.Blocks[0].Kind, Is.EqualTo(LockedBlockKind.Ifex));
+            Assert.That(result.Source.Blocks[0].Outcome, Is.EqualTo(LockedBlockOutcome.Removed));
+            Assert.That(result.Source.Blocks[0].ConditionOrKeyword, Is.EqualTo("_A==0"));
+            Assert.That(result.Source.Blocks[0].OriginalLine, Is.EqualTo(LineOf(original, "//ifex _A==0")));
+            Assert.That(result.Source.Blocks[1].Outcome, Is.EqualTo(LockedBlockOutcome.NotEvaluated));
+            Assert.That(result.Source.Blocks[1].ConditionOrKeyword, Is.EqualTo("_B==0"));
+            Assert.That(result.Source.Blocks[1].OriginalLine, Is.EqualTo(LineOf(original, "//ifex _B==0")));
+            Assert.That(result.Source.States["_A"], Is.EqualTo(LockedPropertyState.Unused));
+            Assert.That(result.Source.States["_B"], Is.EqualTo(LockedPropertyState.Unused));
+        }
+
+        [Test]
+        public void BlockWhoseBodyRepeatsTheFollowingTextGrowsTheLookahead()
+        {
+            // The body line equals the next 10 surviving lines and then the
+            // text differs. A fixed 8 line window ties or picks Kept. The
+            // grown window finds the difference and records Removed
+            // (A3.7, Review Focus 2).
+            var repeat = "            o.Albedo = _A;";
+            var program = new List<string> { "            //ifex _A==0", repeat, "            //endex" };
+            var generatedProgram = new List<string>();
+            for (var i = 0; i < 10; i++)
+            {
+                program.Add(repeat);
+                generatedProgram.Add(repeat);
+            }
+
+            program.Add("            o.Alpha = 1;");
+            generatedProgram.Add("            o.Alpha = 1;");
+            var (original, generated) = ProgramPair(
+                "        _A (\"A\", Float) = 0",
+                Join(program),
+                Join(generatedProgram));
+            var result = Align(original, generated, new[] { Prop("_A", ShaderPropertyType.Float) });
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Blocks.Count, Is.EqualTo(1));
+            Assert.That(result.Source.Blocks[0].Outcome, Is.EqualTo(LockedBlockOutcome.Removed));
+            Assert.That(result.Source.States["_A"], Is.EqualTo(LockedPropertyState.Live));
+        }
+
+        [Test]
+        public void TieAtTheEndOfTheFileRefuses()
+        {
+            // Both outcomes consume the same surviving lines and both stay
+            // consistent until the text ends. The outcome never follows
+            // from the text, so the aligner refuses (A3.7). The texts end
+            // inside the program on purpose, so no line after the repeated
+            // lines breaks the tie.
+            var repeat = "            o.Albedo = _A;";
+            var head = Join(new[]
+            {
+                "Shader \"Custom/Small\"",
+                "{",
+                "    Properties",
+                "    {",
+                "        [ThryShaderOptimizerLockButton] _Lock (\"Lock\", Float) = 0",
+                "        _A (\"A\", Float) = 0",
+                "    }",
+                "    SubShader",
+                "    {",
+                "        Pass",
+                "        {",
+                "            CGPROGRAM",
+                "            //ifex _A==0",
+                repeat,
+                "            //endex",
+                repeat,
+                repeat,
+                repeat
+            });
+            var generatedHead = Join(new[]
+            {
+                "Shader \"Hidden/Locked/Custom/Small/k1\"",
+                "{",
+                "    Properties",
+                "    {",
+                "        [ThryShaderOptimizerLockButton] _Lock (\"Lock\", Float) = 1",
+                "        _A (\"A\", Float) = 0",
+                "    }",
+                "    SubShader",
+                "    {",
+                "        Pass",
+                "        {",
+                "            CGPROGRAM",
+                " #define OPTIMIZER_ENABLED ",
+                repeat,
+                repeat,
+                repeat,
+                repeat
+            });
+            var result = Align(head, generatedHead, new[] { Prop("_A", ShaderPropertyType.Float) });
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(result.Source, Is.Null);
+            Assert.That(result.RefusalDetail, Is.EqualTo(BlockTieDetail));
+        }
+
+        [Test]
+        public void RemovedIfdefKeepsItsElseBody()
+        {
+            var (original, generated) = ProgramPair(
+                "        _P (\"P\", Float) = 0\n        _A (\"A\", Float) = 0",
+                "            #ifndef _K\n            o.Albedo = _P;\n            #else"
+                    + "\n            //ifex _A==0\n            o.Alpha = _A;\n            //endex"
+                    + "\n            o.Albedo = _A;\n            #endif\n            o.Alpha = 1;",
+                "            o.Alpha = _A;\n            o.Albedo = _A;\n            o.Alpha = 1;");
+            var properties = new[]
+            {
+                Prop("_P", ShaderPropertyType.Float),
+                Prop("_A", ShaderPropertyType.Float)
+            };
+            var result = Align(original, generated, properties);
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Blocks.Count, Is.EqualTo(2));
+            Assert.That(result.Source.Blocks[0].Kind, Is.EqualTo(LockedBlockKind.Ifndef));
+            Assert.That(result.Source.Blocks[0].Outcome, Is.EqualTo(LockedBlockOutcome.Removed));
+            Assert.That(result.Source.Blocks[0].ConditionOrKeyword, Is.EqualTo("_K"));
+            Assert.That(result.Source.Blocks[1].Kind, Is.EqualTo(LockedBlockKind.Ifex));
+            Assert.That(result.Source.Blocks[1].Outcome, Is.EqualTo(LockedBlockOutcome.Kept));
+            Assert.That(result.Source.Blocks[1].ConditionOrKeyword, Is.EqualTo("_A==0"));
+            Assert.That(result.Source.States["_P"], Is.EqualTo(LockedPropertyState.Unused));
+            Assert.That(result.Source.States["_A"], Is.EqualTo(LockedPropertyState.Live));
+        }
+
+        [Test]
+        public void IfdefWithAnAmpersandIsNeverStripped()
+        {
+            var program = "            #ifdef _K1 & _K2\n            o.Albedo = _A;\n            #endif\n            o.Alpha = 1;";
+            var (original, generated) = ProgramPair(
+                "        _A (\"A\", Float) = 0",
+                program,
+                program);
+            var result = Align(original, generated, new[] { Prop("_A", ShaderPropertyType.Float) });
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Blocks, Is.Empty);
+            Assert.That(result.Source.SurvivingText, Does.Contain("#ifdef _K1 & _K2"));
+            Assert.That(result.Source.States["_A"], Is.EqualTo(LockedPropertyState.Live));
+        }
+
+        [Test]
+        public void DefineRunIsRecordedPerProgramBlock()
+        {
+            var original = Join(new[]
+            {
+                "Shader \"Custom/Small\"",
+                "{",
+                "    Properties",
+                "    {",
+                "        [ThryShaderOptimizerLockButton] _Lock (\"Lock\", Float) = 0",
+                "        _A (\"A\", Float) = 0",
+                "    }",
+                "    SubShader",
+                "    {",
+                "        Tags { \"RenderType\" = \"Opaque\" }",
+                "        Pass",
+                "        {",
+                "            CGPROGRAM",
+                "            #pragma vertex vert",
+                "            o.Albedo = _A;",
+                "            ENDCG",
+                "        }",
+                "        Pass",
+                "        {",
+                "            CGPROGRAM",
+                "            #pragma vertex vert",
+                "            o.Alpha = _A;",
+                "            ENDCG",
+                "        }",
+                "    }",
+                "}"
+            });
+            var generated = Join(new[]
+            {
+                "Shader \"Hidden/Locked/Custom/Small/k1\"",
+                "{",
+                "    Properties",
+                "    {",
+                "        [ThryShaderOptimizerLockButton] _Lock (\"Lock\", Float) = 1",
+                "        _A (\"A\", Float) = 0",
+                "    }",
+                "    SubShader",
+                "    {",
+                "        Tags { \"RenderType\" = \"Opaque\" }",
+                "        Pass",
+                "        {",
+                "            CGPROGRAM",
+                " #define _FEATURE_ON ",
+                " #define OPTIMIZER_ENABLED ",
+                "            #pragma vertex vert",
+                "            o.Albedo = _A;",
+                "            ENDCG",
+                "        }",
+                "        Pass",
+                "        {",
+                "            CGPROGRAM",
+                " #define OPTIMIZER_ENABLED ",
+                "            #pragma vertex vert",
+                "            o.Alpha = _A;",
+                "            ENDCG",
+                "        }",
+                "    }",
+                "}"
+            });
+            var result = Align(original, generated, new[] { Prop("_A", ShaderPropertyType.Float) });
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.DefineRuns.Count, Is.EqualTo(2));
+            Assert.That(result.Source.DefineRuns[0], Is.EqualTo(new[] { "_FEATURE_ON", "OPTIMIZER_ENABLED" }));
+            Assert.That(result.Source.DefineRuns[1], Is.EqualTo(new[] { "OPTIMIZER_ENABLED" }));
+        }
+
+        [Test]
+        public void DuplicatePropertyLineMustBeTheRenamedCopy()
+        {
+            var propertiesLines = "        _D (\"D\", Float) = 0.5\n        _E (\"E\", Float) = 0";
+            var (original, generated) = SmallPair(
+                propertiesLines,
+                null,
+                "        float _D;\n        o.Albedo = _D;",
+                ("o.Albedo = _D;", "o.Albedo = _D_S;"),
+                ("float _D;", "float _D_S;"),
+                ("        _D (\"D\", Float) = 0.5\n        _E",
+                    "        _D (\"D\", Float) = 0.5\n        _D_S (\"D\", Float) = 0.5\n        _E"));
+            var properties = new[]
+            {
+                Prop("_D", ShaderPropertyType.Float),
+                Prop("_E", ShaderPropertyType.Float)
+            };
+            var result = Align(original, generated, properties);
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Suffix, Is.EqualTo("_S"));
+            Assert.That(result.Source.States["_D"], Is.EqualTo(LockedPropertyState.Renamed));
+            Assert.That(result.Source.RenamedNames["_D"], Is.EqualTo("_D_S"));
+
+            // Any other line after the plain line refuses. The renamed copy
+            // must repeat the plain line byte for byte under the new name.
+            var (mutatedOriginal, mutatedGenerated) = SmallPair(
+                propertiesLines,
+                null,
+                "        float _D;\n        o.Albedo = _D;",
+                ("o.Albedo = _D;", "o.Albedo = _D_S;"),
+                ("float _D;", "float _D_S;"),
+                ("        _D (\"D\", Float) = 0.5\n        _E",
+                    "        _D (\"D\", Float) = 0.5\n        _D_S (\"D\", Float) = 0.9\n        _E"));
+            var mutated = Align(mutatedOriginal, mutatedGenerated, properties);
+            Assert.That(mutated.Succeeded, Is.False);
+            Assert.That(mutated.Source, Is.Null);
+            Assert.That(mutated.RefusalDetail, Is.EqualTo(LineMismatchDetail));
+        }
+
+        [Test]
+        public void RangePropertyInTheDuplicateSetKeepsOnlyTheRenamedLine()
+        {
+            var (original, generated) = SmallPair(
+                "        _R (\"R\", Range(0, 1)) = 0.5",
+                null,
+                "        float _R;\n        o.Albedo = _R;",
+                ("o.Albedo = _R;", "o.Albedo = _R_S;"),
+                ("float _R;", "float _R_S;"),
+                ("_R (\"R\"", "_R_S (\"R\""));
+            var result = Align(original, generated, new[] { Prop("_R", ShaderPropertyType.Float) });
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Suffix, Is.EqualTo("_S"));
+            Assert.That(result.Source.States["_R"], Is.EqualTo(LockedPropertyState.Renamed));
+
+            // A Range definition never keeps the plain line, so a plain
+            // line followed by the renamed copy refuses.
+            var (duplicatedOriginal, duplicatedGenerated) = SmallPair(
+                "        _R (\"R\", Range(0, 1)) = 0.5",
+                null,
+                "        float _R;\n        o.Albedo = _R;",
+                ("o.Albedo = _R;", "o.Albedo = _R_S;"),
+                ("float _R;", "float _R_S;"),
+                ("        _R (\"R\", Range(0, 1)) = 0.5",
+                    "        _R (\"R\", Range(0, 1)) = 0.5\n        _R_S (\"R\", Range(0, 1)) = 0.5"));
+            var duplicated = Align(duplicatedOriginal, duplicatedGenerated, new[] { Prop("_R", ShaderPropertyType.Float) });
+            Assert.That(duplicated.Succeeded, Is.False);
+            Assert.That(duplicated.Source, Is.Null);
+        }
+
+        // --- Falsifier 7: Properties-region rename ---
+        // An implementation that reads the suffix only from program
+        // identifiers and brackets misses the renamed Properties name and
+        // refuses the fixture. The renamed Properties line and the renamed
+        // program uses share one suffix, so the intersection finds it. The
+        // guard aligns the same texts without the rename and proves the
+        // fixture reaches the suffix search.
+
+        [Test]
+        public void PropertiesRegionRenameWithSurvivingProgramUsesFindsTheSuffix()
+        {
+            var (guardOriginal, guardGenerated) = SmallPair(
+                "        _Q (\"Q\", Float) = 0",
+                null,
+                "        float _Q;\n        o.Albedo = _Q;\n        o.Emission = _Q;");
+            var guard = Align(guardOriginal, guardGenerated, new[] { Prop("_Q", ShaderPropertyType.Float) });
+            Assert.That(guard.Succeeded, Is.True, guard.RefusalDetail ?? "refused");
+            Assert.That(guard.Source.Suffix, Is.Null);
+            Assert.That(guard.Source.States["_Q"], Is.EqualTo(LockedPropertyState.Live));
+
+            var (original, generated) = SmallPair(
+                "        _Q (\"Q\", Float) = 0",
+                null,
+                "        float _Q;\n        o.Albedo = _Q;\n        o.Emission = _Q;",
+                ("_Q (\"Q\"", "_Q_Mat (\"Q\""),
+                ("float _Q;", "float _Q_Mat;"),
+                ("o.Albedo = _Q;", "o.Albedo = _Q_Mat;"),
+                ("o.Emission = _Q;", "o.Emission = _Q_Mat;"));
+            var result = Align(original, generated, new[] { Prop("_Q", ShaderPropertyType.Float) });
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Suffix, Is.EqualTo("_Mat"));
+            Assert.That(result.Source.States["_Q"], Is.EqualTo(LockedPropertyState.Renamed));
+            Assert.That(result.Source.RenamedNames["_Q"], Is.EqualTo("_Q_Mat"));
+        }
+
+        [Test]
+        public void ProgramBlockWithoutOptimizerEnabledRefuses()
+        {
+            var (original, generated) = BasePair();
+            generated = generated.Replace(" #define OPTIMIZER_ENABLED \n", string.Empty);
+            var result = Align(original, generated, BaseProperties());
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(result.Source, Is.Null);
+            Assert.That(result.RefusalDetail, Is.EqualTo(OptimizerMissingDetail));
         }
     }
 }
