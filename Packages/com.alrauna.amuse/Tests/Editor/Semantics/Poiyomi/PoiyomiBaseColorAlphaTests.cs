@@ -511,6 +511,26 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 Interpret(material), PoiyomiSemanticOutput.Alpha);
         }
 
+        // --- Fact 16 characterization ---------------------------------------
+
+        /// <summary>
+        /// Fact 16: the alpha result does not change when _Color RGB
+        /// changes. This test pins the existing behavior. It is a
+        /// characterization test, so it must pass on its first run.
+        /// </summary>
+        [Test]
+        public void AlphaResultDoesNotChangeWithColorRgb()
+        {
+            var material = NonForcedMaterial();
+            material.SetColor("_Color", new Color(0.1f, 0.2f, 0.3f, 0.5f));
+            var before = Alpha(Interpret(material));
+
+            material.SetColor("_Color", new Color(0.9f, 0.8f, 0.7f, 0.5f));
+            var after = Alpha(Interpret(material));
+
+            Assert.That(after, Is.EqualTo(before));
+        }
+
         [Test]
         public void GammaColorSpace_AlphaStaysProven()
         {

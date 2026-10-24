@@ -252,3 +252,4 @@ Existing test seams: the restore delegate `TransientUnlockRestoreDelegate` (`Edi
 - 2026-10-23: first revision, integrated from three parallel read-only slices.
 - 2026-10-23: second revision, integrated three parallel adversarial reviews. Added findings 5 to 8. Corrected section 2, the 1a analysis, the K8 masking claim, the stripped-texture reason, and cites.
 - 2026-10-23: third revision, integrated a scoped re-review. Relabeled the unmeasured false-positive classes, finding 3, and the summary claims. Added evidence items 6 and 7, defined terms, and fixed cites.
+- 2026-10-24: The locked source alignment design answers the open questions and the vendor-free check options of this record. See docs/superpowers/specs/2026-10-23-locked-source-alignment-design.md.

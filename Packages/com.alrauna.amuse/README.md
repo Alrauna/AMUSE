@@ -39,7 +39,7 @@ Add the **AMUSE Avatar Optimizer** component to the avatar root and build as usu
 
 Triangles of an AlphaTest or AlphaBlend material that are proven visually opaque move to an appended submesh with a generated canonical opaque material. Triangles that cannot be proven stay on the original material, unchanged. Tessellation, fur, and gem variants are not admitted. Unsupported means a named refusal with the renderer or material untouched - never a silent guess.
 
-Supported shaders: Poiyomi Toon 9.3.64 and the 9.3 shader that Poiyomi 10.x packages bundle, each including Two Pass. Supported lilToon versions are 2.3.0 through any version below 2.5. Those versions are approved without a consent prompt. The build asks once per build for versions outside that range. Bundled-shader support is for unlocked materials. A locked material on the bundled shader keeps its original slot. Poiyomi and lilToon support cutout, transparent, outline, and one-pass/two-pass variants.
+Supported shaders: Poiyomi Toon 9.3.64 and the 9.3 shader that Poiyomi 10.x packages bundle, each including Two Pass. Supported lilToon versions are 2.3.0 through any version below 2.5. Those versions are approved without a consent prompt. The build asks once per build for versions outside that range. AMUSE rebuilds a locked Poiyomi material from its generated locked shader. A locked material that refuses keeps its original slot. Poiyomi and lilToon support cutout, transparent, outline, and one-pass/two-pass variants.
 
 ## Proof modes and acceptance
 
@@ -101,7 +101,7 @@ One material on several slots prints one report line per slot. The repetition is
 
 When a slot's refusal comes from a texture the route could not read, the slot's single line names the texture property, the channel, and the reason. A texture line on its own means the slot kept its proof and the line is a diagnostic only.
 
-Every refusal line names its cause. A conversion refusal names the material that refused. A locked-material refusal says that AMUSE has not verified the original shader. A closure refusal names the renderer and the way the closure failed. A format refusal names the storage format and the texture. A Poiyomi alpha mask refusal names the alpha mask.
+Every refusal line names its cause. A conversion refusal names the material that refused. A locked-material refusal says why AMUSE did not rebuild the locked material. The cause can be a property block on a renderer or an animation that the locked shader reads differently. A closure refusal names the renderer and the way the closure failed. A format refusal names the storage format and the texture. A Poiyomi alpha mask refusal names the alpha mask.
 
 NDMF may print "changed outside of NDMF animator services; cloning a second time" between AMUSE pass lines. Those lines are NDMF re-cloning controllers that an upstream tool changed. They are not AMUSE failures, and AMUSE reads the re-cloned state, so its evidence stays current.
 

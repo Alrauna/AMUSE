@@ -5,12 +5,11 @@ All notable changes to AMUSE are documented in this file.
 ## [Unreleased] - 2026-10-21
 
 ### Added
-- Support for the 9.3 main and Two Pass shaders that Poiyomi 10.x packages bundle. The support is for unlocked materials.
+- Support for the 9.3 main and Two Pass shaders that Poiyomi 10.x packages bundle. The support covers unlocked materials and locked materials that AMUSE rebuilds from their generated locked shader.
 
 ### Fixed
 - A material animation binding of a proof-relevant property with a rename suffix now refuses its renderer. The rule is shader-independent and also covers lilToon. The binding name is a proof-relevant property name followed by an underscore and a suffix, for example `material._Color_<suffix>`. Bindings such as a texture's `_TexelSize` or `_HDR` on a texture whose scale-offset AMUSE reads also refuse.
 - A locked Poiyomi material refuses unless its recorded original shader name tag equals the resolved shader name. An orphan lock with no recorded original keeps its earlier behavior.
-- A locked material whose original resolves to a bundled Poiyomi shader refuses. The material keeps its original slot.
 - Play mode results are keyed by the proved global identity of each avatar root. Same-named roots, twins of one prefab, and roots in scenes with duplicate names keep separate results. A rename or a reorder keeps the record. A root without a proved identity, such as an avatar in an unsaved scene or a copy made during Play, holds no record.
 - The Show Material Transformations preview rejects a run after any setting change. This includes a change made while background work runs. Changing the setting back does not restore the rejected results. Select Refresh to compute new results.
 - The Show Material Transformations preview keeps a recorded refusal cause on the slot row. A closure failure or another named permanent cause now keeps the refusal even when the current material is locked or holds an unreadable streaming texture. The deferred display stays for the valid locked current material and the unnamed streaming capture refusal.
@@ -18,6 +17,7 @@ All notable changes to AMUSE are documented in this file.
 - The package listing download menu no longer stacks one download action per menu open. The menu item now holds one stable action that reads the package address stored by the last row-button click. The row button stores its own address on every activation, including when the menu is already open, and a row click no longer also closes the open menu. The download opens in a new tab without an opener relationship.
 
 ### Changed
+- AMUSE rebuilds a locked Poiyomi material from its generated locked shader. The build aligns the generated text with the attested original shader text. An edit after the lock that changes what the locked material renders is reproduced on the rebuild, or the build refuses the slot with a named cause. A locked material refuses when a renderer that shows it carries a material property block. A locked material refuses when an animation binds a property that the locked shader bakes, renames, or ignores. The refusal covers every slot of that material on every renderer that shows it. A locked material whose animations bind renamed, baked, or unused properties stays refused until a later curve rewrite. That refusal is a known coverage gap.
 - Poiyomi attestation checks the shader file. The check covers the shader name, the file GUID, and the canonical digest. The package name and the package version no longer take part.
 - An old 9.x shader file can share a pinned GUID with different bytes. Such a file reports a modified source in the conversion detail.
 - The research probe finds the admitted shader file. The probe no longer looks up only the 9.3.64 shader name.
