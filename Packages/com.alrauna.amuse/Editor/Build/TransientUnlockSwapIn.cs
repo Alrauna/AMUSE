@@ -189,6 +189,38 @@ namespace Alrauna.Amuse.Editor.Build
                     continue;
                 }
 
+                // The A9 and A10 admission gate. The decision runs per
+                // locked material, before the clone, over every collected
+                // slot and the float and object bindings on the renderer
+                // paths of those slots. A refusal opens no pair and
+                // records on every slot of the locked material, like the
+                // restore mismatch path. A pair whose aligned facts do
+                // not exist skips the gate and refuses later in the
+                // restore path with its own sentence.
+                var aligned = AlignedFactsOf(entry.Locked);
+                if (aligned != null)
+                {
+                    var admissionRefusal = LockedMaterialAdmission.Decide(
+                        aligned,
+                        AnyRendererHasPropertyBlock(entry),
+                        CollectMaterialBindingNames(
+                            context, animationIndex, entry));
+                    if (admissionRefusal !=
+                        AlphaSeparationSlotRefusal.None)
+                    {
+                        foreach (var slot in entry.Slots)
+                        {
+                            AmuseReports.RecordRefusal(
+                                finishState,
+                                renderer: slot.Renderer,
+                                slot.SlotIndex,
+                                admissionRefusal);
+                        }
+
+                        continue;
+                    }
+                }
+
                 var pair = window.OpenPair(entry.Locked);
                 if (pair.UnlockedClone == null)
                 {
@@ -377,6 +409,119 @@ namespace Alrauna.Amuse.Editor.Build
         }
 
         /// <summary>
+        /// The aligned facts of one locked material, aligned through the
+        /// session memo (A8.4). Returns null when the generated shader
+        /// does not compile (A2.3), the recorded original does not
+        /// resolve, or the pair refuses to align. The gate then skips,
+        /// and the restore path names the exact cause.
+        /// </summary>
+        private static AlignedLockedSource AlignedFactsOf(Material locked)
+        {
+            if (locked == null || locked.shader == null ||
+                ShaderUtil.ShaderHasError(locked.shader))
+            {
+                return null;
+            }
+
+            var recordedGuid = locked.GetTag(
+                LockedMaterialIdentity.OriginalShaderGuidTagName,
+                true,
+                null);
+            if (string.IsNullOrEmpty(recordedGuid))
+            {
+                return null;
+            }
+
+            var originalPath = AssetDatabase.GUIDToAssetPath(recordedGuid);
+            var original = string.IsNullOrEmpty(originalPath)
+                ? null
+                : AssetDatabase.LoadAssetAtPath<Shader>(originalPath);
+            if (original == null)
+            {
+                return null;
+            }
+
+            var originalText = LockedMaterialIdentity.ReadOriginalText(
+                original);
+            if (originalText == null)
+            {
+                return null;
+            }
+
+            var result = LockedSourceAlignmentMemo.GetOrAlign(
+                locked.shader,
+                original,
+                LockedSourceAlignmentMemo.PropertiesOf(
+                    original, originalText));
+            return result.Succeeded ? result.Source : null;
+        }
+
+        /// <summary>
+        /// The A9 fact over every collected slot of one locked material:
+        /// any renderer of those slots carries a property block.
+        /// </summary>
+        private static bool AnyRendererHasPropertyBlock(LockedSlots entry)
+        {
+            foreach (var slot in entry.Slots)
+            {
+                if (slot.Renderer != null && slot.Renderer.HasPropertyBlock())
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// The raw property names of the float and object reference
+        /// bindings on the renderer paths of the collected slots,
+        /// closure slots included (A10.1). The set is distinct, because
+        /// the decision reads names only.
+        /// </summary>
+        private static IReadOnlyCollection<string>
+            CollectMaterialBindingNames(
+                BuildContext context,
+                AnimationIndex animationIndex,
+                LockedSlots entry)
+        {
+            var names = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var slot in entry.Slots)
+            {
+                var renderer = slot.Renderer;
+                if (renderer == null)
+                {
+                    continue;
+                }
+
+                var rendererPath = AnimationUtility.CalculateTransformPath(
+                    renderer.transform,
+                    context.AvatarRootObject.transform);
+                if (rendererPath == null)
+                {
+                    continue;
+                }
+
+                foreach (var clip in animationIndex
+                             .GetClipsForObjectPath(rendererPath)
+                             .ToList())
+                {
+                    foreach (var binding in clip.GetFloatCurveBindings())
+                    {
+                        names.Add(binding.propertyName);
+                    }
+
+                    foreach (var binding in clip.GetObjectCurveBindings())
+                    {
+                        names.Add(binding.propertyName);
+                    }
+                }
+            }
+
+            return names;
+        }
+
+        /// <summary>
         /// Puts U into one slot, value-level on a fresh live read, so a
         /// foreign same-length assignment between passes carries through
         /// untouched. Returns false when the slot no longer holds L.
@@ -538,7 +683,7 @@ namespace Alrauna.Amuse.Editor.Build
         /// One locked material and every slot that holds it, discovered in
         /// deterministic renderer-then-slot order.
         /// </summary>
-        private sealed class LockedSlots
+        internal sealed class LockedSlots
         {
             internal Material Locked { get; }
 

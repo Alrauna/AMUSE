@@ -257,6 +257,69 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
+        public void LockedMaterialPropertyBlockEntryExistsWithThreeParts()
+        {
+            var key = AmuseReportStrings.SlotSeparationKey(
+                AlphaSeparationSlotRefusal.LockedMaterialPropertyBlock);
+            Assert.That(
+                AmuseReportStrings.Has(key), Is.True,
+                "missing title for the locked property block entry");
+            Assert.That(
+                AmuseReportStrings.Has(key + ":description"), Is.True,
+                "missing description for the locked property block " +
+                "entry");
+            Assert.That(
+                AmuseReportStrings.Has(key + ":hint"), Is.True,
+                "missing hint for the locked property block entry");
+
+            var description = AmuseReportStrings.Get(key + ":description");
+            Assert.That(
+                description, Does.Contain("property block"),
+                "the description must name the property block");
+            Assert.That(
+                description, Does.Contain("keeps its original locked " +
+                    "material"),
+                "the description must state what the slot keeps");
+            Assert.That(
+                AmuseReportStrings.Get(key + ":hint"),
+                Does.Contain("property block").And.Contain(
+                    "run the build again"),
+                "the hint must name the fix and the next step");
+        }
+
+        [Test]
+        public void LockedMaterialAnimationMismatchEntryExistsWithThreeParts()
+        {
+            var key = AmuseReportStrings.SlotSeparationKey(
+                AlphaSeparationSlotRefusal
+                    .LockedMaterialAnimationMismatch);
+            Assert.That(
+                AmuseReportStrings.Has(key), Is.True,
+                "missing title for the animation mismatch entry");
+            Assert.That(
+                AmuseReportStrings.Has(key + ":description"), Is.True,
+                "missing description for the animation mismatch entry");
+            Assert.That(
+                AmuseReportStrings.Has(key + ":hint"), Is.True,
+                "missing hint for the animation mismatch entry");
+
+            var description = AmuseReportStrings.Get(key + ":description");
+            Assert.That(
+                description, Does.Contain("animation"),
+                "the description must name the animation");
+            Assert.That(
+                description, Does.Contain("bakes or reads under another " +
+                    "name"),
+                "the description must state why the locked material " +
+                "ignores the curve");
+            Assert.That(
+                AmuseReportStrings.Get(key + ":hint"),
+                Does.Contain("animation curves").And.Contain(
+                    "run the build again"),
+                "the hint must name the fix and the next step");
+        }
+
+        [Test]
         public void EveryHostRefusalCauseHasPlainEnglishStrings()
         {
             foreach (HostLifecycleRefusal cause in

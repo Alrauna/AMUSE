@@ -134,10 +134,13 @@ namespace Alrauna.Amuse.Editor.Build
         SamplingPolicyChanged,
 
         // --- Transient-unlock window members, appended at the tail. The
-        // window swap-in and the window close are their only writers, and
-        // they name slot-scoped outcomes of the unlock window. The census
-        // mirrors renderer-scoped refusals only, so these members carry no
-        // census surface; their report strings carry them instead.
+        // window swap-in, the window close, and the apply pass are their
+        // only writers. They name slot-scoped outcomes of the unlock
+        // window. The swap-in writes the restore mismatch and the A9 and
+        // A10 refusals. The apply pass re-runs the A9 check and writes
+        // only the A9 property-block refusal. The census mirrors
+        // renderer-scoped refusals only, so these members carry no
+        // census surface. Their report strings carry them instead.
 
         /// <summary>The unlock window's restored clone failed one fact of
         /// the restore verification contract, so the clone never swapped
@@ -153,6 +156,20 @@ namespace Alrauna.Amuse.Editor.Build
         /// an animation may still apply the retained copy. One record
         /// per affected slot.</summary>
         TransientUnlockCloneRetained,
+
+        /// <summary>A renderer of this locked material carries a property
+        /// block, so the locked original and an unlocked copy would
+        /// render different values (A9). The swap-in opened no pair for
+        /// the locked material, or the apply pass dropped the candidate
+        /// slot. One record per affected slot.</summary>
+        LockedMaterialPropertyBlock,
+
+        /// <summary>An animation curve binds a material property that the
+        /// locked original bakes, renames, or ignores, so an unlocked
+        /// copy would honor a curve the locked original never reads
+        /// (A10). The swap-in opened no pair for the locked material.
+        /// One record per affected slot.</summary>
+        LockedMaterialAnimationMismatch,
     }
 
     /// <summary>

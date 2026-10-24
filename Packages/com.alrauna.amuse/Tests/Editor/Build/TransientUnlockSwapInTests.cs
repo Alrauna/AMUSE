@@ -571,6 +571,201 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 TransientUnlockTestKnobs.Window.OpenPairs, Is.Empty);
         }
 
+        // --- Falsifier: a gate that asks only the renderer it sits on
+        // admits a shared locked material whose other renderer carries
+        // the block ---
+
+        /// <summary>
+        /// A locked material shared by two renderers where only one
+        /// renderer carries a property block must refuse on both
+        /// renderers (A9, Review Focus 4). The decision runs per locked
+        /// material over every collected slot. The clean locked material
+        /// on the third renderer is the no-op guard: the same build
+        /// swaps it in, so the fixture reaches the gate.
+        /// </summary>
+        [Test]
+        public void
+            PropertyBlockOnOneRendererRefusesEverySlotOfThatLockedMaterial()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(
+                TransientUnlockTestLifecycle.TempFolder);
+            TransientUnlockTestKnobs.SkipClose = true;
+
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE property block fixture"));
+            var blocked = Track(
+                TransientUnlockTestLifecycle.LockedMaterial("BlockedCape"));
+            var clean = Track(
+                TransientUnlockTestLifecycle.LockedMaterial("CleanCape"));
+
+            // No-op guard before the build: the fixture is a recognized
+            // locked material, and exactly one renderer of its material
+            // carries the block.
+            Assert.That(
+                LockedMaterialIdentity.RecognizedLockedIdentity(blocked),
+                Is.True,
+                "fixture guard: the material must be a recognized " +
+                "locked material");
+            var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());
+            var blockedRenderer =
+                TransientUnlockTestLifecycle.AddRenderer(
+                    root, mesh, blocked);
+            var secondMesh =
+                Track(TransientUnlockTestLifecycle.OneSlotMesh());
+            var blockedSibling =
+                TransientUnlockTestLifecycle.AddRenderer(
+                    root, secondMesh, blocked);
+            var thirdMesh =
+                Track(TransientUnlockTestLifecycle.OneSlotMesh());
+            var cleanRenderer =
+                TransientUnlockTestLifecycle.AddRenderer(
+                    root, thirdMesh, clean);
+            var block = new MaterialPropertyBlock();
+            block.SetColor("_Color", new Color(1f, 0f, 0f, 1f));
+            blockedRenderer.SetPropertyBlock(block);
+            Assert.That(
+                blockedRenderer.HasPropertyBlock(),
+                Is.True,
+                "fixture guard: the first renderer must carry the block");
+            Assert.That(
+                blockedSibling.HasPropertyBlock(),
+                Is.False,
+                "fixture guard: the second renderer of the same locked " +
+                "material must carry no block");
+
+            var context = AvatarProcessor.ProcessAvatar(
+                root, TransientUnlockTestPlatform.Instance);
+            var state = context.GetState<AmusePlatformFinishState>();
+
+            Assert.That(
+                state.SlotRefusalCount(
+                    AlphaSeparationSlotRefusal
+                        .LockedMaterialPropertyBlock),
+                Is.EqualTo(2),
+                "both slots of the shared locked material must record " +
+                "the refusal");
+            Assert.That(
+                TransientUnlockTestKnobs.LastSwapSummary.ClonesCreated,
+                Is.EqualTo(1),
+                "fixture guard: the clean locked material must open its " +
+                "pair in the same build");
+            Assert.That(
+                TransientUnlockTestKnobs.LastSwapSummary.SlotsSwapped,
+                Is.EqualTo(1),
+                "fixture guard: the clean locked material must swap in");
+            Assert.That(
+                TransientUnlockTestKnobs.Window.OpenPairs,
+                Has.Count.EqualTo(1),
+                "a property block refusal never opens a pair for its " +
+                "locked material");
+            Assert.That(blockedRenderer.sharedMaterials[0],
+                Is.EqualTo(blocked),
+                "the blocked slot keeps its original locked material");
+            Assert.That(blockedSibling.sharedMaterials[0],
+                Is.EqualTo(blocked),
+                "the clean renderer of the same locked material keeps " +
+                "it too");
+            Assert.That(cleanRenderer.sharedMaterials[0],
+                Is.Not.SameAs(clean),
+                "the clean locked material still swapped to its clone");
+        }
+
+        // --- Falsifier: a gate that reads the saved names of the
+        // locked material admits a curve on a renamed name ---
+
+        /// <summary>
+        /// A float curve that binds the renamed name of a renamed
+        /// property refuses the whole locked material, and every slot of
+        /// it records the refusal (A10). The locked material reads that
+        /// property under the renamed name only, so the unlocked copy
+        /// would honor a curve the locked original never reads. The
+        /// clean locked material without the binding is the no-op guard.
+        /// </summary>
+        [Test]
+        public void AnimationMismatchRecordsTheRefusalOnEverySlot()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(
+                TransientUnlockTestLifecycle.TempFolder);
+            TransientUnlockTestKnobs.SkipClose = true;
+
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot("AMUSE animation mismatch fixture"));
+            var fixture = new LockedSourceFixture();
+            fixture.WithRename("S");
+            var mismatched = Track(fixture.Locked("MismatchCape"));
+            var clean = Track(fixture.Locked("CleanCape"));
+
+            var mesh = Track(TransientUnlockTestLifecycle.TwoSlotMesh());
+            var mismatchRenderer =
+                TransientUnlockTestLifecycle.AddRenderer(
+                    root, mesh, mismatched, mismatched);
+            var clip = TransientUnlockTestLifecycle.AddMaterialSwapAnimation(
+                root, mismatchRenderer, 0, mismatched);
+            TransientUnlockTestLifecycle.AddSuffixedFloatBinding(
+                clip, root, mismatchRenderer, "material._Color_S", 0.5f);
+
+            // No-op guard before the build: the clip must carry the
+            // renamed binding, so the collection reads a real curve.
+            var bindingFound = false;
+            foreach (var binding in AnimationUtility
+                         .GetCurveBindings(clip))
+            {
+                if (binding.propertyName == "material._Color_S")
+                {
+                    bindingFound = true;
+                }
+            }
+
+            Assert.That(
+                bindingFound,
+                Is.True,
+                "fixture guard: the clip must carry the renamed " +
+                "binding");
+
+            var secondMesh =
+                Track(TransientUnlockTestLifecycle.OneSlotMesh());
+            var cleanRenderer =
+                TransientUnlockTestLifecycle.AddRenderer(
+                    root, secondMesh, clean);
+
+            var context = AvatarProcessor.ProcessAvatar(
+                root, TransientUnlockTestPlatform.Instance);
+            var state = context.GetState<AmusePlatformFinishState>();
+
+            // Fixture guards first: the clean locked material must swap
+            // in the same build, so a zero refusal count can only mean
+            // the gate skipped the mismatched material.
+            Assert.That(
+                TransientUnlockTestKnobs.LastSwapSummary.ClonesCreated,
+                Is.EqualTo(1),
+                "fixture guard: the clean locked material must open its " +
+                "pair in the same build");
+            Assert.That(
+                TransientUnlockTestKnobs.LastSwapSummary.SlotsSwapped,
+                Is.EqualTo(1),
+                "fixture guard: the clean locked material must swap in");
+            Assert.That(
+                state.SlotRefusalCount(
+                    AlphaSeparationSlotRefusal
+                        .LockedMaterialAnimationMismatch),
+                Is.EqualTo(2),
+                "both slots of the mismatched locked material must " +
+                "record the refusal");
+            Assert.That(
+                TransientUnlockTestKnobs.Window.OpenPairs,
+                Has.Count.EqualTo(1),
+                "an animation mismatch never opens a pair for its " +
+                "locked material");
+            Assert.That(mismatchRenderer.sharedMaterials[0],
+                Is.EqualTo(mismatched),
+                "the first slot keeps its original locked material");
+            Assert.That(mismatchRenderer.sharedMaterials[1],
+                Is.EqualTo(mismatched),
+                "the second slot of the same locked material keeps it " +
+                "too");
+            Assert.That(cleanRenderer.sharedMaterials[0],
+                Is.Not.SameAs(clean),
+                "the clean locked material still swapped to its clone");
+        }
+
         private static string Sha256OfFile(string path)
         {
             using var stream = File.OpenRead(path);
