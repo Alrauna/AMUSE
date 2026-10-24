@@ -497,10 +497,6 @@ namespace Alrauna.Amuse.Editor.Build
                 var rendererPath = AnimationUtility.CalculateTransformPath(
                     renderer.transform,
                     context.AvatarRootObject.transform);
-                if (rendererPath == null)
-                {
-                    continue;
-                }
 
                 foreach (var clip in animationIndex
                              .GetClipsForObjectPath(rendererPath)

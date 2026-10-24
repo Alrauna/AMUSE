@@ -572,6 +572,27 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Assert.That(result.Source.SurvivingText, Does.Contain("float _P;"));
         }
 
+        // --- Falsifier 23: storage class before the type keyword ---
+        // An implementation that reads only the first token misses the
+        // declaration on a storage class line. The aligner then opens a
+        // hole for the declared name, the hole records an identifier use
+        // beside the baked literal uses, and a genuine lock refuses. The
+        // no-op guard is the baked use in the program body, so the
+        // declaration line is the only remaining identifier use.
+        [Test]
+        public void StorageClassDeclarationLineKeepsTheIdentifierWhenBaked()
+        {
+            var (original, generated) = BasePair();
+            original = original.Replace("float _P;", "uniform float _P;");
+            generated = generated.Replace("float _P;", "uniform float _P;");
+            generated = generated.Replace("o.Albedo = _P;", "o.Albedo = 0.5;");
+            var result = Align(original, generated, BaseProperties());
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.States["_P"], Is.EqualTo(LockedPropertyState.Baked));
+            Assert.That(result.Source.BakedLiterals["_P"], Is.EqualTo("0.5"));
+            Assert.That(result.Source.SurvivingText, Does.Contain("uniform float _P;"));
+        }
+
         [Test]
         public void RenameOnEveryLineIncludingStringsAligns()
         {

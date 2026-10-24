@@ -853,6 +853,37 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             AssertConsistent(source, properties, locked, plan);
         }
 
+        // --- Falsifier 22: keyword define consumed as the PROP define ---
+        // An implementation that reads the longest suffix takes the one
+        // keyword define for the PROP define and drops the keyword. The
+        // texture was empty at the lock and its texture keyword was
+        // enabled, so the run holds the name once. The assignment after
+        // the lock puts the name in the expected PROP list. The run text
+        // alone cannot tell the two shapes apart, so the material must
+        // refuse (A5.9 ruling of 2026-10-24). The no-op guard is the
+        // non-empty define run with the keyword enabled on the material.
+        [Test]
+        public void KeywordDefineNamedLikeItsPropDefineRefusesWhenTheRunHoldsItOnce()
+        {
+            var properties = new[] { Prop("_Tex", ShaderPropertyType.Texture) };
+            var source = Source(
+                States(("_Tex", LockedPropertyState.Unused)),
+                runs: Runs(new[] { "PROP_TEX", "OPTIMIZER_ENABLED" }),
+                surviving: "float4 PROP_TEX;");
+            var locked = new FakeValues()
+                .WithTexture(
+                    "_Tex",
+                    new LockedTextureValue("token-g", 4, 4, Vector2.one, Vector2.zero))
+                .WithKeywords("PROP_TEX");
+
+            Assert.That(locked.Keywords, Does.Contain("PROP_TEX"),
+                "The texture keyword is enabled on the material.");
+
+            var result = LockedSourceReproduction.Build(source, properties, locked);
+
+            AssertRefusal(result, PropDefineDetail);
+        }
+
         /// <summary>
         /// Program blocks with different keyword parts refuse (A5.9).
         /// </summary>
@@ -896,6 +927,76 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 
             Assert.That(detail, Is.EqualTo(ConditionDetail),
                 "The false condition refuses the check.");
+        }
+
+        // --- Falsifier 21: unsaved declared operand reads zero ---
+        // An implementation that reads a missing saved entry as zero
+        // accepts a removed block that the finished clone does not hold.
+        // The saved entry was zero at the lock and a later edit cleared
+        // it, so the clone renders the declared default. Reading zero
+        // passes the check and the default fails it (A6.2). The no-op
+        // guards prove the operand is a declared property with no saved
+        // entry and a nonzero declared default.
+        [Test]
+        public void UnsavedDeclaredOperandReadsTheDeclaredDefault()
+        {
+            var properties = new[]
+            {
+                Prop("_X", ShaderPropertyType.Float, defaultFloat: 1f)
+            };
+            var source = Source(
+                States(("_X", LockedPropertyState.Live)),
+                blocks: Blocks(Block(
+                    LockedBlockKind.Ifex,
+                    LockedBlockOutcome.Removed,
+                    "_X==0",
+                    12)));
+
+            Assert.That(properties[0].DefaultFloat, Is.EqualTo(1f),
+                "The declared default is nonzero.");
+
+            var reproduced = new FakeValues();
+            Assert.That(reproduced.TryGetFloat("_X", out _), Is.False,
+                "The clone holds no saved entry.");
+
+            var detail = LockedSourceReproduction.CheckConsistency(
+                source,
+                properties,
+                reproduced);
+
+            Assert.That(detail, Is.EqualTo(ConditionDetail),
+                "The declared default fails the condition, so the check refuses.");
+        }
+
+        /// <summary>
+        /// A never saved operand renders its declared default on the
+        /// locked material and on the clone. That default made the
+        /// removed condition true at the lock, so the check must read
+        /// the default and hold (A6.2).
+        /// </summary>
+        [Test]
+        public void NeverSavedOperandWithNonzeroDefaultKeepsARemovedBlockTrue()
+        {
+            var properties = new[]
+            {
+                Prop("_X", ShaderPropertyType.Float, defaultFloat: 1f)
+            };
+            var source = Source(
+                States(("_X", LockedPropertyState.Live)),
+                blocks: Blocks(Block(
+                    LockedBlockKind.Ifex,
+                    LockedBlockOutcome.Removed,
+                    "_X!=0",
+                    12)));
+            var reproduced = new FakeValues();
+
+            var detail = LockedSourceReproduction.CheckConsistency(
+                source,
+                properties,
+                reproduced);
+
+            Assert.That(detail, Is.Null,
+                "The declared default holds the removed condition.");
         }
 
         /// <summary>

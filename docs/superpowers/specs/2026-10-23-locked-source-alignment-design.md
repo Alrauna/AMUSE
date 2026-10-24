@@ -140,6 +140,7 @@ These facts come from a source read of the vendor packages and scans of the two 
 7. `Live`: `U.P` keeps the value of `L.P`. A program-`Unused` property with a surviving bracket read and no enum text also keeps the value of `L.P`.
 8. `Unused` operands of removed blocks: see A6.3.
 9. Keywords. The `PROP` part of the define run is the longest run suffix before ` #define OPTIMIZER_ENABLED ` that equals the expected list: `PROP` plus the uppercase name of each texture of `L` that is not null, in property order, whose define occurs in the surviving text. A mismatch refuses. This closes finding 6. The rest of the run is the keyword part. A name that is both an enabled keyword and a `PROP` define appears once in each part. All program blocks must give the same keyword part. `U` takes the keyword part, plus the `OriginalKeywords` tag keywords that do not occur in the surviving text. Those extra keywords cannot change rendering.
+   - Amendment, 2026-10-24: the longest-suffix rule has one ambiguous shape. A texture keyword can carry the same name as its `PROP` define. When a name that the expected PROP list derives is also an enabled keyword of the material, and the run holds that name only once, the text cannot tell the keyword define from the PROP define. The split then refuses the material. The refusal reuses the texture define sentence.
 10. `U` takes the render queue, the `RenderType` override tag, and the `VRCFallback` override tag that the build read from the clone before the swap.
 
 ### A6. Consistency checks

@@ -125,10 +125,10 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             Assert.That(
                 RowText.NoteSentence(NoteKind.LockedMaterialNotReproducible),
                 Is.EqualTo(
-                    "Some locked materials cannot be rebuilt from their " +
-                    "recorded source. A build will not convert those " +
-                    "materials. This view does not promise a conversion " +
-                    "for them."));
+                    "Some locked materials refuse in a build. The cause " +
+                    "can be the recorded source, a property block, or an " +
+                    "animation. This view does not promise a conversion " +
+                    "for those materials."));
         }
 
         [Test]

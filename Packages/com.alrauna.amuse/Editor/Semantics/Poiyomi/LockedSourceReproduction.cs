@@ -146,7 +146,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
                 var outcome = PoiyomiLockCondition.Evaluate(
                     block.ConditionOrKeyword,
-                    new LockValuesAdapter(locked));
+                    new LockValuesAdapter(locked, properties));
                 if (outcome == PoiyomiLockConditionOutcome.Unsupported)
                 {
                     return Refuse(ConditionUnsupportedDetail);
@@ -300,7 +300,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             List<string> keywordPart = null;
             foreach (var run in source.DefineRuns)
             {
-                if (!TrySplitRun(run, expectedProps, out var runKeywords))
+                if (!TrySplitRun(run, expectedProps, locked.Keywords, out var runKeywords))
                 {
                     return Refuse(PropDefineDetail);
                 }
@@ -375,7 +375,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             List<string> keywordPart = null;
             foreach (var run in source.DefineRuns)
             {
-                if (!TrySplitRun(run, expectedProps, out var runKeywords))
+                if (!TrySplitRun(run, expectedProps, reproduced.Keywords, out var runKeywords))
                 {
                     return PropDefineDetail;
                 }
@@ -437,7 +437,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     // the removal proves it held at lock time.
                     var outcome = PoiyomiLockCondition.Evaluate(
                         block.ConditionOrKeyword,
-                        new LockValuesAdapter(reproduced));
+                        new LockValuesAdapter(reproduced, properties));
                     if (outcome == PoiyomiLockConditionOutcome.Unsupported)
                     {
                         return ConditionUnsupportedDetail;
@@ -824,16 +824,46 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// (A5.9, fact 8). The run ends with the optimizer define. The
         /// PROP part is the suffix before it that must equal the expected
         /// list. Everything before the suffix is the keyword part.
+        /// A5.9 ruling of 2026-10-24: a texture keyword can carry the
+        /// same name as its PROP define. When the expected PROP part
+        /// holds such a name, the keyword is enabled on the material,
+        /// and the run holds the name only once, the text cannot tell
+        /// the keyword define from the PROP define. The suffix split
+        /// would read the keyword occurrence and drop the keyword, so
+        /// the ambiguous shape refuses.
         /// </summary>
         private static bool TrySplitRun(
             IReadOnlyList<string> run,
             IReadOnlyList<string> expectedProps,
+            IReadOnlyList<string> viewKeywords,
             out List<string> keywordPart)
         {
             keywordPart = null;
             if (run.Count == 0 || run[run.Count - 1] != OptimizerDefine)
             {
                 return false;
+            }
+
+            foreach (var define in expectedProps)
+            {
+                if (!ContainsName(viewKeywords, define))
+                {
+                    continue;
+                }
+
+                var occurrences = 0;
+                foreach (var entry in run)
+                {
+                    if (entry == define)
+                    {
+                        occurrences++;
+                    }
+                }
+
+                if (occurrences == 1)
+                {
+                    return false;
+                }
             }
 
             var propStart = run.Count - 1 - expectedProps.Count;
@@ -1023,15 +1053,26 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// <summary>
         /// Bridges the material value surface to the lock condition reader
         /// (A6.2). A texture slot stays a texture slot with no texture
-        /// assigned, because the vendor asks for the slot.
+        /// assigned, because the vendor asks for the slot. A declared
+        /// name with no saved entry reads the declared default, because
+        /// that is the value both materials render. An unknown name
+        /// still reads zero (fact 9).
         /// </summary>
         private sealed class LockValuesAdapter : IPoiyomiLockConditionValues
         {
             private readonly ILockedMaterialValues values;
+            private readonly Dictionary<string, LockedSourceProperty> declared;
 
-            internal LockValuesAdapter(ILockedMaterialValues values)
+            internal LockValuesAdapter(
+                ILockedMaterialValues values,
+                IReadOnlyList<LockedSourceProperty> properties)
             {
                 this.values = values;
+                declared = new Dictionary<string, LockedSourceProperty>();
+                foreach (var property in properties)
+                {
+                    declared[property.Name] = property;
+                }
             }
 
             public int RenderQueue => values.RenderQueue;
@@ -1043,7 +1084,20 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
             public bool TryGetNumber(string propertyName, out float value)
             {
-                return values.TryGetFloat(propertyName, out value);
+                if (values.TryGetFloat(propertyName, out value))
+                {
+                    return true;
+                }
+
+                // The vendor reads the live typed value. A property with
+                // no saved entry renders its declared default (A6.2).
+                if (declared.TryGetValue(propertyName, out var property))
+                {
+                    value = property.DefaultFloat;
+                    return true;
+                }
+
+                return false;
             }
         }
     }

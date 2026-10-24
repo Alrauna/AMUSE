@@ -266,10 +266,10 @@ namespace Alrauna.Amuse.Editor.DryRun
                     return "Some textures change every frame. This view "
                         + "computes them on Refresh only.";
                 case NoteKind.LockedMaterialNotReproducible:
-                    return "Some locked materials cannot be rebuilt from "
-                        + "their recorded source. A build will not convert "
-                        + "those materials. This view does not promise a "
-                        + "conversion for them.";
+                    return "Some locked materials refuse in a build. The "
+                        + "cause can be the recorded source, a property "
+                        + "block, or an animation. This view does not "
+                        + "promise a conversion for those materials.";
                 default:
                     throw new ArgumentOutOfRangeException(
                         nameof(kind), kind, "Unknown note kind.");

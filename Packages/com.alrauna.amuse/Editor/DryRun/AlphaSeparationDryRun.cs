@@ -86,6 +86,11 @@ namespace Alrauna.Amuse.Editor.DryRun
         private bool _avatarCacheHit;
         private bool _policyInvalidated;
 
+        // The A9 and A10 admission verdicts are a per-pass fact (A9,
+        // A10.1). One computation per pass serves every renderer step.
+        private IReadOnlyDictionary<Material, AlphaSeparationSlotRefusal>
+            _lockedAdmissionRefusals;
+
         // The mapped policy values the build derives once per pass. The
         // dry run derives them once per open, from the same helpers.
         private AlphaPolicyBounds _bounds;
@@ -263,6 +268,8 @@ namespace Alrauna.Amuse.Editor.DryRun
             _controllerFingerprint = BuildControllerFingerprint();
             _graphFingerprint = BuildGraphFingerprint();
             _avatarKey = DryRunFingerprint.Avatar(InputsFor());
+            _lockedAdmissionRefusals =
+                LockedAdmissionRefusals(_avatarRoot, _graph);
 
             // An avatar hit serves the stored avatar rows, which already
             // carry this session's banners and notes, because the avatar
@@ -628,7 +635,7 @@ namespace Alrauna.Amuse.Editor.DryRun
                         renderer,
                         rendererPath,
                         rendererTypeName,
-                        LockedAdmissionRefusals(_avatarRoot, _graph),
+                        _lockedAdmissionRefusals,
                         AddNoteOnce));
                     _rendererIndex++;
                     RepaintRequested?.Invoke();
@@ -700,7 +707,7 @@ namespace Alrauna.Amuse.Editor.DryRun
                         renderer,
                         rendererPath,
                         rendererTypeName,
-                        LockedAdmissionRefusals(_avatarRoot, _graph),
+                        _lockedAdmissionRefusals,
                         AddNoteOnce));
                     if (!refreshOnly && _avatarKey != null)
                     {
@@ -887,7 +894,7 @@ namespace Alrauna.Amuse.Editor.DryRun
                     _inFlightRenderer,
                     _inFlightRendererPath,
                     _inFlightRendererTypeName,
-                    LockedAdmissionRefusals(_avatarRoot, _graph),
+                    _lockedAdmissionRefusals,
                     AddNoteOnce);
 
                 _rendererRows.AddRange(displayRows);
@@ -1183,11 +1190,14 @@ namespace Alrauna.Amuse.Editor.DryRun
         /// <summary>
         /// The A9 and A10 admission refusal per locked material over
         /// every avatar renderer that holds it (A9, A10.1). The pass
-        /// runs on every dry-run pass, outside the renderer cache, with
-        /// the same inputs the build gate reads: the property block
-        /// fact of every holder renderer, and the raw binding property
-        /// names on every holder path, filtered with an ordinal path
-        /// compare. A pair whose aligned facts do not exist skips the
+        /// runs once per dry-run pass, outside the renderer cache. It
+        /// reads the property block fact of every holder renderer, and
+        /// the raw binding property names of the committed controller
+        /// graph on every holder path, filtered with an ordinal path
+        /// compare. The build gate reads the NDMF animation index
+        /// instead, and that index can also hold clips that upstream
+        /// plugins generate, so the two gates can read different clip
+        /// sets. A pair whose aligned facts do not exist skips the
         /// gate, like the build does, and the per-slot mirror refuses
         /// that pair instead. The map holds only refused materials.
         /// </summary>
@@ -1252,8 +1262,7 @@ namespace Alrauna.Amuse.Editor.DryRun
 
                     var holderPath = AnimationUtility.CalculateTransformPath(
                         renderer.transform, avatarRoot.transform);
-                    if (holderPath != null &&
-                        bindingsByPath.TryGetValue(
+                    if (bindingsByPath.TryGetValue(
                             holderPath, out var pathNames))
                     {
                         bindingNames.UnionWith(pathNames);

@@ -1629,8 +1629,10 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 ScanOccurrences(renamedText, name, holes);
             }
 
-            // A declaration keeps its identifier (fact 4).
-            var declarationLine = TypeKeywords.Contains(FirstToken(renamedText.Trim()));
+            // A declaration keeps its identifier (fact 4). A storage
+            // class before the type keyword leaves the line a
+            // declaration line, so this read matches FindIntDeclared.
+            var declarationLine = IsDeclarationLine(renamedText.Trim());
             for (var i = holes.Count - 1; i >= 0; i--)
             {
                 if (declarationLine && FollowsDeclarationPosition(renamedText, holes[i].End))
@@ -2422,6 +2424,53 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
                 i = end;
             }
+        }
+
+        /// <summary>
+        /// True when the line starts with an optional run of storage
+        /// class keywords followed by a type keyword. This matches the
+        /// declaration read of FindIntDeclared (fact 4). Any other
+        /// first token is no declaration.
+        /// </summary>
+        private static bool IsDeclarationLine(string trimmedText)
+        {
+            var position = 0;
+            while (position < trimmedText.Length)
+            {
+                var start = position;
+                while (start < trimmedText.Length
+                    && char.IsWhiteSpace(trimmedText[start]))
+                {
+                    start++;
+                }
+
+                var end = start;
+                while (end < trimmedText.Length
+                    && !char.IsWhiteSpace(trimmedText[end]))
+                {
+                    end++;
+                }
+
+                if (end == start)
+                {
+                    break;
+                }
+
+                var token = trimmedText.Substring(start, end - start);
+                if (TypeKeywords.Contains(token))
+                {
+                    return true;
+                }
+
+                if (token != "uniform" && token != "static" && token != "const")
+                {
+                    return false;
+                }
+
+                position = end;
+            }
+
+            return false;
         }
 
         private static bool FollowsDeclarationPosition(string text, int end)
