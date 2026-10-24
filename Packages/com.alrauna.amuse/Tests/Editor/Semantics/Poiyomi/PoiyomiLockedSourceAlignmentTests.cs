@@ -781,5 +781,48 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Assert.That(result.Source, Is.Null);
             Assert.That(result.RefusalDetail, Is.EqualTo(TwoLiteralsDetail));
         }
+
+        [Test]
+        public void TruncatedGeneratedTextRefusesWithoutThrowing()
+        {
+            var (original, generated) = BasePair();
+            generated = string.Join("\n", generated.Split('\n').Take(20));
+            var result = Align(original, generated, BaseProperties());
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(result.Source, Is.Null);
+            Assert.That(result.RefusalDetail, Is.EqualTo(LineMismatchDetail));
+        }
+
+        [Test]
+        public void EnumTextWithoutASurvivingUseRecordsUnusedState()
+        {
+            var (original, generated) = SmallPair(
+                "        _Cull (\"Cull\", Float) = 0",
+                "        Cull [_Cull]",
+                "        o.Albedo = 0.5;",
+                ("Cull [_Cull]", "Cull Back"));
+            var result = Align(original, generated, new[] { Prop("_Cull", ShaderPropertyType.Float) });
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.EnumValues["_Cull"], Is.EqualTo(2));
+            Assert.That(result.Source.States["_Cull"], Is.EqualTo(LockedPropertyState.Unused));
+            Assert.That(result.Source.BracketReads.ContainsKey("_Cull"), Is.False);
+        }
+
+        [Test]
+        public void DigitSuffixWithoutSeparatorRefuses()
+        {
+            var (original, generated) = SmallPair(
+                "        _P (\"P\", Float) = 0.5",
+                null,
+                "        float _P;\n        o.Albedo = _P;",
+                ("float _P;", "float _P9;"),
+                ("o.Albedo = _P;", "o.Albedo = _P9;"),
+                ("_P (\"P\"", "_P9 (\"P\""));
+            var properties = new[] { Prop("_P", ShaderPropertyType.Float) };
+            var result = Align(original, generated, properties);
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(result.Source, Is.Null);
+            Assert.That(result.RefusalDetail, Is.EqualTo(SuffixAmbiguousDetail));
+        }
     }
 }

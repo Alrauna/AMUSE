@@ -504,7 +504,10 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
         private static void AddTailStripped(HashSet<string> set, string rest)
         {
-            if (rest.Length == 0)
+            // A4.2 splits a declared original name, the underscore
+            // separator, and a remainder. A tail without the separator is
+            // no form the vendor rename can produce.
+            if (rest.Length == 0 || rest[0] != '_')
             {
                 return;
             }
@@ -514,12 +517,20 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             // known tail may ride behind one candidate.
             if (rest.EndsWith("_ST", StringComparison.Ordinal) && rest.Length > 3)
             {
-                set.Add(rest.Substring(0, rest.Length - 3));
+                var stripped = rest.Substring(0, rest.Length - 3);
+                if (stripped[0] == '_')
+                {
+                    set.Add(stripped);
+                }
             }
 
             if (rest.EndsWith("_TexelSize", StringComparison.Ordinal) && rest.Length > 10)
             {
-                set.Add(rest.Substring(0, rest.Length - 10));
+                var stripped = rest.Substring(0, rest.Length - 10);
+                if (stripped[0] == '_')
+                {
+                    set.Add(stripped);
+                }
             }
         }
 
@@ -686,6 +697,11 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
         private static void MatchPropertiesLine(WalkState state, LineRef line)
         {
+            if (state.GenIndex >= state.GeneratedLines.Count)
+            {
+                throw new RefusalException(LineMismatchDetail, line.Number);
+            }
+
             var edited = ApplyLockButtonDefault(line.Text);
             var gen = state.GeneratedLines[state.GenIndex].Text;
             var hasName = TryPropertiesName(line.Text, out var name, out _);
@@ -734,6 +750,11 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
         private static void MatchShaderLabLine(WalkState state, LineRef line)
         {
+            if (state.GenIndex >= state.GeneratedLines.Count)
+            {
+                throw new RefusalException(LineMismatchDetail, line.Number);
+            }
+
             var text = line.Text;
             var trimmed = text.Trim();
             if (trimmed.StartsWith("Shader \"", StringComparison.Ordinal))
@@ -953,6 +974,13 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
         private static void MatchProgramLine(WalkState state, string text, int originalNumber)
         {
+            if (state.GenIndex >= state.GeneratedLines.Count)
+            {
+                // A generated text that ends before the emulation needs it
+                // refuses. It never crashes the walk.
+                throw new RefusalException(LineMismatchDetail, originalNumber);
+            }
+
             var renamedText = RenameLineWithNames(state, text, null);
             var holes = new List<HoleSpan>();
             foreach (var name in state.UndecidedNames())
@@ -1481,10 +1509,11 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
 
             // The vendor writes enum text only for a baked property
-            // (fact 13), so an enum read without a baked use refuses.
+            // (fact 13). A5.6 also accepts enum text for a property with
+            // no surviving use, so only a present non literal use refuses.
             foreach (var key in state.EnumValues.Keys)
             {
-                if (!state.MatchKinds.TryGetValue(key, out var kind) || kind != MatchKind.Literal)
+                if (state.MatchKinds.TryGetValue(key, out var kind) && kind != MatchKind.Literal)
                 {
                     throw new RefusalException(EnumWithoutBakeDetail, 0);
                 }
