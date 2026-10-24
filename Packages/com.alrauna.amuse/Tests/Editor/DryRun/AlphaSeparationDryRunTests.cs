@@ -2299,7 +2299,15 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 LockedMaterialIdentity.OriginalShaderTagName,
                 ".poiyomi/Poiyomi Toon");
             AssertLockedGateGuard(fixture, locked);
-            AddSkinnedRenderer(root, OneTriangleMesh(), locked);
+
+            // The second slot holds a material the selector admits, so
+            // the real capturer runs in a fresh open and stays silent
+            // on a served open. The capture count is the serve-branch
+            // observable.
+            var texture = ImportHalfTexture("gate7_cache_main", 255);
+            var cutout = NewCutoutMaterial(texture, 0.5f);
+            AddSkinnedRenderer(
+                root, MixedTwoSlotMesh(), locked, cutout);
             var fixtureView = new Fixture
             {
                 Root = root, Optimizer = optimizer, Renderer = null
@@ -2313,6 +2321,9 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             Assert.That(SlotRows(first), Is.Not.Empty,
                 "fixture guard: the first open must store renderer " +
                 "rows");
+            var capturesAfterFirst = _captureCalls;
+            Assert.That(capturesAfterFirst, Is.GreaterThan(0),
+                "fixture guard: the first open must capture");
             Assert.That(
                 first.AvatarRows.Any(row =>
                     row.Sentence == RowText.NoteSentence(
@@ -2321,21 +2332,37 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 "the first open with no block and no binding adds no " +
                 "mirror note");
 
-            // The block appears without an asset refresh, so every
-            // fingerprint stays and the second open serves the stored
-            // renderer rows. The fresh per-pass verdict must still run
-            // and name the cause.
+            // The block key names no declared property, so the block
+            // state snapshot stays empty and every fingerprint holds.
+            // The block appears without an asset refresh, so the second
+            // open serves the stored renderer rows, and the unchanged
+            // capture count proves the serve branch ran. The fresh
+            // per-pass verdict must still run there and name the cause.
             var block = new MaterialPropertyBlock();
-            block.SetColor("_Color", new Color(1f, 0f, 0f, 1f));
-            root.GetComponentInChildren<Renderer>(true)
-                .SetPropertyBlock(block);
+            block.SetColor("_AmuseUndeclaredBlockKey",
+                new Color(1f, 0f, 0f, 1f));
+            var cacheRenderer =
+                root.GetComponentInChildren<Renderer>(true);
+            cacheRenderer.SetPropertyBlock(block);
+            Assert.That(
+                cacheRenderer.HasPropertyBlock(), Is.True,
+                "fixture guard: the renderer must carry the block");
 
             var second = NewDryRun(
                 fixtureView, null, FixtureSelector(), FixtureCapturer());
             Run(second);
-            var secondRows = SlotRows(second);
-            Assert.That(secondRows, Is.Not.Empty);
-            foreach (var row in secondRows)
+            Assert.That(
+                _captureCalls, Is.EqualTo(capturesAfterFirst),
+                "the second open must serve the stored renderer rows, " +
+                "not rebuild them, or the test cannot pin the serve " +
+                "branch");
+            var lockedRows = SlotRows(second)
+                .Where(row => row.SlotIndex == 0)
+                .ToList();
+            Assert.That(lockedRows, Is.Not.Empty,
+                "fixture guard: the served rows must carry the locked " +
+                "slot");
+            foreach (var row in lockedRows)
             {
                 Assert.That(
                     row.Sentence,
