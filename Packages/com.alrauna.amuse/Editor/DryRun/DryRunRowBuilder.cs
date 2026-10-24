@@ -15,7 +15,6 @@ namespace Alrauna.Amuse.Editor.DryRun
                 string rendererPath,
                 string rendererTypeName,
                 RuntimeStateResolution.ResolvedRuntimeStates resolved,
-                CapturedAnimationEvidence evidence = null,
                 Action<NoteKind> noteOnce = null)
         {
             var rows = new List<MaterialTransformationRow>();
@@ -38,7 +37,7 @@ namespace Alrauna.Amuse.Editor.DryRun
                 if (!AlphaSeparationDryRun.IsSlotDeferred(
                         renderer, slotIndex,
                         resolved.SlotResults[slotIndex], slotEvidence,
-                        evidence, rendererPath, noteOnce))
+                        noteOnce))
                 {
                     allDeferred = false;
                 }
@@ -71,7 +70,6 @@ namespace Alrauna.Amuse.Editor.DryRun
             SlotResolutionResult[] slotResults,
             IReadOnlyList<CapturedMaterialSlotEvidence> slots,
             string rendererName,
-            CapturedAnimationEvidence evidence = null,
             Action<NoteKind> noteOnce = null)
         {
             var rows = new List<MaterialTransformationRow>();
@@ -90,7 +88,6 @@ namespace Alrauna.Amuse.Editor.DryRun
                         slots[slotIndex],
                         slotIndex,
                         rendererName,
-                        evidence,
                         noteOnce));
                     continue;
                 }
@@ -127,13 +124,11 @@ namespace Alrauna.Amuse.Editor.DryRun
             CapturedMaterialSlotEvidence slot,
             int slotIndex,
             string rendererName,
-            CapturedAnimationEvidence evidence = null,
             Action<NoteKind> noteOnce = null)
         {
             var totalTriangles = AlphaSeparationDryRun.SubmeshPolygonCount(renderer, slotIndex);
             if (AlphaSeparationDryRun.IsSlotDeferred(
-                    renderer, slotIndex, result, slot,
-                    evidence, rendererPath, noteOnce))
+                    renderer, slotIndex, result, slot, noteOnce))
             {
                 return MaterialTransformationRow.Slot(
                     rendererPath,
