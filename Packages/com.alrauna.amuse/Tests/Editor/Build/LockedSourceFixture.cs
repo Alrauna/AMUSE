@@ -609,7 +609,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 var candidate = trimmed.Substring(0, open).Trim();
                 if (candidate.Length > 1 &&
                     candidate.IndexOf(' ') < 0 &&
-                    !names.Contains(candidate))
+                    !names.Contains(candidate) &&
+                    // The optimizer flag never renames (fact 7). Only a
+                    // property with the Animated tag 2 renames, and the
+                    // lock button property is the vendor's own unlock
+                    // handle, read under its plain name after the lock.
+                    candidate !=
+                    LockedMaterialIdentity.OptimizerEnabledPropertyName)
                 {
                     names.Add(candidate);
                 }

@@ -208,12 +208,21 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 var sequence = InPhase(BuildPhase.PlatformFinish);
 
+                // The production topology runs the bindings capture and
+                // the barrier inside one animator scope, and the swap-in
+                // inside the barrier reads the live AnimationIndex. The
+                // probe between the scopes stays extension-free, so it
+                // can only touch renderer components and committed
+                // animator assets, exactly the foreign-pass interference
+                // the late-validation design must survive.
                 sequence.WithRequiredExtension(
                     typeof(AnimatorServicesContext),
-                    inner => inner.Run(
-                        "AMUSE test bindings capture", CapturePass));
-
-                sequence.Run("AMUSE test barrier", BarrierPass);
+                    inner =>
+                    {
+                        inner.Run(
+                            "AMUSE test bindings capture", CapturePass);
+                        inner.Run("AMUSE test barrier", BarrierPass);
+                    });
 
                 sequence.Run("AMUSE test armed probe", ProbePass);
 
@@ -911,6 +920,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         .LockedConvertibleMaterialWithOriginal(
                             "LateBlockCape",
                             "Hidden/Alrauna/AmuseTests/PoiyomiSemanticTest"));
+
+                // No-op guard before the build: the material must be a
+                // recognized locked material, so the eligibility check
+                // and the swap-in discovery see the same fact.
+                Assert.That(
+                    LockedMaterialIdentity.RecognizedLockedIdentity(locked),
+                    Is.True,
+                    "fixture guard: the material must be a recognized " +
+                    "locked material");
                 var mesh = Track(
                     AlphaSeparationTestLifecycle.SingleTriangleMesh());
                 var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(
@@ -956,14 +974,23 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
                 var window = context
                     .GetState<TransientUnlockWindowState>();
-                Assert.That(window.OpenPairs, Has.Count.EqualTo(1),
-                    "fixture guard: the unlock window must have opened " +
-                    "for the locked pair");
+                var slotMaterial = renderer.sharedMaterials[0];
                 Assert.That(
-                    renderer.sharedMaterials[0],
-                    Is.SameAs(window.OpenPairs[0].UnlockedClone),
-                    "fixture guard: the slot must hold the unlocked " +
-                    "copy of the locked original");
+                    "pairs=" + window.OpenPairs.Count +
+                    " slotIsLocked=" +
+                    ReferenceEquals(slotMaterial, locked) +
+                    " blocked=" + state.SlotRefusalCount(
+                        AlphaSeparationSlotRefusal
+                            .LockedMaterialPropertyBlock) +
+                    " applied=" + state.AppliedRendererCount,
+                    Does.StartWith("pairs=1 slotIsLocked=False blocked=1 " +
+                        "applied=0"),
+                    "fixture guard: the window must hold the pair, the " +
+                    "slot must not hold the locked original, and the A9 " +
+                    "refusal must fire with no applied write. NDMF " +
+                    "commits a serialized copy of the unlocked copy, so " +
+                    "the slot material is not reference-identical to " +
+                    "the pair's clone.");
                 Assert.That(state.SemanticallyRefusedRendererCount,
                     Is.Zero,
                     "fixture precondition: the renderer must analyze " +

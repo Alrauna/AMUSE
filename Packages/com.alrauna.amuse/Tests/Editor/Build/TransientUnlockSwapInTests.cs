@@ -693,22 +693,52 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var mismatched = Track(fixture.Locked("MismatchCape"));
             var clean = Track(fixture.Locked("CleanCape"));
 
+            // No-op guard before the build: both materials must be
+            // recognized locked materials, so the swap-in discovery can
+            // collect them.
+            Assert.That(
+                LockedMaterialIdentity.RecognizedLockedIdentity(mismatched),
+                Is.True,
+                "fixture guard: the mismatched material must be a " +
+                "recognized locked material");
+            Assert.That(
+                LockedMaterialIdentity.RecognizedLockedIdentity(clean),
+                Is.True,
+                "fixture guard: the clean material must be a recognized " +
+                "locked material");
+
             var mesh = Track(TransientUnlockTestLifecycle.TwoSlotMesh());
             var mismatchRenderer =
                 TransientUnlockTestLifecycle.AddRenderer(
                     root, mesh, mismatched, mismatched);
+            var secondMesh =
+                Track(TransientUnlockTestLifecycle.OneSlotMesh());
+            var cleanRenderer =
+                TransientUnlockTestLifecycle.AddRenderer(
+                    root, secondMesh, clean);
+
+            // Distinct transform paths. The default fixture hosts share
+            // one name, and the admission gate collects the bindings of
+            // one path, so a shared path would make the clean material
+            // read the mismatched material's curve.
+            mismatchRenderer.gameObject.name = "AMUSE mismatch host";
+            cleanRenderer.gameObject.name = "AMUSE clean host";
+
             var clip = TransientUnlockTestLifecycle.AddMaterialSwapAnimation(
                 root, mismatchRenderer, 0, mismatched);
             TransientUnlockTestLifecycle.AddSuffixedFloatBinding(
-                clip, root, mismatchRenderer, "material._Color_S", 0.5f);
+                clip, root, mismatchRenderer, "material._AlphaForceOpaque_S",
+                1f);
 
             // No-op guard before the build: the clip must carry the
-            // renamed binding, so the collection reads a real curve.
+            // renamed binding, so the collection reads a real curve. The
+            // bound property is a float property under its renamed name,
+            // so the commit writes no error log.
             var bindingFound = false;
             foreach (var binding in AnimationUtility
                          .GetCurveBindings(clip))
             {
-                if (binding.propertyName == "material._Color_S")
+                if (binding.propertyName == "material._AlphaForceOpaque_S")
                 {
                     bindingFound = true;
                 }
@@ -719,12 +749,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Is.True,
                 "fixture guard: the clip must carry the renamed " +
                 "binding");
-
-            var secondMesh =
-                Track(TransientUnlockTestLifecycle.OneSlotMesh());
-            var cleanRenderer =
-                TransientUnlockTestLifecycle.AddRenderer(
-                    root, secondMesh, clean);
 
             var context = AvatarProcessor.ProcessAvatar(
                 root, TransientUnlockTestPlatform.Instance);
