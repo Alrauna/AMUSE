@@ -40,6 +40,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         public void RestoreAnisotropicFiltering()
         {
             _filteringPin.Dispose();
+
+            // The locked source fixture folder must not outlive the
+            // suite. The next suite setup deletes it too, but this
+            // class owns the folder shape that its tests write.
+            LockedSourceFixture.DeleteFolder();
         }
 
         [Test]

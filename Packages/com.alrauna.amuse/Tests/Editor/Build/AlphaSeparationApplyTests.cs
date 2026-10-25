@@ -208,12 +208,21 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 var sequence = InPhase(BuildPhase.PlatformFinish);
 
+                // The production topology runs the bindings capture and
+                // the barrier inside one animator scope, and the swap-in
+                // inside the barrier reads the live AnimationIndex. The
+                // probe between the scopes stays extension-free, so it
+                // can only touch renderer components and committed
+                // animator assets, exactly the foreign-pass interference
+                // the late-validation design must survive.
                 sequence.WithRequiredExtension(
                     typeof(AnimatorServicesContext),
-                    inner => inner.Run(
-                        "AMUSE test bindings capture", CapturePass));
-
-                sequence.Run("AMUSE test barrier", BarrierPass);
+                    inner =>
+                    {
+                        inner.Run(
+                            "AMUSE test bindings capture", CapturePass);
+                        inner.Run("AMUSE test barrier", BarrierPass);
+                    });
 
                 sequence.Run("AMUSE test armed probe", ProbePass);
 
@@ -353,7 +362,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 VerifiedLilToonTestSeams.VerifiedAlphaOnly,
                 ConversionOverride ??
                     VerifiedPoiyomiTestSeams.VerifiedConversion,
-                VerifiedFamilyConversion);
+                VerifiedFamilyConversion,
+                consentPresenter: subjects => true,
+                lockedOriginalAttestation: TransientUnlockTestKnobs
+                    .OriginalAttestation ?? (_ => true));
         }
 
         /// <summary>
@@ -874,6 +886,132 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 AlphaSeparationTestLifecycle.DestroyGenerated(state);
                 _scope.TearDown();
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        // --- Falsifier: a property block added after the swap-in and
+        // before the preparation makes the matching block state hide the
+        // block at apply ---
+
+        /// <summary>
+        /// A9 at apply. The window swapped the unlocked copy in, and a
+        /// late pass added a property block before the barrier prepared.
+        /// The block state at preparation then matches the live block
+        /// state, so only the window-clone re-check in the candidate
+        /// validation can refuse the slot. The named wrong
+        /// implementation trusts the matching block state and converts a
+        /// renderer whose locked original and unlocked copy would render
+        /// different values.
+        /// </summary>
+        [Test]
+        public void PropertyBlockAddedAfterSwapInRefusesAtApply()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(
+                TransientUnlockTestLifecycle.TempFolder);
+            var root = new GameObject("AMUSE late property block");
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            AmusePlatformFinishState state = null;
+            try
+            {
+                var locked = Track(
+                    TransientUnlockTestLifecycle
+                        .LockedConvertibleMaterialWithOriginal(
+                            "LateBlockCape",
+                            "Hidden/Alrauna/AmuseTests/PoiyomiSemanticTest"));
+
+                // No-op guard before the build: the material must be a
+                // recognized locked material, so the eligibility check
+                // and the swap-in discovery see the same fact.
+                Assert.That(
+                    LockedMaterialIdentity.RecognizedLockedIdentity(locked),
+                    Is.True,
+                    "fixture guard: the material must be a recognized " +
+                    "locked material");
+                var mesh = Track(
+                    AlphaSeparationTestLifecycle.SingleTriangleMesh());
+                var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(
+                    root, "body", mesh, locked);
+
+                var blockAdded = false;
+                BuildContext context;
+                using (new ConversionOverrideScope(
+                    (Material live, CapturedMaterialEvidence derived,
+                     bool allowDepthTestChange,
+                     Material preparedOpaque,
+                     out Material opaque,
+                     out PoiyomiOpaqueConversionRefusal refusal,
+                     out bool depthTestDivergence,
+                     out bool premultiplyNormalization) =>
+                    {
+                        // The conversion runs inside the preparation, so
+                        // the block lands after the swap-in gate saw none
+                        // and before the preparation captures the block
+                        // state. That is exactly the late-pass shape A9
+                        // closes.
+                        if (!blockAdded)
+                        {
+                            blockAdded = true;
+                            var block = new MaterialPropertyBlock();
+                            block.SetColor(
+                                "_Color", new Color(1f, 0f, 0f, 1f));
+                            renderer.SetPropertyBlock(block);
+                        }
+
+                        return VerifiedPoiyomiTestSeams.VerifiedConversion(
+                            live, derived, allowDepthTestChange,
+                            preparedOpaque, out opaque, out refusal,
+                            out depthTestDivergence,
+                            out premultiplyNormalization);
+                    }))
+                {
+                    context = AvatarProcessor.ProcessAvatar(
+                        root, ApplyTestPlatform.Instance);
+                }
+
+                state = context.GetState<AmusePlatformFinishState>();
+
+                var window = context
+                    .GetState<TransientUnlockWindowState>();
+                var slotMaterial = renderer.sharedMaterials[0];
+                Assert.That(
+                    "pairs=" + window.OpenPairs.Count +
+                    " slotIsLocked=" +
+                    ReferenceEquals(slotMaterial, locked) +
+                    " blocked=" + state.SlotRefusalCount(
+                        AlphaSeparationSlotRefusal
+                            .LockedMaterialPropertyBlock) +
+                    " applied=" + state.AppliedRendererCount,
+                    Does.StartWith("pairs=1 slotIsLocked=False blocked=1 " +
+                        "applied=0"),
+                    "fixture guard: the window must hold the pair, the " +
+                    "slot must not hold the locked original, and the A9 " +
+                    "refusal must fire with no applied write. NDMF " +
+                    "commits a serialized copy of the unlocked copy, so " +
+                    "the slot material is not reference-identical to " +
+                    "the pair's clone.");
+                Assert.That(state.SemanticallyRefusedRendererCount,
+                    Is.Zero,
+                    "fixture precondition: the renderer must analyze " +
+                    "through the unlocked copy");
+
+                Assert.That(
+                    state.SlotRefusalCount(
+                        AlphaSeparationSlotRefusal
+                            .LockedMaterialPropertyBlock),
+                    Is.EqualTo(1),
+                    "The candidate slot of the unlocked copy must refuse " +
+                    "with the A9 refusal.");
+                Assert.That(state.AppliedRendererCount, Is.EqualTo(0));
+                Assert.That(renderer.sharedMesh, Is.SameAs(mesh),
+                    "No write may touch the mesh of a refused renderer.");
+            }
+            finally
+            {
+                AlphaSeparationTestLifecycle.DestroyGenerated(state);
+                _scope.TearDown();
+                TransientUnlockTestLifecycle.DeleteTempFolder();
                 UnityEngine.Object.DestroyImmediate(root);
             }
         }
@@ -1773,6 +1911,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     new HashSet<(string, string, string)>(),
                     targets,
                     0,
+                    new HashSet<Material>(),
                     null,
                 };
                 var refusal = default(object);

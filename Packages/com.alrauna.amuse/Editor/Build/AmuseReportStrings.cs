@@ -745,6 +745,30 @@ namespace Alrauna.Amuse.Editor.Build
                 "Check the animations that swap this slot, and check " +
                 "that the lock tool works on this machine, then run the " +
                 "build again.",
+            ["amuse.slotSeparation.LockedMaterialPropertyBlock"] =
+                "AMUSE left material slot {0} of renderer '{2}' unchanged.",
+            ["amuse.slotSeparation.LockedMaterialPropertyBlock:description"] =
+                "Material slot {0} of renderer '{2}' holds a locked " +
+                "material. A renderer that shows this material carries " +
+                "a property block. The block would give the locked " +
+                "material and its unlocked build copy different values. " +
+                "The slot keeps its original locked material.",
+            ["amuse.slotSeparation.LockedMaterialPropertyBlock:hint"] =
+                "Remove the property block from the renderers that show " +
+                "this material, then run the build again.",
+            ["amuse.slotSeparation.LockedMaterialAnimationMismatch"] =
+                "AMUSE left material slot {0} of renderer '{2}' unchanged.",
+            ["amuse.slotSeparation.LockedMaterialAnimationMismatch:description"] =
+                "Material slot {0} of renderer '{2}' holds a locked " +
+                "material. An animation drives a property that the " +
+                "locked material bakes or reads under another name. An " +
+                "unlocked build copy would follow that animation, so the " +
+                "two would render different values. The slot keeps its " +
+                "original locked material.",
+            ["amuse.slotSeparation.LockedMaterialAnimationMismatch:hint"] =
+                "Remove the animation curves that drive the baked or " +
+                "renamed properties of this locked material, then run " +
+                "the build again.",
         };
 
 

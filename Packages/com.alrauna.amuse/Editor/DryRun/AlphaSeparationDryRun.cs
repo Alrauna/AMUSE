@@ -86,6 +86,11 @@ namespace Alrauna.Amuse.Editor.DryRun
         private bool _avatarCacheHit;
         private bool _policyInvalidated;
 
+        // The A9 and A10 admission verdicts are a per-pass fact (A9,
+        // A10.1). One computation per pass serves every renderer step.
+        private IReadOnlyDictionary<Material, AlphaSeparationSlotRefusal>
+            _lockedAdmissionRefusals;
+
         // The mapped policy values the build derives once per pass. The
         // dry run derives them once per open, from the same helpers.
         private AlphaPolicyBounds _bounds;
@@ -263,6 +268,8 @@ namespace Alrauna.Amuse.Editor.DryRun
             _controllerFingerprint = BuildControllerFingerprint();
             _graphFingerprint = BuildGraphFingerprint();
             _avatarKey = DryRunFingerprint.Avatar(InputsFor());
+            _lockedAdmissionRefusals =
+                LockedAdmissionRefusals(_avatarRoot, _graph);
 
             // An avatar hit serves the stored avatar rows, which already
             // carry this session's banners and notes, because the avatar
@@ -619,7 +626,17 @@ namespace Alrauna.Amuse.Editor.DryRun
             {
                 if (DryRunCache.TryGetRenderer(composite, out var stored))
                 {
-                    _rendererRows.AddRange(stored);
+                    // The stored rows carry no admission verdict, so the
+                    // fresh per-pass verdict applies to the served rows
+                    // (A9, A10.1). A block or a binding added after the
+                    // cache write still refuses the row.
+                    _rendererRows.AddRange(ApplyLockedAdmission(
+                        stored,
+                        renderer,
+                        rendererPath,
+                        rendererTypeName,
+                        _lockedAdmissionRefusals,
+                        AddNoteOnce));
                     _rendererIndex++;
                     RepaintRequested?.Invoke();
                     return true;
@@ -680,8 +697,18 @@ namespace Alrauna.Amuse.Editor.DryRun
                 if (resolved.Refusal != RendererAnalysisRefusal.None)
                 {
                     var refusalRows = DryRunRowBuilder.BuildResolvedRefusalRows(
-                        renderer, rendererPath, rendererTypeName, resolved);
-                    _rendererRows.AddRange(refusalRows);
+                        renderer, rendererPath, rendererTypeName, resolved,
+                        AddNoteOnce);
+                    // The cache stores the raw rows. The per-pass
+                    // admission verdict applies to the display only, so
+                    // a later pass re-decides it (A9, A10.1).
+                    _rendererRows.AddRange(ApplyLockedAdmission(
+                        refusalRows,
+                        renderer,
+                        rendererPath,
+                        rendererTypeName,
+                        _lockedAdmissionRefusals,
+                        AddNoteOnce));
                     if (!refreshOnly && _avatarKey != null)
                     {
                         DryRunCache.StoreRenderer(_avatarKey, rendererKey, refusalRows);
@@ -857,9 +884,20 @@ namespace Alrauna.Amuse.Editor.DryRun
                     verdicts,
                     _inFlightResolved.SlotResults,
                     _inFlightResolved.Slots,
-                    _inFlightRendererName);
+                    _inFlightRendererName,
+                    AddNoteOnce);
+                // The cache stores the raw rows. The per-pass admission
+                // verdict applies to the display only, so a later pass
+                // re-decides it (A9, A10.1).
+                var displayRows = ApplyLockedAdmission(
+                    rows,
+                    _inFlightRenderer,
+                    _inFlightRendererPath,
+                    _inFlightRendererTypeName,
+                    _lockedAdmissionRefusals,
+                    AddNoteOnce);
 
-                _rendererRows.AddRange(rows);
+                _rendererRows.AddRange(displayRows);
                 if (!_inFlightRefreshOnly && _avatarKey != null)
                 {
                     DryRunCache.StoreRenderer(_avatarKey, _inFlightRendererKey, rows);
@@ -1150,6 +1188,396 @@ namespace Alrauna.Amuse.Editor.DryRun
         }
 
         /// <summary>
+        /// The A9 and A10 admission refusal per locked material over
+        /// every avatar renderer that holds it (A9, A10.1). The pass
+        /// runs once per dry-run pass, outside the renderer cache. It
+        /// reads the property block fact of every holder renderer, and
+        /// the raw binding property names of the committed controller
+        /// graph on every holder path, filtered with an ordinal path
+        /// compare. The build gate reads the NDMF animation index
+        /// instead, and that index can also hold clips that upstream
+        /// plugins generate, so the two gates can read different clip
+        /// sets. A pair whose aligned facts do not exist skips the
+        /// gate, like the build does, and the per-slot mirror refuses
+        /// that pair instead. The map holds only refused materials.
+        /// </summary>
+        internal static IReadOnlyDictionary<Material,
+            AlphaSeparationSlotRefusal> LockedAdmissionRefusals(
+                GameObject avatarRoot,
+                CommittedControllerGraphResult graph)
+        {
+            var refusals = new Dictionary<Material,
+                AlphaSeparationSlotRefusal>();
+            if (avatarRoot == null || graph == null ||
+                graph.Refusal != AvatarAnimationRefusal.None)
+            {
+                return refusals;
+            }
+
+            var holders = new Dictionary<Material, List<Renderer>>();
+            foreach (var renderer in avatarRoot
+                         .GetComponentsInChildren<Renderer>(true))
+            {
+                if (renderer == null)
+                {
+                    continue;
+                }
+
+                foreach (var material in renderer.sharedMaterials)
+                {
+                    if (material == null ||
+                        !LockedMaterialIdentity.RecognizedLockedIdentity(
+                            material))
+                    {
+                        continue;
+                    }
+
+                    if (!holders.TryGetValue(material, out var list))
+                    {
+                        list = new List<Renderer>();
+                        holders.Add(material, list);
+                    }
+
+                    list.Add(renderer);
+                }
+            }
+
+            if (holders.Count == 0)
+            {
+                return refusals;
+            }
+
+            var bindingsByPath = RawBindingsByPath(graph);
+            foreach (var pair in holders)
+            {
+                var anyHolderBlock = false;
+                var bindingNames = new HashSet<string>(StringComparer
+                    .Ordinal);
+                foreach (var renderer in pair.Value)
+                {
+                    if (renderer.HasPropertyBlock())
+                    {
+                        anyHolderBlock = true;
+                    }
+
+                    var holderPath = AnimationUtility.CalculateTransformPath(
+                        renderer.transform, avatarRoot.transform);
+                    if (bindingsByPath.TryGetValue(
+                            holderPath, out var pathNames))
+                    {
+                        bindingNames.UnionWith(pathNames);
+                    }
+                }
+
+                if (AlignedFactsOf(pair.Key, out var source, out _) !=
+                    LockedFactOutcome.Aligned)
+                {
+                    continue;
+                }
+
+                var refusal = LockedMaterialAdmission.Decide(
+                    source, anyHolderBlock, bindingNames);
+                if (refusal != AlphaSeparationSlotRefusal.None)
+                {
+                    refusals.Add(pair.Key, refusal);
+                }
+            }
+
+            return refusals;
+        }
+
+        /// <summary>
+        /// The raw EditorCurveBinding property names of the float and
+        /// object reference curves of every committed clip, grouped by
+        /// binding path (A10.1). The per-path filter matches the
+        /// build's collection, so both gates read the same names.
+        /// </summary>
+        private static Dictionary<string, HashSet<string>>
+            RawBindingsByPath(CommittedControllerGraphResult graph)
+        {
+            var byPath = new Dictionary<string, HashSet<string>>(
+                StringComparer.Ordinal);
+            foreach (var layer in graph.Layers)
+            {
+                foreach (var clip in layer.Clips)
+                {
+                    if (clip == null)
+                    {
+                        continue;
+                    }
+
+                    foreach (var binding in AnimationUtility
+                                 .GetCurveBindings(clip))
+                    {
+                        AddRawBinding(
+                            byPath, binding.path, binding.propertyName);
+                    }
+
+                    foreach (var binding in AnimationUtility
+                                 .GetObjectReferenceCurveBindings(clip))
+                    {
+                        AddRawBinding(
+                            byPath, binding.path, binding.propertyName);
+                    }
+                }
+            }
+
+            return byPath;
+        }
+
+        private static void AddRawBinding(
+            Dictionary<string, HashSet<string>> byPath,
+            string path,
+            string propertyName)
+        {
+            if (string.IsNullOrEmpty(path) ||
+                string.IsNullOrEmpty(propertyName))
+            {
+                return;
+            }
+
+            if (!byPath.TryGetValue(path, out var names))
+            {
+                names = new HashSet<string>(StringComparer.Ordinal);
+                byPath.Add(path, names);
+            }
+
+            names.Add(propertyName);
+        }
+
+        /// <summary>
+        /// Applies the per-pass admission verdict to one renderer's
+        /// rows, stored or fresh. Every slot row whose material the
+        /// verdict refuses turns into the refusal row, so a served
+        /// deferred row cannot promise a conversion the build refuses.
+        /// The method names the cause once per avatar when the verdict
+        /// refuses a material of this renderer.
+        /// </summary>
+        internal static IReadOnlyList<MaterialTransformationRow>
+            ApplyLockedAdmission(
+                IReadOnlyList<MaterialTransformationRow> storedRows,
+                Renderer renderer,
+                string rendererPath,
+                string rendererTypeName,
+                IReadOnlyDictionary<Material, AlphaSeparationSlotRefusal>
+                    refusals,
+                Action<NoteKind> noteOnce)
+        {
+            if (storedRows == null || refusals == null ||
+                refusals.Count == 0 || renderer == null ||
+                renderer.sharedMaterials == null)
+            {
+                return storedRows;
+            }
+
+            var refusedSlots = new HashSet<int>();
+            for (var slotIndex = 0;
+                 slotIndex < renderer.sharedMaterials.Length;
+                 slotIndex++)
+            {
+                var material = renderer.sharedMaterials[slotIndex];
+                if (material != null && refusals.ContainsKey(material))
+                {
+                    refusedSlots.Add(slotIndex);
+                }
+            }
+
+            if (refusedSlots.Count == 0)
+            {
+                return storedRows;
+            }
+
+            noteOnce?.Invoke(NoteKind.LockedMaterialNotReproducible);
+
+            var rows = new List<MaterialTransformationRow>(
+                storedRows.Count);
+            foreach (var row in storedRows)
+            {
+                if (row.Kind == MaterialTransformationRowKind.Slot &&
+                    row.SlotIndex >= 0 &&
+                    refusedSlots.Contains(row.SlotIndex))
+                {
+                    rows.Add(MaterialTransformationRow.Slot(
+                        rendererPath,
+                        rendererTypeName,
+                        row.SlotIndex,
+                        -1,
+                        row.TotalTriangles,
+                        RowText.RefusedSlotSentence(),
+                        row.SourceMaterialPath));
+                    continue;
+                }
+
+                rows.Add(row);
+            }
+
+            return rows;
+        }
+
+        /// <summary>
+        /// One cache fingerprint part per locked material: the identity
+        /// of the generated shader and of the recorded original shader
+        /// (A8.5). A relock at the same asset path moves the generated
+        /// identity, so the renderer cache cannot serve rows of the old
+        /// lock.
+        /// </summary>
+        internal static string LockedShaderIdentityPart(Material material)
+        {
+            if (material == null || material.shader == null)
+            {
+                return "null" + BodySeparator + "null";
+            }
+
+            var original = LockedOriginalShaderOf(material);
+            return AssetIdentity(material.shader)
+                + BodySeparator
+                + (original != null ? AssetIdentity(original) : "null");
+        }
+
+        /// <summary>
+        /// Resolves the recorded original shader of one locked material
+        /// through its recorded GUID tag (A8.5). Null when the tag is
+        /// missing or the GUID resolves to no shader asset. The read is
+        /// read-only.
+        /// </summary>
+        private static Shader LockedOriginalShaderOf(Material material)
+        {
+            if (material == null)
+            {
+                return null;
+            }
+
+            var recordedGuid = material.GetTag(
+                LockedMaterialIdentity.OriginalShaderGuidTagName,
+                true,
+                null);
+            if (string.IsNullOrEmpty(recordedGuid))
+            {
+                return null;
+            }
+
+            var originalPath =
+                AssetDatabase.GUIDToAssetPath(recordedGuid);
+            return string.IsNullOrEmpty(originalPath)
+                ? null
+                : AssetDatabase.LoadAssetAtPath<Shader>(originalPath);
+        }
+
+        /// <summary>
+        /// The dry-run mirror of the locked proof pipeline (A8.5). It
+        /// runs the aligner through the session memo, builds the
+        /// reproduction plan from the live values of the locked
+        /// material, and checks the plan view. The property block and
+        /// animation admission rules live in the per-pass avatar pass,
+        /// which decides per locked material over every holder (A9,
+        /// A10.1). The method returns true when the mirror refuses, and
+        /// then the row never promises a conversion the build refuses.
+        /// A pair the mirror cannot check keeps the display deferral,
+        /// because the name-tag-only arm stays display-only.
+        /// </summary>
+        private static bool LockedMirrorRefuses(
+            Material material,
+            Action<NoteKind> noteOnce)
+        {
+            var outcome = AlignedFactsOf(
+                material, out var aligned, out var properties);
+            if (outcome == LockedFactOutcome.Unavailable)
+            {
+                // No recorded original resolves, so the mirror has no
+                // pair to check. The display-only arm keeps its answer.
+                return false;
+            }
+
+            if (outcome == LockedFactOutcome.Refused)
+            {
+                return RefuseMirror(noteOnce);
+            }
+
+            var lockedView = new UnityLockedMaterialValues(material);
+            var reproduction = LockedSourceReproduction.Build(
+                aligned, properties, lockedView);
+            if (!reproduction.Succeeded)
+            {
+                return RefuseMirror(noteOnce);
+            }
+
+            var consistency = LockedSourceReproduction.CheckConsistency(
+                aligned,
+                properties,
+                new LockedPlanView(lockedView, reproduction.Plan));
+            return consistency != null
+                ? RefuseMirror(noteOnce)
+                : false;
+        }
+
+        private static bool RefuseMirror(Action<NoteKind> noteOnce)
+        {
+            noteOnce?.Invoke(NoteKind.LockedMaterialNotReproducible);
+            return true;
+        }
+
+        /// <summary>
+        /// The outcome of one locked pair resolution through the session
+        /// memo (A8.4). <see cref="LockedFactOutcome.Unavailable"/> means
+        /// no recorded original resolves, so there is no pair to check.
+        /// <see cref="LockedFactOutcome.Refused"/> means the pair exists
+        /// but refuses: a generated shader that does not compile (A2.3),
+        /// an unreadable text, or an alignment refusal.
+        /// </summary>
+        private enum LockedFactOutcome
+        {
+            Unavailable,
+            Refused,
+            Aligned,
+        }
+
+        private static LockedFactOutcome AlignedFactsOf(
+            Material material,
+            out AlignedLockedSource source,
+            out IReadOnlyList<LockedSourceProperty> properties)
+        {
+            source = null;
+            properties = null;
+            if (material == null || material.shader == null)
+            {
+                return LockedFactOutcome.Unavailable;
+            }
+
+            var original = LockedOriginalShaderOf(material);
+            if (original == null)
+            {
+                return LockedFactOutcome.Unavailable;
+            }
+
+            if (ShaderUtil.ShaderHasError(material.shader))
+            {
+                return LockedFactOutcome.Refused;
+            }
+
+            var generatedText = LockedMaterialIdentity.ReadOriginalText(
+                material.shader);
+            var originalText = LockedMaterialIdentity.ReadOriginalText(
+                original);
+            if (generatedText == null || originalText == null)
+            {
+                return LockedFactOutcome.Refused;
+            }
+
+            properties = LockedSourceAlignmentMemo.PropertiesOf(
+                original, originalText);
+            var aligned = LockedSourceAlignmentMemo.GetOrAlign(
+                material.shader, original, properties);
+            if (!aligned.Succeeded)
+            {
+                properties = null;
+                return LockedFactOutcome.Refused;
+            }
+
+            source = aligned.Source;
+            return LockedFactOutcome.Aligned;
+        }
+
+        /// <summary>
         /// Checks whether an unresolved slot evaluates at build time. The
         /// slot's recorded cause controls the answer. Only the recorded
         /// semantics-unknown cause can defer, and only behind the live
@@ -1163,7 +1591,8 @@ namespace Alrauna.Amuse.Editor.DryRun
             Renderer renderer,
             int slotIndex,
             SlotResolutionResult slotResult,
-            CapturedMaterialSlotEvidence slotEvidence)
+            CapturedMaterialSlotEvidence slotEvidence,
+            Action<NoteKind> noteOnce = null)
         {
             if (renderer == null || renderer.sharedMaterials == null)
             {
@@ -1200,11 +1629,22 @@ namespace Alrauna.Amuse.Editor.DryRun
             // precondition reads the recorded asset reference. The
             // attested check also needs the recorded name tag to equal
             // the resolved shader name, and the matched row to admit
-            // locked originals (K8.3).
+            // locked originals (K8.3). The mirror of A8.5 then runs the
+            // same proof pipeline the build runs on the pair, so a
+            // locked material the build refuses is not shown as
+            // deferred. The name-tag-only arm stays display-only. The
+            // property block and animation admission rules run in the
+            // per-pass avatar pass over every holder of the material,
+            // not here (A9, A10.1).
             if (LockedMaterialIdentity.RecognizedLockedIdentity(material) &&
                 (LockedMaterialIdentity.OriginalShaderAttested(material) ||
                  IsAttestedOriginalShader(material)))
             {
+                if (LockedMirrorRefuses(material, noteOnce))
+                {
+                    return false;
+                }
+
                 return true;
             }
 
@@ -1534,6 +1974,14 @@ namespace Alrauna.Amuse.Editor.DryRun
             foreach (var material in renderer.sharedMaterials)
             {
                 parts.Add(AssetIdentity(material));
+                if (LockedMaterialIdentity.RecognizedLockedIdentity(
+                        material))
+                {
+                    // The mirror reads the generated text and the
+                    // original text of a locked material, so both file
+                    // identities join the renderer key (A8.5).
+                    parts.Add(LockedShaderIdentityPart(material));
+                }
             }
 
             foreach (var material in admittedLive)

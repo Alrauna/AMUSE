@@ -39,6 +39,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// the always-attested stand-in.</summary>
         internal static Func<Material, bool> OriginalAttestation;
 
+        /// <summary>A restore delegate a test injects over the production
+        /// restore, for cases that must script the restore outcome. Null
+        /// runs the production reconstruction.</summary>
+        internal static Func<Material, TransientUnlockRestoreResult>
+            RestoreOverride;
+
         /// <summary>False runs the swap-in pass; true skips it, for close
         /// tests that arm their pairs through the swap-in and then need a
         /// second build for the close alone.</summary>
@@ -108,6 +114,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             ConsentGranted = true;
             BuildPath = AmuseBuildPath.NonPlayNdmfBuild;
             OriginalAttestation = null;
+            RestoreOverride = null;
             SkipSwapIn = false;
             SkipClose = false;
             BeforeClose = null;
@@ -190,8 +197,20 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     context.GetState<TransientUnlockWindowState>();
                 window.ConsentGranted =
                     TransientUnlockTestKnobs.ConsentGranted;
-                var restore =
-                    TransientUnlockAvailability.CreateProductionRestore();
+                // The knob type and the delegate type are distinct, so the
+                // choice is an if, not a nullish coalescing.
+                TransientUnlockRestoreDelegate restore;
+                if (TransientUnlockTestKnobs.RestoreOverride != null)
+                {
+                    var injected = TransientUnlockTestKnobs.RestoreOverride;
+                    restore = clone => injected(clone);
+                }
+                else
+                {
+                    restore =
+                        TransientUnlockAvailability
+                            .CreateProductionRestore();
+                }
                 TransientUnlockTestKnobs.LastSwapSummary =
                     TransientUnlockSwapIn.SwapIn(
                         context,
@@ -395,6 +414,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             "Hidden/Alrauna/AmuseTests/LockedStandInOriginal";
 
         /// <summary>
+        /// The one original shader the locked source fixture serves. The
+        /// lifecycle locked materials ride a written partner of this
+        /// shader, because the reconstruction aligns the recorded pair
+        /// (A11.5).
+        /// </summary>
+        internal const string FixtureOriginalShaderName =
+            LockedSourceFixture.ShippedOriginalShaderName;
+
+        /// <summary>
         /// The one test-owned directory NDMF's persistence scope is
         /// pointed at, because the window's persistence is load-bearing.
         /// Deleted unconditionally in each test's finally.
@@ -402,13 +430,17 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         internal const string TempFolder =
             "Assets/AmuseTests_TransientUnlock";
 
-        /// <summary>Deletes the temp folder the lifecycle created, if present.</summary>
+        /// <summary>Deletes the temp folder the lifecycle created, if
+        /// present. It also deletes the locked source fixture folder, so
+        /// every fixture starts without a stale pair.</summary>
         internal static void DeleteTempFolder()
         {
             if (TempFolder != null && UnityEditor.AssetDatabase.IsValidFolder(TempFolder))
             {
                 UnityEditor.AssetDatabase.DeleteAsset(TempFolder);
             }
+
+            LockedSourceFixture.DeleteFolder();
         }
 
         internal static HostLifecycleFacts SupportedFacts()
@@ -427,20 +459,20 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
-        /// A locked stand-in material: the locked shader name prefix, the
-        /// optimizer flag at one, and all three identity tags. The
-        /// recorded original shader names and GUIDs the original stand-in
-        /// asset, so a real restore rebinds to a resolvable shader.
+        /// A locked material whose recorded original is the fixture
+        /// original and whose locked shader is the fixture's written
+        /// partner, so the real reconstruction aligns the pair and
+        /// restores. The caller owns destruction.
         /// </summary>
         internal static Material LockedMaterial(string materialName)
         {
             return LockedMaterialWithOriginal(
-                materialName, OriginalStandInShaderName);
+                materialName, FixtureOriginalShaderName);
         }
 
         /// <summary>
-        /// A locked stand-in material whose recorded original shader is the
-        /// named installed shader and whose saved render state is the
+        /// A locked stand-in material whose recorded original shader is
+        /// the named installed shader and whose saved render state is the
         /// Poiyomi stand-in's convertible Fade preset. The plain locked
         /// builder's material carries only the lock flag, so its restored
         /// clone sits at the original shader's canonical essentials and the
@@ -453,6 +485,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         internal static Material LockedConvertibleMaterialWithOriginal(
             string materialName, string originalShaderName)
         {
+            RequireFixtureOriginal(originalShaderName);
             var originalShader = Shader.Find(originalShaderName);
             if (originalShader == null)
             {
@@ -470,40 +503,42 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
-        /// A locked stand-in material whose recorded original shader is
-        /// the named installed shader. The stand-in restore rebinds the
-        /// clone to whatever the tag records, so a schema-complete fixture
-        /// shader as the recorded original lets the pipeline read the
-        /// restored clone through the full property table.
+        /// A locked material whose recorded original shader is the named
+        /// installed shader. The fixture pair records the fixture
+        /// original, so a schema-complete fixture shader as the recorded
+        /// original lets the pipeline read the restored clone through the
+        /// full property table.
         /// </summary>
         internal static Material LockedMaterialWithOriginal(
             string materialName, string originalShaderName)
         {
-            var shader = Shader.Find(LockedStandInShaderName);
-            if (shader == null)
-            {
-                throw new InvalidOperationException(
-                    "The locked stand-in shader must import.");
-            }
-
-            var originalShader = Shader.Find(originalShaderName);
-            if (originalShader == null)
-            {
-                // A preceding test's folder deletion can leave the asset
-                // database mid-refresh, so the original stand-in shader
-                // can briefly fail to resolve. Refresh and retry once.
-                AssetDatabase.Refresh();
-                originalShader = Shader.Find(originalShaderName);
-            }
-
-            var material = new Material(shader) { name = materialName };
-            ApplyLockTags(material, originalShader);
-            return material;
+            RequireFixtureOriginal(originalShaderName);
+            var fixture = new LockedSourceFixture();
+            return fixture.Locked(materialName);
         }
 
         /// <summary>
-        /// Locks an already configured fixture material. This preserves its
-        /// original shader properties for the unlock-window test.
+        /// The lifecycle serves one original shader. Any other recorded
+        /// original would ride a partner that does not align with it, so
+        /// the request must name the fixture original.
+        /// </summary>
+        private static void RequireFixtureOriginal(
+            string originalShaderName)
+        {
+            if (originalShaderName != FixtureOriginalShaderName)
+            {
+                throw new InvalidOperationException(
+                    "The locked source fixture serves only its shipped " +
+                    "original shader.");
+            }
+        }
+
+        /// <summary>
+        /// Locks an already configured fixture material. This preserves
+        /// its original shader properties for the unlock-window test. The
+        /// locked shader is the fixture's written partner of the
+        /// configured material's own shader, so the recorded pair aligns
+        /// for the real reconstruction.
         /// </summary>
         internal static Material LockConfiguredMaterial(
             string materialName, Material configuredMaterial)
@@ -521,15 +556,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     "The configured fixture material must have a shader.");
             }
 
-            var lockedShader = Shader.Find(LockedStandInShaderName);
-            if (lockedShader == null)
-            {
-                throw new InvalidOperationException(
-                    "The locked stand-in shader must import.");
-            }
-
+            var fixture = new LockedSourceFixture();
             configuredMaterial.name = materialName;
-            configuredMaterial.shader = lockedShader;
+            configuredMaterial.shader = fixture.Partner;
             ApplyLockTags(configuredMaterial, originalShader);
             return configuredMaterial;
         }

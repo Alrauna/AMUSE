@@ -40,7 +40,7 @@ namespace Alrauna.Amuse.Editor.Host
 
     internal static class AnimationBindingResolution
     {
-        private const string MaterialPrefix = "material.";
+        internal const string MaterialPrefix = "material.";
         internal const string TextureScaleOffsetSuffix = "_ST";
 
         internal static bool IsCompatibleRendererType(
@@ -331,7 +331,7 @@ namespace Alrauna.Amuse.Editor.Host
             return false;
         }
 
-        private static bool TrySplitComponent(
+        internal static bool TrySplitComponent(
             string property,
             string suffixes,
             out string stem,
@@ -357,7 +357,7 @@ namespace Alrauna.Amuse.Editor.Host
                    TrySplitComponent(property, "xyzw", out _, out _);
         }
 
-        private static bool TryStripPrefix(
+        internal static bool TryStripPrefix(
             string text,
             string prefix,
             out string remainder)
@@ -373,7 +373,7 @@ namespace Alrauna.Amuse.Editor.Host
             return true;
         }
 
-        private static bool TryStripIndexedMaterialPrefix(
+        internal static bool TryStripIndexedMaterialPrefix(
             string text,
             out string property)
         {

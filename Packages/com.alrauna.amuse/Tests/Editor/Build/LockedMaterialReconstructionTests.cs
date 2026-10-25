@@ -1,5 +1,6 @@
-using System.Collections.Generic;
+using System.IO;
 using Alrauna.Amuse.Editor.Build;
+using Alrauna.Amuse.Editor.Semantics.Poiyomi;
 using Alrauna.Amuse.Tests.Editor.Shared;
 using NUnit.Framework;
 using UnityEditor;
@@ -8,55 +9,15 @@ using UnityEngine;
 namespace Alrauna.Amuse.Tests.Editor.Build
 {
     /// <summary>
-    /// The in-memory locked-material reconstruction on synthetic locked
-    /// fixtures. Every fixture is an in-memory material: the locked stand-in
-    /// shader carries the locked serialization and tags, the original
-    /// stand-in shader plays the recorded original, and no asset database
-    /// content is written or refreshed.
+    /// The in-memory locked-material reconstruction on locked shader
+    /// pairs. Every fixture is a LockedSourceFixture pair: the shipped
+    /// semantic test shader plays the recorded original, the written
+    /// partner plays the locked generated shader, and the locked material
+    /// carries the locked serialization and tags. No repo content outside
+    /// the fixture folder is written or refreshed.
     /// </summary>
     public sealed class LockedMaterialReconstructionTests
     {
-        private const string OriginalStandInShaderName =
-            "Hidden/Alrauna/AmuseTests/LockedStandInOriginal";
-
-        private const string LockedStandInShaderName =
-            "Hidden/Locked/Alrauna/AmuseTests/LockedStandIn";
-
-        // An existing schema-only stand-in that does not declare the
-        // optimizer flag property, so it can play an original shader whose
-        // flag step must refuse.
-        private const string FlaglessStandInShaderName =
-            "Hidden/Alrauna/AmuseTests/LilToonSemanticTest";
-
-        // The schema-only stand-in whose declared table carries the color
-        // and vector plain names the renamed-move rows restore onto.
-        private const string RichOriginalStandInShaderName =
-            "Hidden/Alrauna/AmuseTests/LockedStandInOriginalRich";
-        private const string SuffixedColorName = "_Tint_ReconCape2D7";
-        private const string SuffixedVectorName = "_Shear_ReconCape2D7";
-
-        // The hyphen exercises the vendor rename-suffix cleaning rule: the
-        // suffix of this name is "ReconCape2D7".
-        private const string LockedMaterialName = "ReconCape-7";
-        private const string RenameSuffix = "ReconCape2D7";
-        private const string SuffixedMainTexName = "_MainTex_ReconCape2D7";
-        private const string SuffixedFloatName = "_Saturation_ReconCape2D7";
-        private const string StaleKeyword = "STALE_RECON_KEYWORD";
-
-        // Vendor optimizer format, controller-extracted, fact 1 (keyword
-        // tag): one space-joined keyword list that replaces the whole set.
-        private const string RecordedKeywordsTag =
-            "AMUSE_RECON_KEYWORD_A AMUSE_RECON_KEYWORD_B";
-
-        private static readonly string[] RecordedKeywords =
-        {
-            "AMUSE_RECON_KEYWORD_A",
-            "AMUSE_RECON_KEYWORD_B",
-        };
-
-        private const string UnresolvableGuid =
-            "deadbeefdeadbeefdeadbeefdeadbeef";
-
         // The fixed refusal sentences the reconstruction contract pins.
         private const string NameTagMissingDetail =
             "the recorded original shader name tag is missing";
@@ -70,14 +31,34 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         private const string FlagPropertyMissingDetail =
             "the resolved original shader does not declare the " +
             "optimizer flag property";
+        private const string CompileErrorDetail =
+            "The generated shader of the locked material does not " +
+            "compile.";
+        private const string PropDefineDetail =
+            "The texture defines of a program block do not match the " +
+            "textures of the material.";
+
+        // A GUID-shaped marker that resolves to no asset. It is a
+        // synthetic constant, not the GUID of any real asset.
+        private const string UnresolvableGuid =
+            "deadbeefdeadbeefdeadbeefdeadbeef";
 
         private readonly TestTransientScope _scope =
             new TestTransientScope(allowDestroyingAssets: true);
+
+        [SetUp]
+        public void SetUp()
+        {
+            LockedSourceFixture.DeleteFolder();
+            AssetDatabase.Refresh();
+        }
 
         [TearDown]
         public void TearDown()
         {
             _scope.TearDown();
+            LockedSourceFixture.DeleteFolder();
+            AssetDatabase.Refresh();
         }
 
         private T Track<T>(T obj) where T : Object
@@ -90,559 +71,375 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             return obj;
         }
 
-        private static Shader StandInShader(string shaderName)
-        {
-            var shader = Shader.Find(shaderName);
-            Assert.That(shader, Is.Not.Null, $"'{shaderName}' must import.");
-            return shader;
-        }
-
-        /// <summary>
-        /// The unlocked original fixture: one material on the original
-        /// stand-in that carries one plain float and the cleared flag, and
-        /// whose shader GUID is recorded through the AssetDatabase.
-        /// </summary>
-        private Material UnlockedOriginalFixture(
-            Shader originalShader, Texture plainTexture)
-        {
-            var original = Track(new Material(originalShader)
-            {
-                name = LockedMaterialName,
-            });
-            original.SetFloat("_Saturation", 0.37f);
-            original.SetFloat(
-                LockedMaterialIdentity.OptimizerEnabledPropertyName, 0f);
-            original.SetTexture("_MainTex", plainTexture);
-            return original;
-        }
-
-        /// <summary>
-        /// The locked form: a name-identical material on the locked
-        /// stand-in whose flag float is one, whose tags record the original
-        /// name and GUID, whose keyword tag carries a keyword set, and
-        /// whose saved properties hold the suffixed name carrying the value
-        /// while the plain name holds a different value. The plain value is
-        /// a typed write on a declared name; every suffixed entry is
-        /// written through the serialization, because Unity no-ops typed
-        /// writes on names the current shader does not declare.
-        /// </summary>
-        private Material LockedFixture(
-            Shader originalShader,
-            string recordedGuid,
-            Texture plainTexture = null,
-            Texture suffixedTexture = null,
-            bool withNameTag = true,
-            bool withGuidTag = true,
-            bool withKeywordTag = true,
-            bool mainTexAnimated = true,
-            bool withSuffixedUndeclaredFloat = false)
-        {
-            var locked = Track(new Material(
-                StandInShader(LockedStandInShaderName))
-            {
-                name = LockedMaterialName,
-            });
-            locked.SetFloat(
-                LockedMaterialIdentity.OptimizerEnabledPropertyName, 1f);
-
-            // The locked keyword set differs from the recorded tag, so the
-            // restore must replace the whole set, not extend it.
-            locked.shaderKeywords = new[] { StaleKeyword };
-
-            if (withNameTag)
-            {
-                locked.SetOverrideTag(
-                    LockedMaterialIdentity.OriginalShaderTagName,
-                    originalShader.name);
-            }
-
-            if (withGuidTag)
-            {
-                locked.SetOverrideTag(
-                    LockedMaterialIdentity.OriginalShaderGuidTagName,
-                    recordedGuid);
-            }
-
-            if (withKeywordTag)
-            {
-                locked.SetOverrideTag("OriginalKeywords",
-                    RecordedKeywordsTag);
-            }
-
-            // Vendor optimizer format, controller-extracted, fact 3 (rename
-            // scope): the animated tag value two marks a renamed property.
-            if (mainTexAnimated)
-            {
-                locked.SetOverrideTag("_MainTex" + "Animated", "2");
-            }
-
-            if (plainTexture != null)
-            {
-                locked.SetTexture("_MainTex", plainTexture);
-                locked.SetTextureScale("_MainTex", Vector2.one);
-            }
-
-            if (suffixedTexture != null)
-            {
-                WriteSavedTexEnv(locked, SuffixedMainTexName,
-                    suffixedTexture, new Vector2(2f, 3f),
-                    new Vector2(0.25f, 0.5f));
-            }
-
-            if (withSuffixedUndeclaredFloat)
-            {
-                WriteSavedFloat(locked, SuffixedFloatName, 0.37f);
-                locked.SetOverrideTag("_Saturation" + "Animated", "2");
-            }
-
-            return locked;
-        }
-
-        /// <summary>
-        /// Appends one saved texenv entry through the serialization, the
-        /// way the lock persists renamed texture properties.
-        /// </summary>
-        private static void WriteSavedTexEnv(
-            Material material, string propertyName, Texture texture,
-            Vector2 scale, Vector2 offset)
-        {
-            using var serialized = new SerializedObject(material);
-            var texEnvs = serialized.FindProperty(
-                "m_SavedProperties.m_TexEnvs");
-            Assert.That(texEnvs, Is.Not.Null,
-                "m_TexEnvs must exist on a material.");
-            texEnvs.InsertArrayElementAtIndex(texEnvs.arraySize);
-            var element = texEnvs.GetArrayElementAtIndex(
-                texEnvs.arraySize - 1);
-            SetElementKey(element, propertyName);
-            var second = element.FindPropertyRelative("second");
-            Assert.That(second, Is.Not.Null,
-                "the texenv element must expose its value struct.");
-            second.FindPropertyRelative("m_Texture")
-                .objectReferenceValue = texture;
-            second.FindPropertyRelative("m_Scale").vector2Value = scale;
-            second.FindPropertyRelative("m_Offset").vector2Value = offset;
-            serialized.ApplyModifiedProperties();
-        }
-
-        /// <summary>
-        /// Appends one saved float entry through the serialization, the
-        /// way the lock persists renamed float properties.
-        /// </summary>
-        private static void WriteSavedFloat(
-            Material material, string propertyName, float value)
-        {
-            using var serialized = new SerializedObject(material);
-            var floats = serialized.FindProperty(
-                "m_SavedProperties.m_Floats");
-            Assert.That(floats, Is.Not.Null,
-                "m_Floats must exist on a material.");
-            floats.InsertArrayElementAtIndex(floats.arraySize);
-            var element = floats.GetArrayElementAtIndex(
-                floats.arraySize - 1);
-            SetElementKey(element, propertyName);
-            var second = element.FindPropertyRelative("second");
-            Assert.That(second, Is.Not.Null,
-                "the float element must expose its value.");
-            second.floatValue = value;
-            serialized.ApplyModifiedProperties();
-        }
-
-        /// <summary>
-        /// Appends one saved integer entry through the serialization.
-        /// Renamed integer properties persist this way when locked.
-        /// </summary>
-        private static void WriteSavedInt(
-            Material material, string propertyName, int value)
-        {
-            using var serialized = new SerializedObject(material);
-            var ints = serialized.FindProperty(
-                "m_SavedProperties.m_Ints");
-            Assert.That(ints, Is.Not.Null,
-                "m_Ints must exist on a material.");
-            ints.InsertArrayElementAtIndex(ints.arraySize);
-            var element = ints.GetArrayElementAtIndex(
-                ints.arraySize - 1);
-            SetElementKey(element, propertyName);
-            var second = element.FindPropertyRelative("second");
-            Assert.That(second, Is.Not.Null,
-                "the int element must expose its value.");
-            second.intValue = value;
-            serialized.ApplyModifiedProperties();
-        }
-
-        /// <summary>
-        /// Appends one saved color entry through the serialization, the
-        /// way the lock persists renamed color properties. Renamed vector
-        /// values ride the same colors storage on the serialization shapes
-        /// without a separate vectors container, so the vector row writes
-        /// through this helper too.
-        /// </summary>
-        private static void WriteSavedColor(
-            Material material, string propertyName, Color value)
-        {
-            using var serialized = new SerializedObject(material);
-            var colors = serialized.FindProperty(
-                "m_SavedProperties.m_Colors");
-            Assert.That(colors, Is.Not.Null,
-                "m_Colors must exist on a material.");
-            colors.InsertArrayElementAtIndex(colors.arraySize);
-            var element = colors.GetArrayElementAtIndex(
-                colors.arraySize - 1);
-            SetElementKey(element, propertyName);
-            var second = element.FindPropertyRelative("second");
-            Assert.That(second, Is.Not.Null,
-                "the color element must expose its value.");
-            second.colorValue = value;
-            serialized.ApplyModifiedProperties();
-        }
-
-        /// <summary>
-        /// Appends one saved vector entry through the serialization, the
-        /// way the lock persists renamed vector properties. The entry is
-        /// written through the colors container, which every serialization
-        /// shape carries, and additionally through the vectors container
-        /// on the shapes that separate Vector4 storage, so the fixture
-        /// never depends on which shape this Unity exposes. Both entries
-        /// hold the same value, so whichever loop of the reconstruction
-        /// moves it, the plain name receives the same four components.
-        /// </summary>
-        private static void WriteSavedVector(
-            Material material, string propertyName, Vector4 value)
-        {
-            WriteSavedColor(material, propertyName,
-                new Color(value.x, value.y, value.z, value.w));
-
-            using var serialized = new SerializedObject(material);
-            var vectors = serialized.FindProperty(
-                "m_SavedProperties.m_Vectors");
-            if (vectors == null)
-            {
-                return;
-            }
-
-            vectors.InsertArrayElementAtIndex(vectors.arraySize);
-            var element = vectors.GetArrayElementAtIndex(
-                vectors.arraySize - 1);
-            SetElementKey(element, propertyName);
-            var second = element.FindPropertyRelative("second");
-            Assert.That(second, Is.Not.Null,
-                "the vector element must expose its value.");
-            second.vector4Value = value;
-            serialized.ApplyModifiedProperties();
-        }
-
-        /// <summary>
-        /// Writes the key of one saved-property element. The current
-        /// material serialization keeps the key string directly in
-        /// "first"; the older one kept it inside a "first" struct under
-        /// "name". Both are written so the fixture never depends on which
-        /// one this Unity exposes.
-        /// </summary>
-        private static void SetElementKey(
-            SerializedProperty element, string propertyName)
-        {
-            var first = element.FindPropertyRelative("first");
-            Assert.That(first, Is.Not.Null,
-                "the saved-property element must expose its key.");
-            if (first.propertyType == SerializedPropertyType.String)
-            {
-                first.stringValue = propertyName;
-                return;
-            }
-
-            var name = first.FindPropertyRelative("name");
-            Assert.That(name, Is.Not.Null,
-                "the saved-property key struct must expose its name.");
-            name.stringValue = propertyName;
-        }
-
-        /// <summary>
-        /// The key of one saved-property element, read with the same
-        /// shape tolerance the fixture writer uses.
-        /// </summary>
-        private static string ElementKey(SerializedProperty element)
-        {
-            var first = element.FindPropertyRelative("first");
-            if (first == null)
-            {
-                return null;
-            }
-
-            if (first.propertyType == SerializedPropertyType.String)
-            {
-                return first.stringValue;
-            }
-
-            var name = first.FindPropertyRelative("name");
-            return name != null ? name.stringValue : null;
-        }
-
-        private Texture2D TrackTexture(string textureName)
-        {
-            var texture = Track(new Texture2D(2, 2));
-            texture.name = textureName;
-            return texture;
-        }
-
-        private static bool Apply(
-            Material locked, bool attests, out string refusalDetail)
+        private static TransientUnlockRestoreResult Apply(
+            Material locked, bool attests)
         {
             return LockedMaterialReconstruction.TryApply(
-                locked, _ => attests, out refusalDetail);
+                locked, _ => attests);
         }
 
         private static void AssertRefusal(
-            bool applied,
-            string refusalDetail,
+            TransientUnlockRestoreResult result,
             string expectedDetail,
             string recordedGuid)
         {
-            Assert.That(applied, Is.False,
+            Assert.That(result.Outcome,
+                Is.EqualTo(TransientUnlockRestoreOutcome.Failed),
                 "the reconstruction must refuse");
-            Assert.That(refusalDetail, Is.EqualTo(expectedDetail));
-            Assert.That(refusalDetail.Contains("/"), Is.False,
+            Assert.That(result.Detail, Is.EqualTo(expectedDetail));
+            Assert.That(result.Detail.Contains("/"), Is.False,
                 "a refusal detail must never carry a path");
-            Assert.That(refusalDetail.Contains(recordedGuid), Is.False,
+            Assert.That(result.Detail.Contains(recordedGuid), Is.False,
                 "a refusal detail must never carry a GUID");
-            Assert.That(refusalDetail.Contains(LockedMaterialName), Is.False,
-                "a refusal detail must never carry a material name");
-        }
-
-        private static float? SavedFloat(
-            Material material, string propertyName)
-        {
-            using var serialized = new SerializedObject(material);
-            var floats = serialized.FindProperty(
-                "m_SavedProperties.m_Floats");
-            if (floats == null)
-            {
-                return null;
-            }
-
-            for (var index = 0; index < floats.arraySize; index++)
-            {
-                var element = floats.GetArrayElementAtIndex(index);
-                if (ElementKey(element) == propertyName)
-                {
-                    var second = element.FindPropertyRelative("second");
-                    return second != null ? second.floatValue : null;
-                }
-            }
-
-            return null;
         }
 
         /// <summary>
-        /// The color of one saved colors entry, read through the same
-        /// serialization the fixture writers use, so the no-op guards
-        /// below cannot be fooled by the typed getter's view of names the
-        /// locked shader does not declare.
+        /// The guard of every falsifier: the pair aligns and the
+        /// reproduction builds a non-empty plan before the test applies
+        /// its edit. A guard failure means the fixture broke, never the
+        /// falsified behavior.
         /// </summary>
-        private static Color? SavedColor(
-            Material material, string propertyName)
+        private static void AssertGuard(
+            LockedSourceFixture fixture, Material locked)
         {
-            using var serialized = new SerializedObject(material);
-            var colors = serialized.FindProperty(
-                "m_SavedProperties.m_Colors");
-            if (colors == null)
-            {
-                return null;
-            }
+            var originalText = LockedMaterialIdentity.ReadOriginalText(
+                fixture.Original);
+            var generatedText = LockedMaterialIdentity.ReadOriginalText(
+                fixture.Partner);
+            Assert.That(originalText, Is.Not.Null,
+                "the original text must be readable for the guard");
+            Assert.That(generatedText, Is.Not.Null,
+                "the generated text must be readable for the guard");
+            var properties = LockedSourceAlignmentMemo.PropertiesOf(
+                fixture.Original, originalText);
+            var aligned = LockedSourceAlignmentMemo.GetOrAlign(
+                fixture.Partner, fixture.Original, properties);
+            Assert.That(aligned.Succeeded, Is.True,
+                "fixture guard: the pair must align before the edit, " +
+                "but the aligner refused at original line " +
+                aligned.OriginalLine + " with " +
+                (aligned.RefusalDetail ?? "no sentence"));
 
-            for (var index = 0; index < colors.arraySize; index++)
-            {
-                var element = colors.GetArrayElementAtIndex(index);
-                if (ElementKey(element) == propertyName)
-                {
-                    var second = element.FindPropertyRelative("second");
-                    return second != null ? second.colorValue : null;
-                }
-            }
-
-            return null;
+            var lockedView = new UnityLockedMaterialValues(locked);
+            var reproduction = LockedSourceReproduction.Build(
+                aligned.Source, properties, lockedView);
+            Assert.That(reproduction.Succeeded, Is.True,
+                "fixture guard: the plan must build before the edit, " +
+                "but the reproduction refused with " +
+                (reproduction.RefusalDetail ?? "no sentence"));
+            Assert.That(reproduction.Plan.FloatWrites.Count +
+                    reproduction.Plan.VectorWrites.Count +
+                    reproduction.Plan.ColorWrites.Count +
+                    reproduction.Plan.TextureWrites.Count,
+                Is.GreaterThan(0),
+                "fixture guard: the plan must hold at least one write");
         }
 
-        /// <summary>
-        /// The texture of one saved texenv entry, read through the same
-        /// serialization the fixture writes, so a guard on it cannot be
-        /// fooled by the typed getter's view of undeclared names.
-        /// </summary>
-        private static Texture SavedTexEnvTexture(
-            Material material, string propertyName)
-        {
-            using var serialized = new SerializedObject(material);
-            var texEnvs = serialized.FindProperty(
-                "m_SavedProperties.m_TexEnvs");
-            if (texEnvs == null)
-            {
-                return null;
-            }
-
-            for (var index = 0; index < texEnvs.arraySize; index++)
-            {
-                var element = texEnvs.GetArrayElementAtIndex(index);
-                if (ElementKey(element) == propertyName)
-                {
-                    var second = element.FindPropertyRelative("second");
-                    var textureProperty =
-                        second != null
-                            ? second.FindPropertyRelative("m_Texture")
-                            : null;
-                    return textureProperty != null
-                        ? textureProperty.objectReferenceValue as Texture
-                        : null;
-                }
-            }
-
-            return null;
-        }
-
+        // --- Falsifier 1: an implementation that derives the rename from
+        // the material name instead of the generated text and misses a
+        // cleaned underscore suffix, or that cannot carry an edited
+        // renamed value onto the plain name. The suffix of the material
+        // name U_Cape is U5FCape, and the renamed alpha input is edited
+        // after the lock. The plain color must take the edited renamed
+        // value.
         [Test]
-        public void ReconstructionMovesSuffixedValuesOntoPlainNamesRestoresKeywordsAndClearsFlag()
+        public void UnderscoreNameWithAnEditedRenamedAlphaInputReproducesTheLockedValue()
         {
-            // Falsifies the declared-table reader: the locked shader's
-            // typed view resolves the plain value, never the suffixed
-            // value the serialization holds.
-            var originalShader = StandInShader(OriginalStandInShaderName);
-            var plainTexture = TrackTexture("PlainMainTex");
-            var suffixedTexture = TrackTexture("SuffixedMainTex");
-            UnlockedOriginalFixture(originalShader, plainTexture);
-            AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
-                originalShader, out var guid, out long _);
+            var fixture = new LockedSourceFixture();
+            fixture.WithRename("U5FCape");
+            var locked = Track(fixture.Locked("U_Cape"));
+            AssertGuard(fixture, locked);
 
-            var locked = LockedFixture(
-                originalShader, guid, plainTexture, suffixedTexture);
+            // The partner declares the renamed name, so the edit after
+            // the lock is a typed write on a declared slot, exactly the
+            // way an authored material holds it.
+            var renamedColor = "_Color_U5FCape";
+            var edited = new Color(0.25f, 0.5f, 0.75f, 0.125f);
+            locked.SetColor(renamedColor, edited);
+            var expected = locked.GetColor(renamedColor);
+            Assert.That(expected.a, Is.EqualTo(0.125f),
+                "fixture guard: the edited renamed value must be " +
+                "readable on the locked material");
 
-            // No-op guards: the fixture must hold the locked shape, or the
-            // assertions below prove nothing. The suffixed entry is
-            // checked in the serialization, because the typed getter of an
-            // undeclared name cannot see it.
-            Assert.That(SavedTexEnvTexture(locked, SuffixedMainTexName),
-                Is.SameAs(suffixedTexture),
-                "the suffixed texenv must exist pre-call");
-            Assert.That(locked.shader.name,
-                Is.EqualTo(LockedStandInShaderName));
-            Assert.That(locked.GetTexture("_MainTex"),
-                Is.SameAs(plainTexture),
-                "the plain name must hold a different value pre-call");
+            var result = Apply(locked, true);
+
+            Assert.That(result.Outcome,
+                Is.EqualTo(TransientUnlockRestoreOutcome.Succeeded),
+                result.Detail ?? "the reconstruction refused");
+            Assert.That(result.Detail, Is.Null);
+            Assert.That(locked.shader, Is.SameAs(fixture.Original),
+                "the reconstruction must rebind the recorded original");
+            Assert.That(locked.GetColor("_Color"),
+                Is.EqualTo(expected),
+                "the plain name must take the edited renamed value");
             Assert.That(locked.GetFloat(
                     LockedMaterialIdentity.OptimizerEnabledPropertyName),
-                Is.EqualTo(1f));
+                Is.EqualTo(0f),
+                "the lock flag must clear after the reconstruction");
+        }
 
-            var applied = Apply(locked, true, out var refusalDetail);
+        // --- Falsifier 2: an implementation that gates the renamed move
+        // on the per-property Animated tag. The pair renames the texture,
+        // the material carries no Animated tag at all, and the renamed
+        // value must still land on the plain name.
+        [Test]
+        public void MissingAnimatedTagsDoNotStopTheRenamedMove()
+        {
+            var fixture = new LockedSourceFixture();
+            fixture.WithRename("XCape");
+            var locked = Track(fixture.Locked("X Cape"));
+            AssertGuard(fixture, locked);
 
-            Assert.That(applied, Is.True, refusalDetail ?? string.Empty);
-            Assert.That(refusalDetail, Is.Null);
-            Assert.That(locked.shader, Is.SameAs(originalShader));
+            var texture = Track(new Texture2D(4, 4));
+            var renamedTexture = "_MainTex_XCape";
+            locked.SetTexture(renamedTexture, texture);
+            locked.SetTextureScale(renamedTexture, new Vector2(2f, 3f));
+            locked.SetTextureOffset(renamedTexture, new Vector2(0.25f, 0.5f));
+
+            var result = Apply(locked, true);
+
+            Assert.That(result.Outcome,
+                Is.EqualTo(TransientUnlockRestoreOutcome.Succeeded),
+                result.Detail ?? "the reconstruction refused");
             Assert.That(locked.GetTexture("_MainTex"),
-                Is.SameAs(suffixedTexture),
-                "the typed getter must read the suffixed value on the " +
-                "plain name");
+                Is.SameAs(texture),
+                "the renamed texture must land on the plain name");
             Assert.That(locked.GetTextureScale("_MainTex"),
-                Is.EqualTo(new Vector2(2f, 3f)));
+                Is.EqualTo(new Vector2(2f, 3f)),
+                "the renamed scale must land on the plain name");
             Assert.That(locked.GetTextureOffset("_MainTex"),
-                Is.EqualTo(new Vector2(0.25f, 0.5f)));
+                Is.EqualTo(new Vector2(0.25f, 0.5f)),
+                "the renamed offset must land on the plain name");
+        }
+
+        // --- Falsifier 3: an implementation that trusts a rename suffix
+        // tag. The fixture writes both suffix tags with values that
+        // disagree with the real suffix in the generated text. The move
+        // must still happen, because the text is the only truth source.
+        [Test]
+        public void LockedRenameSuffixTagThatDisagreesWithTheNameIsIgnored()
+        {
+            var fixture = new LockedSourceFixture();
+            fixture.WithRename("RealSuffix");
+            var locked = Track(fixture.Locked("Plain Name"));
+            fixture.WriteDecoySuffixTags(locked, "WrongSuffix");
+            AssertGuard(fixture, locked);
+
+            var renamedColor = "_Color_RealSuffix";
+            var edited = new Color(0.5f, 0.25f, 0.75f, 0.5f);
+            locked.SetColor(renamedColor, edited);
+            var expected = locked.GetColor(renamedColor);
+
+            var result = Apply(locked, true);
+
+            Assert.That(result.Outcome,
+                Is.EqualTo(TransientUnlockRestoreOutcome.Succeeded),
+                result.Detail ?? "the reconstruction refused");
+            Assert.That(locked.GetColor("_Color"),
+                Is.EqualTo(expected),
+                "the suffix tags must be ignored and the renamed value " +
+                "must move");
+            Assert.That(locked.GetFloat(
+                    LockedMaterialIdentity.OptimizerEnabledPropertyName),
+                Is.EqualTo(0f),
+                "every other step must still have held");
+        }
+
+        // --- Falsifier 4: an implementation that carries the live saved
+        // value of a baked property instead of the baked literal. The
+        // original gains one program use of _AlphaForceOpaque, the
+        // partner bakes it to the vendor print of one, and the locked
+        // material is edited to zero after the lock. The clone must take
+        // the baked value.
+        [Test]
+        public void BakedForceOpaqueEditedAfterLockTakesTheBakedValue()
+        {
+            var fixture = new LockedSourceFixture();
+            fixture.WithProgramHeadLines(
+                "            float _AlphaForceOpaque;");
+            fixture.WithFragmentLines(
+                "            i.uv.x += _AlphaForceOpaque;");
+            fixture.WithBake("_AlphaForceOpaque", "1.0");
+            var locked = Track(fixture.Locked("BakedCape"));
+            AssertGuard(fixture, locked);
+
+            locked.SetFloat("_AlphaForceOpaque", 0f);
+
+            var result = Apply(locked, true);
+
+            Assert.That(result.Outcome,
+                Is.EqualTo(TransientUnlockRestoreOutcome.Succeeded),
+                result.Detail ?? "the reconstruction refused");
+            Assert.That(locked.shader, Is.SameAs(fixture.Original));
+            Assert.That(locked.GetFloat("_AlphaForceOpaque"),
+                Is.EqualTo(1f),
+                "the baked literal must win over the edited saved " +
+                "value");
+        }
+
+        // --- Falsifier 5: an implementation that restores a mask
+        // assigned after the lock without its texture define. The
+        // original holds a surviving masked block under the define, and
+        // the generated text carries no PROP define for the mask,
+        // because the mask slot was empty at lock time. A mask assigned
+        // after the lock must refuse instead of restoring.
+        [Test]
+        public void MaskAssignedAfterLockWithoutItsDefineRefuses()
+        {
+            var fixture = new LockedSourceFixture();
+            fixture.WithProgramLines(
+                "            #if defined(PROP_ALPHAMASK)",
+                "            sampler2D _AlphaMask;",
+                "            #endif");
+            var locked = Track(fixture.Locked("MaskCape"));
+            AssertGuard(fixture, locked);
+
+            // The mask is assigned after the lock, on the live locked
+            // material. The generated text carries no PROP define for it.
+            var mask = Track(new Texture2D(4, 4));
+            locked.SetTexture("_AlphaMask", mask);
+
+            var result = Apply(locked, true);
+
+            AssertRefusal(result, PropDefineDetail, UnresolvableGuid);
+            Assert.That(locked.shader, Is.SameAs(fixture.Partner),
+                "a refused reconstruction must not swap the shader");
+            Assert.That(locked.GetFloat(
+                    LockedMaterialIdentity.OptimizerEnabledPropertyName),
+                Is.EqualTo(1f),
+                "a refused reconstruction must not clear the lock flag");
+        }
+
+        // --- Falsifier 6: an implementation that tolerates a generated
+        // label line that differs from the original. The shipped label
+        // stays the release label, so a changed label must refuse.
+        [Test]
+        public void DifferentLabelLineRefuses()
+        {
+            var fixture = new LockedSourceFixture();
+            fixture.WithGeneratedLine(
+                "shader_master_label",
+                "        shader_master_label " +
+                "(\"Another Label\", Float) = 0");
+            var locked = Track(fixture.Locked("LabelCape"));
+
+            var result = Apply(locked, true);
+
+            AssertRefusal(
+                result,
+                "A generated line does not match the expected line.",
+                UnresolvableGuid);
+        }
+
+        [Test]
+        public void GeneratedShaderWithCompileErrorRefuses()
+        {
+            var fixture = new LockedSourceFixture();
+            fixture.WithGeneratedLine(
+                "return tex2D",
+                "                return tex2D(_MainTex, i.uv) * " +
+                "_AmuseNoSuchSymbol;");
+            var locked = Track(fixture.Locked("BrokenCape"));
+
+            // No-op guard: the partner asset itself carries the compile
+            // error, so the refusal cannot come from any other step.
+            Assert.That(ShaderUtil.ShaderHasError(fixture.Partner),
+                Is.True,
+                "fixture guard: the partner must carry the compile " +
+                "error");
+
+            var result = Apply(locked, true);
+
+            AssertRefusal(result, CompileErrorDetail, UnresolvableGuid);
+            Assert.That(locked.shader, Is.SameAs(fixture.Partner),
+                "a refused reconstruction must not swap the shader");
+        }
+
+        [Test]
+        public void QueueAndOverrideTagsAreCarriedFromTheLockedMaterial()
+        {
+            var fixture = new LockedSourceFixture();
+            var locked = Track(fixture.Locked("TagCape"));
+            AssertGuard(fixture, locked);
+
+            locked.renderQueue = 2450;
+            locked.SetOverrideTag("RenderType", "Transparent");
+            locked.SetOverrideTag("VRCFallback", "Unlit");
+
+            var result = Apply(locked, true);
+
+            Assert.That(result.Outcome,
+                Is.EqualTo(TransientUnlockRestoreOutcome.Succeeded),
+                result.Detail ?? "the reconstruction refused");
+            Assert.That(locked.renderQueue, Is.EqualTo(2450),
+                "the render queue must carry from the locked material");
+            Assert.That(
+                locked.GetTag("RenderType", false, null),
+                Is.EqualTo("Transparent"),
+                "the RenderType override tag must carry");
+            Assert.That(
+                locked.GetTag("VRCFallback", false, null),
+                Is.EqualTo("Unlit"),
+                "the VRCFallback override tag must carry");
+        }
+
+        [Test]
+        public void ClonedNameStaysTheLockedName()
+        {
+            var fixture = new LockedSourceFixture();
+            var locked = Track(fixture.Locked("Named Cape"));
+
+            var result = Apply(locked, true);
+
+            Assert.That(result.Outcome,
+                Is.EqualTo(TransientUnlockRestoreOutcome.Succeeded),
+                result.Detail ?? "the reconstruction refused");
+            Assert.That(locked.name, Is.EqualTo("Named Cape"),
+                "the reconstruction must never rename the clone");
+        }
+
+        [Test]
+        public void RelockToTheSamePathInvalidatesTheMemo()
+        {
+            var fixture = new LockedSourceFixture("relock");
+            var locked = Track(fixture.Locked("RelockCape"));
+
+            var first = Apply(locked, true);
+            Assert.That(first.Outcome,
+                Is.EqualTo(TransientUnlockRestoreOutcome.Succeeded),
+                first.Detail ?? "the first reconstruction refused");
+
+            // The relock writes a different generated text to the same
+            // asset path. The memo key binds the write time, so the test
+            // pins a moved stamp and proves the invalidation on the
+            // content, not on a timing race.
+            var relock = new LockedSourceFixture("relock");
+            relock.WithAddedDefine("AMUSE_RELOCK_MARKER");
+            var regenerated = relock.Partner;
+            var generatedPath = AssetDatabase.GetAssetPath(regenerated);
+            Assert.That(generatedPath, Is.Not.Empty,
+                "fixture guard: the regenerated partner must be an " +
+                "asset");
+            var stampBefore = File.GetLastWriteTimeUtc(generatedPath);
+            File.SetLastWriteTimeUtc(
+                generatedPath, stampBefore.AddMilliseconds(2));
+            Assert.That(
+                File.GetLastWriteTimeUtc(generatedPath).Ticks,
+                Is.Not.EqualTo(stampBefore.Ticks),
+                "fixture guard: the file system must keep the moved " +
+                "stamp");
+            locked.shader = regenerated;
+            locked.SetFloat(
+                LockedMaterialIdentity.OptimizerEnabledPropertyName, 1f);
+
+            var second = Apply(locked, true);
+            Assert.That(second.Outcome,
+                Is.EqualTo(TransientUnlockRestoreOutcome.Succeeded),
+                second.Detail ?? "the relock reconstruction refused");
             Assert.That(locked.shaderKeywords,
-                Is.EquivalentTo(RecordedKeywords),
-                "the keyword set must be replaced with the tag's set");
-            Assert.That(locked.GetFloat(
-                    LockedMaterialIdentity.OptimizerEnabledPropertyName),
-                Is.EqualTo(0f));
-        }
-
-        [Test]
-        public void ReconstructionMovesRenamedColorOntoTheDeclaredPlainName()
-        {
-            // Follows the float and texture move rows: the renamed color
-            // persists in the saved colors serialization under the
-            // suffixed name, and the move must land it on the plain name
-            // the resolved original shader declares as a color. The
-            // material color set/get path converts between color spaces
-            // on this project, so the typed expectation is derived through
-            // the same set/get round trip on a reference material of the
-            // same shader, fed with the exact value the reconstruction
-            // reads from the serialization. This keeps the equality exact
-            // instead of loosening it to a tolerance.
-            var originalShader = StandInShader(RichOriginalStandInShaderName);
-            AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
-                originalShader, out var guid, out long _);
-
-            var authoredColor = new Color(0.25f, 0.5f, 0.75f, 0.125f);
-            var locked = LockedFixture(originalShader, guid);
-            WriteSavedColor(locked, SuffixedColorName, authoredColor);
-            locked.SetOverrideTag("_Tint" + "Animated", "2");
-
-            // No-op guard: the suffixed entry must hold a value in the
-            // serialization pre-call. The typed getter of the locked
-            // stand-in cannot see the undeclared plain name, so only the
-            // serialization proves the fixture shape. The reader is the
-            // same serialized colors entry the reconstruction reads.
-            var savedValue = SavedColor(locked, SuffixedColorName);
-            Assert.That(savedValue, Is.Not.Null,
-                "the suffixed color entry must exist pre-call");
-
-            // The typed expectation: what the declared plain name reads
-            // after the same saved value goes through the same set/get
-            // path on a reference material of the same shader.
-            var reference = Track(new Material(originalShader));
-            reference.SetColor("_Tint", savedValue.Value);
-            var expectedThroughTypedGetter = reference.GetColor("_Tint");
-
-            var applied = Apply(locked, true, out var refusalDetail);
-
-            Assert.That(applied, Is.True, refusalDetail ?? string.Empty);
-            Assert.That(refusalDetail, Is.Null);
-            Assert.That(locked.shader, Is.SameAs(originalShader));
-            Assert.That(locked.GetColor("_Tint"),
-                Is.EqualTo(expectedThroughTypedGetter),
-                "the typed getter must read the moved saved color on " +
-                "the plain name");
-            Assert.That(locked.GetFloat(
-                    LockedMaterialIdentity.OptimizerEnabledPropertyName),
-                Is.EqualTo(0f),
-                "every other step must still have held");
-        }
-
-        [Test]
-        public void ReconstructionMovesRenamedVectorOntoTheDeclaredPlainName()
-        {
-            // The renamed vector rides the saved colors storage on the
-            // serialization shapes without a separate vectors container,
-            // and the move must route a colors entry onto a vector
-            // declared plain name exactly as the vendor restore puts it
-            // back.
-            var originalShader = StandInShader(RichOriginalStandInShaderName);
-            AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
-                originalShader, out var guid, out long _);
-
-            var expectedVector = new Vector4(0.125f, 0.25f, 0.5f, 0.75f);
-            var locked = LockedFixture(originalShader, guid);
-            WriteSavedVector(locked, SuffixedVectorName, expectedVector);
-            locked.SetOverrideTag("_Shear" + "Animated", "2");
-
-            // No-op guard: the suffixed entry must hold the value in the
-            // colors serialization pre-call; the locked stand-in declares
-            // no plain vector name, so the serialization is the only view.
-            Assert.That(SavedColor(locked, SuffixedVectorName),
-                Is.EqualTo(new Color(
-                    expectedVector.x, expectedVector.y,
-                    expectedVector.z, expectedVector.w)),
-                "the suffixed vector entry must exist pre-call");
-
-            var applied = Apply(locked, true, out var refusalDetail);
-
-            Assert.That(applied, Is.True, refusalDetail ?? string.Empty);
-            Assert.That(refusalDetail, Is.Null);
-            Assert.That(locked.shader, Is.SameAs(originalShader));
-            Assert.That(locked.GetVector("_Shear"),
-                Is.EqualTo(expectedVector),
-                "the typed getter must read the suffixed vector on the " +
-                "plain name");
-            Assert.That(locked.GetFloat(
-                    LockedMaterialIdentity.OptimizerEnabledPropertyName),
-                Is.EqualTo(0f),
-                "every other step must still have held");
+                Does.Contain("AMUSE_RELOCK_MARKER"),
+                "the relock must align the new text and carry its " +
+                "keyword");
         }
 
         [Test]
@@ -650,17 +447,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             // Falsifies the tag-less reader: without reading the identity
             // tags this case would apply and return true.
-            var originalShader = StandInShader(OriginalStandInShaderName);
-            AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
-                originalShader, out var guid, out long _);
+            var fixture = new LockedSourceFixture();
+            var locked = Track(fixture.Locked("NoNameTagCape"));
+            locked.SetOverrideTag(
+                LockedMaterialIdentity.OriginalShaderTagName, null);
 
-            var locked = LockedFixture(
-                originalShader, guid, withNameTag: false);
+            var result = Apply(locked, true);
 
-            var applied = Apply(locked, true, out var refusalDetail);
-
-            AssertRefusal(
-                applied, refusalDetail, NameTagMissingDetail, guid);
+            AssertRefusal(result, NameTagMissingDetail, UnresolvableGuid);
         }
 
         [Test]
@@ -668,17 +462,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             // Falsifies the tag-less reader: without reading the identity
             // tags this case would apply and return true.
-            var originalShader = StandInShader(OriginalStandInShaderName);
-            AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
-                originalShader, out var guid, out long _);
+            var fixture = new LockedSourceFixture();
+            var locked = Track(fixture.Locked("NoGuidTagCape"));
+            locked.SetOverrideTag(
+                LockedMaterialIdentity.OriginalShaderGuidTagName, null);
 
-            var locked = LockedFixture(
-                originalShader, guid, withGuidTag: false);
+            var result = Apply(locked, true);
 
-            var applied = Apply(locked, true, out var refusalDetail);
-
-            AssertRefusal(
-                applied, refusalDetail, GuidTagMissingDetail, guid);
+            AssertRefusal(result, GuidTagMissingDetail, UnresolvableGuid);
         }
 
         [Test]
@@ -687,16 +478,16 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             // Falsifies the tag-less reader: a reader that never resolves
             // the recorded GUID through the AssetDatabase answers true
             // here.
-            var originalShader = StandInShader(OriginalStandInShaderName);
+            var fixture = new LockedSourceFixture();
+            var locked = Track(fixture.Locked("LostCape"));
+            locked.SetOverrideTag(
+                LockedMaterialIdentity.OriginalShaderGuidTagName,
+                UnresolvableGuid);
 
-            var locked = LockedFixture(
-                originalShader, UnresolvableGuid);
-
-            var applied = Apply(locked, true, out var refusalDetail);
+            var result = Apply(locked, true);
 
             AssertRefusal(
-                applied, refusalDetail, GuidUnresolvableDetail,
-                UnresolvableGuid);
+                result, GuidUnresolvableDetail, UnresolvableGuid);
         }
 
         [Test]
@@ -704,16 +495,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             // Falsifies the tag-less reader: a reader that skips the
             // attestation seam answers true on an unattested original.
-            var originalShader = StandInShader(OriginalStandInShaderName);
-            AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
-                originalShader, out var guid, out long _);
+            var fixture = new LockedSourceFixture();
+            var locked = Track(fixture.Locked("UnattestedCape"));
 
-            var locked = LockedFixture(originalShader, guid);
-
-            var applied = Apply(locked, false, out var refusalDetail);
+            var result = Apply(locked, false);
 
             AssertRefusal(
-                applied, refusalDetail, AttestationFailedDetail, guid);
+                result, AttestationFailedDetail, UnresolvableGuid);
         }
 
         [Test]
@@ -721,150 +509,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             // Falsifies the blind flag writer: clearing the flag without a
             // declared-property check corrupts a shader that never
-            // carried it.
-            var flaglessShader = StandInShader(FlaglessStandInShaderName);
-            AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
-                flaglessShader, out var guid, out long _);
+            // carried it. The variant original drops the flag property
+            // line, and the pair still aligns, so the refusal can only
+            // come from the flag step.
+            var fixture = new LockedSourceFixture();
+            fixture.WithoutOriginalLine("_ShaderOptimizerEnabled (");
+            var locked = Track(fixture.Locked("FlaglessCape"));
+            AssertGuard(fixture, locked);
 
-            var locked = LockedFixture(
-                flaglessShader,
-                guid,
-                mainTexAnimated: false);
-
-            var applied = Apply(locked, true, out var refusalDetail);
+            var result = Apply(locked, true);
 
             AssertRefusal(
-                applied, refusalDetail, FlagPropertyMissingDetail, guid);
-        }
-
-        [Test]
-        public void SuffixedValueWithoutPlainDeclarationStaysUntouchedAndReconstructionSucceeds()
-        {
-            // Falsifies the blind stripper: stripping the suffix without a
-            // declared-plain-name check writes orphan values onto
-            // undeclared names.
-            var originalShader = StandInShader(OriginalStandInShaderName);
-            AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
-                originalShader, out var guid, out long _);
-
-            var locked = LockedFixture(
-                originalShader,
-                guid,
-                withSuffixedUndeclaredFloat: true);
-
-            var applied = Apply(locked, true, out var refusalDetail);
-
-            Assert.That(applied, Is.True, refusalDetail ?? string.Empty);
-            Assert.That(refusalDetail, Is.Null);
-            Assert.That(SavedFloat(locked, SuffixedFloatName),
-                Is.EqualTo(0.37f),
-                "the undeclared suffixed value must stay untouched");
-            Assert.That(SavedFloat(locked, "_Saturation"), Is.Null,
-                "no plain entry may appear for an undeclared name");
-            Assert.That(locked.GetFloat(
-                    LockedMaterialIdentity.OptimizerEnabledPropertyName),
-                Is.EqualTo(0f),
-                "every other step must still have held");
-        }
-
-        [Test]
-        public void SuffixedValueWithoutAnimatedTagStaysUntouchedAndReconstructionSucceeds()
-        {
-            // Falsifies the suffix-only mover: moving every suffixed value
-            // without the animated-tag check renames duplicates that the
-            // vendor unlock leaves alone.
-            var originalShader = StandInShader(OriginalStandInShaderName);
-            var plainTexture = TrackTexture("PlainMainTex");
-            var suffixedTexture = TrackTexture("SuffixedMainTex");
-            UnlockedOriginalFixture(originalShader, plainTexture);
-            AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
-                originalShader, out var guid, out long _);
-
-            var locked = LockedFixture(
-                originalShader,
-                guid,
-                plainTexture,
-                suffixedTexture,
-                mainTexAnimated: false);
-
-            // No-op guard: the plain name must hold its own value
-            // pre-call, and the suffixed entry must exist in the
-            // serialization, or the untouched assertion proves nothing.
-            Assert.That(locked.GetTexture("_MainTex"),
-                Is.SameAs(plainTexture));
-            Assert.That(SavedTexEnvTexture(locked, SuffixedMainTexName),
-                Is.SameAs(suffixedTexture),
-                "the suffixed texenv must exist pre-call");
-
-            var applied = Apply(locked, true, out var refusalDetail);
-
-            Assert.That(applied, Is.True, refusalDetail ?? string.Empty);
-            Assert.That(refusalDetail, Is.Null);
-            Assert.That(locked.GetTexture("_MainTex"),
-                Is.SameAs(plainTexture),
-                "the suffixed value must stay off the plain name");
-            Assert.That(locked.GetFloat(
-                    LockedMaterialIdentity.OptimizerEnabledPropertyName),
-                Is.EqualTo(0f),
-                "every other step must still have held");
-        }
-
-        [Test]
-        public void MoveSuffixedSavedValues_RestoresIntegerProperties_ToClonedMaterial()
-        {
-            var integerShader = Track(ShaderUtil.CreateShaderAsset(
-                "Shader \"Hidden/AmuseTests/ReconIntegerTest\"\n" +
-                "{\n" +
-                "    Properties\n" +
-                "    {\n" +
-                "        _Cull (\"Cull\", Integer) = 0\n" +
-                "    }\n" +
-                "    SubShader { Pass {} }\n" +
-                "}\n"));
-
-            var clone = Track(new Material(integerShader)
-            {
-                name = LockedMaterialName,
-            });
-            clone.SetOverrideTag("thry_rename_suffix", RenameSuffix);
-            clone.SetOverrideTag("_CullAnimated", "2");
-
-            const int expectedValue = 2;
-            WriteSavedInt(clone, "_Cull_" + RenameSuffix, expectedValue);
-
-            Assert.That(clone.GetInteger("_Cull"), Is.EqualTo(0),
-                "the integer property must start at its default value");
-
-            LockedMaterialReconstruction.MoveSuffixedSavedValues(
-                clone, integerShader);
-
-            Assert.That(clone.GetInteger("_Cull"), Is.EqualTo(expectedValue),
-                "the suffixed saved int must restore onto the declared plain property");
-        }
-
-        [Test]
-        public void ReadSavedProperties_ReadsIntegerPropertyStorage()
-        {
-            var originalShader = StandInShader(OriginalStandInShaderName);
-            AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
-                originalShader, out var guid, out long _);
-            var locked = LockedFixture(originalShader, guid);
-            const string propertyName = "_Cull_ReconCape2D7";
-            const int expectedValue = 2;
-            WriteSavedInt(locked, propertyName, expectedValue);
-
-            var textures = new List<(string name, Texture texture,
-                Vector2 scale, Vector2 offset)>();
-            var floats = new List<(string name, float value)>();
-            var colors = new List<(string name, Color value)>();
-            var vectors = new List<(string name, Vector4 value)>();
-
-            LockedMaterialReconstruction.ReadSavedProperties(
-                locked, textures, floats, colors, vectors);
-
-            Assert.That(floats, Has.Some.Matches<(string name, float value)>(
-                entry => entry.name == propertyName &&
-                         Mathf.RoundToInt(entry.value) == expectedValue));
+                result, FlagPropertyMissingDetail, UnresolvableGuid);
         }
     }
 }

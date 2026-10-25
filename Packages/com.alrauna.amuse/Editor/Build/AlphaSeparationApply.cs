@@ -213,6 +213,21 @@ namespace Alrauna.Amuse.Editor.Build
                       ObjectReferenceKeyframe[] Curve,
                       int SlotIndex)>>(separation.Renderers.Count);
 
+            // The open window's unlocked clones (A9). A candidate slot
+            // whose live material is one of them re-runs the swap-in
+            // property-block check at apply, because a later pass can
+            // add a block after the swap-in gate saw none.
+            var windowClones = new HashSet<Material>();
+            foreach (var pair in context
+                         .GetState<TransientUnlockWindowState>()
+                         .OpenPairs)
+            {
+                if (pair.UnlockedClone != null)
+                {
+                    windowClones.Add(pair.UnlockedClone);
+                }
+            }
+
             foreach (var prepared in separation.Renderers)
             {
                 var survivors = new List<PreparedSlotSeparation>();
@@ -364,7 +379,8 @@ namespace Alrauna.Amuse.Editor.Build
                 {
                     var refusal = ValidateCandidateSlot(
                         prepared, candidate, live, capturedBindings,
-                        targetBindings, splitCount, out var unmapped);
+                        targetBindings, splitCount, windowClones,
+                        out var unmapped);
                     if (refusal != AlphaSeparationSlotRefusal.None)
                     {
                         AmuseReports.RecordRefusal(
@@ -692,6 +708,7 @@ namespace Alrauna.Amuse.Editor.Build
                   ObjectReferenceKeyframe[] Curve,
                   int SlotIndex)> targetBindings,
             int currentSplitCount,
+            HashSet<Material> windowClones,
             out Material unmapped)
         {
             unmapped = null;
@@ -717,6 +734,18 @@ namespace Alrauna.Amuse.Editor.Build
             }
 
             var slotIndex = candidate.Plan.SourceMaterialBindingIndex;
+
+            // A9 at apply. The live material is an unlocked clone of the
+            // window, so the renderer must still carry no property block.
+            // A later pass can add one after the swap-in gate saw none.
+            if (windowClones.Contains(live[slotIndex]) &&
+                prepared.Target.Renderer != null &&
+                prepared.Target.Renderer.HasPropertyBlock())
+            {
+                return AlphaSeparationSlotRefusal
+                    .LockedMaterialPropertyBlock;
+            }
+
             foreach (var target in targetBindings)
             {
                 if (target.SlotIndex != slotIndex)

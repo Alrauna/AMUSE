@@ -122,6 +122,13 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                     "A shader version inside the supported range did not " +
                     "verify against its measured source. Its triangles " +
                     "stay unproven."));
+            Assert.That(
+                RowText.NoteSentence(NoteKind.LockedMaterialNotReproducible),
+                Is.EqualTo(
+                    "Some locked materials refuse in a build. The cause " +
+                    "can be the recorded source, a property block, or an " +
+                    "animation. This view does not promise a conversion " +
+                    "for those materials."));
         }
 
         [Test]
