@@ -1179,11 +1179,13 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 "before trusting a green result");
 
             var target = Shader.Find(targetName);
-            Assume.That(
-                target, Is.Not.Null,
-                "the jp.lilxyzw.liltoon package is not installed in this"
-                + " project; the pinned opaque target cannot resolve."
-                + " Install it to run this verification.");
+            if (target == null)
+            {
+                Assert.Ignore(
+                    "the jp.lilxyzw.liltoon package 2.4.1 is not installed"
+                    + " in this project; the pinned opaque target cannot"
+                    + " resolve. Install it to run this verification.");
+            }
 
             // The attestation reads the shader-format stamp off captured
             // material evidence, exactly as the production wrapper feeds

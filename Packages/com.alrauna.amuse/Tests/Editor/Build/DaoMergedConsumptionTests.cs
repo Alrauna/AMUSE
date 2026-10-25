@@ -49,9 +49,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
     public sealed class DaoMergedConsumptionTests
         : MergedConsumptionFixture
     {
-        private const string DaoIntegrationEnvironmentVariable =
-            "AMUSE_DAO_INTEGRATION";
-
         protected override string TempFolder =>
             "Assets/AmuseTests_DaoMerge";
 
@@ -103,19 +100,21 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             // The disposable-project guard: these tests mutate and delete
             // project-level d4rkAvatarOptimizer output, so they run only
             // when the caller explicitly opted the project in.
-            Assume.That(
-                Environment.GetEnvironmentVariable(
-                    DaoIntegrationEnvironmentVariable),
-                Is.EqualTo("1"),
-                "Set " + DaoIntegrationEnvironmentVariable + "=1 in a"
+            VendorOptInGate.Require(
+                VendorOptInGate.DaoIntegration,
+                "Set " + VendorOptInGate.DaoIntegration + "=1 in a"
                 + " disposable public integration project to run these"
                 + " tests. They delete project-level d4rkAvatarOptimizer"
                 + " output and must never run elsewhere.");
 
             var daoType = Type.GetType(DaoComponentTypeName);
-            Assume.That(daoType, Is.Not.Null,
-                "the d4rkpl4y3r.d4rkavataroptimizer package is not"
-                + " installed in this project; install it to run them.");
+            if (daoType == null)
+            {
+                Assert.Ignore(
+                    "the d4rkpl4y3r.d4rkavataroptimizer package 4.6.0 is"
+                    + " not installed in this project; install it to run"
+                    + " them.");
+            }
             RequireLilToonEnvironment(out var transparentShader,
                 out var cutoutShader);
             var traceAndOptimizeType = Type.GetType(TraceAndOptimizeTypeName);

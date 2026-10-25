@@ -99,7 +99,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             AssetDatabase.CreateFolder("Assets", "AmuseTests_AaoMerge");
             quadrantTexture = Track(ImportQuadrantAlphaTexture());
             var shader = Shader.Find(LilToonTransparentShaderName);
-            Assume.That(shader, Is.Not.Null, "lilToon not installed");
+            if (shader == null)
+            {
+                Assert.Ignore(
+                    "lilToon not installed. Install the jp.lilxyzw.liltoon"
+                    + " package 2.4.1 to run this test.");
+            }
             var material = Track(NewTransparentMaterial(shader, quadrantTexture));
 
             var selected = UnityMaterialSemantics
@@ -152,7 +157,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             AssetDatabase.CreateFolder("Assets", "AmuseTests_AaoMerge");
             quadrantTexture = Track(ImportQuadrantAlphaTexture());
             var shader = Shader.Find(LilToonTransparentShaderName);
-            Assume.That(shader, Is.Not.Null, "lilToon not installed");
+            if (shader == null)
+            {
+                Assert.Ignore(
+                    "lilToon not installed. Install the jp.lilxyzw.liltoon"
+                    + " package 2.4.1 to run this test.");
+            }
 
             var root = new GameObject("AMUSE evidence probe root");
             Track(root);
