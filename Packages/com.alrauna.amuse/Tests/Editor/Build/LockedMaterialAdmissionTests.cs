@@ -203,6 +203,36 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "mismatch");
         }
 
+        // --- Falsifier 12: a reorder of the locked-slot checks admits
+        // a blocked locked slot with a clean binding set ---
+
+        /// <summary>
+        /// A blocked locked slot refuses with the property block cause
+        /// with no binding input at all, so the block check cannot move
+        /// behind the binding check (A9).
+        /// </summary>
+        [Test]
+        public void DecideRefusesABlockedLockedSlotWithCleanBindings()
+        {
+            var source = Source(
+                States(("_B", LockedPropertyState.Baked)));
+
+            Assert.That(
+                LockedMaterialAdmission.Decide(
+                    source, false, Array.Empty<string>()),
+                Is.EqualTo(AlphaSeparationSlotRefusal.None),
+                "fixture guard: the same source without the block " +
+                "must admit");
+
+            Assert.That(
+                LockedMaterialAdmission.Decide(
+                    source, true, Array.Empty<string>()),
+                Is.EqualTo(AlphaSeparationSlotRefusal
+                    .LockedMaterialPropertyBlock),
+                "a blocked locked slot with a clean binding set must " +
+                "refuse");
+        }
+
         [Test]
         public void ANullBindingCollectionIsAProgrammingError()
         {
