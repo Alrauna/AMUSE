@@ -28,6 +28,16 @@ namespace Alrauna.Amuse.Tests.Editor
     [SetUpFixture]
     public sealed class RunEndSceneHygiene
     {
+        [OneTimeSetUp]
+        public void AssertTheLockedVendorEnvironment()
+        {
+            // Suite start: fail before the first test when the
+            // environment is not the locked vendor one. Absent
+            // packages and accepted drifts are recorded in one dated
+            // console line. See VendorSuiteStartCheck.RunAll.
+            VendorSuiteStartCheck.RunAll();
+        }
+
         [OneTimeTearDown]
         public void LeaveNoModifiedSceneOpen()
         {
