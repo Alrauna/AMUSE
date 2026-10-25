@@ -8,3 +8,9 @@
 # package.json. Excluded from releases by the workflows, which build only the
 # single package they are configured with, not by being untracked here.
 !com.alrauna.amuse.research
+
+# Vendor packages for local testing (Poiyomi, Thry, VRCFury, Modular Avatar).
+# Explicit so a future whitelist edit cannot expose them.
+com.poiyomi.*
+com.vrcfury.*
+nadena.dev.modular-avatar

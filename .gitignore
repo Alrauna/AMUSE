@@ -72,3 +72,10 @@ Desktop.ini
 
 # Agent execution scratch (plans, ledgers, review packages)
 .superpowers/
+
+# Vendor packages installed for local testing only. Never commit them.
+# Packages/.gitignore already ignores them. These cover Assets-side residue.
+Assets/_PoiyomiShaders*
+Assets/*LockedShader*
+Assets/.Thry*
+Assets/VRCFury*
