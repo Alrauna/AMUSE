@@ -49,7 +49,6 @@ Correctness policy: a false positive violates the declared transformation contra
 |`docs/superpowers/specs/`|Dated design specs, `YYYY-MM-DD-<topic>-design.md`|
 |`docs/superpowers/plans/`|Dated implementation plans with RED/GREEN tasks|
 |`docs/superpowers/investigations/`|Dated read-only characterization notes|
-|`Tools/`|`Bootstrap-NdmfStandalone.ps1`|
 
 ## Development Commands
 
@@ -60,11 +59,10 @@ dotnet tool install --global vrchat.vpm.cli
 vpm list repos                                    # check NDMF repo registration
 vpm add repo https://vpm.nadena.dev/vpm.json      # only when missing
 vpm resolve project .                             # restores Packages/nadena.dev.ndmf
-pwsh -NoProfile -File ./Tools/Bootstrap-NdmfStandalone.ps1
 # then open the project in Unity 2022.3.22f1
 ```
 
-`vpm resolve` can exit 0 without resolving. Confirm `Packages/nadena.dev.ndmf/package.json` exists at version 1.14.4 afterward. The bootstrap script materializes NDMF `Dependencies~` into `Packages/nadena.dev.ndmf/Dependencies/`, pinned to NDMF 1.14.4, and verifies the file list and digests. It is idempotent.
+`vpm resolve` can exit 0 without resolving. Confirm `Packages/nadena.dev.ndmf/package.json` exists afterward. Any NDMF 1.14.x or newer 1.x version inside the package range works. The VRChat SDK supplies the Harmony and immutable-collection assemblies, so NDMF needs no extra bootstrap step.
 
 - Tests run through the Unity Test Runner, EditMode mode. No CLI test script and no CI test job exists. In-repo practice: refresh Unity after new files, run a focused EditMode filter, then the full `Alrauna.Amuse.Tests.Editor` and `Alrauna.Amuse.Research.Tests.Editor` assemblies.
 - Release: `.github/workflows/release.yml` (manual dispatch) zips the single package named by the repo variable `vars.PACKAGE_NAME`, excludes `Tests/`, and fails the release if test content re-enters. `build-listing.yml` publishes the VPM listing to GitHub Pages. `pr.yml` is a deliberate no-op branch-protection gate.
@@ -108,7 +106,6 @@ pwsh -NoProfile -File ./Tools/Bootstrap-NdmfStandalone.ps1
 |`Packages/com.alrauna.amuse/package.json`|Package identity and the NDMF dependency range|
 |`Packages/manifest.json` and `Packages/vpm-manifest.json`|Unity and VPM dependencies|
 |`Packages/.gitignore`|The whitelist that decides which embedded packages are tracked|
-|`Tools/Bootstrap-NdmfStandalone.ps1`|NDMF standalone bootstrap, pinned to 1.14.4|
 |`docs/development-setup.md`|Clone-to-Unity setup path|
 |`docs/architecture/vision.md`|Long-term direction. Code does not overrule it.|
 |`docs/superpowers/README.md`|Interpretation rules for dated records|
@@ -117,7 +114,7 @@ pwsh -NoProfile -File ./Tools/Bootstrap-NdmfStandalone.ps1
 ## Runtime/Tooling Preferences
 
 - Dev environment: Unity 2022.3.22f1 (`ProjectSettings/ProjectVersion.txt`). The package declares `unity: "2022.3"`.
-- Compilation happens inside Unity. There is no dotnet build, no Node, no Bun. `dotnet` appears only as the VPM CLI prerequisite. PowerShell 7 runs the one bootstrap script.
+- Compilation happens inside Unity. There is no dotnet build, no Node, no Bun. `dotnet` appears only as the VPM CLI prerequisite.
 - Generated `*.csproj` and `*.sln` files are gitignored. Never commit or hand-edit them.
 - `Packages/nadena.dev.ndmf/` is intentionally untracked. A fresh clone restores it with `vpm resolve project .`. A new embedded package needs a whitelist line in `Packages/.gitignore`.
 - Unity MCP is development and observability tooling, never a product dependency or correctness oracle. Before any MCP write or broad operation: enumerate reachable instances read-only, inspect `Application.dataPath`, and require an exact match to this project root. Stop instead of guessing.

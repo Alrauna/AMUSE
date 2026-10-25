@@ -12,8 +12,6 @@ AMUSE depends on NDMF. NDMF is distributed through a VPM package repository, not
   dotnet tool install --global vrchat.vpm.cli
   ```
 
-- **PowerShell 7 (`pwsh`) on `PATH`**: use it for the NDMF standalone bootstrap below.
-
 This setup uses the official .NET-based VPM CLI. It does not introduce AMUSE-specific machine-path or OS assumptions. VRChat documents a macOS setup, but its current documentation describes Linux support as untested. Thus, AMUSE does not claim stronger platform support for the VPM CLI than VRChat claims.
 
 ## Register the NDMF package repository (once per machine)
@@ -44,19 +42,9 @@ Confirm the restore by its postcondition, not by its exit code. In an observed t
 
 The restore leaves the working tree clean. `Packages/.gitignore` already contains the ignore rules that VPM expects. Thus, a fresh clone stays clean through the restore and does not show a modified tracked file.
 
-## Bootstrap the NDMF standalone dependencies
-
-After you restore the VPM dependencies, run the NDMF standalone bootstrap before you open Unity. The script targets PowerShell 7, so it needs `pwsh` on `PATH`. PowerShell 7 is available for Windows, macOS, and Linux. The script resolves every path relative to its own location:
-
-```powershell
-pwsh -NoProfile -File ./Tools/Bootstrap-NdmfStandalone.ps1
-```
-
-NDMF packages standalone dependency assemblies under `Dependencies~`, which Unity intentionally ignores. The bootstrap verifies the resolved package version and payload. It then copies those files into an ignored, Unity-importable `Dependencies` directory. You can safely run it repeatedly, and it requires no junction or symlink privileges. Remove this workaround when an upstream NDMF release exposes its standalone dependencies directly.
-
 ## Open Unity
 
-Open the project root in Unity 2022.3.22f1. At this point, NDMF is already resolved and bootstrapped. Thus, the VPM resolver has nothing to fetch when Unity loads.
+Open the project root in Unity 2022.3.22f1. At this point, NDMF is already resolved. Thus, the VPM resolver has nothing to fetch when Unity loads. The VRChat SDK supplies the Harmony and immutable-collection assemblies that NDMF needs, so no extra step is required.
 
 ## Tests
 
