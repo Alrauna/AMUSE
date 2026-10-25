@@ -18,7 +18,7 @@ The guard counts `LockedMaterialAnimationMismatch` refusals. A count of zero mea
 
 A throwaway EditMode fixture ran outside the committed suites on 2026-10-25 and was deleted after the runs. It mirrored the failing fixture exactly: the opted root with the descriptor, the two locked stand-in materials with the rename suffix, the two renderers on distinct paths, and the hand built clip with one object curve on the path A renderer and one float curve on the path C renderer. The build ran through `AvatarProcessor.ProcessAvatar` on the transient unlock test platform, exactly as the fixture under test does.
 
-The throwaway file also registered two temporary NDMF probe plugins, both deleted after the runs. One plugin ran one extension free pass per build phase after the vendors of that phase, plus one PlatformFinish pass that sat immediately before the window test plugin. The other plugin ran one PlatformFinish pass inside an animator extension scope and dumped the animation index bindings for both renderer paths. Each probe point recorded `Renderer.HasPropertyBlock()`, the two candidate float values, and the live slot materials.
+The throwaway file also registered two temporary NDMF probe plugins, both deleted after the runs. One plugin ran one extension-free pass per build phase after the vendors of that phase, plus one PlatformFinish pass that sat immediately before the window test plugin. The other plugin ran one PlatformFinish pass inside an animator extension scope and dumped the animation index bindings for both renderer paths. Each probe point recorded `Renderer.HasPropertyBlock()`, the two candidate float values, and the live slot materials.
 
 Controls. One run disabled the index probe plugin, so no probe opened an animator scope before the swap in. One run disabled both Modular Avatar plugins. One run built the minimal fixture of the task brief through `AvatarProcessor.ProcessAvatar(root, AmbientPlatform.DefaultPlatform)` with every vendor enabled.
 
@@ -29,7 +29,9 @@ The writer is the editor animator rebind that follows the animator controller re
 1. `VirtualControllerContext.OnDeactivate` commits every virtual controller.
 2. The commit calls `IPlatformAnimatorBindings.CommitControllers`.
 3. `GenericPlatformAnimatorBindings.CommitControllers` assigns `Animator.runtimeAnimatorController` on the root animator.
-4. The controller assignment rebinds the editor animator. The rebind applies the bound curve values of the clip onto the live renderer. A float curve on a `material.` name lands as a renderer `MaterialPropertyBlock`. An object reference curve lands as the time zero material over the slot array. The finish plugin already documents the second form at `Editor/Build/AmusePlatformFinishPlugin.cs:208-216`.
+4. The controller assignment rebinds the editor animator. The rebind applies the bound curve values of the clip onto the live renderer. An object reference curve lands as the time zero material over the slot array, the form the finish plugin already documents at `Editor/Build/AmusePlatformFinishPlugin.cs:208-216`. A float curve on a `material.` name can land as a renderer `MaterialPropertyBlock`, within the boundary named below the chain.
+
+Boundary of the block form, probe runs of 2026-10-25: a float curve lands as that block only when the curve was already part of the clip when the animator first received its controller. The sibling `AnimationMismatchRecordsTheRefusalOnEverySlot` writes its float curve after its swap helper assigned the controller, so no block lands there and its animation mismatch refusal stands, while the failing fixture writes every curve before the controller assignment, so the block lands. The engine path between the bound curve and the block was not determined further.
 
 No installed package writes a renderer property block during the build. A search over the locked vendor sources found `SetPropertyBlock` callers only in the d4rk optimizer merge path, which runs outside NDMF, and in two runtime scripts that no build pass executes.
 
@@ -69,7 +71,7 @@ summary refusedBlock=0
 point:post-build renderer=AMUSE path C host block=True _AlphaForceOpaque=0 _AlphaForceOpaque_S=1
 ```
 
-With Modular Avatar disabled, no phase writes the block, the refusal returns to the animation mismatch, and the whole original expectation of the fixture holds. The block that appears after the build comes from the window test plugin own animator scope commit, which runs after the barrier. Modular Avatar 1.18.7 of the locked vendor set runs on the transient unlock test platform, and its Resolving phase animator pass is the first commit in the build. That commit, through the chain above, is the mid build writer.
+With Modular Avatar disabled, no phase writes the block, the refusal returns to the animation mismatch, and the whole original expectation of the fixture holds. The block that appears after the build comes from the animator scope commit of the window test plugin itself, which runs after the barrier. Modular Avatar 1.18.7 of the locked vendor set runs on the transient unlock test platform, and its Resolving phase animator pass is the first commit in the build. That commit, through the chain above, is the mid build writer.
 
 Default platform run per the task brief, minimal fixture, vendors enabled:
 
