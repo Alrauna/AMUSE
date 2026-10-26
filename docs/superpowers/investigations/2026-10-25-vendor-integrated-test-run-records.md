@@ -648,3 +648,40 @@ the five touched classes and `VendorLockToolSourceBanTests`.
 
 The source-scan tripwire passed. Production protection now rests on
 the tripwire alone, because no stand-in type exists.
+
+### Task 18 fix round 1, 2026-10-26
+
+The review asked for a bake value proof, a teardown gone assert, and an
+armed cache entry cleanup. All three landed in
+`RealThryLockCharacterizationTests.cs`. The gated run set
+`AMUSE_REAL_THRY_LOCK=1` in the editor process and removed it after.
+
+- RED of the value proof. The assert ran against a deliberately wrong
+  expected value and failed with "Expected: 0.5f, But was: 0.75f",
+  which names the recorded literal 0.75 against the wrong expectation.
+- GREEN gated run. Completed 3, passed 3, failed 0, about 11.5 seconds
+  of test time. The proof parses the recorded float literal back to
+  0.75 exactly and the recorded color literal back to the set linear
+  color within 1e-5 per component.
+- Ungated run after the gate was removed. Completed 3, passed 2,
+  skipped 1, failed 0. The teardown asserts every planned path gone,
+  and the cache folder held only the vendor created root with its
+  README file.
+- The armed cleanup binding caught a real defect during the round: the
+  scan returned Windows separators while the exact entry path used
+  forward ones. The scan normalizes separators now.
+
+Two environment facts of the same date, recorded for the owner:
+
+- The probe needed an HLSL program declaration for its float property.
+  A property the program never declares is an undeclared identifier at
+  its use. The probe carries `float _ColorThemeIndex;` now.
+- The real vendor lock bakes a property use inside a local variable
+  declaration initializer, for example `fixed4 color = tex2D(...) *
+  _Color;` becomes a float4 literal there. The production aligner
+  refuses that shape, because a declaration line keeps property
+  identifiers (fact 4). The probe keeps its baked uses on the return
+  line, which aligns clean. The aligner difference on declaration
+  line initializer bakes stands unfixed in this task and is a record
+  for an owner decision, because real Poiyomi programs declare locals
+  with property initializers.

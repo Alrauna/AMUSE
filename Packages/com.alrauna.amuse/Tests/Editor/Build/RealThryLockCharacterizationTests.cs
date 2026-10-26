@@ -8,6 +8,7 @@ using System.Text;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.Rendering;
 using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
 using Alrauna.Amuse.Tests.Editor.Shared;
@@ -38,8 +39,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
     /// real lock bakes every non-animated property into a constant.
     /// The emulated fixture partner keeps every property live. The
     /// aligner reads the bake as the Baked state, so the comparison
-    /// accepts exactly Live-to-Baked and calls any other change a
-    /// named difference.
+    /// accepts exactly Live-to-Baked and Unused-to-Baked and calls any
+    /// other change a named difference. The bake value proof then
+    /// parses the recorded literals of one float and one color back to
+    /// the exact values the probe material carried before the lock,
+    /// so a wrong-value bake cannot pass.
     /// </para>
     /// </summary>
     public sealed class RealThryLockCharacterizationTests
@@ -58,6 +62,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
         private const string ProbeShaderName =
             "Hidden/Alrauna/AmuseTests/" + ProbeFragment;
+
+        // The distinctive non-default values the probe material carries
+        // before the lock. The bake value proof reads them back from
+        // the recorded literals, so a wrong-value bake cannot pass.
+        private const string BakedFloatPropertyName = "_ColorThemeIndex";
+
+        private const float BakedFloatValue = 0.75f;
+
+        private const string BakedColorPropertyName = "_Color";
+
+        private static readonly Color BakedColorValue =
+            new Color(0.25f, 0.5f, 0.75f, 1f);
 
         // The cleanup planner. It returns the deletion order. Every
         // material path precedes every cache entry path, because a
@@ -223,6 +239,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 name = ProbeFragment,
             };
+            material.SetFloat(BakedFloatPropertyName, BakedFloatValue);
+            material.SetColor(BakedColorPropertyName, BakedColorValue);
             var materialPath =
                 "Assets/" + ProbeFolderName + "/"
                 + ProbeFragment + ".mat";
@@ -233,12 +251,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             // The real lock. The reflection call passes both arguments
             // on every call, so the invocation reaches the vendor
-            // overload the build path uses.
+            // overload the build path uses. The probe cache entry arms
+            // before any assert, so a failed assert cannot strand it.
             var locked = (bool)lockMethod.Invoke(null, new object[]
             {
                 new List<Material> { material },
                 progressBarNone,
             });
+            ArmProbeCacheEntryPaths();
             Assert.That(
                 locked, Is.True,
                 Dated("the vendor lock call returned false",
@@ -278,12 +298,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Path.GetDirectoryName(entryDirectory).Replace('\\', '/');
             // The test's own cache entries: the entry folder first, its
             // test-named parent folder second. Both die after every
-            // material path.
-            _cacheEntryPaths = new[]
-            {
-                entryDirectory,
-                shaderDirectory,
-            };
+            // material path. The armed scan must agree with the exact
+            // entry path the locked shader names.
+            Assert.That(
+                _cacheEntryPaths,
+                Does.Contain(entryDirectory),
+                Dated("the armed cache entries miss the locked shader "
+                    + "entry " + entryDirectory, runDate, null));
+            Assert.That(
+                _cacheEntryPaths,
+                Does.Contain(shaderDirectory),
+                Dated("the armed cache entries miss the probe shader "
+                    + "folder " + shaderDirectory, runDate, null));
 
             var lockedText = ReadText(lockedPath);
             var real = PoiyomiLockedSourceAlignment.Align(
@@ -291,7 +317,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(
                 real.Succeeded, Is.True,
                 Dated("the real lock output refused the production "
-                    + "aligner", runDate, real.RefusalDetail));
+                    + "aligner at original line " + real.OriginalLine
+                    + " with text " + OriginalLineText(
+                        originalText, real.OriginalLine),
+                    runDate, real.RefusalDetail));
             Assert.That(
                 real.Source, Is.Not.Null,
                 Dated("the real alignment carries no source",
@@ -327,8 +356,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     Is.True,
                     Dated("the real alignment carries no state for "
                         + "property " + pair.Key, runDate, null));
-                var isKnownBake = pair.Value == LockedPropertyState.Live
-                    && realState == LockedPropertyState.Baked;
+                var isKnownBake = realState == LockedPropertyState.Baked
+                    && (pair.Value == LockedPropertyState.Live
+                        || pair.Value == LockedPropertyState.Unused);
                 if (isKnownBake)
                 {
                     bakedProperties++;
@@ -358,6 +388,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Is.EqualTo(0),
                 Dated("the real lock renamed properties on a probe "
                     + "without animated tags", runDate, null));
+
+            // The bake value proof: the recorded literal must carry the
+            // value the probe material held before the lock, never a
+            // default and never another property's value.
+            AssertBakedFloatLiteral(real.Source, runDate);
+            AssertBakedColorLiteral(real.Source, runDate);
 
             // The real unlock. It must restore the original shader and
             // clear the flag, and it keeps the cache entry in place.
@@ -391,9 +427,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             // later deletion.
             if (_materialPaths != null && _cacheEntryPaths != null)
             {
-                ResidueCleanupApply(
+                var plan = ResidueCleanupApply(
                     _materialPaths, _cacheEntryPaths,
                     path => AssetDatabase.DeleteAsset(path));
+                AssertPlannedPathsGone(plan);
             }
             else if (_materialPaths != null)
             {
@@ -401,6 +438,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 {
                     AssetDatabase.DeleteAsset(path);
                 }
+
+                AssertPlannedPathsGone(_materialPaths);
             }
 
             _materialPaths = null;
@@ -418,6 +457,119 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         private IReadOnlyList<string> _materialPaths;
 
         private IReadOnlyList<string> _cacheEntryPaths;
+
+        private static void AssertPlannedPathsGone(
+            IReadOnlyList<string> plan)
+        {
+            foreach (var path in plan)
+            {
+                Assert.That(
+                    Directory.Exists(path) || File.Exists(path),
+                    Is.False,
+                    "the teardown left residue at " + path);
+            }
+        }
+
+        // The bake value proof for the float. The vendor prints float
+        // literals in a fixed-decimal format, so the parse-back is
+        // exact for the chosen value.
+        private static void AssertBakedFloatLiteral(
+            AlignedLockedSource source, string runDate)
+        {
+            Assert.That(
+                source.BakedLiterals.ContainsKey(BakedFloatPropertyName),
+                Is.True,
+                Dated("the real lock baked no literal for "
+                    + BakedFloatPropertyName, runDate, null));
+            var literal = source.BakedLiterals[BakedFloatPropertyName];
+            var baked = float.Parse(
+                literal, NumberStyles.Float, CultureInfo.InvariantCulture);
+            Assert.That(
+                baked,
+                Is.EqualTo(BakedFloatValue),
+                Dated("the baked literal for " + BakedFloatPropertyName
+                    + " is " + literal + ", which does not parse back to "
+                    + BakedFloatValue.ToString(
+                        CultureInfo.InvariantCulture), runDate, null));
+        }
+
+        // The bake value proof for the color. The vendor converts a
+        // plain color to linear in linear color space and prints the
+        // vector literal in a shortest float format, so the parse-back
+        // uses a small tolerance. A default or a wrong value sits far
+        // outside it.
+        private static void AssertBakedColorLiteral(
+            AlignedLockedSource source, string runDate)
+        {
+            Assert.That(
+                source.BakedLiterals.ContainsKey(BakedColorPropertyName),
+                Is.True,
+                Dated("the real lock baked no literal for "
+                    + BakedColorPropertyName, runDate, null));
+            var literal = source.BakedLiterals[BakedColorPropertyName];
+            var expected = BakedColorValue;
+            if (PlayerSettings.colorSpace != ColorSpace.Gamma)
+            {
+                expected = expected.linear;
+            }
+
+            var prefix = "float4(";
+            Assert.That(
+                literal.StartsWith(prefix, StringComparison.Ordinal)
+                    && literal.EndsWith(")", StringComparison.Ordinal),
+                Is.True,
+                Dated("the baked literal for " + BakedColorPropertyName
+                    + " is " + literal, runDate, null));
+            var inner = literal.Substring(
+                prefix.Length, literal.Length - prefix.Length - 1);
+            var parts = inner.Split(',');
+            Assert.That(
+                parts.Length,
+                Is.EqualTo(4),
+                Dated("the baked literal for " + BakedColorPropertyName
+                    + " is " + literal, runDate, null));
+            for (var index = 0; index < 4; index++)
+            {
+                var component = float.Parse(
+                    parts[index], NumberStyles.Float,
+                    CultureInfo.InvariantCulture);
+                Assert.That(
+                    component,
+                    Is.EqualTo(expected[index]).Within(1e-5f),
+                    Dated("the baked literal for "
+                        + BakedColorPropertyName + " is " + literal,
+                        runDate, null));
+            }
+        }
+
+        // Arms the probe cache entry for cleanup immediately after the
+        // lock call returns, before any assert. The scan finds every
+        // probe-named folder under the cache root and plans its child
+        // entries first, the named folder last, so the teardown can
+        // never strand the entry when an assert fails.
+        private void ArmProbeCacheEntryPaths()
+        {
+            if (!Directory.Exists(CacheRoot))
+            {
+                return;
+            }
+
+            var paths = new List<string>();
+            foreach (var shaderFolder in Directory.GetDirectories(
+                CacheRoot, "*" + ProbeFragment + "*",
+                SearchOption.TopDirectoryOnly))
+            {
+                paths.AddRange(Directory.GetDirectories(
+                    shaderFolder).Select(
+                    path => path.Replace('\\', '/')));
+                paths.Add(shaderFolder.Replace('\\', '/'));
+            }
+
+            if (paths.Count > 0)
+            {
+                _cacheEntryPaths = paths;
+            }
+        }
 
         // The vendor binding rule: resolve the real tool by
         // assembly-qualified reflection. The guard asserts the resolved
@@ -534,6 +686,32 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         + "_ShaderOptimizerEnabled (\"Locked\", Float)"
                         + " = 0";
                     attributedFlag = true;
+                    continue;
+                }
+
+                if (lines[index].Trim() == "fixed4 _Color;")
+                {
+                    // The float property needs its own program
+                    // declaration, because a property the program never
+                    // declares is an undeclared identifier at its use.
+                    lines.Insert(
+                        index + 1,
+                        "            float "
+                        + BakedFloatPropertyName + ";");
+                    continue;
+                }
+
+                if (lines[index].Trim().StartsWith(
+                        "return tex2D(", StringComparison.Ordinal))
+                {
+                    // The probe program gains one float use on the
+                    // return line. A declaration line keeps property
+                    // identifiers (fact 4), so the float use must sit
+                    // on a non-declaration line for the bake to align.
+                    lines[index] =
+                        "                return tex2D(_MainTex, i.uv)"
+                        + " * _Color * " + BakedFloatPropertyName + ";";
+                    break;
                 }
             }
 
@@ -561,6 +739,23 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             return File.ReadAllText(path, Encoding.UTF8)
                 .Replace("\r", string.Empty);
+        }
+
+        // The text of one original line for a refusal message. An out of
+        // range index names itself instead of throwing.
+        private static string OriginalLineText(
+            string originalText, int originalLine)
+        {
+            var lines = originalText.Split('\n');
+            if (originalLine < 0 || originalLine >= lines.Length)
+            {
+                return "<out of range " + originalLine + ">";
+            }
+
+            var text = lines[originalLine].Trim();
+            return text.Length == 0
+                ? "<empty line>"
+                : text;
         }
 
         private static string Dated(
