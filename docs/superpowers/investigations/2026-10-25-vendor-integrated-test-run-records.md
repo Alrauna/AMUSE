@@ -569,3 +569,82 @@ class teardown deletes `Packages/com.vrcfury.temp/Builds`. No other
 project-level write appeared. The full-suite run records of this file
 must list this gate among the opt-in gates that were set whenever tier
 A results are part of a recorded run.
+
+## Run of 2026-10-26, Task 18 validation, product assembly
+
+Environment. The working tree of the dev project after Task 18, the
+real Thry lock characterization and the stand-in cutover of stage 5.
+The local work date of the run is 2026-10-26. The suite-start line of
+the runs reported all 12 locked packages as Match, including
+`com.poiyomi.thryeditor` locked 2.74.3 installed 2.74.3, and the
+`AMUSE_VRCSDK3_AVATARS` define active.
+
+How the runs were made. Filtered EditMode runs in the dev editor
+instance. No full-suite run was made for Task 18. Before the first run
+the vendor cache folder `Assets/_LockedShaderCache` did not exist, and
+`git status` over `Assets/` was clean.
+
+### Cleanup-order falsifier, RED then GREEN
+
+The first run of `RealThryLockCharacterizationTests` used the named
+wrong implementation, a planner that lists cache entries before
+materials. The run completed 3 leaves. The falsifier
+`ResidueCleanupPlanDeletesMaterialsBeforeCacheEntries` failed with
+"Expected: less than 0, But was: 4", which names the cache-first order.
+The apply binding test passed against the same wrong plan, because it
+binds the deleter to whatever plan the planner returns. After the
+minimal fix the same filter completed 3 leaves, passed 2, skipped 1,
+failed 0. The skip was the gated real lock test with its named
+opt-in message.
+
+### Gated real lock characterization, 2026-10-26
+
+The opt-in variable `AMUSE_REAL_THRY_LOCK` was set to 1 in the dev
+editor process for one run and removed after it. The run completed 3
+leaves, passed 3, failed 0, skipped 0, in about 10.6 seconds of test
+time.
+
+- The binding guard held. The assembly-qualified resolution reached
+  the installed vendor assembly named `ThryAssemblyDefinition`, never
+  the test stand-in.
+- The real lock processed the synthetic probe material. The material
+  took a locked shader under the vendor cache root, and the lock flag
+  set to one.
+- The production aligner aligned the real lock output in the same era
+  as the emulated fixture pair. Both aligned clean, with no refusal.
+- The named vendor delta of the same date: the real lock bakes every
+  non-animated property into a constant, which the aligner reads as
+  the Baked state, while the emulated fixture partner keeps every
+  property live. The first gated run observed that difference at the
+  property `_Color`. The comparison accepts exactly Live-to-Baked and
+  calls any other state change a named difference. After the
+  comparison was written to that rule, the run held. A vendor change
+  that renames or drops a live property still fails the test.
+- No rename appeared on the probe, which carries no animated tags.
+- The real unlock restored the original shader and cleared the flag.
+  The vendor kept its cache entry in place, as its cache design
+  states. The teardown then deleted the test's own material and
+  shader assets first and the test's own cache entries after them.
+  After the run the vendor cache folder held only the vendor-created
+  root with its README file, which the repository gitignore already
+  ignores. No test residue stayed.
+- The gated run made the vendor usage-counter network call by the
+  disclosed design of the opt-in. No other vendor side effect appeared.
+
+### Stand-in cutover, 2026-10-26
+
+After the characterization existed, the stand-in type file and its
+meta were deleted, and the five counter-reading classes lost 15 counter
+assertions and 3 stand-in reset calls. The final filtered run covered
+the five touched classes and `VendorLockToolSourceBanTests`.
+
+- Completed: 166.
+- Passed: 165.
+- Failed: 0.
+- Skipped: 1, the gated real lock test, because no opt-in gate was set
+  for this run (V15).
+- Inconclusive: 0.
+- Duration: about 187.7 seconds of test time.
+
+The source-scan tripwire passed. Production protection now rests on
+the tripwire alone, because no stand-in type exists.

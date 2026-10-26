@@ -9,8 +9,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
     /// never calls the vendor lock tool. The scan matches the vendor
     /// qualified type name only, never a name substring, because AMUSE
     /// property names and vendor operands contain the same word. The
-    /// test-local stand-in type under Tests stays out of scope until the
-    /// task that deletes it runs.
+    /// scan covers the production Editor source, so test fixtures stay
+    /// out of scope by construction. Since the 2026-10-26 stand-in
+    /// cutover no stand-in type exists, and this tripwire is the whole
+    /// production protection.
     /// </summary>
     public sealed class VendorLockToolSourceBanTests
     {

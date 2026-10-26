@@ -3512,10 +3512,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(midWindowRestoreMismatchCount, Is.Zero,
                     "the in-memory restore must verify with no vendor");
                 Assert.That(
-                    Thry.ThryEditor.ShaderOptimizer.LockCallCount,
-                    Is.Zero,
-                    "no build path may lock through the vendor");
-                Assert.That(
                     consentSubjects,
                     Is.Empty,
                     "an admitted play build adds no consent subject of " +

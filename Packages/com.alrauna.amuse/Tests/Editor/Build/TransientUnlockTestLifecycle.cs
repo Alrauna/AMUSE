@@ -124,7 +124,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             LastSwapSummary = null;
             LastSwapError = null;
             LastCloseError = null;
-            Thry.ThryEditor.ShaderOptimizer.Reset();
         }
     }
 
