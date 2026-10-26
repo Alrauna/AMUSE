@@ -426,3 +426,30 @@ The `propertyIndex` console exception of the stage 1 exit run closes as vendor n
 ### Side-effect observation, QualitySettings
 
 Before and after this run, on 2026-10-26, `ProjectSettings/QualitySettings.asset` matched the committed file and showed `anisotropicTextures: 2` in every quality level. The file stayed unchanged.
+
+## Focused run of 2026-10-26, Task 14 validation, product assembly
+
+Environment. The working tree of the dev project after Task 14, the real-source ground checks and the source-scan tripwire. The local work date of the run is 2026-10-26. The suite-start line of the run reported all 12 locked packages as Match and the `AMUSE_VRCSDK3_AVATARS` define active.
+
+How the run was made. A filtered EditMode run over the two new fixture classes, `Tests/Editor/Semantics/RealSourceGroundCheckTests.cs` and `Tests/Editor/Build/VendorLockToolSourceBanTests.cs`. No full-suite run was made for Task 14. The run-record block of the suite printed a discovered leaf count of 3069 for the assembly node. The Task 13 full run delivered 3060 leaves. The nine new leaves of this task account for the difference.
+
+- Completed leaf results: 9, by selection.
+- Passed: 9.
+- Failed: 0.
+- Skipped: 0.
+- Inconclusive: 0.
+- Duration: about 9.1 seconds.
+
+All nine passed on their first run. They are characterization of the pinned environment, as the task brief expected. The source-scan tripwire found no product Editor file that names the vendor lock tool qualified type name.
+
+### lilToon digest-equality outcome, V10.1
+
+Settled clean on 2026-10-26. The installed lilToon 2.4.1 shape attested through the production conjunction for every checked family. The families are the main shader with its pass asset, the cutout pair, the transparent pair, the outline opaque target through the canonical opaque routing, and both Multi containers. The pinned regular shader, pass, cutout, transparent, and outline digests reproduce on the installed 2.4.1 bytes of this project. The open question at `Editor/Semantics/LilToon/LilToonSourceAttestation.cs:419-424` closes for this shape. The second settings shape named there stays outstanding, because this project holds one shape.
+
+### Name-map observation of the same date
+
+`Shader.Find` resolved the same object as the pinned GUID load for all nine lilToon family names on this install. Both Multi containers are included. The committed test stand-ins share the two container names, so the agreement is a property of the current name map and not a guarantee. The Poiyomi release name resolved the 10.x root shader and disagreed with the bundled 9.3 GUID load. Falsifier 10 pinned that disagreement.
+
+### Real unattested 10.x answer
+
+`RealPoiyomiTenMaterialAnswersUnattested` held. A material on the 10.x root shader selected into the Poiyomi family by its admitted release name. The source attestation refused it at the GUID gate of the admitted rows. The closed capture named the material unattested by batch position, and no member was admitted.
