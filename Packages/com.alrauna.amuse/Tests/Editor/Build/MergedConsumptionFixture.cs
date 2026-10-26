@@ -218,9 +218,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// Adds the committed animation fixture: a real synthetic clip on
         /// a real controller state, carried by the root Animator and, when
         /// the SDK is present, by the descriptor layer NDMF's bindings
-        /// actually read. An empty controller or an untouched default SDK
-        /// layer is exactly the fixture shape that made earlier runs
-        /// diverge, so the fixture controls both.
+        /// actually read. The descriptor lists all five base layer
+        /// entries, Base through FX, exactly as the VRChat SDK default
+        /// fills a real descriptor. Base carries the fixture controller.
+        /// The other four carry the SDK-default empty layer. A descriptor
+        /// without an FX entry fails the build inside Modular Avatar,
+        /// which reads that entry without a presence check.
         /// </summary>
         protected void AttachAnimationFixture(
             GameObject root, string assetSuffix,
@@ -252,27 +255,31 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 VRC.SDK3.Avatars.Components.VRCAvatarDescriptor>();
             if (descriptor == null) return;
             descriptor.customizeAnimationLayers = true;
-            var baseLayer =
+            // A real descriptor lists every base layer entry. NDMF fills
+            // its controller map only from the listed layers, and Modular
+            // Avatar reads the FX entry without a presence check, so a
+            // Base-only list fails the build for the fixture shape. The
+            // four non-Base entries carry the SDK-default empty layer.
+            descriptor.baseAnimationLayers = new[]
+            {
                 new VRC.SDK3.Avatars.Components.VRCAvatarDescriptor
                     .CustomAnimLayer
-            {
-                type = VRC.SDK3.Avatars.Components.VRCAvatarDescriptor
-                    .AnimLayerType.Base,
-                animatorController = controller,
-                isDefault = false,
-                isEnabled = true,
+                {
+                    type = VRC.SDK3.Avatars.Components.VRCAvatarDescriptor
+                        .AnimLayerType.Base,
+                    animatorController = controller,
+                    isDefault = false,
+                    isEnabled = true,
+                },
+                SdkDefaultLayer(VRC.SDK3.Avatars.Components
+                    .VRCAvatarDescriptor.AnimLayerType.Additive),
+                SdkDefaultLayer(VRC.SDK3.Avatars.Components
+                    .VRCAvatarDescriptor.AnimLayerType.Gesture),
+                SdkDefaultLayer(VRC.SDK3.Avatars.Components
+                    .VRCAvatarDescriptor.AnimLayerType.Action),
+                SdkDefaultLayer(VRC.SDK3.Avatars.Components
+                    .VRCAvatarDescriptor.AnimLayerType.FX),
             };
-            var layers = descriptor.baseAnimationLayers;
-            if (layers == null || layers.Length == 0)
-            {
-                layers = new[] { baseLayer };
-            }
-            else
-            {
-                layers[0] = baseLayer;
-            }
-
-            descriptor.baseAnimationLayers = layers;
             // A fresh descriptor carries null layer arrays (verified on
             // this SDK build). NDMF's commit path tolerates a null array
             // when virtualizing but dereferences it when committing, so
@@ -433,6 +440,25 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 type = type,
                 isDefault = true,
                 isEnabled = true,
+            };
+        }
+
+        /// <summary>
+        /// The SDK-default empty base layer entry a real descriptor
+        /// carries on every non-Base layer: no controller, marked
+        /// default, and not enabled. The vendor tier A twins of the
+        /// platform finish suite fill the same shape.
+        /// </summary>
+        private static VRC.SDK3.Avatars.Components.VRCAvatarDescriptor
+            .CustomAnimLayer SdkDefaultLayer(
+            VRC.SDK3.Avatars.Components.VRCAvatarDescriptor.AnimLayerType type)
+        {
+            return new VRC.SDK3.Avatars.Components.VRCAvatarDescriptor
+                .CustomAnimLayer
+            {
+                type = type,
+                isDefault = true,
+                isEnabled = false,
             };
         }
 

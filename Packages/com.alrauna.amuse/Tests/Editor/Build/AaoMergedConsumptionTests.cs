@@ -1000,9 +1000,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     VRC.SDK3.Avatars.Components.VRCAvatarDescriptor>();
                 if (descriptor != null)
                 {
+                    // The fixture materialized the VRChat-shaped base
+                    // layer set. Only the Base entry takes this test's
+                    // swap controller. The other four entries stay, so
+                    // the Modular Avatar FX read finds its entry and the
+                    // build completes.
                     descriptor.customizeAnimationLayers = true;
-                    descriptor.baseAnimationLayers = new[]
-                    {
+                    var layers = descriptor.baseAnimationLayers;
+                    Assert.That(layers?.Length, Is.EqualTo(5),
+                        "the fixture must materialize the five base layer"
+                        + " entries before this test swaps the Base"
+                        + " controller");
+                    layers[0] =
                         new VRC.SDK3.Avatars.Components.VRCAvatarDescriptor
                             .CustomAnimLayer
                         {
@@ -1011,8 +1020,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             animatorController = controller,
                             isDefault = false,
                             isEnabled = true,
-                        },
-                    };
+                        };
                 }
 #endif
 

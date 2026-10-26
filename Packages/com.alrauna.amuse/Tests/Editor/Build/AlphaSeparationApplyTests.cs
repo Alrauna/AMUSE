@@ -208,6 +208,19 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 var sequence = InPhase(BuildPhase.PlatformFinish);
 
+                // The structural graph check runs extension-free and
+                // first, exactly as the production plugin and the seam
+                // plugin run it. A vendor animator pass that already
+                // virtualized the controllers leaves the live committed
+                // controller with empty layers while an animator scope
+                // is active. An in-scope enumeration then reads no clips
+                // at all. Enumerating before the scope stores the
+                // committed graph the barrier reads, the same stored
+                // graph the production barrier reads.
+                sequence.Run(
+                    "AMUSE test structural graph check",
+                    AmuseStructuralGraphCheck.Execute);
+
                 // The production topology runs the bindings capture and
                 // the barrier inside one animator scope, and the swap-in
                 // inside the barrier reads the live AnimationIndex. The
@@ -330,9 +343,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// The real bindings capture pass, followed by the marker-stub
         /// override: when a test arms special clip names, the barrier is
         /// handed a stub host bindings that reports those clips as special
-        /// motions. The public project installs no VRChat SDK, so no real
-        /// proxy clip can exist and the live marker route is unreachable;
-        /// this stub exercises the barrier-side marker refusal.
+        /// motions. The marker stub gives the suite exact control over
+        /// which clips count as special motions. The live marker route is
+        /// exercised by the survival audit of stage 1b.
         /// </summary>
         private static void CapturePass(BuildContext context)
         {
