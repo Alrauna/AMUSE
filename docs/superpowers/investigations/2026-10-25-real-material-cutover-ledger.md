@@ -52,6 +52,7 @@ pinned environment, in the shape of the Task 14 ground checks.
 | `AlphaSeparationDryRunTests.CutoutSplitSlotAllProvenProducesConvertableSentence` | `CutoutSplitSlotAllProvenProducesConvertableSentenceWithRealLilToon`. Real cutout material over a fully opaque texture, same convertable row. | 2026-10-26 |
 | `AlphaSeparationDryRunTests.FoldSlotProducesConvertableSentence` | `FoldSlotProducesConvertableSentenceWithRealLilToon`. Real cutout material under the same cutout preserve pair, same folded row. | 2026-10-26 |
 | `AlphaSeparationDryRunTests.OpaqueFamilySlotShowsUntouchable` | `OpaqueFamilySlotShowsUntouchableWithRealLilToon`. Real plain lilToon material, same untouchable row. The dead stand-in helper `NewOpaqueMaterial` was removed with it. | 2026-10-26 |
+| `LilToonCutoutSourceEligibilityTests.CanonicalDefaultStandIn_IsConvertible` | `CanonicalDefaultStandIn_IsConvertibleWithRealLilToon`. Fresh material on the GUID-loaded cutout shader, same eligibility assertion. Added in fix round 1 of 2026-10-26, when the review caught the row the first enumeration pass missed. | 2026-10-26 |
 
 ## Retained stand-in tests with stated reasons
 
@@ -64,6 +65,14 @@ pinned environment, in the shape of the Task 14 ground checks.
 | `LilToonTransparentSourceEligibilityTests.TransparentBucketQueueOffsets_AreConvertible` | Authored dress render queues 3000 to 3099 are exact queue control on the eligibility matrix. The fresh-defaults admission now runs on the real twin of the retired fresh-material row. | 2026-10-26 |
 | `LilToonTransparentSourceEligibilityTests.TransparentDstBlendDefault_IsAdmittedByGateNine` | Gate-matrix row with exact scalar control. The vendor-default admission it names is covered end to end by the real twins of the preparation and dry-run rows. | 2026-10-26 |
 | `LilToonTransparentSourceEligibilityTests.DepthTestLEqualWithPolicyCarriesNoDivergence` | Exact depth-test state plus the policy arm. Matrix control a fresh material cannot carry. | 2026-10-26 |
+| `LilToonCutoutSourceEligibilityTests.ClipThresholdAtMaxProvableCutoff_IsConvertible` | Gate-matrix row planted at the exact 0.9999 bound. Exact scalar control. | 2026-10-26 |
+| `LilToonCutoutSourceEligibilityTests.OpaqueEquivalentBlendState_IsConvertible` | Gate-matrix rows planted at the exact blend-equivalent scalars. Exact scalar control. | 2026-10-26 |
+| `LilToonCutoutSourceEligibilityTests.UngatedProperties_DoNotAffectEligibility` | Gate-matrix rows planted at exact scalars to prove the deliberate absence of a gate. | 2026-10-26 |
+| `LilToonCutoutSourceEligibilityTests.DepthTestLessWithPolicyConvertsAndFlagsDivergence` | Exact depth-test state plus the policy arm. | 2026-10-26 |
+| `LilToonTransparentSourceEligibilityTests.CutoffAtOrBelowOne_IsConvertible` | Gate-matrix row planted at the exact bound scalar. | 2026-10-26 |
+| `LilToonTransparentSourceEligibilityTests.AlphaBoostFaAtOrAboveOne_IsConvertible` | Gate-matrix row planted at the exact bound scalar. | 2026-10-26 |
+| `LilToonTransparentSourceEligibilityTests.SubpassCutoffAtOrBelowOne_IsConvertible` | Gate-matrix row planted at the exact bound scalar. | 2026-10-26 |
+| `LilToonTransparentSourceEligibilityTests.DepthTestLessWithPolicyConvertsAndFlagsDivergence` | Exact depth-test state plus the policy arm. | 2026-10-26 |
 | `AlphaSeparationPreparationTests.BothSwitchesOnReproducesBasePreparation` | Policy-arm comparison whose base arm plants a below-minimum coverage refusal as a fixture precondition. Not a clean happy path, and the switch policy is AMUSE state, not vendor input. | 2026-10-26 |
 | `AlphaSeparationPreparationTests.GeneratedSubAssetTexture_IsAdmittedAndProvenOpaqueEndToEnd` | The subject is the generated sub-asset texture's identity, a controlled texture grid. Record section 5.3, controlled pixel grids. The material only carries the texture. | 2026-10-26 |
 | `AlphaSeparationPreparationTests.StreamingMipmapProvesThroughTheReadableClone` | Streaming decode mechanics over a controlled mipmap grid. Record section 5.3, controlled pixel grids. | 2026-10-26 |
@@ -79,7 +88,11 @@ pinned environment, in the shape of the Task 14 ground checks.
 | `AlphaSeparationApplyTests.TransparentSiblingKeepsPoiyomiAndCutoutResultsByteIdentical` | Cross-build byte parity needs the identical Poiyomi and cutout fixtures in both builds. Stage 4 (V12) owns the Poiyomi half. | 2026-10-26 |
 | `AlphaSeparationPersistenceTests.SourceAssetsRemainUnchangedAfterSuccessfulFeatureBuild` | One build carries the Poiyomi opaque pair, the split material, and the transparent extension. Stage 4 (V12) owns the Poiyomi and split stand-ins. | 2026-10-26 |
 | `AlphaSeparationDryRunTests.DryRunVerdictsMatchTheBuildOnAMixedRenderer` | The mixed renderer's slots are Poiyomi split stand-ins. Stage 4 (V12). | 2026-10-26 |
-| `AlphaSeparationDryRunTests` approved-range rows (`ApprovedRangeInstallAdmitsThroughTheVersionKeyedArm` and siblings) | The embedded vendor package presents an approved, non-row version with stand-in digests: a byte-changed in-range install. No single installed package can supply that state. | 2026-10-26 |
+| `AlphaSeparationPreparationTests.ByteChangedInRangeInstallSeparatesSilentlyThroughTheRealPipeline` | The embedded vendor package presents an approved, non-row version with stand-in digests: a byte-changed in-range install. No single installed package can supply that state. | 2026-10-26 |
+| `AlphaSeparationPreparationTests.OutOfRangeInstallStillAsksThroughTheRealPipeline` | The embedded vendor package presents an out-of-range version. Version-range control no single installed package can supply. | 2026-10-26 |
+| `AlphaSeparationDryRunTests.ApprovedVersionStaysUnknownInDryRun` | Byte-changed in-range install over the embedded vendor package. The dry run keeps strict attestation, and the fixture pins that conservative view. | 2026-10-26 |
+| `AlphaSeparationDryRunTests.ApprovedAndOutOfRangeAvatarsRouteTheirNotes` | Approved and out-of-range embedded installs in one avatar. Version-range control. | 2026-10-26 |
+| `AlphaSeparationDryRunTests.CacheHitServesTheApprovedNoteOnce` | Cache-note routing over the approved and out-of-range embedded installs. Version-range control. | 2026-10-26 |
 | `Host/UnityAlphaFieldEvidenceTests.AdmittedAtlasCapturesWithCorroboratedOriginMaterial` | The subject is the AAO atlas admission over a controlled pixel grid. The origin material is a registry token for the corroboration gate. Record section 5.3, controlled pixel grids. The real AAO atlas ground check of Task 13 covers the installed route. | 2026-10-26 |
 | `Host/UnityAlphaFieldEvidenceTests.StreamingFlagOnAdmittedAtlasStillTakesTheGeneratedRoute` | Same controlled-grid subject and registry token reason. | 2026-10-26 |
 | `Host/UnityMaterialEvidenceCaptureTests` capture-mechanics rows (`SharedCutoutTexture*`, `ChangingTheCutoutCapLeavesTheExactArmsChainUnchanged`, `RegisteredCloneOverAdmittedAtlas_ProvesOpaqueAtItsOwnCutoff`, `UnregisteredCloneOverAdmittedAtlas_StaysUnknown`, `MenuMembershipRecordsPerMaterial`) | Exact cutoff scalars and controlled isolation grids pin the capture merge rules. Record section 5.3, controlled pixel grids. | 2026-10-26 |
