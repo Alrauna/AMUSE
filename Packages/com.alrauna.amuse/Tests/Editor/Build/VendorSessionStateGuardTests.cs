@@ -217,5 +217,118 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Directory.Delete(root, true);
             }
         }
+
+        [Test]
+        public void
+            GeneratedOutputCleanupRemovesALinkedContainerWithoutItsTarget()
+        {
+            var root = Path.Combine(
+                Path.GetTempPath(),
+                "AmuseGeneratedOutputCleanupTests-"
+                + Guid.NewGuid().ToString("N"));
+            var outside = Path.Combine(
+                Path.GetTempPath(),
+                "AmuseGeneratedOutputCleanupTests-outside-"
+                + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(
+                Path.Combine(root, "Keep Me", "_assets"));
+            Directory.CreateDirectory(outside);
+            File.WriteAllText(
+                Path.Combine(outside, "Outside Content.asset"),
+                string.Empty);
+            File.WriteAllText(
+                Path.Combine(root, "Keep Me", "_assets", "assets.asset"),
+                string.Empty);
+            File.WriteAllText(
+                Path.Combine(root, "Keep Me.meta"), string.Empty);
+
+            // A junction needs no admin rights on this host, so the
+            // probe is deterministic. A prefixed junction under the
+            // generated root must lose only the link. A recursive
+            // delete would follow the link and remove content outside
+            // the root, and the planning walk must not descend through
+            // the link either.
+            var link = Path.Combine(root, "AMUSE linked");
+            var creation = RunCmd(
+                "mklink /J \"" + link + "\" \"" + outside + "\"");
+            Assert.That(
+                creation.exitCode, Is.EqualTo(0),
+                "the junction probe must be created: " + creation.output);
+            Assert.That(
+                Directory.Exists(link), Is.True,
+                "a junction must appear as a directory");
+
+            // A decoy prefixed name behind the link. Planning must
+            // never see it, because the walk stops at the link.
+            File.WriteAllText(
+                Path.Combine(outside, "AMUSE behind the link.asset"),
+                string.Empty);
+
+            try
+            {
+                var planned = AmuseGeneratedOutputCleanup.Plan(root);
+
+                Assert.That(
+                    planned,
+                    Is.EquivalentTo(new[] { "AMUSE linked" }),
+                    "the plan must name the prefixed link itself and"
+                    + " nothing behind it");
+
+                AmuseGeneratedOutputCleanup.Delete(root);
+
+                Assert.That(
+                    Directory.Exists(link), Is.False,
+                    "the prefixed link must be removed");
+                Assert.That(
+                    Directory.Exists(outside), Is.True,
+                    "the link target directory must survive");
+                Assert.That(
+                    File.Exists(Path.Combine(
+                        outside, "Outside Content.asset")),
+                    Is.True,
+                    "content behind the link must survive the link"
+                    + " removal");
+                Assert.That(
+                    File.Exists(Path.Combine(
+                        outside, "AMUSE behind the link.asset")),
+                    Is.True,
+                    "even prefixed names behind the link must survive,"
+                    + " because the link is the only owned unit");
+                Assert.That(
+                    Directory.Exists(Path.Combine(root, "Keep Me")),
+                    Is.True,
+                    "a real container must survive beside the link");
+            }
+            finally
+            {
+                if (Directory.Exists(link))
+                {
+                    Directory.Delete(link);
+                }
+
+                Directory.Delete(root, true);
+                Directory.Delete(outside, true);
+            }
+        }
+
+        private static (int exitCode, string output) RunCmd(string arguments)
+        {
+            var start = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "cmd.exe",
+                Arguments = "/c " + arguments,
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true,
+            };
+            using (var process = System.Diagnostics.Process.Start(start))
+            {
+                var output = process.StandardOutput.ReadToEnd()
+                    + process.StandardError.ReadToEnd();
+                process.WaitForExit();
+                return (process.ExitCode, output);
+            }
+        }
     }
 }

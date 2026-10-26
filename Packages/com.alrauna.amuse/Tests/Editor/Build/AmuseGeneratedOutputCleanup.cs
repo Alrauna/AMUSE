@@ -73,10 +73,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
-        /// Deletes exactly the planned set. Every prefixed directory
-        /// goes recursively with its meta companion, then every
-        /// prefixed file outside the deleted directories goes on its
-        /// own. Nothing else is touched.
+        /// Deletes exactly the planned set. Every prefixed real
+        /// directory goes recursively with its meta companion. A
+        /// prefixed link goes as the link alone, because a recursive
+        /// delete would follow it and remove content outside the
+        /// generated root. Then every prefixed file outside the
+        /// deleted directories goes on its own. Nothing else is
+        /// touched.
         /// </summary>
         internal static void Delete(string generatedRoot)
         {
@@ -97,7 +100,17 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     continue;
                 }
 
-                Directory.Delete(directory, true);
+                if (IsLink(directory))
+                {
+                    // Remove the link only. The non-recursive delete
+                    // never reaches the target of the link.
+                    Directory.Delete(directory);
+                }
+                else
+                {
+                    Directory.Delete(directory, true);
+                }
+
                 var meta = directory + ".meta";
                 if (File.Exists(meta))
                 {
@@ -121,16 +134,55 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        // The walk collects one level at a time and never descends
+        // through a link. A link can therefore neither widen the walk
+        // into content outside the root nor loop it through a cycle.
         private static string[] DirectoriesUnder(string generatedRoot)
         {
-            return Directory.GetDirectories(
-                generatedRoot, "*", SearchOption.AllDirectories);
+            var found = new List<string>();
+            var pending = new Stack<string>();
+            pending.Push(generatedRoot);
+            while (pending.Count > 0)
+            {
+                var current = pending.Pop();
+                foreach (var directory in Directory.GetDirectories(current))
+                {
+                    found.Add(directory);
+                    if (!IsLink(directory))
+                    {
+                        pending.Push(directory);
+                    }
+                }
+            }
+
+            return found.ToArray();
         }
 
         private static string[] FilesUnder(string generatedRoot)
         {
-            return Directory.GetFiles(
-                generatedRoot, "*", SearchOption.AllDirectories);
+            var found = new List<string>();
+            var pending = new Stack<string>();
+            pending.Push(generatedRoot);
+            while (pending.Count > 0)
+            {
+                var current = pending.Pop();
+                found.AddRange(Directory.GetFiles(current));
+                foreach (var directory in Directory.GetDirectories(current))
+                {
+                    if (!IsLink(directory))
+                    {
+                        pending.Push(directory);
+                    }
+                }
+            }
+
+            return found.ToArray();
+        }
+
+        private static bool IsLink(string path)
+        {
+            return (File.GetAttributes(path) & FileAttributes.ReparsePoint)
+                != 0;
         }
 
         private static string NameOf(string path)
