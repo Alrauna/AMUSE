@@ -69,10 +69,12 @@ pinned environment, in the shape of the Task 14 ground checks.
 | `LilToonCutoutSourceEligibilityTests.OpaqueEquivalentBlendState_IsConvertible` | Gate-matrix rows planted at the exact blend-equivalent scalars. Exact scalar control. | 2026-10-26 |
 | `LilToonCutoutSourceEligibilityTests.UngatedProperties_DoNotAffectEligibility` | Gate-matrix rows planted at exact scalars to prove the deliberate absence of a gate. | 2026-10-26 |
 | `LilToonCutoutSourceEligibilityTests.DepthTestLessWithPolicyConvertsAndFlagsDivergence` | Exact depth-test state plus the policy arm. | 2026-10-26 |
+| `LilToonCutoutSourceEligibilityTests.DepthTestLEqualWithPolicyCarriesNoDivergence` | Exact depth-test state plus the policy arm. Matrix control a fresh material cannot carry. | 2026-10-26 |
 | `LilToonTransparentSourceEligibilityTests.CutoffAtOrBelowOne_IsConvertible` | Gate-matrix row planted at the exact bound scalar. | 2026-10-26 |
 | `LilToonTransparentSourceEligibilityTests.AlphaBoostFaAtOrAboveOne_IsConvertible` | Gate-matrix row planted at the exact bound scalar. | 2026-10-26 |
 | `LilToonTransparentSourceEligibilityTests.SubpassCutoffAtOrBelowOne_IsConvertible` | Gate-matrix row planted at the exact bound scalar. | 2026-10-26 |
 | `LilToonTransparentSourceEligibilityTests.DepthTestLessWithPolicyConvertsAndFlagsDivergence` | Exact depth-test state plus the policy arm. | 2026-10-26 |
+| `LilToonTransparentSourceEligibilityTests.DeliberatelyUngatedProperty_StaysConvertible` | Gate-matrix rows planted at exact scalars to prove the deliberate absence of a gate. | 2026-10-26 |
 | `AlphaSeparationPreparationTests.BothSwitchesOnReproducesBasePreparation` | Policy-arm comparison whose base arm plants a below-minimum coverage refusal as a fixture precondition. Not a clean happy path, and the switch policy is AMUSE state, not vendor input. | 2026-10-26 |
 | `AlphaSeparationPreparationTests.GeneratedSubAssetTexture_IsAdmittedAndProvenOpaqueEndToEnd` | The subject is the generated sub-asset texture's identity, a controlled texture grid. Record section 5.3, controlled pixel grids. The material only carries the texture. | 2026-10-26 |
 | `AlphaSeparationPreparationTests.StreamingMipmapProvesThroughTheReadableClone` | Streaming decode mechanics over a controlled mipmap grid. Record section 5.3, controlled pixel grids. | 2026-10-26 |
