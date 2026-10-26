@@ -46,6 +46,16 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         internal static Func<IReadOnlyList<VendorVersionEntry>>
             EntriesOverride;
 
+        // The seam the RunAll tests silence, so an injected entry set
+        // never prints a second suite-start line into a full-run
+        // console. The default logs the real console line.
+        internal static Action<string> RecordLine = DefaultRecordLine;
+
+        private static void DefaultRecordLine(string line)
+        {
+            Debug.Log(line);
+        }
+
         internal static void RunAll()
         {
             VendorSessionStateGuard.AssertNoKnownPluginDisabled();
@@ -55,7 +65,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             RecordTheEffectiveEnvironment(entries);
         }
 
-        private static IReadOnlyList<VendorVersionEntry> CollectEntries()
+        // The entry collector the run record reuses at capture time.
+        // It honors the EntriesOverride seam, so the RunAll tests and
+        // the record tests read the same seam.
+        internal static IReadOnlyList<VendorVersionEntry> CollectEntries()
         {
             if (EntriesOverride != null)
             {
@@ -126,7 +139,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 #else
             line.Append(" inactive");
 #endif
-            Debug.Log(line.ToString());
+            RecordLine(line.ToString());
         }
 
         private static IReadOnlyDictionary<string, string>

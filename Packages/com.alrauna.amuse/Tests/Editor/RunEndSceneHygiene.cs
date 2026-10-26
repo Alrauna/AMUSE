@@ -36,6 +36,15 @@ namespace Alrauna.Amuse.Tests.Editor
     /// suite owns under NDMF's generated folder.
     /// </para>
     /// <para>
+    /// The setup also captures the vendor run record and the teardown
+    /// prints it first. The block states the counts, the durations,
+    /// the opt-in gates that were set, the gated fixtures the run
+    /// excluded, the per-test skip reasons, the effective vendor
+    /// environment, the observable scripting defines, and the changed
+    /// project setting lines. It observes vendor writes and never
+    /// prevents them.
+    /// </para>
+    /// <para>
     /// The research package carries a third near-verbatim copy of the
     /// discard in its own test assembly. It cannot delegate across
     /// assemblies, so that copy stays.
@@ -52,11 +61,25 @@ namespace Alrauna.Amuse.Tests.Editor
             // packages and accepted drifts are recorded in one dated
             // console line. See VendorSuiteStartCheck.RunAll.
             VendorSuiteStartCheck.RunAll();
+
+            // Run record: capture the settings digest, the observable
+            // defines, the effective vendor entries, and the suite
+            // start time before the first test. The teardown prints
+            // one report block after the last test. See
+            // VendorRunRecord.
+            VendorRunRecord.CaptureBeforeRun();
         }
 
         [OneTimeTearDown]
         public void LeaveNoModifiedSceneOpen()
         {
+            // Run record: the block prints first, so a later hygiene
+            // failure cannot lose the evidence of the run. It records
+            // the counts, the durations, the gates, the skip reasons,
+            // the effective environment, and the changed settings
+            // lines. See VendorRunRecord.
+            VendorRunRecord.ReportAfterRun();
+
             // Tripwire: the shared static fails the population here if any
             // open scene still reports dirty after its best-effort
             // discard. See

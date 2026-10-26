@@ -8,7 +8,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
     /// hand-built installed and locked maps, so they never touch the
     /// project. The two RunAll tests inject entries through the
     /// EntriesOverride seam. Each one sets a no-op guard flag that
-    /// proves RunAll read the seam instead of the real sources.
+    /// proves RunAll read the seam instead of the real sources. Each
+    /// one also silences the suite-start record line through the
+    /// RecordLine seam, so an injected entry set never prints a
+    /// second dated line into a full-run console.
     /// </summary>
     public sealed class VendorEnvironmentCheckTests
     {
@@ -134,6 +137,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         VendorVersionState.Mismatch, null),
                 };
             };
+            var savedRecordLine = VendorSuiteStartCheck.RecordLine;
+            VendorSuiteStartCheck.RecordLine = _ => { };
             try
             {
                 var thrown = Assert.Throws<AssertionException>(
@@ -150,6 +155,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
+                VendorSuiteStartCheck.RecordLine = savedRecordLine;
                 VendorSuiteStartCheck.EntriesOverride = null;
             }
         }
@@ -165,6 +171,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     SingleEntryMap("com.poiyomi.thryeditor", "2.74.4"),
                     SingleEntryMap("com.poiyomi.thryeditor", "2.74.3"));
             };
+            var savedRecordLine = VendorSuiteStartCheck.RecordLine;
+            VendorSuiteStartCheck.RecordLine = _ => { };
             try
             {
                 Assert.DoesNotThrow(VendorSuiteStartCheck.RunAll,
@@ -175,6 +183,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
+                VendorSuiteStartCheck.RecordLine = savedRecordLine;
                 VendorSuiteStartCheck.EntriesOverride = null;
             }
         }
