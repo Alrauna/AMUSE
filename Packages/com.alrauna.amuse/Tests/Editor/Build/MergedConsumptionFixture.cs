@@ -620,6 +620,24 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         // --- the soundness oracle -------------------------------------------
 
         /// <summary>
+        /// The tier A texture arm of the oracle. The default keeps the
+        /// strict instance identity for every existing suite. A suite
+        /// that builds through the SDK dispatcher may override it to
+        /// accept a vendor saved copy of the source texture: accepted
+        /// only when the decoded pixels of both textures equal exactly.
+        /// Any pixel difference refuses with both identities named in
+        /// the refusal text.
+        /// </summary>
+        protected virtual bool TryAcceptVendorSavedTextureCopy(
+            Texture2D sourceTexture,
+            Texture2D sampledTexture,
+            out string refusal)
+        {
+            refusal = "";
+            return false;
+        }
+
+        /// <summary>
         /// The soundness oracle. Every authored triangle must appear in
         /// the built avatar exactly once, matched as an unordered
         /// avatar-root-space position triple on the fixed rounding grid,
@@ -770,22 +788,39 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             // conversions from different source textures
                             // under one canonical, rendering other
                             // materials' faces with the wrong pixels.
-                            var outputTextureId = material.HasProperty(
+                            var sampledTexture = material.HasProperty(
                                 "_MainTex")
-                                && material.GetTexture("_MainTex") != null
                                 ? material.GetTexture("_MainTex")
-                                    .GetInstanceID()
+                                : null;
+                            var outputTextureId = sampledTexture != null
+                                ? sampledTexture.GetInstanceID()
                                 : 0;
+                            var vendorCopyAccepted = false;
+                            var vendorCopyRefusal = "";
+                            if (outputTextureId != match.SourceMainTexId
+                                && sampledTexture is Texture2D sampled2D
+                                && EditorUtility.InstanceIDToObject(
+                                    match.SourceMainTexId)
+                                        is Texture2D sourceTexture2D)
+                            {
+                                vendorCopyAccepted =
+                                    TryAcceptVendorSavedTextureCopy(
+                                        sourceTexture2D, sampled2D,
+                                        out vendorCopyRefusal);
+                            }
+
                             Assert.That(
-                                outputTextureId,
-                                Is.EqualTo(match.SourceMainTexId),
+                                outputTextureId == match.SourceMainTexId
+                                || vendorCopyAccepted,
+                                Is.True,
                                 "converted triangle " + key + " renders"
                                 + " with a canonical material sampling a"
                                 + " different texture than its source:"
                                 + " expected tex="
                                 + match.SourceMainTexId
                                 + " got tex=" + outputTextureId
-                                + " (slot material " + slotName + ")");
+                                + " (slot material " + slotName + ")"
+                                + vendorCopyRefusal);
                         }
                     }
                 }

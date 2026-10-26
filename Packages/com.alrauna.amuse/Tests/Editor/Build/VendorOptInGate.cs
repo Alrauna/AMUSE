@@ -15,6 +15,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
     {
         internal const string RealThryLock = "AMUSE_REAL_THRY_LOCK";
         internal const string DaoIntegration = "AMUSE_DAO_INTEGRATION";
+        internal const string ProductionOrderDispatch =
+            "AMUSE_PRODUCTION_ORDER_DISPATCH";
 
         internal static void Require(string variable, string disclosure)
         {

@@ -553,3 +553,19 @@ changed.
 The file matched the committed file after this run. No working-tree
 change appeared in the run window, unlike the transient changes seen by
 the Task 6 and Task 10 runs.
+
+### V15 finding of the Task 17 first run, 2026-10-26
+
+The first class run of `VendorProductionOrderTests` in the dev editor
+instance observed the V15 condition of the stage 5 plan. Each tier A
+fixture builds through the SDK callback dispatcher, and the dispatcher
+runs the installed VRCFury callback on every avatar. VRCFury saves the
+controllers it rebuilds under `Packages/com.vrcfury.temp/Builds`, so a
+tier A fixture writes project-level state beyond the ambient NDMF
+generated output. Both tier A fixtures therefore moved behind
+`VendorOptInGate.Require(VendorOptInGate.ProductionOrderDispatch)`
+with a disclosure that names the disposable-project requirement. The
+class teardown deletes `Packages/com.vrcfury.temp/Builds`. No other
+project-level write appeared. The full-suite run records of this file
+must list this gate among the opt-in gates that were set whenever tier
+A results are part of a recorded run.

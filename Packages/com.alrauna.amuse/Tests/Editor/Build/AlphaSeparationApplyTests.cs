@@ -473,7 +473,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// </summary>
         private static bool ProductionCapture { get; set; }
 
-        private sealed class ProductionCaptureScope : IDisposable
+        // Internal, not private: the production-order vendor fixtures
+        // of the same assembly run their tier B twins through this
+        // scope, so the twins drive the production barrier entry over
+        // real installed materials exactly as the twins in this suite
+        // do.
+        internal sealed class ProductionCaptureScope : IDisposable
         {
             private readonly bool previous;
 
