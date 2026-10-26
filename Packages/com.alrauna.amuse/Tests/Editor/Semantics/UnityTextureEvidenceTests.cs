@@ -202,9 +202,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             try
             {
                 ObjectRegistry.RegisterReplacedObject(source, clone);
-                AaoAtlasTextureAttestation.Versions.ResetForTests();
-                AaoAtlasTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
-                    _ => "1.9.17";
 
                 var resolved = UnityTextureEvidence.TryGetSourceId(
                     atlas, out var id, originMaterial: clone);
@@ -221,7 +218,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             {
                 UnityEngine.Object.DestroyImmediate(atlas);
                 UnityEngine.Object.DestroyImmediate(clone);
-                AaoAtlasTextureAttestation.Versions.ResetForTests();
                 registryGuard.Dispose();
             }
         }
@@ -233,10 +229,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             atlas.name = "MainTex (AAO UV Packed)";
             try
             {
-                AaoAtlasTextureAttestation.Versions.ResetForTests();
-                AaoAtlasTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
-                    _ => "1.9.17";
-
                 Assert.That(
                     UnityTextureEvidence.TryGetSourceId(
                         atlas, out _, originMaterial: null),
@@ -246,7 +238,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             finally
             {
                 UnityEngine.Object.DestroyImmediate(atlas);
-                AaoAtlasTextureAttestation.Versions.ResetForTests();
             }
         }
 
@@ -259,10 +250,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             atlas.name = "MainTex (AAO UV Packed)";
             try
             {
-                AaoAtlasTextureAttestation.Versions.ResetForTests();
-                AaoAtlasTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
-                    _ => "1.9.17";
-
                 Assert.That(
                     UnityTextureEvidence.TryGetSourceId(
                         atlas, out _, originMaterial: clone),
@@ -273,7 +260,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             {
                 UnityEngine.Object.DestroyImmediate(atlas);
                 UnityEngine.Object.DestroyImmediate(clone);
-                AaoAtlasTextureAttestation.Versions.ResetForTests();
             }
         }
 
@@ -848,9 +834,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 EditorUtility.CompressTexture(
                     atlas, TextureFormat.DXT1,
                     TextureCompressionQuality.Normal);
-                AaoAtlasTextureAttestation.Versions.ResetForTests();
-                AaoAtlasTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
-                    _ => "1.9.17";
                 Assert.That(
                     UnityTextureEvidence.TryProveSampledAlphaIsOne(atlas),
                     Is.True,
@@ -860,7 +843,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             finally
             {
                 UnityEngine.Object.DestroyImmediate(atlas);
-                AaoAtlasTextureAttestation.Versions.ResetForTests();
             }
         }
 

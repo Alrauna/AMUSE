@@ -17,7 +17,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [SetUp]
         public void ResetAttestationStateBeforeEachTest()
         {
-            AaoAtlasTextureAttestation.Versions.ResetForTests();
             RegistryGuard = new ObjectRegistryGuard();
         }
 
@@ -29,13 +28,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             {
                 AssetDatabase.DeleteAsset(FixtureFolder);
             }
-        }
-
-        private static void InstallAdmittedAaoVersion()
-        {
-            AaoAtlasTextureAttestation.Versions.ResetForTests();
-            AaoAtlasTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
-                _ => "1.9.17";
         }
 
         private static Texture2D NewAtlas(string name)
@@ -64,33 +56,16 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         }
 
         [Test]
-        public void ShippedAdmittedSetContainsOnlyTheCharacterizedVersion()
-        {
-            Assert.That(
-                AaoAtlasTextureAttestation.Versions.AdmittedVersions,
-                Is.EqualTo(new[] { "1.9.17" }),
-                "1.9.17 joined on 2026-10-04 through the dated " +
-                "characterization; any other version stays refused");
-            Assert.That(
-                AaoAtlasTextureAttestation.Versions.IsVersionAdmitted("1.9.17"),
-                Is.True);
-            Assert.That(
-                AaoAtlasTextureAttestation.Versions.IsVersionAdmitted("1.9.18"),
-                Is.False);
-        }
-
-        [Test]
         public void AtlasShapeRequiresThePinnedNameMarkers()
         {
-            InstallAdmittedAaoVersion();
             var wrongName = NewAtlas("MainTex UV Packed");
             try
             {
                 Assert.That(
                     AaoAtlasTextureAttestation.TryIdentifyAtlasShape(wrongName),
                     Is.False,
-                    "a path-less texture without a pinned marker is not an " +
-                    "AAO atlas, whatever its version");
+                    "a path-less texture without a pinned marker is not " +
+                    "an AAO atlas");
             }
             finally
             {
@@ -101,7 +76,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [Test]
         public void AtlasShapeRefusesAnAssetBackedTexture()
         {
-            InstallAdmittedAaoVersion();
             if (!AssetDatabase.IsValidFolder(FixtureFolder))
             {
                 AssetDatabase.CreateFolder(
@@ -122,50 +96,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         }
 
         [Test]
-        public void AtlasShapeRefusesAnUnadmittedVersion()
-        {
-            AaoAtlasTextureAttestation.Versions.ResetForTests();
-            AaoAtlasTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
-                _ => "1.9.18";
-            var atlas = NewAtlas("MainTex (AAO UV Packed)");
-            try
-            {
-                Assert.That(
-                    AaoAtlasTextureAttestation.TryIdentifyAtlasShape(atlas),
-                    Is.False,
-                    "an uncharacterized producer version keeps refusing");
-            }
-            finally
-            {
-                Object.DestroyImmediate(atlas);
-            }
-        }
-
-        [Test]
-        public void AtlasShapeRefusesAnUnreadableVersion()
-        {
-            AaoAtlasTextureAttestation.Versions.ResetForTests();
-            AaoAtlasTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
-                _ => null;
-            var atlas = NewAtlas("MainTex (AAO UV Packed)");
-            try
-            {
-                Assert.That(
-                    AaoAtlasTextureAttestation.TryIdentifyAtlasShape(atlas),
-                    Is.False,
-                    "an unreadable or absent producer version keeps the " +
-                    "gate closed");
-            }
-            finally
-            {
-                Object.DestroyImmediate(atlas);
-            }
-        }
-
-        [Test]
         public void CorroborationAcceptsARegisteredAssetBackedOriginMaterial()
         {
-            InstallAdmittedAaoVersion();
             var source = NewAssetMaterial("origin-source");
             var clone = new Material(source.shader)
             {
@@ -192,7 +124,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [Test]
         public void CorroborationRefusesAnUnregisteredOriginMaterial()
         {
-            InstallAdmittedAaoVersion();
             var clone = new Material(
                 Shader.Find("Hidden/Alrauna/AmuseTests/LilToonCutoutConversionTest"));
             var atlas = NewAtlas("MainTex (AAO UV Packed)");
@@ -213,7 +144,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [Test]
         public void CorroborationRefusesAMemoryOnlySourceMaterial()
         {
-            InstallAdmittedAaoVersion();
             var memorySource = new Material(
                 Shader.Find("Hidden/Alrauna/AmuseTests/LilToonCutoutConversionTest"));
             var clone = new Material(memorySource.shader);
@@ -239,7 +169,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [Test]
         public void CorroborationRefusesANullOriginMaterial()
         {
-            InstallAdmittedAaoVersion();
             var atlas = NewAtlas("MainTex (AAO UV Packed)");
             try
             {

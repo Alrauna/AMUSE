@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using Alrauna.Amuse.Editor.Semantics;
 using Alrauna.Amuse.Runtime;
 using nadena.dev.ndmf;
+using UnityEditor;
 using UnityEngine;
 
 [assembly: ExportsPlugin(
@@ -55,18 +57,46 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             internal bool RootHasAmuseComponent;
         }
 
+        /// <summary>One real Avatar Optimizer atlas observed on a slot at
+        /// the post-optimizer boundary, with the admission answers the
+        /// atlas ground check asserts.</summary>
+        internal sealed class AtlasObservation
+        {
+            internal string Name;
+
+            /// <summary>Whether the atlas already carries an asset path
+            /// at the boundary. NDMF persists build objects after the
+            /// last pass, so the answer must stay false here.</summary>
+            internal bool HasAssetPath;
+
+            /// <summary>The answer of
+            /// AaoAtlasTextureAttestation.TryIdentifyAtlas for the atlas
+            /// over the slot material that carries it.</summary>
+            internal bool Admitted;
+
+            /// <summary>The answer of
+            /// GeneratedTextureAttestation.TryIdentifyRouteTexture for
+            /// the atlas.</summary>
+            internal bool ServedByGeneratedRoute;
+        }
+
         /// <summary>Opt-in switch. A test sets this before processing the
         /// avatar and clears it afterwards.</summary>
         internal static bool Enabled;
-
         internal static PhaseSnapshot AfterOptimizer;
         internal static PhaseSnapshot AfterAmuse;
+
+        /// <summary>Real atlases of the last enabled observation, one
+        /// entry per slot that carried a pinned name marker.</summary>
+        internal static readonly List<AtlasObservation> Atlases =
+            new List<AtlasObservation>();
 
         internal static void Reset()
         {
             Enabled = false;
             AfterOptimizer = null;
             AfterAmuse = null;
+            Atlases.Clear();
         }
 
         /// <summary>The canonical key of one output triangle: the three
@@ -127,6 +157,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             material != null && material.shader != null
                                 ? material.shader.name
                                 : "<null>");
+                        if (phase == Phase.AfterOptimizer)
+                        {
+                            ObserveAtlas(material);
+                        }
                     }
                 }
 
@@ -164,6 +198,46 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 AfterAmuse = snapshot;
             }
+        }
+
+        /// <summary>Records the real Avatar Optimizer atlas of one slot
+        /// at the post-optimizer boundary. The boundary sits before the
+        /// AMUSE passes and before NDMF persists build objects, so the
+        /// probe reads the same live in-memory texture and the same
+        /// active object registry the production capture reads.</summary>
+        private static void ObserveAtlas(Material material)
+        {
+            if (material == null || !material.HasProperty("_MainTex"))
+            {
+                return;
+            }
+            if (!(material.GetTexture("_MainTex") is Texture2D atlas))
+            {
+                return;
+            }
+            var name = atlas.name ?? string.Empty;
+            var carriesMarker =
+                name.EndsWith(
+                    AaoAtlasTextureAttestation.AtlasNameSuffix,
+                    StringComparison.Ordinal) ||
+                name.StartsWith(
+                    AaoAtlasTextureAttestation.MonotoneNamePrefix,
+                    StringComparison.Ordinal);
+            if (!carriesMarker)
+            {
+                return;
+            }
+            Atlases.Add(new AtlasObservation
+            {
+                Name = name,
+                HasAssetPath = !string.IsNullOrEmpty(
+                    AssetDatabase.GetAssetPath(atlas)),
+                Admitted = AaoAtlasTextureAttestation.TryIdentifyAtlas(
+                    atlas, material),
+                ServedByGeneratedRoute =
+                    GeneratedTextureAttestation.TryIdentifyRouteTexture(
+                        atlas),
+            });
         }
     }
 

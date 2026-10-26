@@ -390,3 +390,39 @@ The console held exactly one logged error across both runs, `ArgumentOutOfRangeE
 ### Side-effect observation, QualitySettings
 
 Before the runs, on 2026-10-26, `ProjectSettings/QualitySettings.asset` carried a working-tree change against the committed file. After the runs the file matched the committed file again and showed `anisotropicTextures: 2` in every quality level. The block reports `changed setting lines: none` for the two digested files. This matches the Task 6 observation shape of a vendor editor load hook that writes at reload time, outside the digested window.
+
+## Run of 2026-10-26, Task 13 validation, product assembly
+
+Environment. The working tree of the dev project after Task 13, the AAO atlas admission without a version pin. The local work date of the run is 2026-10-26. The suite-start line of the run reported all 12 locked packages as Match and the `AMUSE_VRCSDK3_AVATARS` define active.
+
+How the run was made. The callback recorder method of `.superpowers/sdd/full-run-recorder.md` ran the product assembly alone. The research assembly was not run, because Task 13 changes only product assembly files. The run delivered every leaf row exactly once, with no double delivery. The temporary recorder and its data file were deleted after the run, and a forced refresh then reported zero compile errors. The printed report block of the suite was not captured from the console, which collapsed the run's repeated pass logs. This block records the footer counts and the delivered leaf rows.
+
+- Delivered leaf results: 3060, counted once per leaf row.
+- Passed: 3058.
+- Failed: 0.
+- Skipped: 2.
+- Inconclusive: 0.
+- Duration from the test framework bookends: 1597.5 seconds. The research assembly was not part of this run.
+
+Count changes against the Task 10 stage 1 exit run of this file. The leaf count went from 3063 to 3060. One test joined, the Task 13 ground check `RealAaoAtlasIsAdmittedThroughTheGeneratedRoute`. Four version-seam tests retired with the deleted seam, three from `AaoAtlasTextureAttestationTests` and one from `GeneratedTextureAttestationTests`. The failed count stayed 0 and the skip set stayed the same two gated DAO tests.
+
+### Skipped test names, 2 tests
+
+Both are the gated opt-in skips of the Task 3 gate conversion. No opt-in gate was set for this run.
+
+- `Alrauna.Amuse.Tests.Editor.Build.DaoMergedConsumptionTests.AaoAndDaoCombinedKeepsTheMergedSoundness`
+- `Alrauna.Amuse.Tests.Editor.Build.DaoMergedConsumptionTests.DaoMergeRunsInTheSdkSequenceAndPreservesSoundness`
+
+### Failed test names
+
+None.
+
+Focused evidence of the same date. Before the seam deletion, a filtered run over the new ground check observed it fail with the admission refusal, `Expected: True But was: False`, because conjunct 3 refused the installed 1.9.20. After the deletion, a filtered run over the nine touched fixture classes passed 347 of 347, and a filtered run over the two witness classes passed 21 of 21, with the corroboration refusal and the forged foreign texture refusal both green.
+
+### Console error observation of the stage 1 exit run, closed
+
+The `propertyIndex` console exception of the stage 1 exit run closes as vendor noise. The installed lilToon asset postprocessor walks a near-miss shader name around material creation and throws inside Unity, and the fixture fences exactly that exception with `LogAssert.Expect` at `Tests/Editor/Build/AlphaSeparationPreparationTests.cs:4907-4921`. The product walk cannot raise it, because the capture resolves the shader property index and records a no-index fact for `propertyIndex < 0` at `Editor/Host/UnityMaterialEvidenceCapture.cs:258-266`.
+
+### Side-effect observation, QualitySettings
+
+Before and after this run, on 2026-10-26, `ProjectSettings/QualitySettings.asset` matched the committed file and showed `anisotropicTextures: 2` in every quality level. The file stayed unchanged.

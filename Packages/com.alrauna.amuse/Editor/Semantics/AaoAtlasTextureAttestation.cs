@@ -13,63 +13,25 @@ namespace Alrauna.Amuse.Editor.Semantics
     // generated textures, for example by registering each atlas in the
     // NDMF object registry or by persisting atlases into a build
     // container, would let AMUSE delete this admission almost
-    // entirely: the shape predicate, the corroboration conjunct, and
-    // the version seam would all retire together with the identity
-    // mint and the two arms that consult them. The persisted-container
-    // branch in GeneratedTextureAttestation already reads that shape.
-    // Until then, this comment is the whole upstream ask.
+    // entirely: the shape predicate and the corroboration conjunct
+    // would retire together with the identity mint and the two arms
+    // that consult them. The persisted-container branch in
+    // GeneratedTextureAttestation already reads that shape. The
+    // version seam left this list on 2026-10-25, when owner decision
+    // Q8 dropped the version pin. Until that release arrives, this
+    // comment is the whole upstream ask.
     internal static class AaoAtlasTextureAttestation
     {
-        internal const string ProducerPackageName =
-            "com.anatawa12.avatar-optimizer";
         internal const string AtlasNameSuffix = " (AAO UV Packed)";
         internal const string MonotoneNamePrefix = "AAO Monotone ";
 
-        // The admitted set is pinned, characterized data, never grown
-        // at runtime. 1.9.17 joined on 2026-10-04: the installed dev
-        // and Census Lab copies' source shows the shape (atlases named
-        // source plus " (AAO UV Packed)" or "AAO Monotone ...", plain
-        // in-memory Texture2D objects, never saved, never registered,
-        // format and flags mirrored from the source), and Lab builds
-        // exercised the refusal end to end before admission
-        // (investigations 2026-09-27 and 2026-10-04).
-        private static readonly string[] ProductionAdmittedVersions =
-        {
-            "1.9.17",
-        };
-
         /// <summary>
-        /// The exposed producer-version seam of this attestation. Each
-        /// member is addressed directly through this field:
-        /// Versions.ReadInstalledPackageVersionOrNull is set by
-        /// AaoAtlasTextureAttestationTests, GeneratedTextureAttestationTests,
-        /// UnityTextureEvidenceTests, UnityAlphaFieldEvidenceTests,
-        /// UnityGeneratedTextureEvidenceTests, and
-        /// UnityMaterialEvidenceCaptureTests. Versions.AdmittedVersions is
-        /// read by AaoAtlasTextureAttestationTests.
-        /// Versions.ResetForTests is called by
-        /// AaoAtlasTextureAttestationTests, GeneratedTextureAttestationTests,
-        /// UnityTextureEvidenceTests, UnityAlphaFieldEvidenceTests,
-        /// UnityGeneratedTextureEvidenceTests, and
-        /// UnityMaterialEvidenceCaptureTests.
-        /// Versions.TryReadInstalledProducerVersion is exercised through
-        /// the admission and refusal tests in
-        /// AaoAtlasTextureAttestationTests.
-        /// Versions.ClearVersionCacheForSession is called by the
-        /// production session resets in AlphaSeparationApply and
-        /// AmusePlatformFinishPlugin. Versions.IsVersionAdmitted is
-        /// exercised by AaoAtlasTextureAttestationTests.
-        /// </summary>
-        internal static readonly AdmittedProducerVersions Versions =
-            new AdmittedProducerVersions(
-                ProducerPackageName,
-                ProductionAdmittedVersions);
-
-        /// <summary>
-        /// The shape predicate, conjuncts C1 to C3 of spec 2026-10-04
-        /// section 4.1. It is deliberately texture-only: the route
-        /// selector and the fact readers consult it, while the identity
-        /// gate demands the corroborated form below.
+        /// The shape predicate, conjuncts C1 and C2 of spec 2026-10-04
+        /// section 4.1. Owner decision Q8 of 2026-10-25 retired the
+        /// admitted-version conjunct C3. The predicate is deliberately
+        /// texture-only: the route selector and the fact readers
+        /// consult it, while the identity gate demands the corroborated
+        /// form below.
         /// </summary>
         internal static bool TryIdentifyAtlasShape(Texture2D texture)
         {
@@ -84,25 +46,20 @@ namespace Alrauna.Amuse.Editor.Semantics
             }
             // Conjunct 2: the pinned name shape.
             var name = texture.name ?? string.Empty;
-            var hasMarker =
-                name.EndsWith(AtlasNameSuffix, StringComparison.Ordinal) ||
-                name.StartsWith(MonotoneNamePrefix, StringComparison.Ordinal);
-            if (!hasMarker)
-            {
-                return false;
-            }
-            // Conjunct 3: the producer is installed and its version is
-            // admitted.
-            return Versions.TryReadInstalledProducerVersion(out var version) &&
-                   Versions.IsVersionAdmitted(version);
+            return name.EndsWith(
+                       AtlasNameSuffix, StringComparison.Ordinal) ||
+                   name.StartsWith(
+                       MonotoneNamePrefix, StringComparison.Ordinal);
         }
 
         /// <summary>
-        /// The full admission, conjuncts C1 to C4 of spec 2026-10-04
-        /// section 4.1. The slot's live material must corroborate the
-        /// producer: the registry resolves it one hop to an asset-backed
-        /// material, the pair the DuplicateAssets pass of Avatar
-        /// Optimizer registers for every renderer material it clones.
+        /// The full admission, conjuncts C1, C2, and C4 of spec
+        /// 2026-10-04 section 4.1. Owner decision Q8 of 2026-10-25
+        /// retired the admitted-version conjunct C3. The slot's live
+        /// material must corroborate the producer: the registry
+        /// resolves it one hop to an asset-backed material, the pair
+        /// the DuplicateAssets pass of Avatar Optimizer registers for
+        /// every renderer material it clones.
         /// </summary>
         internal static bool TryIdentifyAtlas(
             Texture2D texture,

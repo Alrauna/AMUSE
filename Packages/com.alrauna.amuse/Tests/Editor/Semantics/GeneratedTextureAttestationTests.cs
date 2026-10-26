@@ -16,7 +16,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [SetUp]
         public void SetUp()
         {
-            AaoAtlasTextureAttestation.Versions.ResetForTests();
             _container = ScriptableObject.CreateInstance<nadena.dev.ndmf.runtime.SubAssetContainer>();
             AssetDatabase.CreateAsset(_container, TestContainerPath);
 
@@ -30,7 +29,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         public void TearDown()
         {
             ReplacementTextureAttestation.Versions.ResetForTests();
-            AaoAtlasTextureAttestation.Versions.ResetForTests();
             if (AssetDatabase.LoadAssetAtPath<ScriptableObject>(TestContainerPath) != null)
             {
                 AssetDatabase.DeleteAsset(TestContainerPath);
@@ -253,11 +251,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         }
 
         [Test]
-        public void LooseAtlasWithAdmittedVersion_TakesTheGeneratedRoute()
+        public void LooseAtlasWithPinnedMarkers_TakesTheGeneratedRoute()
         {
-            AaoAtlasTextureAttestation.Versions.ResetForTests();
-            AaoAtlasTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
-                _ => "1.9.17";
             var loose = new Texture2D(4, 4, TextureFormat.RGBA32, false);
             loose.name = "MainTex (AAO UV Packed)";
             try
@@ -269,28 +264,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             finally
             {
                 Object.DestroyImmediate(loose);
-                AaoAtlasTextureAttestation.Versions.ResetForTests();
-            }
-        }
-
-        [Test]
-        public void LooseAtlasWithUnadmittedVersion_RefusesTheRoute()
-        {
-            AaoAtlasTextureAttestation.Versions.ResetForTests();
-            AaoAtlasTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
-                _ => "1.9.18";
-            var loose = new Texture2D(4, 4, TextureFormat.RGBA32, false);
-            loose.name = "MainTex (AAO UV Packed)";
-            try
-            {
-                var routed = GeneratedTextureAttestation.TryIdentifyRouteTexture(loose);
-
-                Assert.That(routed, Is.False);
-            }
-            finally
-            {
-                Object.DestroyImmediate(loose);
-                AaoAtlasTextureAttestation.Versions.ResetForTests();
             }
         }
     }

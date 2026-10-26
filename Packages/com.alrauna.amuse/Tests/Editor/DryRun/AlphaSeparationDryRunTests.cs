@@ -902,9 +902,6 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             atlas.Apply(false);
             atlas.filterMode = FilterMode.Point;
             atlas.wrapMode = UnityEngine.TextureWrapMode.Clamp;
-            AaoAtlasTextureAttestation.Versions.ResetForTests();
-            AaoAtlasTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
-                _ => "1.9.17";
             try
             {
                 var fixture = NewComputeFixture(
@@ -926,7 +923,6 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             }
             finally
             {
-                AaoAtlasTextureAttestation.Versions.ResetForTests();
             }
         }
 
