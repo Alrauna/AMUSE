@@ -430,6 +430,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             return renderer;
         }
 
+#if AMUSE_VRCSDK3_AVATARS
         private static VRC.SDK3.Avatars.Components.VRCAvatarDescriptor
             .CustomAnimLayer FallbackLayer(
             VRC.SDK3.Avatars.Components.VRCAvatarDescriptor.AnimLayerType type)
@@ -461,6 +462,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 isEnabled = false,
             };
         }
+#endif
 
         private static Vector2[] BandUv(Band band)
         {

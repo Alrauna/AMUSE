@@ -577,15 +577,27 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             using (VendorProductionOrderCapture.Arm())
             {
-                var accepted = VRC.SDKBase.Editor.BuildPipeline
-                    .VRCBuildPipelineCallbacks.OnPreprocessAvatar(root);
-                Assert.That(
-                    accepted,
-                    Is.True,
-                    "the SDK preprocess chain must accept the fixture"
-                    + " avatar");
+                try
+                {
+                    var accepted = VRC.SDKBase.Editor.BuildPipeline
+                        .VRCBuildPipelineCallbacks
+                        .OnPreprocessAvatar(root);
+                    Assert.That(
+                        accepted,
+                        Is.True,
+                        "the SDK preprocess chain must accept the"
+                        + " fixture avatar");
+                }
+                finally
+                {
+                    // The flag must hold even when the dispatch
+                    // rejects or throws. The vendor callbacks may have
+                    // written their builds folder before the failure,
+                    // and a skipped cleanup would protect that residue
+                    // in every later snapshot forever.
+                    _dispatchRanThisTest = true;
+                }
             }
-            _dispatchRanThisTest = true;
 
             Assert.That(
                 VendorProductionOrderCapture.Context,
