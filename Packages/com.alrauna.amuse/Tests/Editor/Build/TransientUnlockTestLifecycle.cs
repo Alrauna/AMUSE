@@ -86,27 +86,28 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         // Trace and Optimize passes execute on this test platform and
         // rewrite animator clips and material serialized state in the
         // Optimizing phase, before the window opens, so the window
-        // fixtures opt out for their own duration and restore the prior
-        // value afterwards.
+        // fixtures opt out for their own duration. The session-state
+        // guard owns the disable lifecycle: it saves the prior value,
+        // restores it on dispose, and registers the key for the suite
+        // teardown tripwire.
         internal const string AaoPluginId =
             "com.anatawa12.avatar-optimizer";
 
-        private const string AaoDisableKey =
-            "nadena.dev.ndmf.plugin-disabled." + AaoPluginId;
-
-        private static bool aaoPriorDisabled;
+        private static IDisposable aaoDisableScope;
 
         internal static void DisableAaoForFixture()
         {
-            aaoPriorDisabled = UnityEditor.SessionState.GetBool(
-                AaoDisableKey, false);
-            UnityEditor.SessionState.SetBool(AaoDisableKey, true);
+            aaoDisableScope =
+                VendorSessionStateGuard.DisablePluginForFixture(
+                    AaoPluginId);
         }
 
         internal static void RestoreAaoAfterFixture()
         {
-            UnityEditor.SessionState.SetBool(
-                AaoDisableKey, aaoPriorDisabled);
+            // A no-op when the scope is already restored. The guard
+            // writes back the value it saved.
+            aaoDisableScope?.Dispose();
+            aaoDisableScope = null;
         }
 
         internal static void Reset()

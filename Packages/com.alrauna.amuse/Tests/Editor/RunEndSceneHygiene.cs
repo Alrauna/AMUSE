@@ -29,6 +29,13 @@ namespace Alrauna.Amuse.Tests.Editor
     /// service-owned and re-opens clean when a build needs it.
     /// </para>
     /// <para>
+    /// The teardown also runs the session-state tripwire of
+    /// VendorSessionStateGuard, so a vendor plugin-disable key a
+    /// fixture left off its entry value fails here with its key named,
+    /// and then the generated-output cleanup deletes the files the
+    /// suite owns under NDMF's generated folder.
+    /// </para>
+    /// <para>
     /// The research package carries a third near-verbatim copy of the
     /// discard in its own test assembly. It cannot delegate across
     /// assemblies, so that copy stays.
@@ -55,6 +62,18 @@ namespace Alrauna.Amuse.Tests.Editor
             // discard. See
             // TransientUnlockTestLifecycle.AssertNoSavedSceneDirty.
             TransientUnlockTestLifecycle.AssertNoSavedSceneDirty();
+
+            // The session-state tripwire runs before the cleanup, so a
+            // vendor plugin-disable key a fixture left set names its key
+            // while the offender test still sits in the runner output.
+            // See VendorSessionStateGuard.
+            VendorSessionStateGuard.AssertAllTouchedKeysAtEntryValues();
+
+            // The generated-output cleanup deletes only the files the
+            // suite owns under NDMF's generated folder. See
+            // AmuseGeneratedOutputCleanup.
+            AmuseGeneratedOutputCleanup.Delete(
+                AmuseGeneratedOutputCleanup.DefaultGeneratedRoot);
         }
     }
 }

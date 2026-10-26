@@ -5,7 +5,6 @@ using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
 using NUnit.Framework;
-using UnityEditor;
 using UnityEngine;
 using PackageManagerInfo = UnityEditor.PackageManager.PackageInfo;
 
@@ -28,8 +27,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         private const string ManifestRelativePath =
             "Packages/vpm-manifest.json";
 
-        private const string NdmfDisableKeyPrefix =
-            "nadena.dev.ndmf.plugin-disabled.";
+        // The known NDMF plugin-disable keys. The default reads the
+        // exact known plugin set of the session-state guard, and the
+        // guard's suite-start assertion reads this seam, so an
+        // injected list stays in effect.
+        internal static Func<IEnumerable<string>> KnownDisableKeys =
+            DefaultKnownDisableKeys;
 
         private const string SuiteStartTag = "[AMUSE vendor suite start]";
 
@@ -43,33 +46,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         internal static Func<IReadOnlyList<VendorVersionEntry>>
             EntriesOverride;
 
-        // The known NDMF plugin-disable keys. Task 5 owns the full known
-        // set and replaces this default with the session-state guard.
-        internal static Func<IEnumerable<string>> KnownDisableKeys =
-            DefaultKnownDisableKeys;
-
         internal static void RunAll()
         {
-            AssertNoKnownDisableKeyIsSet();
+            VendorSessionStateGuard.AssertNoKnownPluginDisabled();
             var entries = CollectEntries();
             AssertNoMismatch(entries);
             AssertVrcAvatarsDefineMatchesTheInstalledPackages();
             RecordTheEffectiveEnvironment(entries);
-        }
-
-        private static void AssertNoKnownDisableKeyIsSet()
-        {
-            foreach (var key in KnownDisableKeys())
-            {
-                if (SessionState.GetBool(key, false))
-                {
-                    Assert.Fail(
-                        "The suite-start check found the NDMF plugin-disable"
-                        + " key " + key + " set to true. A disabled vendor"
-                        + " plugin changes what the suite measures. Clear"
-                        + " the key before the run.");
-                }
-            }
         }
 
         private static IReadOnlyList<VendorVersionEntry> CollectEntries()
@@ -221,8 +204,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
         private static IEnumerable<string> DefaultKnownDisableKeys()
         {
-            yield return NdmfDisableKeyPrefix
-                + TransientUnlockTestKnobs.AaoPluginId;
+            return VendorSessionStateGuard.KnownDisableKeys();
         }
     }
 }

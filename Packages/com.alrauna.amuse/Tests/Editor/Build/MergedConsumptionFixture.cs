@@ -616,7 +616,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "the fixture must complete the real build; the NDMF"
                 + " error report names the failing pass in the editor"
                 + " console; builtRenderers="
-                + DescribeBuiltRenderers(root));
+                + DescribeBuiltRenderers(root)
+                + DescribeVendorFailures(context));
 
             var state = context.GetState<AmusePlatformFinishState>();
             Assert.That(state, Is.Not.Null);
@@ -816,6 +817,39 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             return parts.Count == 0
                 ? "none"
                 : string.Join("; ", parts);
+        }
+
+        /// <summary>
+        /// Names the failing pass and its plugin for every error the
+        /// NDMF error report recorded at error severity, so a vendor
+        /// failure reads as a vendor failure in the test message. The
+        /// string is empty when the build recorded none.
+        /// </summary>
+        private static string DescribeVendorFailures(
+            nadena.dev.ndmf.BuildContext context)
+        {
+            var failures = context.ErrorReport.Errors
+                .Where(error => error.TheError != null
+                    && error.TheError.Severity
+                        >= nadena.dev.ndmf.ErrorSeverity.Error)
+                .Select(DescribeVendorFailure)
+                .ToList();
+            if (failures.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            return " failingPasses=[" + string.Join(", ", failures) + "]";
+        }
+
+        private static string DescribeVendorFailure(
+            nadena.dev.ndmf.ErrorContext error)
+        {
+            var pass = error.PassName ?? "<unnamed pass>";
+            var plugin = error.Plugin != null
+                ? error.Plugin.DisplayName
+                : "<unknown plugin>";
+            return pass + " of " + plugin;
         }
 
         internal static string DescribeSnapshot(
