@@ -72,11 +72,17 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Is.True);
         }
 
+        /// <summary>
+        /// Replaces CandidateRendererProducesARetainedRecord (stage 4,
+        /// V12). The same retained-record assertions over a material on
+        /// the GUID-loaded bundled 9.3 shader, driven through the
+        /// production barrier with no seams.
+        /// </summary>
         [Test]
-        public void CandidateRendererProducesARetainedRecord()
+        public void CandidateRendererProducesARetainedRecordWithRealPoiyomi()
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
-            var root = new GameObject("AMUSE prepared candidate");
+            var root = new GameObject("AMUSE prepared candidate real");
             FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
@@ -86,10 +92,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             try
             {
-                material = PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial();
+                material = NewRealPoiyomiOpaqueMaterial();
                 var renderer = AddSingleTriangleRenderer(root, material, out mesh);
 
-                amuse = RunBarrier(root);
+                amuse = RunProductionBarrier(root);
 
                 Assert.That(
                     amuse.SemanticallyRefusedRendererCount, Is.Zero,
@@ -130,15 +136,16 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
-        /// Preparation creates transient clones and mappings but must never
-        /// touch the build avatar: the renderer keeps its exact material
-        /// array and its source mesh until the apply pass.
+        /// Replaces PreparationDoesNotMutateTheBuildAvatar (stage 4,
+        /// V12). The same non-mutation contract over a material on the
+        /// GUID-loaded bundled 9.3 shader, driven through the production
+        /// barrier with no seams.
         /// </summary>
         [Test]
-        public void PreparationDoesNotMutateTheBuildAvatar()
+        public void PreparationDoesNotMutateTheBuildAvatarWithRealPoiyomi()
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
-            var root = new GameObject("AMUSE prepared without mutation");
+            var root = new GameObject("AMUSE prepared without mutation real");
             FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
@@ -148,11 +155,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             try
             {
-                material = PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial();
+                material = NewRealPoiyomiOpaqueMaterial();
                 var renderer = AddSingleTriangleRenderer(root, material, out mesh);
                 var originalMaterials = renderer.sharedMaterials;
 
-                amuse = RunBarrier(root);
+                amuse = RunProductionBarrier(root);
 
                 Assert.That(amuse.Separation, Is.Not.Null,
                     "fixture precondition: nothing was prepared, so the " +
@@ -181,11 +188,17 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        /// <summary>
+        /// Replaces RendererWithoutAnOpaqueCandidateRetainsNothing
+        /// (stage 4, V12). The same no-candidate outcome over a
+        /// transparent material on the GUID-loaded bundled 9.3 shader,
+        /// driven through the production barrier with no seams.
+        /// </summary>
         [Test]
-        public void RendererWithoutAnOpaqueCandidateRetainsNothing()
+        public void RendererWithoutAnOpaqueCandidateRetainsNothingWithRealPoiyomi()
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
-            var root = new GameObject("AMUSE no candidate");
+            var root = new GameObject("AMUSE no candidate real");
             FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
@@ -194,10 +207,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             try
             {
-                material = PoiyomiFixtureTestBase.CreateVerifiedTransparentMaterial();
+                material = NewRealPoiyomiTransparentMaterial();
                 AddSingleTriangleRenderer(root, material, out mesh);
 
-                var amuse = RunBarrier(root);
+                var amuse = RunProductionBarrier(root);
 
                 Assert.That(
                     amuse.SemanticallyRefusedRendererCount, Is.Zero,
@@ -1820,10 +1833,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         // --- Defect A regression: avatar-wide deduplication ------------------
 
         [Test]
-        public void SharedSourceMaterialReusesOneAvatarWideClone()
+        public void SharedSourceMaterialReusesOneAvatarWideCloneWithRealPoiyomi()
         {
+            // Replaces SharedSourceMaterialReusesOneAvatarWideClone
+            // (stage 4, V12). The same one-clone dedup over a material on
+            // the GUID-loaded bundled 9.3 shader, driven through the
+            // production barrier with no seams.
             using var assets = new OverrideTemporaryDirectoryScope(null);
-            var root = new GameObject("AMUSE shared source dedup");
+            var root = new GameObject("AMUSE shared source dedup real");
             FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
@@ -1833,10 +1850,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             try
             {
-                material = PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial();
+                material = NewRealPoiyomiOpaqueMaterial();
                 AddTwoTriangleRenderer(root, material, material, out mesh);
 
-                amuse = RunBarrier(root);
+                amuse = RunProductionBarrier(root);
 
                 Assert.That(
                     amuse.SemanticallyRefusedRendererCount, Is.Zero,
@@ -12586,6 +12603,60 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "fixture precondition: the installed " + shaderLabel +
                 " asset must load");
             return shader;
+        }
+
+        /// <summary>
+        /// Loads the installed bundled Poiyomi 9.3 shader by its
+        /// production GUID pin. The GUID load is the only reliable
+        /// resolve, because the release name resolves the Poiyomi 10.x
+        /// root shader on this install, not the bundled asset.
+        /// </summary>
+        private static Shader LoadInstalledPoiyomiShader()
+        {
+            var path = AssetDatabase.GUIDToAssetPath(
+                PoiyomiSourceAttestation.CanonicalShaderGuid);
+            Assert.That(
+                path, Is.Not.Empty,
+                "fixture precondition: the installed bundled Poiyomi " +
+                "Toon shader asset must resolve by its pinned GUID");
+            var shader = AssetDatabase.LoadAssetAtPath<Shader>(path);
+            Assert.That(
+                shader, Is.Not.Null,
+                "fixture precondition: the installed bundled Poiyomi " +
+                "Toon shader asset must load");
+            return shader;
+        }
+
+        /// <summary>
+        /// A material on the GUID-loaded bundled 9.3 shader at the same
+        /// convertible state the retired stand-in fixture carried: the
+        /// vendor force-opaque flag at one over the Fade preset render
+        /// state. Every written fact is a vendor property a fresh
+        /// installed material can carry. The caller owns destruction.
+        /// </summary>
+        private static Material NewRealPoiyomiOpaqueMaterial()
+        {
+            var material = new Material(LoadInstalledPoiyomiShader());
+            material.SetFloat("_AlphaForceOpaque", 1f);
+            PoiyomiFixtureTestBase.ApplyConvertibleRenderState(material);
+            return material;
+        }
+
+        /// <summary>
+        /// A material on the GUID-loaded bundled 9.3 shader at the same
+        /// transparent state the retired stand-in fixture carried:
+        /// force-opaque off, the alpha mask mode off, a half-alpha white
+        /// color, over the Fade preset render state. The caller owns
+        /// destruction.
+        /// </summary>
+        private static Material NewRealPoiyomiTransparentMaterial()
+        {
+            var material = new Material(LoadInstalledPoiyomiShader());
+            material.SetFloat("_AlphaForceOpaque", 0f);
+            material.SetFloat("_MainAlphaMaskMode", 0f);
+            material.SetColor("_Color", new Color(1f, 1f, 1f, 0.5f));
+            PoiyomiFixtureTestBase.ApplyConvertibleRenderState(material);
+            return material;
         }
 
         /// <summary>

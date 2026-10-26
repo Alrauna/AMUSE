@@ -1397,10 +1397,32 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Assert.That(found, Is.False, "Unexpected disagreement: " + fact);
         }
 
+        /// <summary>
+        /// Replaces ReadEffectiveRenderState_ReportsTheDeclaredQueue
+        /// _WithoutAnOverride (stage 4, V12). The same declared-default
+        /// read over a fresh material on the GUID-loaded bundled 9.3
+        /// shader, so the vendor's own declared queue and RenderType
+        /// answer, not the stand-in transcription. The bundled SubShader
+        /// declares the Geometry queue and the Opaque tag, which is the
+        /// declared-default half of the fresh-material AlreadyOpaque
+        /// classification.
+        /// </summary>
         [Test]
-        public void ReadEffectiveRenderState_ReportsTheDeclaredQueueWithoutAnOverride()
+        public void
+            ReadEffectiveRenderState_ReportsTheDeclaredQueueWithoutAnOverrideWithRealPoiyomi()
         {
-            var material = NewFixtureMaterial();
+            var path = AssetDatabase.GUIDToAssetPath(
+                PoiyomiSourceAttestation.CanonicalShaderGuid);
+            Assert.That(
+                path, Is.Not.Empty,
+                "fixture precondition: the installed bundled Poiyomi Toon " +
+                "shader asset must resolve by its pinned GUID");
+            var shader = AssetDatabase.LoadAssetAtPath<Shader>(path);
+            Assert.That(
+                shader, Is.Not.Null,
+                "fixture precondition: the installed bundled Poiyomi Toon " +
+                "shader asset must load");
+            var material = Track(new Material(shader));
 
             EffectiveRenderState.ReadEffectiveRenderState(
                 material, out var queue, out var renderType);

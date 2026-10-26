@@ -485,3 +485,71 @@ Cutover observation of the same date. All twelve twins passed on their first run
 ### Side-effect observation, QualitySettings
 
 The file showed a working-tree change during the run window and matched the committed file again after it, with `anisotropicTextures: 2` in every quality level. This is the known vendor editor reload hook shape recorded by the Task 6 and Task 10 runs.
+
+## Run of 2026-10-26, Task 16 validation, product assembly
+
+Environment. The working tree of the dev project after Task 16, the
+Poiyomi bundled 9.3 stand-in cutover of stage 4. The local work date of
+the run is 2026-10-26.
+
+How the run was made. The callback recorder method of
+`.superpowers/sdd/full-run-recorder.md` ran the product assembly alone.
+The research assembly was not run, because Task 16 changes only product
+assembly files. The run delivered every leaf row exactly once, with no
+double delivery. The temporary recorder and its data file were deleted
+after the run, and a forced refresh then reported zero compile errors.
+
+- Delivered leaf results: 3069, counted once per leaf row.
+- Passed: 3067.
+- Failed: 0.
+- Skipped: 2.
+- Inconclusive: 0.
+- Duration from the test framework bookends: 1610.0 seconds.
+
+Count changes against the Task 15 full run of this file. The leaf count
+stayed 3069. Task 16 retired five Poiyomi stand-in happy paths and added
+five real-material twins, one for one, so the cutover itself changed no
+leaf count. Every retired test is named in the cutover ledger with its
+replacement. The failed count stayed 0 and the skip set stayed the same
+two gated DAO tests.
+
+### Skipped test names, 2 tests
+
+Both are the gated opt-in skips of the Task 3 gate conversion. No
+opt-in gate was set for this run.
+
+- `Alrauna.Amuse.Tests.Editor.Build.DaoMergedConsumptionTests.AaoAndDaoCombinedKeepsTheMergedSoundness`
+- `Alrauna.Amuse.Tests.Editor.Build.DaoMergedConsumptionTests.DaoMergeRunsInTheSdkSequenceAndPreservesSoundness`
+
+### Failed test names
+
+None.
+
+Cutover observation of the same date. All five twins passed on their
+first run. They are characterization of the pinned environment. An
+earlier unrecorded full-assembly run of the same working tree, started
+before the recorded run, also completed with zero failures over its
+whole discovered set, and both touched classes passed inside it. The
+touched classes in the recorded run passed as follows:
+`AlphaSeparationPreparationTests` 93 of 93 leaves and
+`PoiyomiOpaqueConversionTests` 115 of 115 leaves, zero failed in each.
+Every twin loads the bundled 9.3 shader by the production GUID pin and
+drives the production delegates with no seams. The production barrier
+presenter fails the build on any consent subject, and no subject
+appeared in any twin build.
+
+### Poiyomi import and compile cost, 2026-10-26
+
+Recorded data, never a gate (V5, V12). One forced synchronous reimport
+per bundled 9.3 shader file, through `AssetDatabase.ImportAsset` with
+`ForceUpdate` and `ForceSynchronousImport`, timed with a stopwatch in
+the dev editor instance after the test run. The bundled main shader
+took 1492 ms. The bundled two-pass shader took 1696 ms. The total wall
+time for both files was 3188 ms. No vendor asset and no import setting
+changed.
+
+### Side-effect observation, QualitySettings
+
+The file matched the committed file after this run. No working-tree
+change appeared in the run window, unlike the transient changes seen by
+the Task 6 and Task 10 runs.

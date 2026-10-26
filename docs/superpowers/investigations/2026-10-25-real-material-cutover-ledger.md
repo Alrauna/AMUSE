@@ -150,3 +150,101 @@ target), `LilToonMultiContainerTest.shader`,
 `LilToonMultiModeGateTest.shader` (retained Multi fixtures). The one dead
 helper the retirement created, `NewOpaqueMaterial` of the dry-run suite, was
 deleted.
+
+## Stage 4: Poiyomi bundled 9.3 cutover, 2026-10-26
+
+Status as of 2026-10-26. Stage 4 of the vendor-integrated test plan,
+design decision V12. The installed package is Poiyomi 10.0.27. Its
+bundled 9.3 shaders attest through production on this install, settled
+by the Task 14 ground checks of 2026-10-26
+(`Tests/Editor/Semantics/RealSourceGroundCheckTests.cs`). Owner
+decision A3b of 2026-10-25 drops release package testing. The two
+9.3.64 release rows stay in the product data and no test loads them,
+because the release package is not installed. The locked stand-ins
+(`LockedStandInOriginal`, `LockedStandInOriginalRich`, and every locked
+row through `LockedSourceFixture`) never joined this enumeration. The
+bundled rows carry `LockedOriginalAdmitted = false`, so no locked
+original can attest in this environment. Stage 5 (V13) owns them.
+
+### Enumeration method, stage 4
+
+The Step 1 grep ran over `Tests/Editor/` for the stand-in shader names
+under `Hidden/Alrauna/AmuseTests/` that carry the Poiyomi property
+schema, for `VerifiedPoiyomiTestSeams`, and for the
+`PoiyomiFixtureTestBase.Create*` and `InterpretVerified*` helpers, then
+followed the fixture wrappers each file builds on them
+(`SplitAlphaMaterial`, `SampledAlphaMaterial`,
+`VerifiedForceOpaqueMaterial`). The sweep covered the Poiyomi Semantics
+suites and the Poiyomi halves of Analysis, Build, DryRun, and Host. A
+test joined the retirement list only when both stage 3 criteria hold:
+
+1. The stand-in material's role is the vendor material itself on an
+   admitted route, at vendor-default state or at a state a fresh
+   installed material can carry.
+2. The asserted outcome is the clean admitted result, with no planted
+   refusal, junk state, or exact control the vendor surface cannot
+   carry.
+
+Falsifier-marked fixtures and refusal shapes never joined. Every twin
+loads the bundled 9.3 shader by the production GUID pin
+(`PoiyomiSourceAttestation.CanonicalShaderGuid`), never by name, and
+drives the production path with no seam delegates. The conversion
+eligibility over the real material uses the vendor Fade preset render
+state and the vendor force-opaque flag, both states a fresh installed
+material can carry. First-run green on every twin is characterization
+of the pinned environment, in the shape of the Task 14 ground checks.
+
+### Retired Poiyomi stand-in tests
+
+| Old test | Replacement | Date |
+|---|---|---|
+| `AlphaSeparationPreparationTests.CandidateRendererProducesARetainedRecord` | `CandidateRendererProducesARetainedRecordWithRealPoiyomi`. Real bundled 9.3 material by GUID, production barrier with no seams, same retained-record assertions. | 2026-10-26 |
+| `AlphaSeparationPreparationTests.PreparationDoesNotMutateTheBuildAvatar` | `PreparationDoesNotMutateTheBuildAvatarWithRealPoiyomi`. Real bundled 9.3 material, production barrier, same non-mutation assertions. | 2026-10-26 |
+| `AlphaSeparationPreparationTests.RendererWithoutAnOpaqueCandidateRetainsNothing` | `RendererWithoutAnOpaqueCandidateRetainsNothingWithRealPoiyomi`. Real transparent material, production barrier, same no-candidate assertions. | 2026-10-26 |
+| `AlphaSeparationPreparationTests.SharedSourceMaterialReusesOneAvatarWideClone` | `SharedSourceMaterialReusesOneAvatarWideCloneWithRealPoiyomi`. Real bundled 9.3 source shared by two slots, production barrier, same one-clone mapping assertions. | 2026-10-26 |
+| `PoiyomiOpaqueConversionTests.ReadEffectiveRenderState_ReportsTheDeclaredQueueWithoutAnOverride` | `ReadEffectiveRenderState_ReportsTheDeclaredQueueWithoutAnOverrideWithRealPoiyomi`. Fresh material on the GUID-loaded bundled shader, same declared queue and RenderType assertions. The vendor's own declared SubShader tags answer, not the stand-in transcription. | 2026-10-26 |
+
+### Retained Poiyomi stand-ins with stated reasons
+
+| Stand-in test or suite | Retention reason | Date |
+|---|---|---|
+| The interpreter equation suites of `Semantics/Poiyomi/` (`PoiyomiBaseColorAlphaTests`, `PoiyomiAlphaMaskTests`, `PoiyomiTwoPassAlphaTests`, `PoiyomiRimLightingAlphaTests`, `PoiyomiOutlineAlphaSemanticsTests`, `PoiyomiDecalSlotAlphaTests`, `PoiyomiCutoutSplitTests`, `PoiyomiMultipassRuleTests`, `PoiyomiTextureEvidenceTests`) and the characterization suites | They pin traced equations over exact property and feature states through the verified-material seam. Record section 5.3, analysis oracles with independent outcomes. | 2026-10-26 |
+| `PoiyomiOpaqueConversionTests` gate, preset, tuple, and pin rows (`ConvertibleFadeBaseline_IsConvertible`, the `Preset*` rows, the gate matrices, the canonical-tuple pins) | Exact control over the 23 conversion-read properties through `MakeCanonical` and the `Preset` helper. The rows assemble vendor preset facts onto the canonical tuple, which is not fresh vendor state. Record section 5.3, exact scalar control. | 2026-10-26 |
+| `PoiyomiOpaqueConversionTests.FixtureMaterial_ConvertsThroughProductionWithoutAMissingPropertyRefusal` | The row guards the stand-in fixture itself. The retained behavioral rows trust its precondition. Its subject is the fixture, not the vendor route. The retired barrier twins ground the installed shader's conversion schema end to end, because a missing conversion property would refuse their preparation assertions. | 2026-10-26 |
+| The falsifier-marked rows (`AlphaSeparationPreparationTests.AlreadyOpaqueMapsToItselfWithoutAClone`, `NoSplitAnywhereCreatesNoMeshClone`, the conversion-only animation row, `MixedPoiyomiAndLilToonSlotMapsCompletely`, `PoiyomiSlotPreparesBesideAnOpaqueLilToonSlotOnTheSameRenderer`, `PoiyomiSiblingSlotsSelectDifferentPairs`, the premultiply and forced-opaque report falsifiers) | Falsifier fixtures never enter the retirement list. Their planted contrasts need the stand-in state the marker names. | 2026-10-26 |
+| `AlphaSeparationPreparationTests.CutoutSlotPreparesBesideAPoiyomiSlotWithIndependentClones`, `MixedPoiyomiAndCutoutAdmittedSetMapsThroughEachOwnConversion`, `SwappedMaterialWithUnconvertedSiblingMapsToIdentityAndPrepares`, `AlphaSeparationApplyTests.TransparentSiblingKeepsPoiyomiAndCutoutResultsByteIdentical`, `AlphaSeparationPersistenceTests.SourceAssetsRemainUnchangedAfterSuccessfulFeatureBuild`, `AlphaSeparationDryRunTests.DryRunVerdictsMatchTheBuildOnAMixedRenderer` | These stage 3 deferral rows stay synthetic. One build carries a retained lilToon stand-in half or a controlled-grid split half that needs the seam route, and the asserted subject is family routing, cross-build parity, verdict parity, or the preservation audit, not the vendor route. A production no-seam run would refuse the retained stand-in half at family selection. | 2026-10-26 |
+| `AlphaSeparationPreparationTests.PoiyomiNonIdentityStSlotProvesOpaqueAndMigrates`, `PoiyomiStAnimatedAtSerializedDefaultPrepares`, `PoiyomiNonSingletonStAnimationRefuses`, `PoiyomiNonIdentityStPreparationLeavesSourceAssetsUnchanged` | Controlled pixel grids and exact UV envelopes, plus animation singleton mechanics. Record section 5.3, controlled pixel grids. | 2026-10-26 |
+| `AlphaSeparationPreparationTests.SharedSourceStillValidatesConversionPerRenderer` and the refusal rows of the Poiyomi suites | Planted refusals. Refusal shapes never enter the retirement list. | 2026-10-26 |
+| The runtime-state, report, cache, and policy rows (`AdmittedMaterialStatesTests`, the `RuntimeStateProductionEntry_*` rows, `AmuseReportsSlotTests`, `AmusePlatformFinishPluginTests` report and pair rows, the dry-run sentence mechanics) | Their subjects are AMUSE state machines and report strings over controlled textures. The stand-in material is a vehicle, and the rows assert call counts or exact policy pairs. Record section 5.3, analysis oracles with independent outcomes. | 2026-10-26 |
+| The Host capture and materialization rows (`UnityMaterialEvidenceCaptureTests`, `EffectiveMaterialMaterializationTests`, `RendererAlphaAnalysisIntegrationTests`) | Capture and materialization mechanics with exact block-entry control. Record section 5.3. | 2026-10-26 |
+| `AlphaSeparationPreparationTests.TwoPass_ConversionRefusesByName` and the Two Pass equation suites | Production conversion never admits the Two Pass family, so no Two Pass happy path exists. The row is a refusal shape and the suites are equation oracles. The real Two Pass attestation is covered by the Task 14 ground checks. | 2026-10-26 |
+
+### Stage 4 stand-in shader assets
+
+No stand-in shader file was deleted. `PoiyomiSemanticTest.shader`
+serves the retained equation suites, the fixture seams, and the locked
+source fixture. `PoiyomiTwoPassSemanticTest.shader` serves the Two Pass
+equation suites and the multipass rule tests. No dead helper was
+created: the retired rows used the shared
+`PoiyomiFixtureTestBase.Create*` helpers, which the retained rows keep.
+
+### Stage 4 import and compile cost, 2026-10-26
+
+The measurement ran one forced synchronous reimport of each bundled
+9.3 shader file in the dev editor instance, through
+`AssetDatabase.ImportAsset` with `ForceUpdate` and
+`ForceSynchronousImport`. The shaders resolved inside the vendor's
+bundled 9.3 folder by their shader names, never by a written GUID. The
+wall time came from a stopwatch around each call, with the total
+around the loop. This is recorded data and never a gate (V5, V12).
+There is no threshold and no failure branch.
+
+| Bundled shader file | Forced synchronous reimport wall time |
+|---|---|
+| `.poiyomi/Old Versions/9.3/Poiyomi Toon` | 1492 ms |
+| `.poiyomi/Old Versions/9.3/Poiyomi Toon Two Pass` | 1696 ms |
+| Total, both files | 3188 ms |
+
+The same numbers are dated in the run-record file. No vendor asset and
+no import setting changed. The reimport writes only the editor's own
+import artifacts.
