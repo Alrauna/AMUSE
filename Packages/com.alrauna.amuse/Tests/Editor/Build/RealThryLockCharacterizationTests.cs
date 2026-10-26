@@ -741,18 +741,19 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 .Replace("\r", string.Empty);
         }
 
-        // The text of one original line for a refusal message. An out of
-        // range index names itself instead of throwing.
+        // The text of one original line for a refusal message. The
+        // aligner reports the line number one based. An out of range
+        // number names itself instead of throwing.
         private static string OriginalLineText(
             string originalText, int originalLine)
         {
             var lines = originalText.Split('\n');
-            if (originalLine < 0 || originalLine >= lines.Length)
+            if (originalLine < 1 || originalLine > lines.Length)
             {
                 return "<out of range " + originalLine + ">";
             }
 
-            var text = lines[originalLine].Trim();
+            var text = lines[originalLine - 1].Trim();
             return text.Length == 0
                 ? "<empty line>"
                 : text;
