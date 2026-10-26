@@ -388,9 +388,11 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             }
         }
 
-        // --- Falsifier 2: a provenance read that reads only one registry
-        // hop where two plugins cloned in sequence misses the authored
-        // event. ---
+        // --- Falsifier 2: a provenance read that never consults the
+        // registry misses the authored event behind two plugin clones.
+        // The pinned registry collapses both registrations into one
+        // resolved hop, so this fixture pins the provenance read
+        // itself, not the hop count. ---
         [Test]
         public void EventRefusalSurvivesTwoHandRegisteredCloneHops()
         {
