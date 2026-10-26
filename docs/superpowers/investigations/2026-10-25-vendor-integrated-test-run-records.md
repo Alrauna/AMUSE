@@ -299,3 +299,94 @@ How the run was made. The callback recorder method of `.superpowers/sdd/full-run
 Count changes against the Task 7 validation run of this file. The leaf count grew from 3061 to 3063, the two new provenance tests of `CommittedControllerGraphTests`. The failed set shrank from 22 to 21. `TransientUnlockTransformationTests.ClosePassAddsNoAvatarEntryWhenTheBarrierAlreadyRefused` passed in this run, the Task 8 target. The remaining 21 failed names are the 20 `AaoMergedConsumptionTests` failures of the missing FX layer defect plus `AlphaSeparationApplyTests.MarkerClipRefusalIsSlotLocalAndWritesNothingForIt`, both owned by Task 9. Every remaining name matches the Task 4 failed list one to one. No new failure appeared. The two skips are the same gated DAO tests.
 
 Focused evidence of the same date. Before the fix, a filtered run over `CommittedControllerGraphTests` observed both new tests fail with `Expected: AnimationEventPresent But was: None`, while the identity-committed event test passed. After the fix, the same class passed 22 of 22, and a filtered run over `TransientUnlockTransformationTests` passed 16 of 16, including the barrier-refused close fixture.
+
+## Run of 2026-10-26, Task 10 stage 1 exit validation, both assemblies
+
+Environment. The working tree of the dev project after Task 9. The locked vendor set is the one in `Packages/vpm-manifest.json`. The local work date of the run is 2026-10-26. The block dates itself 2026-10-26 in UTC.
+
+How the runs were made. The callback recorder method of `.superpowers/sdd/full-run-recorder.md` ran both test assemblies, one at a time. The product assembly ran first, then the research assembly. The forced refresh before the recorder timed out once during the reload and succeeded on the retry, as the method expects. The product run delivered every row exactly once. The research run delivered every row exactly twice, the known double-delivery quirk of the callback. Every research leaf was counted once by full name. The console carried one report block for the product run, read before any refresh and copied below. The temporary recorder and both data files were deleted after the runs, and a forced refresh then reported zero compile errors.
+
+The printed report block of the product run, copied from the console:
+
+```text
+=== AMUSE vendor run record ===
+date: 2026-10-26
+counts: discovered 3063, completed 3063, passed 3061, failed 0, skipped 2, inconclusive 0
+discovered basis: the leaf count of this assembly node in the test tree the runner loaded for the run. The catalog is filter blind, so a filtered run completes fewer leaves by selection, not by loss.
+durations: product 1601.7 s, research not part of this run, sum 1601.7 s
+opt-in gates set: none
+gated fixtures excluded: Alrauna.Amuse.Tests.Editor.Build.DaoMergedConsumptionTests (AMUSE_DAO_INTEGRATION unset)
+skip reasons:
+  - Alrauna.Amuse.Tests.Editor.Build.DaoMergedConsumptionTests.AaoAndDaoCombinedKeepsTheMergedSoundness: The opt-in variable AMUSE_DAO_INTEGRATION is not set to 1. Set AMUSE_DAO_INTEGRATION=1 in a disposable public integration project to run these tests. They delete project-level d4rkAvatarOptimizer output and must never run elsewhere.
+  - Alrauna.Amuse.Tests.Editor.Build.DaoMergedConsumptionTests.DaoMergeRunsInTheSdkSequenceAndPreservesSoundness: The opt-in variable AMUSE_DAO_INTEGRATION is not set to 1. Set AMUSE_DAO_INTEGRATION=1 in a disposable public integration project to run these tests. They delete project-level d4rkAvatarOptimizer output and must never run elsewhere.
+effective environment:
+  - at.pimaker.ltcgi locked 1.7.4, installed 1.7.4, Match
+  - com.anatawa12.avatar-optimizer locked 1.9.20, installed 1.9.20, Match
+  - com.poiyomi.thryeditor locked 2.74.3, installed 2.74.3, Match
+  - com.poiyomi.toon locked 10.0.27, installed 10.0.27, Match
+  - com.vrcfury.vrcfury locked 1.1434.0, installed 1.1434.0, Match
+  - com.vrchat.avatars locked 3.10.5, installed 3.10.5, Match
+  - com.vrchat.base locked 3.10.5, installed 3.10.5, Match
+  - d4rkpl4y3r.d4rkavataroptimizer locked 4.6.0, installed 4.6.0, Match
+  - jp.lilxyzw.liltoon locked 2.4.1, installed 2.4.1, Match
+  - nadena.dev.modular-avatar locked 1.18.7, installed 1.18.7, Match
+  - nadena.dev.ndmf locked 1.14.8, installed 1.14.8, Match
+  - red.sim.lightvolumes locked 3.0.1, installed 3.0.1, Match
+scripting defines: UNITY_POST_PROCESSING_STACK_V2;VRC_SDK_VRCSDK3;LTCGI_INCLUDED;VRC_LIGHT_VOLUMES;LTCGI_VRC_LIGHT_VOLUMES
+changed setting lines:
+  none
+```
+
+### Product assembly run, `Alrauna.Amuse.Tests.Editor`
+
+- Discovered leaf results: 3063, measured from the assembly node of the loaded tree by the block.
+- Completed leaf results: 3063, counted once per delivered leaf. No double delivery.
+- Passed: 3061.
+- Failed: 0.
+- Skipped: 2.
+- Inconclusive: 0.
+- Duration from the test framework bookends: 1603.7 seconds. The block prints 1601.7 seconds, measured from the first test to the suite teardown.
+
+### Research assembly run, `Alrauna.Amuse.Research.Tests.Editor`
+
+- Discovered leaf results: 151, the unique delivered leaf names.
+- Completed leaf results: 151.
+- Passed: 151.
+- Failed: 0.
+- Skipped: 0.
+- Inconclusive: 0.
+- Duration from the test framework bookends: 6.7 seconds. The callback delivered the whole run twice, four milliseconds apart, and both footer pairs agree on every count.
+
+### Both assemblies together
+
+- Result total: 3214.
+- Passed: 3212.
+- Failed: 0.
+- Skipped: 2.
+- Inconclusive: 0.
+- Duration of the product run: 1603.7 seconds.
+- Duration of the research run: 6.7 seconds.
+- Sum of both durations: 1610.4 seconds.
+
+Exit rule of stage 1. Both assemblies are green with a named skip list of two tests. The completed count equals the discovered count in both assemblies. For the product assembly the two numbers come from independent sources, the loaded tree and the delivered leaf results. For the research assembly both numbers come from the delivered leaf results, deduplicated by full name.
+
+Count changes against the Task 8 run of this file. The product leaf count stayed at 3063. Task 9 repaired the 21 remaining failures and added no test. The failed count went from 21 to 0. The skip set is the same two gated DAO tests. The research counts match every earlier research entry of this file: 151 leaves, all passed.
+
+### Skipped test names, 2 tests
+
+Both are the gated opt-in skips of the Task 3 gate conversion. No opt-in gate was set for this run. The fixture was excluded by selection, and each skip carries its gate reason in the block above.
+
+- `Alrauna.Amuse.Tests.Editor.Build.DaoMergedConsumptionTests.AaoAndDaoCombinedKeepsTheMergedSoundness`
+- `Alrauna.Amuse.Tests.Editor.Build.DaoMergedConsumptionTests.DaoMergeRunsInTheSdkSequenceAndPreservesSoundness`
+
+### Failed test names
+
+None.
+
+### Console error observation, one entry
+
+The console held exactly one logged error across both runs, `ArgumentOutOfRangeException` with parameter name `propertyIndex`. Both assembly footers report zero failed tests, so no test failed on it. The entry carried no stack trace. No cause is claimed here.
+
+### Side-effect observation, QualitySettings
+
+Before the runs, on 2026-10-26, `ProjectSettings/QualitySettings.asset` carried a working-tree change against the committed file. After the runs the file matched the committed file again and showed `anisotropicTextures: 2` in every quality level. The block reports `changed setting lines: none` for the two digested files. This matches the Task 6 observation shape of a vendor editor load hook that writes at reload time, outside the digested window.
