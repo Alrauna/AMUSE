@@ -6,13 +6,16 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 {
     /// <summary>
     /// Deletes the generated output the suite leaves under NDMF's
-    /// generated folder. NDMF's asset saver writes one root asset per
-    /// build and one container file per saved texture, and the suite
-    /// names its generated assets with the AMUSE prefix. The saver's
+    /// generated folder. NDMF's asset saver writes one directory per
+    /// avatar directly under the root, named with the filtered avatar
+    /// name, and holds the container asset files inside it. The suite
+    /// names its fixture avatars with the AMUSE prefix, and the saver's
     /// reserved-name filter prefixes an underscore when a name holds a
-    /// Windows reserved fragment anywhere, case insensitively, so the
-    /// underscore form also belongs to the suite. Deletion stays
-    /// inside the two pinned name prefixes. Every other file survives.
+    /// Windows reserved fragment anywhere, case insensitively, so both
+    /// pinned prefixes land on the container directory names.
+    /// Deletion stays inside the two pinned name prefixes. A prefixed
+    /// directory goes with everything inside it and with its meta
+    /// companion. Every entry outside the prefixes survives.
     /// </summary>
     internal static class AmuseGeneratedOutputCleanup
     {
@@ -30,8 +33,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// <summary>
         /// The names this class will delete under the given root. Every
         /// returned name starts with one of the two pinned prefixes.
-        /// The meta file of a planned asset carries the same prefix, so
-        /// it is planned with it.
+        /// A prefixed directory is one deletion unit and takes its meta
+        /// companion with it. The meta file of a prefixed directory
+        /// carries the same prefix, so it is planned with it. A
+        /// prefixed file inside a prefixed directory dies with its
+        /// directory and needs no entry of its own.
         /// </summary>
         internal static IReadOnlyList<string> Plan(string generatedRoot)
         {
@@ -41,18 +47,36 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 return new string[0];
             }
 
-            return Directory.GetFiles(
-                    generatedRoot, "*", SearchOption.AllDirectories)
-                .Select(Path.GetFileName)
-                .Where(Owns)
+            var planned = new List<string>();
+            foreach (var directory in DirectoriesUnder(generatedRoot))
+            {
+                if (Owns(NameOf(directory)) &&
+                    !SitsInsideOwnedDirectory(generatedRoot, directory))
+                {
+                    planned.Add(NameOf(directory));
+                }
+            }
+
+            foreach (var file in FilesUnder(generatedRoot))
+            {
+                if (Owns(NameOf(file)) &&
+                    !SitsInsideOwnedDirectory(generatedRoot, file))
+                {
+                    planned.Add(NameOf(file));
+                }
+            }
+
+            return planned
                 .Distinct()
                 .OrderBy(name => name, System.StringComparer.Ordinal)
                 .ToList();
         }
 
         /// <summary>
-        /// Deletes exactly the planned set: every file under the root
-        /// whose name the plan returned. Nothing else is touched.
+        /// Deletes exactly the planned set. Every prefixed directory
+        /// goes recursively with its meta companion, then every
+        /// prefixed file outside the deleted directories goes on its
+        /// own. Nothing else is touched.
         /// </summary>
         internal static void Delete(string generatedRoot)
         {
@@ -64,14 +88,56 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             var plannedNames = new HashSet<string>(
                 planned, System.StringComparer.Ordinal);
-            foreach (var path in Directory.GetFiles(
-                generatedRoot, "*", SearchOption.AllDirectories))
+
+            foreach (var directory in DirectoriesUnder(generatedRoot))
             {
-                if (plannedNames.Contains(Path.GetFileName(path)))
+                if (SitsInsideOwnedDirectory(generatedRoot, directory) ||
+                    !plannedNames.Contains(NameOf(directory)))
                 {
-                    File.Delete(path);
+                    continue;
+                }
+
+                Directory.Delete(directory, true);
+                var meta = directory + ".meta";
+                if (File.Exists(meta))
+                {
+                    File.Delete(meta);
                 }
             }
+
+            // The file pass runs after the directory pass, so files that
+            // died with their container are no longer on disk here.
+            foreach (var file in FilesUnder(generatedRoot))
+            {
+                if (SitsInsideOwnedDirectory(generatedRoot, file))
+                {
+                    continue;
+                }
+
+                if (plannedNames.Contains(NameOf(file)))
+                {
+                    File.Delete(file);
+                }
+            }
+        }
+
+        private static string[] DirectoriesUnder(string generatedRoot)
+        {
+            return Directory.GetDirectories(
+                generatedRoot, "*", SearchOption.AllDirectories);
+        }
+
+        private static string[] FilesUnder(string generatedRoot)
+        {
+            return Directory.GetFiles(
+                generatedRoot, "*", SearchOption.AllDirectories);
+        }
+
+        private static string NameOf(string path)
+        {
+            return Path.GetFileName(path.TrimEnd(
+                Path.DirectorySeparatorChar,
+                Path.AltDirectorySeparatorChar));
         }
 
         private static bool Owns(string fileName)
@@ -79,6 +145,31 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             return OwnedNamePrefixes.Any(
                 prefix => fileName.StartsWith(prefix,
                     System.StringComparison.Ordinal));
+        }
+
+        // True when any directory between the root and the entry holds a
+        // pinned prefix. Such an entry dies with that directory.
+        private static bool SitsInsideOwnedDirectory(
+            string generatedRoot, string path)
+        {
+            var rootLength = Path.GetFullPath(generatedRoot).Length;
+            var relative = Path.GetFullPath(path)
+                .Substring(rootLength)
+                .TrimStart(
+                    Path.DirectorySeparatorChar,
+                    Path.AltDirectorySeparatorChar);
+            var segments = relative.Split(
+                Path.DirectorySeparatorChar,
+                Path.AltDirectorySeparatorChar);
+            for (var i = 0; i < segments.Length - 1; i++)
+            {
+                if (Owns(segments[i]))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 }

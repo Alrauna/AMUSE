@@ -106,42 +106,109 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Path.GetTempPath(),
                 "AmuseGeneratedOutputCleanupTests-"
                 + Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(root);
+
+            // The real NDMF layout. The asset saver writes one directory
+            // per avatar directly under the generated root, named with
+            // the filtered avatar name, one _assets folder inside it,
+            // and the container asset files inside that. The suite
+            // names its fixture avatars with the AMUSE prefix, so the
+            // pinned prefixes land on the directory names. The
+            // underscore form is the test witness for NDMF's
+            // reserved-name filter. The filter prefixes an underscore
+            // when a name holds a Windows reserved fragment anywhere,
+            // case insensitively. Fixture names hit it, for example a
+            // container whose name contains the fragment inside the
+            // word control.
+            Directory.CreateDirectory(
+                Path.Combine(root, "AMUSE one", "_assets"));
+            File.WriteAllText(
+                Path.Combine(root, "AMUSE one", "_assets", "assets.asset"),
+                string.Empty);
+            File.WriteAllText(
+                Path.Combine(
+                    root, "AMUSE one", "_assets", "assets.asset.meta"),
+                string.Empty);
+            File.WriteAllText(
+                Path.Combine(root, "AMUSE one", "AMUSE one.asset"),
+                string.Empty);
+            File.WriteAllText(
+                Path.Combine(root, "AMUSE one.meta"), string.Empty);
+            Directory.CreateDirectory(
+                Path.Combine(root, "_AMUSE two", "_assets"));
+            File.WriteAllText(
+                Path.Combine(root, "_AMUSE two", "_assets", "assets.asset"),
+                string.Empty);
+            File.WriteAllText(
+                Path.Combine(root, "_AMUSE two.meta"), string.Empty);
+            Directory.CreateDirectory(
+                Path.Combine(root, "Keep Me", "_assets"));
+            File.WriteAllText(
+                Path.Combine(root, "Keep Me", "_assets", "assets.asset"),
+                string.Empty);
+            File.WriteAllText(
+                Path.Combine(root, "Keep Me.meta"), string.Empty);
+            File.WriteAllText(
+                Path.Combine(root, "Keep Standalone.asset"), string.Empty);
+
             try
             {
-                File.WriteAllText(
-                    Path.Combine(root, "AMUSE one"), string.Empty);
-                File.WriteAllText(
-                    Path.Combine(root, "_AMUSE two"), string.Empty);
-                File.WriteAllText(
-                    Path.Combine(root, "Keep Me"), string.Empty);
-
                 var planned = AmuseGeneratedOutputCleanup.Plan(root);
 
-                // The underscore form is the test witness for NDMF's
-                // reserved-name filter. The filter prefixes an
-                // underscore when a name holds a Windows reserved
-                // fragment anywhere, case insensitively. Current
-                // fixture names hit it, for example a container whose
-                // name contains the fragment inside the word control.
                 Assert.That(
                     planned,
-                    Is.EquivalentTo(new[] { "AMUSE one", "_AMUSE two" }),
-                    "the plan must name exactly the two prefixed"
-                    + " containers");
+                    Is.EquivalentTo(new[]
+                    {
+                        "AMUSE one",
+                        "AMUSE one.meta",
+                        "_AMUSE two",
+                        "_AMUSE two.meta",
+                    }),
+                    "the plan must name exactly the prefixed container"
+                    + " directories and their meta companions. The root"
+                    + " asset inside a prefixed container dies with its"
+                    + " container and needs no plan entry of its own.");
 
                 AmuseGeneratedOutputCleanup.Delete(root);
 
                 Assert.That(
-                    File.Exists(Path.Combine(root, "AMUSE one")),
+                    Directory.Exists(Path.Combine(root, "AMUSE one")),
                     Is.False,
-                    "the plain prefixed container must be gone");
+                    "the plain prefixed container directory must be"
+                    + " gone");
                 Assert.That(
-                    File.Exists(Path.Combine(root, "_AMUSE two")),
+                    Directory.Exists(Path.Combine(root, "_AMUSE two")),
                     Is.False,
-                    "the underscore prefixed container must be gone");
+                    "the underscore prefixed container directory must"
+                    + " be gone");
                 Assert.That(
-                    File.Exists(Path.Combine(root, "Keep Me")),
+                    File.Exists(Path.Combine(root, "AMUSE one.meta")),
+                    Is.False,
+                    "the meta companion of a deleted container must be"
+                    + " gone");
+                Assert.That(
+                    File.Exists(Path.Combine(root, "_AMUSE two.meta")),
+                    Is.False,
+                    "the meta companion of an underscore container must"
+                    + " be gone");
+                Assert.That(
+                    Directory.Exists(Path.Combine(root, "Keep Me")),
+                    Is.True,
+                    "a container directory outside the pinned prefixes"
+                    + " must survive");
+                Assert.That(
+                    File.Exists(
+                        Path.Combine(root, "Keep Me", "_assets",
+                            "assets.asset")),
+                    Is.True,
+                    "the container asset of a surviving container must"
+                    + " stay on disk");
+                Assert.That(
+                    File.Exists(Path.Combine(root, "Keep Me.meta")),
+                    Is.True,
+                    "the meta companion of a surviving container must"
+                    + " stay on disk");
+                Assert.That(
+                    File.Exists(Path.Combine(root, "Keep Standalone.asset")),
                     Is.True,
                     "a file outside the pinned prefixes must survive");
             }
