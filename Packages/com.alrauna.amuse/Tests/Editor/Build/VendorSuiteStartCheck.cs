@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Reflection;
 using NUnit.Framework;
 using UnityEngine;
 using PackageManagerInfo = UnityEditor.PackageManager.PackageInfo;
@@ -14,9 +15,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
     /// The suite-start check of the product test assembly. It runs once
     /// before the first test. It fails the suite start when a known NDMF
     /// plugin-disable key is set, when any locked vendor version
-    /// mismatches its installed version, or when an installed VRChat
-    /// avatar SDK lost its compile define. Absent packages and accepted
-    /// Thry patch drifts are recorded in one dated console line, never
+    /// mismatches its installed version, when an installed VRChat
+    /// avatar SDK lost its compile define, or when the SDK is installed
+    /// and no test carries the tier A vendor VRChat category. Absent
+    /// packages and accepted Thry patch drifts are recorded in one
+    /// dated console line, never
     /// failed.
     /// </summary>
     internal static class VendorSuiteStartCheck
@@ -56,12 +59,81 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Debug.Log(line);
         }
 
+        // The tier A category rule of the platform split. The check
+        // reads the tier gate's installed package source, so the audit
+        // test pins the rule with an injected source and the suite
+        // start reads the real package database. The check fails when
+        // the VRChat SDK is installed and no test method carries the
+        // tier A category, because tier A would then have no coverage
+        // while the environment could run it.
+        internal static void AssertTierACategoryPresent()
+        {
+            var sdkInstalled = false;
+            foreach (var package in VendorVrChatTierGate
+                         .InstalledPackageIds())
+            {
+                if (package == VendorVrChatTierGate.VrcAvatarsPackage)
+                {
+                    sdkInstalled = true;
+                    break;
+                }
+            }
+
+            if (!sdkInstalled)
+            {
+                return;
+            }
+
+            if (AnyTestCarriesTheTierACategory())
+            {
+                return;
+            }
+
+            Assert.Fail(
+                "The package " + VendorVrChatTierGate.VrcAvatarsPackage
+                + " is installed, but no test method carries the"
+                + " category " + VendorVrChatTierGate.TierACategory
+                + ". The tier A vendor VRChat twins are missing, so"
+                + " vendor VRChat coexistence has no coverage in this"
+                + " environment.");
+        }
+
+        private static bool AnyTestCarriesTheTierACategory()
+        {
+            foreach (var type in typeof(VendorSuiteStartCheck).Assembly
+                         .GetTypes())
+            {
+                foreach (var method in type.GetMethods(
+                             BindingFlags.Static | BindingFlags.Instance
+                                 | BindingFlags.Public
+                                 | BindingFlags.NonPublic))
+                {
+                    if (method.GetCustomAttribute<TestAttribute>()
+                        == null)
+                    {
+                        continue;
+                    }
+
+                    var category = method
+                        .GetCustomAttribute<CategoryAttribute>();
+                    if (category != null && category.Name
+                        == VendorVrChatTierGate.TierACategory)
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
         internal static void RunAll()
         {
             VendorSessionStateGuard.AssertNoKnownPluginDisabled();
             var entries = CollectEntries();
             AssertNoMismatch(entries);
             AssertVrcAvatarsDefineMatchesTheInstalledPackages();
+            AssertTierACategoryPresent();
             RecordTheEffectiveEnvironment(entries);
         }
 

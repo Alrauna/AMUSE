@@ -13069,7 +13069,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             internal static readonly PreparationTestPlatform Instance =
                 new PreparationTestPlatform();
 
-            public string QualifiedName => "nadena.dev.ndmf.generic";
+            public string QualifiedName =>
+                "com.alrauna.amuse.tests.alpha-separation-preparation";
             public string DisplayName => "AMUSE alpha separation preparation";
         }
     }

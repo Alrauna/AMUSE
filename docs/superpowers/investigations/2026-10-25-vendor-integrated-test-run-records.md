@@ -265,3 +265,20 @@ changed setting lines:
 Count changes against the Task 6 validation run of this file. The leaf count grew by 3, the fix round tests. The failed set is exactly the 30 names of the Task 4 run. No new failure appeared. The two skips are the same gated DAO tests. The discovered count and the completed count agree for this full run, and the two numbers now come from independent sources: the loaded tree and the delivered leaf results.
 
 Side effects. `ProjectSettings/QualitySettings.asset` stayed at `anisotropicTextures: 2` before and after this run, unchanged against the committed file. The block reports `changed setting lines: none`.
+
+## Run of 2026-10-25, Task 7 validation, product assembly
+
+Environment. The working tree of the dev project after Task 7. The platform identity split renamed the eight platform finish tests onto a dedicated platform, added the mirrored five-pass plugin, and added the eight vendor VRChat tier A twins with their gate. This run crossed UTC midnight, so a dated console line would print 2026-10-26. The local work date of the run is 2026-10-25.
+
+How the run was made. The callback recorder method of `.superpowers/sdd/full-run-recorder.md` ran the product assembly alone. The run delivered every row exactly once: one RUN_STARTED bookend, one RUN_FINISHED bookend, and no double delivery. The footer counts are the authoritative summary. The temporary recorder and its data file were deleted after the run, and a forced refresh then reported zero compile errors. The refresh cleared the editor console, so the printed report block of Task 6 was not captured for this run. This block records the footer counts and the delivered leaf rows instead.
+
+- Delivered leaf results: 3061, counted once per delivered leaf.
+- Passed: 3037.
+- Failed: 22.
+- Skipped: 2.
+- Inconclusive: 0.
+- Duration from the test framework bookends: 1638.5 seconds. The research assembly was not part of this run.
+
+Count changes against the Task 6 fix round run of this file. The leaf count grew from 3049 to 3061, the twelve new tests: the four platform provider audits and the eight tier A twins. The failed set shrank from 30 to 22. The eight platform identity failures of `AmusePlatformFinishPluginTests` are gone. The remaining 22 are exactly the 20 `AaoMergedConsumptionTests` failures of the missing FX layer defect, which Task 9 owns, plus the two single failures that Tasks 8 and 9 own. Every remaining name matches the Task 4 failed list one to one. No new failure appeared. The two skips are the same gated DAO tests.
+
+Tier A evidence. The eight tier A twins delivered as passed, so the `VendorVRChatPlatform` category was present in the run. The suite-start check passed, including the new tier A category assertion with the SDK installed.
