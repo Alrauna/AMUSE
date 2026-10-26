@@ -282,3 +282,20 @@ How the run was made. The callback recorder method of `.superpowers/sdd/full-run
 Count changes against the Task 6 fix round run of this file. The leaf count grew from 3049 to 3061, the twelve new tests: the four platform provider audits and the eight tier A twins. The failed set shrank from 30 to 22. The eight platform identity failures of `AmusePlatformFinishPluginTests` are gone. The remaining 22 are exactly the 20 `AaoMergedConsumptionTests` failures of the missing FX layer defect, which Task 9 owns, plus the two single failures that Tasks 8 and 9 own. Every remaining name matches the Task 4 failed list one to one. No new failure appeared. The two skips are the same gated DAO tests.
 
 Tier A evidence. The eight tier A twins delivered as passed, so the `VendorVRChatPlatform` category was present in the run. The suite-start check passed, including the new tier A category assertion with the SDK installed.
+
+## Run of 2026-10-25, Task 8 validation, product assembly
+
+Environment. The working tree of the dev project after Task 8. The event scan of the committed graph now reads NDMF registry provenance, so an authored event that a plugin clone dropped refuses the build again. This run crossed UTC midnight, so a dated console line would print 2026-10-26. The local work date of the run is 2026-10-25.
+
+How the run was made. The callback recorder method of `.superpowers/sdd/full-run-recorder.md` ran the product assembly alone. The run delivered every row exactly once, with one RUN_STARTED bookend and one RUN_FINISHED bookend. The temporary recorder and its data file were deleted after the run, and a forced refresh then reported zero compile errors.
+
+- Delivered leaf results: 3063, counted once per delivered leaf.
+- Passed: 3040.
+- Failed: 21.
+- Skipped: 2.
+- Inconclusive: 0.
+- Duration from the test framework bookends: 1647.2 seconds. The research assembly was not part of this run.
+
+Count changes against the Task 7 validation run of this file. The leaf count grew from 3061 to 3063, the two new provenance tests of `CommittedControllerGraphTests`. The failed set shrank from 22 to 21. `TransientUnlockTransformationTests.ClosePassAddsNoAvatarEntryWhenTheBarrierAlreadyRefused` passed in this run, the Task 8 target. The remaining 21 failed names are the 20 `AaoMergedConsumptionTests` failures of the missing FX layer defect plus `AlphaSeparationApplyTests.MarkerClipRefusalIsSlotLocalAndWritesNothingForIt`, both owned by Task 9. Every remaining name matches the Task 4 failed list one to one. No new failure appeared. The two skips are the same gated DAO tests.
+
+Focused evidence of the same date. Before the fix, a filtered run over `CommittedControllerGraphTests` observed both new tests fail with `Expected: AnimationEventPresent But was: None`, while the identity-committed event test passed. After the fix, the same class passed 22 of 22, and a filtered run over `TransientUnlockTransformationTests` passed 16 of 16, including the barrier-refused close fixture.

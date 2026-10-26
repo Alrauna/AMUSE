@@ -197,11 +197,13 @@ namespace Alrauna.Amuse.Editor.Build
         internal PreparedAlphaSeparation Separation { get; set; }
 
         /// <summary>
-        /// The enumerated committed graph from the structural check pass,
-        /// stored before any animator scope virtualizes the graph: the
-        /// checks that need real authored clips keep their
-        /// pre-virtualization view, and the barrier reads this stored
-        /// result instead of enumerating again.
+        /// The enumerated committed graph from the structural check
+        /// pass. The graph is committed state, and the structural
+        /// reads resolve authored originals through the NDMF object
+        /// registry when a fact must survive a plugin copy (V3, owner
+        /// decision of 2026-10-25), so no pre-virtualization snapshot
+        /// is kept. The barrier reads this stored result instead of
+        /// enumerating again.
         /// </summary>
         internal CommittedControllerGraphResult StructuralGraph { get; set; }
 
@@ -264,12 +266,14 @@ namespace Alrauna.Amuse.Editor.Build
         {
             var sequence = InPhase(BuildPhase.PlatformFinish);
 
-            // The structural refusals read real authored clips, and
-            // animation events survive only before virtualization: this
-            // pass runs extension-free and first, stores the enumerated
-            // graph and its refusal, and reports nothing. The barrier
-            // reports the stored refusal behind the consent gates. The
-            // passes after it read the same graph from state.
+            // The structural refusals read the committed graph, and the
+            // event scan resolves authored originals through the NDMF
+            // object registry, so an event a plugin copy dropped still
+            // refuses the build (V3, owner decision of 2026-10-25):
+            // this pass runs extension-free and first, stores the
+            // enumerated graph and its refusal, and reports nothing.
+            // The barrier reports the stored refusal behind the consent
+            // gates. The passes after it read the same graph from state.
             sequence.Run(
                 StructuralGraphCheckPassName,
                 AmuseStructuralGraphCheck.Execute);

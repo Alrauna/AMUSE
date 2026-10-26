@@ -1375,9 +1375,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     root, mesh, locked));
             var clip = TransientUnlockTestLifecycle.AddMaterialSwapAnimation(
                 root, renderer, 0, locked);
-            // An animation event lies outside the admitted animation value
-            // model, so the structural enumeration refuses the avatar
-            // before the barrier's swap-in can open a pair.
+            // An animation event lies outside the admitted animation
+            // value model. The planted event rides the authored clip,
+            // the committed clone drops it, and the structural scan
+            // still refuses through the registry provenance (V3, owner
+            // decision of 2026-10-25), before the barrier's swap-in
+            // can open a pair.
             AnimationUtility.SetAnimationEvents(clip, new[]
             {
                 new AnimationEvent

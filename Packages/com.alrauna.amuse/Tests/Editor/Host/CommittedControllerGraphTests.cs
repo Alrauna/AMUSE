@@ -2,6 +2,8 @@ using System.Collections.Generic;
 using System.Linq;
 using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.Host;
+using Alrauna.Amuse.Tests.Editor.Shared;
+using nadena.dev.ndmf;
 using nadena.dev.ndmf.animator;
 using NUnit.Framework;
 using UnityEditor;
@@ -382,6 +384,137 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             {
                 Object.DestroyImmediate(root);
                 Object.DestroyImmediate(eventClip);
+                DestroyController(controller);
+            }
+        }
+
+        // --- Falsifier 2: a provenance read that reads only one registry
+        // hop where two plugins cloned in sequence misses the authored
+        // event. ---
+        [Test]
+        public void EventRefusalSurvivesTwoHandRegisteredCloneHops()
+        {
+            var root = new GameObject("two hop clone chain");
+            var controller = new AnimatorController();
+            var authored = new AnimationClip { name = "authored source" };
+            var cloneOne = new AnimationClip { name = "first clone" };
+            var cloneTwo = new AnimationClip { name = "second clone" };
+            try
+            {
+                controller.AddLayer("L0");
+                controller.layers[0].stateMachine.AddState("S0").motion =
+                    cloneTwo;
+                AttachEvents(authored, 1);
+                Assert.That(cloneOne.events, Is.Empty,
+                    "the first clone must not carry the authored event");
+                Assert.That(cloneTwo.events, Is.Empty,
+                    "the committed clone must not carry the authored event");
+
+                var registryGuard = new ObjectRegistryGuard();
+                try
+                {
+                    // No-op guard: with no registration the enumeration
+                    // reaches the committed clone and refuses nothing, so
+                    // the refusal below can only come from the registry
+                    // provenance.
+                    var unregistered = CommittedControllerGraph.Enumerate(
+                        root, new StubBindings(controller));
+                    Assert.That(unregistered.Refusal,
+                        Is.EqualTo(AvatarAnimationRefusal.None));
+                    Assert.That(
+                        unregistered.Layers.Single().Clips.Single(),
+                        Is.SameAs(cloneTwo));
+
+                    ObjectRegistry.RegisterReplacedObject(authored, cloneOne);
+                    ObjectRegistry.RegisterReplacedObject(cloneOne, cloneTwo);
+
+                    var result = CommittedControllerGraph.Enumerate(
+                        root, new StubBindings(controller));
+
+                    Assert.That(result.Refusal, Is.EqualTo(
+                        AvatarAnimationRefusal.AnimationEventPresent));
+                    Assert.That(result.Layers, Is.Empty);
+                }
+                finally
+                {
+                    registryGuard.Dispose();
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+                Object.DestroyImmediate(authored);
+                Object.DestroyImmediate(cloneOne);
+                Object.DestroyImmediate(cloneTwo);
+                DestroyController(controller);
+            }
+        }
+
+        // --- Falsifier 2, cap witness: a provenance walk that stops at
+        // its depth cap without refusing hides an authored event deeper
+        // in the chain. The pinned registry resolves the whole chain in
+        // one hop, so the cap itself stays defense in depth and this
+        // witness pins the deep registration chain. ---
+        [Test]
+        public void EventRefusalOnAChainDeeperThanTheCapStillRefuses()
+        {
+            var root = new GameObject("chain deeper than the cap");
+            var controller = new AnimatorController();
+            var authored = new AnimationClip { name = "authored source" };
+            var hops = new AnimationClip[9];
+            try
+            {
+                for (var index = 0; index < hops.Length; index++)
+                    hops[index] = new AnimationClip
+                    {
+                        name = "clone hop " + (index + 1),
+                    };
+                controller.AddLayer("L0");
+                controller.layers[0].stateMachine.AddState("S0").motion =
+                    hops[8];
+
+                var registryGuard = new ObjectRegistryGuard();
+                try
+                {
+                    // Nine registrations, the commit direction old object
+                    // first, from the authored clip to the committed clone.
+                    ObjectRegistry.RegisterReplacedObject(authored, hops[0]);
+                    for (var index = 1; index < hops.Length; index++)
+                        ObjectRegistry.RegisterReplacedObject(
+                            hops[index - 1], hops[index]);
+
+                    // No-op guard: the clean chain enumerates the
+                    // committed clone and refuses nothing, so the refusal
+                    // below can only come from the authored event in the
+                    // provenance.
+                    var clean = CommittedControllerGraph.Enumerate(
+                        root, new StubBindings(controller));
+                    Assert.That(clean.Refusal,
+                        Is.EqualTo(AvatarAnimationRefusal.None));
+                    Assert.That(
+                        clean.Layers.Single().Clips.Single(),
+                        Is.SameAs(hops[8]));
+
+                    AttachEvents(authored, 1);
+
+                    var result = CommittedControllerGraph.Enumerate(
+                        root, new StubBindings(controller));
+
+                    Assert.That(result.Refusal, Is.EqualTo(
+                        AvatarAnimationRefusal.AnimationEventPresent));
+                    Assert.That(result.Layers, Is.Empty);
+                }
+                finally
+                {
+                    registryGuard.Dispose();
+                }
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+                Object.DestroyImmediate(authored);
+                foreach (var hop in hops)
+                    if (hop != null) Object.DestroyImmediate(hop);
                 DestroyController(controller);
             }
         }
