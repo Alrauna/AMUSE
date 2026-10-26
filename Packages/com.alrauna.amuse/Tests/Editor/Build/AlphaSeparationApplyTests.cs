@@ -771,22 +771,33 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
         // --- Falsifier 1: wholly opaque slot -------------------------------
 
+        /// <summary>
+        /// Replaces WhollyOpaqueSlotReplacesOnlyItsMaterial (stage 4,
+        /// V12, fix round 1). The same wholly-opaque apply contract over
+        /// a material on the GUID-loaded bundled 9.3 shader, through a
+        /// real build with the apply pass and the production capture
+        /// delegates.
+        /// </summary>
         [Test]
-        public void WhollyOpaqueSlotReplacesOnlyItsMaterial()
+        public void WhollyOpaqueSlotReplacesOnlyItsMaterialWithRealPoiyomi()
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
-            var root = new GameObject("AMUSE wholly opaque apply");
+            var root = new GameObject("AMUSE wholly opaque apply real");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             AmusePlatformFinishState state = null;
             try
             {
-                var material = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+                var material = Track(NewRealPoiyomiOpaqueMaterial());
                 var mesh = Track(AlphaSeparationTestLifecycle.SingleTriangleMesh());
                 var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(root, "body", mesh, material);
 
-                var context = AvatarProcessor.ProcessAvatar(
-                    root, ApplyTestPlatform.Instance);
+                BuildContext context;
+                using (new ProductionCaptureScope())
+                {
+                    context = AvatarProcessor.ProcessAvatar(
+                        root, ApplyTestPlatform.Instance);
+                }
                 state = context.GetState<AmusePlatformFinishState>();
 
                 Assert.That(state.SemanticallyRefusedRendererCount, Is.Zero,
@@ -6156,6 +6167,32 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "fixture precondition: the installed " + shaderLabel +
                 " asset must load");
             return shader;
+        }
+
+        /// <summary>
+        /// A material on the GUID-loaded bundled Poiyomi 9.3 shader at
+        /// the same convertible state the stand-in fixture carried: the
+        /// vendor force-opaque flag at one over the Fade preset render
+        /// state. Every written fact is a vendor property a fresh
+        /// installed material can carry. The caller owns destruction.
+        /// </summary>
+        private static Material NewRealPoiyomiOpaqueMaterial()
+        {
+            var path = AssetDatabase.GUIDToAssetPath(
+                PoiyomiSourceAttestation.CanonicalShaderGuid);
+            Assert.That(
+                path, Is.Not.Empty,
+                "fixture precondition: the installed bundled Poiyomi " +
+                "Toon shader asset must resolve by its pinned GUID");
+            var shader = AssetDatabase.LoadAssetAtPath<Shader>(path);
+            Assert.That(
+                shader, Is.Not.Null,
+                "fixture precondition: the installed bundled Poiyomi " +
+                "Toon shader asset must load");
+            var material = new Material(shader);
+            material.SetFloat("_AlphaForceOpaque", 1f);
+            PoiyomiFixtureTestBase.ApplyConvertibleRenderState(material);
+            return material;
         }
 
         /// <summary>

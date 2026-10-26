@@ -203,6 +203,16 @@ of the pinned environment, in the shape of the Task 14 ground checks.
 | `AlphaSeparationPreparationTests.RendererWithoutAnOpaqueCandidateRetainsNothing` | `RendererWithoutAnOpaqueCandidateRetainsNothingWithRealPoiyomi`. Real transparent material, production barrier, same no-candidate assertions. | 2026-10-26 |
 | `AlphaSeparationPreparationTests.SharedSourceMaterialReusesOneAvatarWideClone` | `SharedSourceMaterialReusesOneAvatarWideCloneWithRealPoiyomi`. Real bundled 9.3 source shared by two slots, production barrier, same one-clone mapping assertions. | 2026-10-26 |
 | `PoiyomiOpaqueConversionTests.ReadEffectiveRenderState_ReportsTheDeclaredQueueWithoutAnOverride` | `ReadEffectiveRenderState_ReportsTheDeclaredQueueWithoutAnOverrideWithRealPoiyomi`. Fresh material on the GUID-loaded bundled shader, same declared queue and RenderType assertions. The vendor's own declared SubShader tags answer, not the stand-in transcription. | 2026-10-26 |
+| `AlphaSeparationApplyTests.WhollyOpaqueSlotReplacesOnlyItsMaterial` | `WhollyOpaqueSlotReplacesOnlyItsMaterialWithRealPoiyomi`. Real bundled 9.3 material by GUID through the apply suite's `ProductionCaptureScope`, same Falsifier 1 marker and same wholly-opaque apply assertions. Added in fix round 1 of 2026-10-26, when the review caught the row the first apply-file pass missed. | 2026-10-26 |
+
+Fix round 1 re-scan of the apply suite, 2026-10-26. Every other row
+that mints a Poiyomi stand-in material in `AlphaSeparationApplyTests`
+was checked against the two criteria. Each plants an AMUSE-side arm or
+builds its subject directly: animation curves and marker clips, property
+blocks, reparenting, replacement and sweep mechanics, coverage policy
+arms, hand-built prepared records, or the retained parity fixture. None
+asserts the plain admitted apply result over the vendor material, so no
+further row joined this table.
 
 ### Retained Poiyomi stand-ins with stated reasons
 
