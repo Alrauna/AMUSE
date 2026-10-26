@@ -44,6 +44,65 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
+        public void SettingsDiffReportsADuplicateLineRemoval()
+        {
+            const string before =
+                "anisotropicTextures: 2\nanisotropicTextures: 2\nm_Shadows: 1";
+            const string after =
+                "anisotropicTextures: 2\nm_Shadows: 1";
+
+            var changed = VendorRunRecord.DiffLines(before, after);
+
+            Assert.That(changed, Is.EqualTo(new[] { "anisotropicTextures: 2" }),
+                "a removed duplicate of a name that stays must be"
+                + " reported");
+        }
+
+        [Test]
+        public void BuildReportMarksARunWithoutTheResearchAssembly()
+        {
+            var report = VendorRunRecord.BuildReport(
+                1, 1, 1, 0, 0, 0,
+                TimeSpan.FromSeconds(10.5),
+                TimeSpan.Zero,
+                new string[0],
+                new VendorVersionEntry[0]);
+
+            Assert.That(report, Does.Contain("research not part of this run"),
+                "a zero research duration must state that the research"
+                + " assembly did not run");
+            Assert.That(report, Does.Contain("sum 10.5 s"),
+                "the sum must still record the product duration");
+        }
+
+        [Test]
+        public void BuildReportStatesTheBasisOfTheDiscoveredCount()
+        {
+            var savedBasis = VendorRunRecord.DiscoveredBasis;
+            VendorRunRecord.DiscoveredBasis =
+                "the leaf count of this assembly node in the test tree.";
+            try
+            {
+                var report = VendorRunRecord.BuildReport(
+                    5, 5, 5, 0, 0, 0,
+                    TimeSpan.Zero, TimeSpan.Zero,
+                    new string[0],
+                    new VendorVersionEntry[0]);
+
+                Assert.That(report,
+                    Does.Contain(
+                        "discovered basis: the leaf count of this"
+                        + " assembly node in the test tree."),
+                    "the block must state where the discovered figure"
+                    + " comes from");
+            }
+            finally
+            {
+                VendorRunRecord.DiscoveredBasis = savedBasis;
+            }
+        }
+
+        [Test]
         public void BuildReportCarriesTheStableHeaderCountsAndDurations()
         {
             var report = VendorRunRecord.BuildReport(

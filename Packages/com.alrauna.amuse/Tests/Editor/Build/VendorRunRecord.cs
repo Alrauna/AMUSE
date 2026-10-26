@@ -21,13 +21,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
     /// writes, such as the VRCFury load-hook settings writes, and
     /// never prevents them.
     /// <para>
-    /// The tracker counts leaf results through the test framework
-    /// callback stream. Registration starts at the first test, so the
-    /// discovered count and the completed count both read from the
-    /// leaf results the run delivered. A run that dies before the
-    /// teardown prints no block at all. The zero research duration of
-    /// a product-only run states that the research assembly was not
-    /// part of that run.
+    /// The discovered count reads from the assembly node of the test
+    /// tree the runner loaded at run start. A listener registered at
+    /// domain load sees the run start event, so the block measures
+    /// the catalog and not only the delivered results. The catalog is
+    /// filter blind, so a filtered run completes fewer leaves by
+    /// selection, and the block states that basis under the counts.
+    /// The completed count reads from the leaf results the run
+    /// delivered, counted once per leaf, because the callback stream
+    /// double-delivered a whole run in this project before. A run
+    /// that dies before the teardown prints no block at all. The
+    /// zero research duration of a product-only run states that the
+    /// research assembly was not part of that run.
     /// </para>
     /// </summary>
     internal static class VendorRunRecord
@@ -78,6 +83,25 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
         private static DateTimeOffset? startedAt;
 
+        // The basis line under the counts. The teardown sets it from
+        // its discovered source before it builds the block. Null
+        // prints no basis line.
+        internal static string DiscoveredBasis;
+
+        // The discovered figure of the captured run. The value reads
+        // from the run start listener, which sees the loaded tree
+        // before the first test of the run.
+        private static int? discoveredAtStart;
+
+        // The leaf count of this assembly node in the tree the runner
+        // loaded for the last run start of this editor session.
+        internal static int? DiscoveredInLoadedTree;
+
+        // The api instance of the run start listener. It lives for
+        // the whole editor session, unlike the tracker api of one
+        // run.
+        private static TestRunnerApi listenerApi;
+
         private static TestRunnerApi api;
 
         private static ResultTracker tracker;
@@ -89,6 +113,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             definesBefore = ReadScriptingDefines();
             entriesAtStart = VendorSuiteStartCheck.CollectEntries();
             startedAt = DateTimeOffset.UtcNow;
+            discoveredAtStart = DiscoveredInLoadedTree;
             StartTracking();
         }
 
@@ -109,7 +134,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             foreach (var line in DistinctLinesOf(before))
             {
-                if (!HasName(afterCounts, line))
+                beforeCounts.TryGetValue(line, out var beforeCount);
+                afterCounts.TryGetValue(line, out var afterCount);
+                if (beforeCount > afterCount
+                    && NameTotalOf(beforeCounts, line)
+                        > NameTotalOf(afterCounts, line))
                 {
                     changed.Add(line);
                 }
@@ -140,10 +169,23 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 .Append(", skipped ").Append(skipped)
                 .Append(", inconclusive ").Append(inconclusive)
                 .AppendLine();
+            if (!string.IsNullOrEmpty(DiscoveredBasis))
+            {
+                block.Append("discovered basis: ")
+                    .AppendLine(DiscoveredBasis);
+            }
             block.Append("durations: product ")
                 .Append(SecondsOf(productDuration))
-                .Append(" s, research ").Append(SecondsOf(researchDuration))
-                .Append(" s, sum ")
+                .Append(" s, research ");
+            if (researchDuration == TimeSpan.Zero)
+            {
+                block.Append("not part of this run");
+            }
+            else
+            {
+                block.Append(SecondsOf(researchDuration)).Append(" s");
+            }
+            block.Append(", sum ")
                 .Append(SecondsOf(productDuration + researchDuration))
                 .AppendLine(" s");
             AppendGates(block);
@@ -172,8 +214,16 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 return;
             }
             var productDuration = DateTimeOffset.UtcNow - startedAt.Value;
+            var discovered = discoveredAtStart ?? tracker.CompletedLeaves;
+            DiscoveredBasis = discoveredAtStart.HasValue
+                ? "the leaf count of this assembly node in the test tree"
+                + " the runner loaded for the run. The catalog is filter"
+                + " blind, so a filtered run completes fewer leaves by"
+                + " selection, not by loss."
+                : "the leaf results this run delivered. No run-start"
+                + " tree was observed for this run.";
             var report = BuildReport(
-                tracker.CompletedLeaves,
+                discovered,
                 tracker.CompletedLeaves,
                 tracker.Passed,
                 tracker.Failed,
@@ -354,25 +404,31 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             return counts;
         }
 
-        private static bool HasName(
+        // The total count of all lines that share the setting name of
+        // the given line. A name that loses one duplicate entry keeps
+        // its name total lower, which tells a duplicate removal from
+        // a value change of a name that stays.
+        private static int NameTotalOf(
             Dictionary<string, int> counts,
             string line)
         {
-            var colon = line.IndexOf(':');
-            var name = colon < 0 ? line : line.Substring(0, colon);
-            foreach (var other in counts.Keys)
+            var name = NameOf(line);
+            var total = 0;
+            foreach (var pair in counts)
             {
-                var otherColon = other.IndexOf(':');
-                var otherName = otherColon < 0
-                    ? other
-                    : other.Substring(0, otherColon);
-                if (string.Equals(name, otherName,
+                if (string.Equals(NameOf(pair.Key), name,
                         StringComparison.Ordinal))
                 {
-                    return true;
+                    total += pair.Value;
                 }
             }
-            return false;
+            return total;
+        }
+
+        private static string NameOf(string line)
+        {
+            var colon = line.IndexOf(':');
+            return colon < 0 ? line : line.Substring(0, colon);
         }
 
         private static string DefaultReadProjectFile(string relativePath)
@@ -411,11 +467,71 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             tracker = null;
         }
 
+        // Registers the run start listener at domain load, before any
+        // run starts, so the run start event with the loaded tree
+        // reaches the record.
+        [InitializeOnLoadMethod]
+        private static void RegisterRunStartListener()
+        {
+            listenerApi = ScriptableObject.CreateInstance<TestRunnerApi>();
+            listenerApi.RegisterCallbacks(new RunStartListener());
+        }
+
+        private sealed class RunStartListener : ICallbacks
+        {
+            public void RunStarted(ITestAdaptor testsToRun)
+            {
+                DiscoveredInLoadedTree =
+                    CountLeavesOfThisAssembly(testsToRun);
+            }
+
+            public void RunFinished(ITestResultAdaptor result)
+            {
+            }
+
+            public void TestStarted(ITestAdaptor test)
+            {
+            }
+
+            public void TestFinished(ITestResultAdaptor result)
+            {
+            }
+        }
+
+        // Finds the node of this assembly in the loaded tree and
+        // returns its leaf count. The node name is the dll file name
+        // of this assembly. The tree never leaves the editor, and the
+        // record never prints a node path.
+        private static int? CountLeavesOfThisAssembly(ITestAdaptor node)
+        {
+            var dllName = typeof(VendorRunRecord).Assembly.GetName().Name
+                + ".dll";
+            var pending = new Stack<ITestAdaptor>();
+            pending.Push(node);
+            while (pending.Count > 0)
+            {
+                var current = pending.Pop();
+                if (current.IsTestAssembly
+                    && string.Equals(current.Name, dllName,
+                        StringComparison.Ordinal))
+                {
+                    return current.TestCaseCount;
+                }
+                foreach (var child in current.Children)
+                {
+                    pending.Push(child);
+                }
+            }
+            return null;
+        }
+
         /// <summary>
         /// Counts the leaf results of the run and collects the reason
-        /// of every skipped leaf. The test framework delivers the
-        /// events through the shared callback stream, and the delegator
-        /// logs a throwing callback instead of failing the run.
+        /// of every skipped leaf. Every leaf counts once. The tracker
+        /// remembers the delivered leaf full names, because the
+        /// callback stream double-delivered a whole run in this
+        /// project before. The delegator logs a throwing callback
+        /// instead of failing the run.
         /// </summary>
         private sealed class ResultTracker : ICallbacks
         {
@@ -432,6 +548,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             internal readonly List<string> SkipReasons =
                 new List<string>();
 
+            private readonly HashSet<string> deliveredLeafNames =
+                new HashSet<string>(StringComparer.Ordinal);
+
             public void RunStarted(ITestAdaptor testsToRun)
             {
             }
@@ -447,6 +566,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             public void TestFinished(ITestResultAdaptor result)
             {
                 if (result.Test.IsSuite)
+                {
+                    return;
+                }
+                // The stream can deliver one leaf twice. Count and
+                // record only the first delivery of each leaf.
+                if (!deliveredLeafNames.Add(result.Test.FullName))
                 {
                     return;
                 }
