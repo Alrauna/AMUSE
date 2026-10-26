@@ -260,31 +260,76 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             return material;
         }
 
-        private Material NewOpaqueMaterial(Texture2D mainTex)
+        /// <summary>
+        /// Loads an installed lilToon shader by its production GUID pin.
+        /// The GUID load is the only reliable resolve, because a name
+        /// lookup can answer with a committed stand-in or a foreign
+        /// shader that shares the vendor name.
+        /// </summary>
+        private static Shader LoadInstalledLilToonShader(
+            string assetGuid,
+            string shaderLabel)
         {
-            var shader = Shader.Find(OpaqueShaderName);
-            Assert.That(shader, Is.Not.Null, OpaqueShaderName + " must import.");
+            var path = AssetDatabase.GUIDToAssetPath(assetGuid);
+            Assert.That(
+                path, Is.Not.Empty,
+                "fixture precondition: the installed " + shaderLabel +
+                " asset must resolve by its pinned GUID");
+            var shader = AssetDatabase.LoadAssetAtPath<Shader>(path);
+            Assert.That(
+                shader, Is.Not.Null,
+                "fixture precondition: the installed " + shaderLabel +
+                " asset must load");
+            return shader;
+        }
+
+        private Material NewRealCutoutMaterial(
+            Texture2D mainTex,
+            float cutoff)
+        {
+            var shader = LoadInstalledLilToonShader(
+                LilToonSourceAttestation.CutoutShaderGuid,
+                "lilToon cutout shader");
+            var material = _scope.Track(new Material(shader));
+            material.SetTexture("_MainTex", mainTex);
+            material.SetTextureScale("_MainTex", Vector2.one);
+            material.SetTextureOffset("_MainTex", Vector2.zero);
+            material.SetFloat("_Cutoff", cutoff);
+            material.SetColor("_Color", new Color(1f, 1f, 1f, 1f));
+            return material;
+        }
+
+        private Material NewRealOpaqueMaterial(Texture2D mainTex)
+        {
+            var shader = LoadInstalledLilToonShader(
+                LilToonSourceAttestation.SupportedShaderGuid,
+                "lilToon main shader");
             var material = _scope.Track(new Material(shader));
             material.SetTexture("_MainTex", mainTex);
             material.SetColor("_Color", new Color(1f, 1f, 1f, 1f));
             return material;
         }
 
-        private Material NewTransparentMaterial(Texture2D mainTex)
+        /// <summary>
+        /// The real-material compute fixture: the same two-triangle shape
+        /// as <see cref="NewComputeFixture"/>, over a material on the
+        /// GUID-loaded installed cutout shader.
+        /// </summary>
+        private Fixture NewRealCutoutComputeFixture(
+            byte leftAlpha,
+            float cutoff)
         {
-            var shader = Shader.Find(
-                LilToonFixtureTestBase.TransparentConversionShaderName);
-            Assert.That(
-                shader,
-                Is.Not.Null,
-                LilToonFixtureTestBase.TransparentConversionShaderName +
-                " must import.");
-            var material = _scope.Track(new Material(shader));
-            material.SetTexture("_MainTex", mainTex);
-            material.SetTextureScale("_MainTex", Vector2.one);
-            material.SetTextureOffset("_MainTex", Vector2.zero);
-            material.SetColor("_Color", new Color(1f, 1f, 1f, 1f));
-            return material;
+            var root = _scope.Track(NewAvatarRoot("amuse-dry-run-real"));
+            var optimizer = AddOptimizer(root);
+            var texture = ImportHalfTexture(
+                "real_half_" + leftAlpha, leftAlpha);
+            var material = NewRealCutoutMaterial(texture, cutoff);
+            var renderer = AddSkinnedRenderer(
+                root, TwoTriangleMesh(), material);
+            return new Fixture
+            {
+                Root = root, Optimizer = optimizer, Renderer = renderer
+            };
         }
 
         /// <summary>
@@ -599,12 +644,17 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
 
         // --- Behavior sentences ---------------------------------------------
 
+        /// <summary>
+        /// Replaces CutoutSplitSlotProducesSplittableSentence (stage 3,
+        /// V11). The same splittable row over a material on the
+        /// GUID-loaded installed cutout shader, through the production
+        /// family map and the plain capturer with real attestation.
+        /// </summary>
         [Test]
-        public void CutoutSplitSlotProducesSplittableSentence()
+        public void CutoutSplitSlotProducesSplittableSentenceWithRealLilToon()
         {
-            var fixture = NewComputeFixture(255, 0.5f);
-            var dryRun = NewDryRun(
-                fixture, null, FixtureSelector(), FixtureCapturer());
+            var fixture = NewRealCutoutComputeFixture(255, 0.5f);
+            var dryRun = NewDryRun(fixture, null, null, null);
             Run(dryRun);
 
             var slot = SlotRows(dryRun);
@@ -623,12 +673,18 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 "a healthy renderer must emit no summary row");
         }
 
+        /// <summary>
+        /// Replaces UnknownStaysUntouchable (stage 3, V11). The same
+        /// unproven outcome over a material on the GUID-loaded installed
+        /// cutout shader and a fully transparent texture, through the
+        /// production family map and the plain capturer with real
+        /// attestation.
+        /// </summary>
         [Test]
-        public void UnknownStaysUntouchable()
+        public void UnknownStaysUntouchableWithRealLilToon()
         {
-            var fixture = NewComputeFixture(0, 0.5f);
-            var dryRun = NewDryRun(
-                fixture, null, FixtureSelector(), FixtureCapturer());
+            var fixture = NewRealCutoutComputeFixture(0, 0.5f);
+            var dryRun = NewDryRun(fixture, null, null, null);
             Run(dryRun);
 
             Assert.That(
@@ -648,13 +704,21 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 "a healthy renderer must emit no summary row");
         }
 
+        /// <summary>
+        /// Replaces CutoutSplitSlotAllProvenProducesConvertableSentence
+        /// (stage 3, V11). The same convertable row over a material on
+        /// the GUID-loaded installed cutout shader and a fully opaque
+        /// texture, through the production family map and the plain
+        /// capturer with real attestation.
+        /// </summary>
         [Test]
-        public void CutoutSplitSlotAllProvenProducesConvertableSentence()
+        public void
+            CutoutSplitSlotAllProvenProducesConvertableSentenceWithRealLilToon()
         {
-            var root = _scope.Track(NewAvatarRoot("amuse-dry-run-root"));
+            var root = _scope.Track(NewAvatarRoot("amuse-dry-run-real"));
             var optimizer = AddOptimizer(root);
-            var texture = ImportHalfTexture("all_proven", 255);
-            var material = NewCutoutMaterial(texture, 0.5f);
+            var texture = ImportHalfTexture("all_proven_real", 255);
+            var material = NewRealCutoutMaterial(texture, 0.5f);
             AddSkinnedRenderer(root, OneTriangleMesh(), material);
 
             var dryRun = NewDryRun(
@@ -662,7 +726,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 {
                     Root = root, Optimizer = optimizer, Renderer = null
                 },
-                null, FixtureSelector(), FixtureCapturer());
+                null, null, null);
             Run(dryRun);
 
             var rows = SlotRows(dryRun);
@@ -676,10 +740,16 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 Is.False);
         }
 
+        /// <summary>
+        /// Replaces FoldSlotProducesConvertableSentence (stage 3, V11).
+        /// The same fold verdict over a material on the GUID-loaded
+        /// installed cutout shader, through the production family map
+        /// and the plain capturer with real attestation.
+        /// </summary>
         [Test]
-        public void FoldSlotProducesConvertableSentence()
+        public void FoldSlotProducesConvertableSentenceWithRealLilToon()
         {
-            var fixture = NewComputeFixture(255, 0.5f);
+            var fixture = NewRealCutoutComputeFixture(255, 0.5f);
 
             // The fixture's slot records the cutout arm, so the fold
             // reads the cutout preserve value, not the transparent one.
@@ -687,8 +757,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 fixture.Optimizer,
                 "_cutoutMinimumOpaqueCoverageToPreservePercent",
                 60);
-            var dryRun = NewDryRun(
-                fixture, null, FixtureSelector(), FixtureCapturer());
+            var dryRun = NewDryRun(fixture, null, null, null);
             Run(dryRun);
 
             var rows = SlotRows(dryRun);
@@ -2377,13 +2446,19 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 "per-pass verdict, not from the cached rows");
         }
 
+        /// <summary>
+        /// Replaces OpaqueFamilySlotShowsUntouchable (stage 3, V11). The
+        /// same untouchable row over a material on the GUID-loaded
+        /// installed plain lilToon shader, through the production family
+        /// map and the plain capturer with real attestation.
+        /// </summary>
         [Test]
-        public void OpaqueFamilySlotShowsUntouchable()
+        public void OpaqueFamilySlotShowsUntouchableWithRealLilToon()
         {
-            var root = _scope.Track(NewAvatarRoot("amuse-dry-run-root"));
+            var root = _scope.Track(NewAvatarRoot("amuse-dry-run-real"));
             var optimizer = AddOptimizer(root);
-            var texture = ImportHalfTexture("opaque", 255);
-            var material = NewOpaqueMaterial(texture);
+            var texture = ImportHalfTexture("opaque_real", 255);
+            var material = NewRealOpaqueMaterial(texture);
             AddSkinnedRenderer(root, OneTriangleMesh(), material);
 
             var dryRun = NewDryRun(
@@ -2391,7 +2466,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 {
                     Root = root, Optimizer = optimizer, Renderer = null
                 },
-                null, FixtureSelector(), FixtureCapturer());
+                null, null, null);
             Run(dryRun);
 
             var rows = SlotRows(dryRun);

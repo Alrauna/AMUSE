@@ -453,3 +453,35 @@ Settled clean on 2026-10-26. The installed lilToon 2.4.1 shape attested through 
 ### Real unattested 10.x answer
 
 `RealPoiyomiTenMaterialAnswersUnattested` held. A material on the 10.x root shader selected into the Poiyomi family by its admitted release name. The source attestation refused it at the GUID gate of the admitted rows. The closed capture named the material unattested by batch position, and no member was admitted.
+
+## Run of 2026-10-26, Task 15 validation, product assembly
+
+Environment. The working tree of the dev project after Task 15, the lilToon stand-in cutover of stage 3. The local work date of the run is 2026-10-26.
+
+How the run was made. The callback recorder method of `.superpowers/sdd/full-run-recorder.md` ran the product assembly alone. The research assembly was not run, because Task 15 changes only product assembly files. The run delivered every leaf row exactly once, with no double delivery. The temporary recorder and its data file were deleted after the run, and a forced refresh then reported zero compile errors.
+
+- Delivered leaf results: 3069, counted once per leaf row.
+- Passed: 3067.
+- Failed: 0.
+- Skipped: 2.
+- Inconclusive: 0.
+- Duration from the test framework bookends: 1765.4 seconds.
+
+Count changes against the Task 13 full run of this file. The leaf count went from 3060 to 3069. The nine Task 14 leaves carry the count to 3069 before the cutover. Task 15 retired twelve stand-in happy paths and added twelve real-material twins, one for one, so the cutover itself changed no leaf count. Every retired test is named in the cutover ledger with its replacement. The failed count stayed 0 and the skip set stayed the same two gated DAO tests.
+
+### Skipped test names, 2 tests
+
+Both are the gated opt-in skips of the Task 3 gate conversion. No opt-in gate was set for this run.
+
+- `Alrauna.Amuse.Tests.Editor.Build.DaoMergedConsumptionTests.AaoAndDaoCombinedKeepsTheMergedSoundness`
+- `Alrauna.Amuse.Tests.Editor.Build.DaoMergedConsumptionTests.DaoMergeRunsInTheSdkSequenceAndPreservesSoundness`
+
+### Failed test names
+
+None.
+
+Cutover observation of the same date. All twelve twins passed on their first run, in the focused runs and in this full run. They are characterization of the pinned environment. The focused runs came first: the two touched Semantics classes passed 74 of 74, and the three touched Build and DryRun classes passed 199 of 199, zero failed in each. Every twin loads its shader by the production GUID pin and drives the production delegates with no seams. The production barrier presenter fails the build on any consent subject, and no subject appeared in any twin build.
+
+### Side-effect observation, QualitySettings
+
+The file showed a working-tree change during the run window and matched the committed file again after it, with `anisotropicTextures: 2` in every quality level. This is the known vendor editor reload hook shape recorded by the Task 6 and Task 10 runs.

@@ -358,7 +358,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
-        /// The real extension-free barrier through the public-fixture seams.
+        /// The real extension-free barrier. A test that arms
+        /// <see cref="ProductionCaptureScope"/> drives the production
+        /// entry with no seam delegates over installed vendor materials;
+        /// every other test runs through the public-fixture seams below.
         /// The conversion delegate defaults to the family-routing verified
         /// seam; a test that must substitute a different conversion
         /// boundary — e.g. an identity mapping — arms
@@ -367,6 +370,29 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// </summary>
         private static void BarrierPass(BuildContext context)
         {
+            if (ProductionCapture)
+            {
+                // The production entry with no seam delegates: the
+                // production selection, capture, resolution, and
+                // conversion steps. The presenter fails on any consent
+                // subject, because a build over installed lilToon 2.4.1
+                // materials must raise none.
+                AmusePlatformFinishPass.Execute(
+                    context,
+                    SupportedFacts(),
+                    consentPresenter: subjects =>
+                    {
+                        Assert.That(
+                            subjects, Is.Empty,
+                            "a build over installed lilToon materials " +
+                            "must raise no consent subjects. A subject " +
+                            "names what the installed attestation " +
+                            "refused");
+                        return true;
+                    });
+                return;
+            }
+
             AmusePlatformFinishPass.Execute(
                 context,
                 SupportedFacts(),
@@ -434,6 +460,32 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             public void Dispose()
             {
                 ConversionOverride = previous;
+            }
+        }
+
+        /// <summary>
+        /// True while one test drives the barrier through the production
+        /// entry with no seam delegates, so the production selection, the
+        /// production closed capture with real source attestation, the
+        /// production resolution, and the production conversion steps run
+        /// over installed vendor materials. The scope restores the seam
+        /// route even on failure.
+        /// </summary>
+        private static bool ProductionCapture { get; set; }
+
+        private sealed class ProductionCaptureScope : IDisposable
+        {
+            private readonly bool previous;
+
+            internal ProductionCaptureScope()
+            {
+                previous = ProductionCapture;
+                ProductionCapture = true;
+            }
+
+            public void Dispose()
+            {
+                ProductionCapture = previous;
             }
         }
 
@@ -4446,10 +4498,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
-        /// Attested-opaque map-to-self at pipeline level (coverage 2): a
-        /// cutout slot whose swap set reaches the opaque lilToon stand-in
-        /// maps that value to itself with no clone, through a real build
-        /// with the apply pass.
+        /// Replaces CutoutSwapToAttestedOpaqueMapsToItselfWithoutAClone
+        /// (stage 3, V11). Attested-opaque map-to-self at pipeline level
+        /// (coverage 2) over the installed assets: a cutout slot whose
+        /// swap set reaches the installed plain lilToon material maps
+        /// that value to itself with no clone, through a real build with
+        /// the apply pass and the production capture delegates.
         /// <para>
         /// Falsifies a pipeline-level routing that clones the attested
         /// opaque admitted value instead of mapping it to itself, or that
@@ -4457,10 +4511,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// </para>
         /// </summary>
         [Test]
-        public void CutoutSwapToAttestedOpaqueMapsToItselfWithoutAClone()
+        public void
+            CutoutSwapToAttestedOpaqueMapsToItselfWithoutACloneWithRealLilToon()
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
-            var root = new GameObject("AMUSE cutout map to self");
+            var root = new GameObject("AMUSE cutout map to self real");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             AmusePlatformFinishState state = null;
@@ -4470,10 +4525,16 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 fixtures.BaseSetUp();
                 var mipTexture = fixtures.ImportFullyOpaqueMipmap(
-                    "cutout_map_to_self");
-                var cutout = Track(NewCutoutConversionMaterial(mipTexture));
-                var swap = Track(
-                    LilToonFixtureTestBase.CreateVerifiedMaterial());
+                    "cutout_map_to_self_real");
+                var cutout = Track(new Material(
+                    LoadInstalledLilToonShader(
+                        LilToonSourceAttestation.CutoutShaderGuid,
+                        "lilToon cutout shader")));
+                cutout.SetTexture("_MainTex", mipTexture);
+                var swap = Track(new Material(
+                    LoadInstalledLilToonShader(
+                        LilToonSourceAttestation.SupportedShaderGuid,
+                        "lilToon main shader")));
                 var mesh = Track(AlphaSeparationTestLifecycle.SingleTriangleMesh());
                 mesh.uv = new[]
                 {
@@ -4484,13 +4545,17 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(root, "body", mesh, cutout);
 
                 var clip = Track(AlphaSeparationTestLifecycle.NewSwapClip(
-                    "AMUSE cutout map to self swap", "body", 0,
+                    "AMUSE cutout map to self real swap", "body", 0,
                     (0f, cutout), (1f, swap)));
                 controller = AlphaSeparationTestLifecycle.NewController(
-                    root, "AMUSE cutout map to self graph", clip);
+                    root, "AMUSE cutout map to self real graph", clip);
 
-                var context = AvatarProcessor.ProcessAvatar(
-                    root, ApplyTestPlatform.Instance);
+                BuildContext context;
+                using (new ProductionCaptureScope())
+                {
+                    context = AvatarProcessor.ProcessAvatar(
+                        root, ApplyTestPlatform.Instance);
+                }
                 state = context.GetState<AmusePlatformFinishState>();
 
                 Assert.That(state.AnalyzedRendererCount, Is.EqualTo(1),
@@ -6068,6 +6133,29 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
                 return pixels;
             }
+        }
+
+        /// <summary>
+        /// Loads an installed lilToon shader by its production GUID pin.
+        /// The GUID load is the only reliable resolve, because a name
+        /// lookup can answer with a committed stand-in or a foreign
+        /// shader that shares the vendor name.
+        /// </summary>
+        private static Shader LoadInstalledLilToonShader(
+            string assetGuid,
+            string shaderLabel)
+        {
+            var path = AssetDatabase.GUIDToAssetPath(assetGuid);
+            Assert.That(
+                path, Is.Not.Empty,
+                "fixture precondition: the installed " + shaderLabel +
+                " asset must resolve by its pinned GUID");
+            var shader = AssetDatabase.LoadAssetAtPath<Shader>(path);
+            Assert.That(
+                shader, Is.Not.Null,
+                "fixture precondition: the installed " + shaderLabel +
+                " asset must load");
+            return shader;
         }
 
         /// <summary>

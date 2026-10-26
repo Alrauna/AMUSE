@@ -188,52 +188,54 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         /// <summary>
-        /// The clone is transient. Persistence belongs to assignment, which is
-        /// the consumer's job, so preparation must not save anything.
+        /// Replaces PreparedClone_IsNotPersisted (stage 3, V11). The same
+        /// transient-clone proof over the installed lilToon assets: the
+        /// source is a material on the GUID-loaded cutout shader and the
+        /// target is the GUID-loaded main shader the production wrapper
+        /// attests. The clone is transient, so preparation must not save
+        /// anything.
         /// </summary>
         [Test]
-        public void PreparedClone_IsNotPersisted()
+        public void PreparedClone_IsNotPersistedWithRealLilToon()
         {
-            var source = ConversionEligibleStandIn();
+            var source = Track(new Material(LoadInstalledLilToonShader(
+                LilToonSourceAttestation.CutoutShaderGuid,
+                "lilToon cutout shader")));
+            var target = LoadInstalledLilToonShader(
+                LilToonSourceAttestation.SupportedShaderGuid,
+                "lilToon main shader");
 
             var clone = Track(LilToonOpaqueTarget.PrepareCanonicalOpaqueClone(
-                source, source.shader));
+                source, target));
 
             Assert.That(AssetDatabase.Contains(clone), Is.False);
             Assert.That(AssetDatabase.GetAssetPath(clone), Is.Empty);
         }
 
         /// <summary>
-        /// The swap is asserted, not preservation (spec R5): the clone must
-        /// carry the attested opaque target and must not keep the cutout
-        /// source's shader. The cutout stand-in supplies the distinct source
-        /// shader; the clone read-back still passes because the recipe writes
-        /// are made against the swapped-in opaque target, which declares all
-        /// 18 recipe properties.
-        /// <para>
-        /// This pin also carries the material-count assertion for the named
-        /// target-mismatch failure (Finding 42): a success leaves exactly one
-        /// material, the transient clone. The mismatch destroy site itself is
-        /// unreachable from test inputs, because a shader assignment always
-        /// reads back its own reference on this editor, so the gate can only
-        /// fire on an engine regression. The structural try and finally from
-        /// the Finding 42 change covers that site.
-        /// </para>
+        /// Replaces PreparedClone_SwapsTheShaderToTheAttestedTarget
+        /// (stage 3, V11). The same swap-and-read-back contract over the
+        /// installed lilToon assets: the source is a material on the
+        /// GUID-loaded cutout shader, the target is the GUID-loaded main
+        /// shader the production wrapper attests, and the clone must
+        /// carry the canonical recipe on that target while the source
+        /// keeps every observed fact.
         /// </summary>
         [Test]
-        public void PreparedClone_SwapsTheShaderToTheAttestedTarget()
+        public void PreparedClone_SwapsTheShaderToTheAttestedTargetWithRealLilToon()
         {
-            var source = NewCutoutFixtureMaterial();
+            var source = Track(new Material(LoadInstalledLilToonShader(
+                LilToonSourceAttestation.CutoutShaderGuid,
+                "lilToon cutout shader")));
             var before = PropertySnapshot.SnapshotFloats(source);
             var queueBefore = source.renderQueue;
             var tagBefore = source.GetTag("RenderType", false);
-            var target = Shader.Find(OpaqueConversionShaderName);
-            Assert.That(
-                target, Is.Not.Null,
-                $"Fixture shader '{OpaqueConversionShaderName}' must import.");
+            var target = LoadInstalledLilToonShader(
+                LilToonSourceAttestation.SupportedShaderGuid,
+                "lilToon main shader");
             Assert.That(
                 target, Is.Not.SameAs(source.shader),
-                "The swap test needs two distinct fixture shaders.");
+                "The swap test needs two distinct shaders.");
             var materialsBefore = LoadedMaterialCount();
 
             var clone = Track(LilToonOpaqueTarget.PrepareCanonicalOpaqueClone(
@@ -667,6 +669,29 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 textureProperties:
                     Array.Empty<TexturePropertyEvidenceRequest>(),
                 captureKeywords: true);
+        }
+
+        /// <summary>
+        /// Loads an installed lilToon shader by its production GUID pin.
+        /// The GUID load is the only reliable resolve, because a name
+        /// lookup can answer with a stand-in or a foreign shader that
+        /// shares the vendor name.
+        /// </summary>
+        private static Shader LoadInstalledLilToonShader(
+            string assetGuid,
+            string shaderLabel)
+        {
+            var path = AssetDatabase.GUIDToAssetPath(assetGuid);
+            Assert.That(
+                path, Is.Not.Empty,
+                "fixture precondition: the installed " + shaderLabel +
+                " asset must resolve by its pinned GUID");
+            var shader = AssetDatabase.LoadAssetAtPath<Shader>(path);
+            Assert.That(
+                shader, Is.Not.Null,
+                "fixture precondition: the installed " + shaderLabel +
+                " asset must load");
+            return shader;
         }
 
         // --- Validation failure policy ---------------------------------------
