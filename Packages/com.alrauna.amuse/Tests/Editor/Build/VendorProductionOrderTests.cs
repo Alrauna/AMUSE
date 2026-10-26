@@ -1,5 +1,7 @@
 using System;
 using System.Collections;
+using System.Collections.Generic;
+using System.IO;
 using System.Reflection;
 using System.Text;
 using Alrauna.Amuse.Runtime;
@@ -70,6 +72,21 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             "AMUSE production order MA holder";
         private const string FuryHolderName =
             "AMUSE production order fury holder";
+
+        private const string VrcFuryBuildsFolder =
+            "Packages/com.vrcfury.temp/Builds";
+
+        // True from a dispatched build until its teardown ran. The
+        // residue cleanup and the tier A texture arm both read it, so
+        // tier B twins, skipped runs, and every other suite keep the
+        // strict behavior and delete nothing.
+        private static bool _dispatchRanThisTest;
+
+        // The Builds folder entry names before the dispatch of the
+        // running test. The teardown deletes only the new entries, so
+        // vendor content that predates the test survives.
+        private static readonly HashSet<string> BuildsFolderSnapshot =
+            new HashSet<string>(StringComparer.Ordinal);
 
         // --- tier B twins ---------------------------------------------------
 
@@ -375,16 +392,33 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         [TearDown]
         public void TearDownVrcFuryBuildsOutput()
         {
-            // VRCFury saves the controllers it rebuilds during a
-            // dispatched build under its own project folder. A
-            // disposable project owns every byte of it. The deletion
-            // mirrors the vendor own cleanup, which removes stale
-            // entries under the same folder.
-            const string buildsFolder =
-                "Packages/com.vrcfury.temp/Builds";
-            if (AssetDatabase.IsValidFolder(buildsFolder))
+            // The cleanup is run scoped. It deletes only when this
+            // test dispatched a build, and only the entries the test
+            // added under the vendor builds folder. Vendor content
+            // that predates the test survives, and a tier B twin or a
+            // skipped run deletes nothing.
+            if (!_dispatchRanThisTest)
             {
-                AssetDatabase.DeleteAsset(buildsFolder);
+                return;
+            }
+
+            _dispatchRanThisTest = false;
+            if (!AssetDatabase.IsValidFolder(VrcFuryBuildsFolder))
+            {
+                return;
+            }
+
+            foreach (var entry in Directory.GetFileSystemEntries(
+                         VrcFuryBuildsFolder))
+            {
+                var name = Path.GetFileName(entry);
+                if (name.EndsWith(".meta", StringComparison.Ordinal)
+                    || BuildsFolderSnapshot.Contains(name))
+                {
+                    continue;
+                }
+
+                AssetDatabase.DeleteAsset(entry);
             }
         }
 
@@ -393,9 +427,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// capture a slot material the vendor save session re-homed,
         /// and the canonical clone then samples the vendor saved copy
         /// of the fixture texture instead of the fixture instance. The
-        /// copy is accepted only when its decoded pixels equal the
-        /// fixture texture pixels exactly. Any dimension or pixel
-        /// difference refuses with both identities named.
+        /// arm is tier A only: the dispatch flag holds between a
+        /// dispatched build and its teardown, so the tier B twins and
+        /// every other suite keep the strict instance identity. The
+        /// copy is accepted only when its mip count and its decoded
+        /// pixels of every mip level equal the fixture texture
+        /// exactly. Any difference refuses with both identities
+        /// named.
         /// </summary>
         protected override bool TryAcceptVendorSavedTextureCopy(
             Texture2D sourceTexture,
@@ -403,6 +441,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             out string refusal)
         {
             refusal = "";
+            if (!_dispatchRanThisTest)
+            {
+                return false;
+            }
+
             if (sourceTexture == null || sampledTexture == null)
             {
                 refusal = " a sampled texture is missing";
@@ -422,28 +465,56 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 return false;
             }
 
-            var sourcePixels = sourceTexture.GetPixels32();
-            var sampledPixels = sampledTexture.GetPixels32();
-            for (var index = 0; index < sourcePixels.Length; index++)
+            if (sourceTexture.mipmapCount != sampledTexture.mipmapCount)
             {
-                var sourcePixel = sourcePixels[index];
-                var sampledPixel = sampledPixels[index];
-                if (sourcePixel.r != sampledPixel.r
-                    || sourcePixel.g != sampledPixel.g
-                    || sourcePixel.b != sampledPixel.b
-                    || sourcePixel.a != sampledPixel.a)
+                refusal = " the sampled texture mip counts differ:"
+                    + " source " + sourceTexture.name + " tex="
+                    + sourceTexture.GetInstanceID() + " mips="
+                    + sourceTexture.mipmapCount + ", sampled "
+                    + sampledTexture.name + " tex="
+                    + sampledTexture.GetInstanceID() + " mips="
+                    + sampledTexture.mipmapCount;
+                return false;
+            }
+
+            for (var mip = 0; mip < sourceTexture.mipmapCount; mip++)
+            {
+                var sourcePixels = sourceTexture.GetPixels32(mip);
+                var sampledPixels = sampledTexture.GetPixels32(mip);
+                if (sourcePixels.Length != sampledPixels.Length)
                 {
-                    refusal = " the sampled texture pixels differ at"
-                        + " texel " + index + ": source "
-                        + sourceTexture.name + " tex="
-                        + sourceTexture.GetInstanceID() + " rgb("
-                        + sourcePixel.r + "," + sourcePixel.g + ","
-                        + sourcePixel.b + ") a" + sourcePixel.a
+                    refusal = " the sampled texture mip " + mip
+                        + " size differs: source " + sourceTexture.name
+                        + " tex=" + sourceTexture.GetInstanceID()
+                        + " texels=" + sourcePixels.Length
                         + ", sampled " + sampledTexture.name + " tex="
-                        + sampledTexture.GetInstanceID() + " rgb("
-                        + sampledPixel.r + "," + sampledPixel.g + ","
-                        + sampledPixel.b + ") a" + sampledPixel.a;
+                        + sampledTexture.GetInstanceID() + " texels="
+                        + sampledPixels.Length;
                     return false;
+                }
+
+                for (var index = 0; index < sourcePixels.Length; index++)
+                {
+                    var sourcePixel = sourcePixels[index];
+                    var sampledPixel = sampledPixels[index];
+                    if (sourcePixel.r != sampledPixel.r
+                        || sourcePixel.g != sampledPixel.g
+                        || sourcePixel.b != sampledPixel.b
+                        || sourcePixel.a != sampledPixel.a)
+                    {
+                        refusal = " the sampled texture pixels differ"
+                            + " at mip " + mip + " texel " + index
+                            + ": source " + sourceTexture.name + " tex="
+                            + sourceTexture.GetInstanceID() + " rgb("
+                            + sourcePixel.r + "," + sourcePixel.g + ","
+                            + sourcePixel.b + ") a" + sourcePixel.a
+                            + ", sampled " + sampledTexture.name
+                            + " tex=" + sampledTexture.GetInstanceID()
+                            + " rgb(" + sampledPixel.r + ","
+                            + sampledPixel.g + "," + sampledPixel.b
+                            + ") a" + sampledPixel.a;
+                        return false;
+                    }
                 }
             }
 
@@ -496,6 +567,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         private static void BuildThroughSdkDispatcher(GameObject root)
         {
 #if AMUSE_VRCSDK3_AVATARS
+            // The residue cleanup and the tier A texture arm scope
+            // themselves to this dispatch: the snapshot lists the
+            // vendor folder before the build, and the flag marks the
+            // test that dispatched one.
+            _dispatchRanThisTest = false;
+            BuildsFolderSnapshot.Clear();
+            BuildsFolderSnapshot.UnionWith(SnapshotBuildsEntries());
+
             using (VendorProductionOrderCapture.Arm())
             {
                 var accepted = VRC.SDKBase.Editor.BuildPipeline
@@ -506,6 +585,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     "the SDK preprocess chain must accept the fixture"
                     + " avatar");
             }
+            _dispatchRanThisTest = true;
+
             Assert.That(
                 VendorProductionOrderCapture.Context,
                 Is.Not.Null,
@@ -517,6 +598,28 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 + " the installed callback dispatcher cannot be"
                 + " exercised.");
 #endif
+        }
+
+        /// <summary>
+        /// The entry names under the vendor builds folder right now.
+        /// Both a generated folder and its meta companion list, so the
+        /// snapshot sees the same shape the teardown reads.
+        /// </summary>
+        private static HashSet<string> SnapshotBuildsEntries()
+        {
+            var names = new HashSet<string>(StringComparer.Ordinal);
+            if (!AssetDatabase.IsValidFolder(VrcFuryBuildsFolder))
+            {
+                return names;
+            }
+
+            foreach (var entry in Directory.GetFileSystemEntries(
+                         VrcFuryBuildsFolder))
+            {
+                names.Add(Path.GetFileName(entry));
+            }
+
+            return names;
         }
 
         // --- shared fixture helpers -----------------------------------------
@@ -747,6 +850,24 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.Fail(
                 "the committed descriptor carries no FX base layer"
                 + " entry; committed entries:" + names);
+            return null;
+        }
+#else
+        /// <summary>
+        /// The SDK-less shape of the committed descriptor read. The
+        /// tier A fixtures skip before they reach it, so this arm only
+        /// names the missing package, the same loud ignore the
+        /// descriptor fixture helper reports.
+        /// </summary>
+        private static AnimatorController DescriptorFxController(
+            GameObject root)
+        {
+            Assert.Ignore(
+                "The com.vrchat.avatars package is not installed in"
+                + " this project. Fixture avatars cannot carry a"
+                + " VRCAvatarDescriptor, so the tier A survival read"
+                + " has no committed descriptor. Install it to run"
+                + " them.");
             return null;
         }
 #endif
