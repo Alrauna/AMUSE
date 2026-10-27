@@ -2375,9 +2375,15 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
             for (var i = 0; i < left.Count; i++)
             {
+                // The zero-and-zero marker of a record picks the strict
+                // mode of the reproduction (A6.2). Two eras that disagree
+                // on the marker do not agree on the facts, so the pair
+                // refuses (A2.2 of the 2026-10-24 locked source alignment
+                // spec).
                 if (left[i].Kind != right[i].Kind
                     || left[i].Outcome != right[i].Outcome
                     || left[i].OriginalLine != right[i].OriginalLine
+                    || left[i].ZeroAndZero != right[i].ZeroAndZero
                     || !string.Equals(left[i].ConditionOrKeyword, right[i].ConditionOrKeyword, StringComparison.Ordinal))
                 {
                     return false;
