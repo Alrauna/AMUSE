@@ -5,7 +5,6 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Text;
 using nadena.dev.ndmf;
 using nadena.dev.ndmf.animator;
 using NUnit.Framework;
@@ -70,14 +69,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
     /// </summary>
     public sealed class BundledLockedOriginalRealLockTests
     {
-        private const string VendorToolQualifiedName =
-            "Thry.ThryEditor.ShaderOptimizer, ThryAssemblyDefinition";
-
-        private const string VendorToolAssemblyName =
-            "ThryAssemblyDefinition";
-
-        private const string CacheRoot = "Assets/_LockedShaderCache";
-
         private const string FixtureFolder = "Assets/AmuseTests_RealLock";
 
         // The shape inputs of record section 4.1. A tag value of 1 keeps
@@ -100,7 +91,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             "Set " + VendorOptInGate.RealThryLock + "=1 in a disposable"
             + " dev project to run these tests. The tests lock real"
             + " materials with the installed vendor lock tool. The lock"
-            + " writes vendor-owned cache data under " + CacheRoot
+            + " writes vendor-owned cache data under " + RealVendorLockTestSupport.CacheRoot
             + ". The lock calls the vendor usage counter once per editor"
             + " session unless the editor preferences already record the"
             + " counts (spec Y9 item 7). The tests must never run in the"
@@ -313,7 +304,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var runDate = DateTime.UtcNow.ToString(
                 "yyyy-MM-dd", CultureInfo.InvariantCulture);
 
-            EnsureFolder("Assets", "AmuseTests_RealLock");
+            RealVendorLockTestSupport.EnsureFolder("Assets", "AmuseTests_RealLock");
             var materialPath =
                 FixtureFolder + "/" + lockCase.FileStem + ".mat";
             var material = new Material(shader)
@@ -355,7 +346,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 lockMs = lockWatch.Elapsed.TotalMilliseconds;
                 Assert.That(
                     locked, Is.True,
-                    Dated("the vendor lock call returned false",
+                    RealVendorLockTestSupport.Dated("the vendor lock call returned false",
                         runDate, null));
 
                 // The locked identity. The vendor lock writes the
@@ -365,14 +356,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     LockedMaterialIdentity.RecognizedLockedIdentity(
                         material),
                     Is.True,
-                    Dated("the locked identity of the real lock is not"
+                    RealVendorLockTestSupport.Dated("the locked identity of the real lock is not"
                         + " recognized", runDate, null));
                 Assert.That(
                     material.shader.name.StartsWith(
                         LockedMaterialIdentity.LockedShaderNamePrefix,
                         StringComparison.Ordinal),
                     Is.True,
-                    Dated("the locked shader name does not carry the"
+                    RealVendorLockTestSupport.Dated("the locked shader name does not carry the"
                         + " vendor locked prefix, got "
                         + material.shader.name, runDate, null));
 
@@ -382,15 +373,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     AssetDatabase.GetAssetPath(material.shader);
                 Assert.That(
                     generatedPath.StartsWith(
-                        CacheRoot + "/", StringComparison.Ordinal),
+                        RealVendorLockTestSupport.CacheRoot + "/", StringComparison.Ordinal),
                     Is.True,
-                    Dated("the locked shader asset does not live under"
+                    RealVendorLockTestSupport.Dated("the locked shader asset does not live under"
                         + " the vendor cache root, got " + generatedPath,
                         runDate, null));
 
-                var generatedText = ReadText(generatedPath);
+                var generatedText = RealVendorLockTestSupport.ReadText(generatedPath);
                 generatedBytes = new FileInfo(generatedPath).Length;
-                var originalText = ReadText(
+                var originalText = RealVendorLockTestSupport.ReadText(
                     AssetDatabase.GetAssetPath(shader));
                 var properties = LockedSourceAlignmentMemo.PropertiesOf(
                     shader, originalText);
@@ -407,15 +398,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 alignMs = alignWatch.Elapsed.TotalMilliseconds;
                 Assert.That(
                     aligned.Succeeded, Is.True,
-                    Dated("the real lock output refused the production"
+                    RealVendorLockTestSupport.Dated("the real lock output refused the production"
                         + " aligner at original line "
                         + aligned.OriginalLine + " with text "
-                        + OriginalLineText(
+                        + RealVendorLockTestSupport.OriginalLineText(
                             originalText, aligned.OriginalLine),
                         runDate, aligned.RefusalDetail));
                 Assert.That(
                     aligned.Source, Is.Not.Null,
-                    Dated("the real alignment carries no source",
+                    RealVendorLockTestSupport.Dated("the real alignment carries no source",
                         runDate, null));
 
                 // The swap-in harness. Direct call on a public
@@ -451,34 +442,34 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
                         Assert.That(
                             summary.ConsentGatePassed, Is.True,
-                            Dated("the swap-in consent gate did not"
+                            RealVendorLockTestSupport.Dated("the swap-in consent gate did not"
                                 + " pass", runDate, null));
                         Assert.That(
                             summary.RestoreMismatchSlots,
                             Is.EqualTo(0),
-                            Dated("the swap-in restored the clone with"
+                            RealVendorLockTestSupport.Dated("the swap-in restored the clone with"
                                 + " a mismatch, so the seventh fact or"
                                 + " the consistency check failed",
                                 runDate, null));
                         Assert.That(
                             summary.ClonesCreated, Is.EqualTo(1),
-                            Dated("the swap-in created no clone for the"
+                            RealVendorLockTestSupport.Dated("the swap-in created no clone for the"
                                 + " locked material", runDate, null));
                         Assert.That(
                             summary.SlotsSwapped, Is.EqualTo(1),
-                            Dated("the swap-in swapped no slot",
+                            RealVendorLockTestSupport.Dated("the swap-in swapped no slot",
                                 runDate, null));
                         AssertNoSlotRefusal(finishState, runDate);
 
                         var swapped = renderer.sharedMaterials[0];
                         Assert.That(
                             swapped, Is.Not.EqualTo(material),
-                            Dated("the slot still holds the locked"
+                            RealVendorLockTestSupport.Dated("the slot still holds the locked"
                                 + " material after the swap-in",
                                 runDate, null));
                         Assert.That(
                             swapped.shader, Is.EqualTo(shader),
-                            Dated("the swapped clone does not sit on"
+                            RealVendorLockTestSupport.Dated("the swapped clone does not sit on"
                                 + " the bundled original shader",
                                 runDate, null));
                         Assert.That(
@@ -486,7 +477,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                                 LockedMaterialIdentity
                                     .OptimizerEnabledPropertyName),
                             Is.EqualTo(0f),
-                            Dated("the swapped clone carries the lock"
+                            RealVendorLockTestSupport.Dated("the swapped clone carries the lock"
                                 + " flag", runDate, null));
                     }
                     finally
@@ -514,7 +505,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(
                     restored.Outcome,
                     Is.EqualTo(TransientUnlockRestoreOutcome.Succeeded),
-                    Dated("the standalone reconstruction refused the"
+                    RealVendorLockTestSupport.Dated("the standalone reconstruction refused the"
                         + " clone", runDate, restored.Detail));
 
                 // The consistency call on the finished clone (A5.9).
@@ -529,7 +520,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     consistencyWatch.Elapsed.TotalMilliseconds;
                 Assert.That(
                     consistency, Is.Null,
-                    Dated("the consistency check refused the restored"
+                    RealVendorLockTestSupport.Dated("the consistency check refused the restored"
                         + " clone", runDate, consistency));
 
                 // Phase three. The dry-run align time. The dry run reads
@@ -544,7 +535,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 dryMs = dryWatch.Elapsed.TotalMilliseconds;
                 Assert.That(
                     dryAligned.Succeeded, Is.True,
-                    Dated("the dry-run align refused the same pair",
+                    RealVendorLockTestSupport.Dated("the dry-run align refused the same pair",
                         runDate, dryAligned.RefusalDetail));
             }
             finally
@@ -669,13 +660,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     Is.EqualTo(
                         LockedMaterialIdentity.OriginalShaderAttested(
                             probe)),
-                    Dated("the attestation seam must answer exactly"
+                    RealVendorLockTestSupport.Dated("the attestation seam must answer exactly"
                         + " what the production check answers for a"
                         + " material whose recorded original names the"
                         + " 9.3.64 release row", runDate, null));
                 Assert.That(
                     TestScopedAttestation(probe), Is.False,
-                    Dated("the attestation seam must refuse the release"
+                    RealVendorLockTestSupport.Dated("the attestation seam must refuse the release"
                         + " recorded name on this install, because the"
                         + " production name rule refuses it",
                         runDate, null));
@@ -686,15 +677,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
-        // The vendor binding rule. The resolution is
-        // assembly-qualified, so it can only reach the installed vendor
-        // editor assembly. The guard proves the binding before any call.
+        // The vendor binding rule. The suite skips with a named reason
+        // when the vendor is absent, and the shared guard proves the
+        // binding before any call.
         private static void ResolveRealTool(
             out MethodInfo lockMethod,
             out MethodInfo unlockMethod,
             out object progressBarNone)
         {
-            var tool = Type.GetType(VendorToolQualifiedName, false);
+            var tool = RealVendorLockTestSupport.VendorToolOrNull();
             if (tool == null)
             {
                 Assert.Ignore(
@@ -703,46 +694,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     + " tool. Install thryeditor to run these tests");
             }
 
-            Assert.That(
-                tool.Assembly,
-                Is.Not.EqualTo(
-                    typeof(BundledLockedOriginalRealLockTests).Assembly),
-                "the resolution reached the test assembly. The suite"
-                + " must bind the vendor assembly only");
-
-            Assert.That(
-                tool.Assembly.GetName().Name,
-                Is.EqualTo(VendorToolAssemblyName),
-                "the resolved assembly must be the vendor editor"
-                + " assembly, got " + tool.Assembly.GetName().Name);
-
-            var progressBarType = tool.GetNestedType("ProgressBar");
-            Assert.That(
-                progressBarType, Is.Not.Null,
-                "the vendor nested progress bar enum must exist");
-
-            lockMethod = tool.GetMethod(
-                "LockMaterials",
-                BindingFlags.Public | BindingFlags.Static,
-                null,
-                new Type[] { typeof(IEnumerable<Material>), progressBarType },
-                null);
-            unlockMethod = tool.GetMethod(
-                "UnlockMaterials",
-                BindingFlags.Public | BindingFlags.Static,
-                null,
-                new Type[] { typeof(IEnumerable<Material>), progressBarType },
-                null);
-            Assert.That(
-                lockMethod, Is.Not.Null,
-                "the vendor lock member must exist with the material"
-                + " list first and the progress bar second");
-            Assert.That(
-                unlockMethod, Is.Not.Null,
-                "the vendor unlock member must exist with the material"
-                + " list first and the progress bar second");
-
-            progressBarNone = Enum.Parse(progressBarType, "None");
+            RealVendorLockTestSupport.ResolveRealTool(
+                tool, out lockMethod, out unlockMethod,
+                out progressBarNone);
         }
 
         // The pinned row load. The shader resolves from the row GUID of
@@ -821,7 +775,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(
                     finishState.SlotRefusalCount(slotRefusal),
                     Is.EqualTo(0),
-                    Dated("the slot refusal " + slotRefusal
+                    RealVendorLockTestSupport.Dated("the slot refusal " + slotRefusal
                         + " fired, and this case expects no refusal",
                         runDate, null));
             }
@@ -872,13 +826,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         private static HashSet<string> SnapshotCacheRoot()
         {
             var entries = new HashSet<string>(StringComparer.Ordinal);
-            if (!Directory.Exists(CacheRoot))
+            if (!Directory.Exists(RealVendorLockTestSupport.CacheRoot))
             {
                 return entries;
             }
 
             foreach (var path in Directory.GetFileSystemEntries(
-                CacheRoot, "*", SearchOption.AllDirectories))
+                RealVendorLockTestSupport.CacheRoot, "*", SearchOption.AllDirectories))
             {
                 entries.Add(path.Replace('\\', '/'));
             }
@@ -943,51 +897,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     CultureInfo.InvariantCulture,
                     "{0:F0} ms", milliseconds)
                 : "not reached";
-        }
-
-        private static void EnsureFolder(string parent, string folder)
-        {
-            var combined = parent + "/" + folder;
-            if (!AssetDatabase.IsValidFolder(combined))
-            {
-                AssetDatabase.CreateFolder(parent, folder);
-            }
-        }
-
-        private static string ReadText(string path)
-        {
-            return File.ReadAllText(path, Encoding.UTF8)
-                .Replace("\r", string.Empty);
-        }
-
-        // The text of one original line for a refusal message. The
-        // aligner reports the line number one based. An out of range
-        // number names itself instead of throwing.
-        private static string OriginalLineText(
-            string originalText, int originalLine)
-        {
-            var lines = originalText.Split('\n');
-            if (originalLine < 1 || originalLine > lines.Length)
-            {
-                return "<out of range " + originalLine + ">";
-            }
-
-            var text = lines[originalLine - 1].Trim();
-            return text.Length == 0
-                ? "<empty line>"
-                : text;
-        }
-
-        private static string Dated(
-            string detail, string runDate, string refusalDetail)
-        {
-            var message = detail + " on " + runDate;
-            if (!string.IsNullOrEmpty(refusalDetail))
-            {
-                message += ": " + refusalDetail;
-            }
-
-            return message;
         }
     }
 }
