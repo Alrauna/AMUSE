@@ -494,10 +494,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 }
 
                 // Phase two. The clone and restore time around the
-                // standalone reconstruction on a fresh clone.
+                // standalone reconstruction on a fresh clone. The
+                // stopwatch starts before the clone, so the phase covers
+                // the clone and the restore (Y10 item 2).
+                var restoreWatch = Stopwatch.StartNew();
                 timingClone = UnityEngine.Object.Instantiate(material);
                 timingClone.name = material.name;
-                var restoreWatch = Stopwatch.StartNew();
                 var restored = LockedMaterialReconstruction.TryApply(
                     timingClone, _ => true);
                 restoreWatch.Stop();
