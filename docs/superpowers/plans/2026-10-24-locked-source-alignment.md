@@ -267,9 +267,9 @@ The decision runs per `L` before the clone, over every collected slot, closure s
 - [ ] **Step 1: Write the failing tests.**
   - `PropertyBlockOnOneRendererRefusesEverySlotOfThatLockedMaterial` (Review Focus 4) in `TransientUnlockSwapInTests`: two renderers share `L`, one carries a block, both slots record `LockedMaterialPropertyBlock`.
   - In `LockedMaterialAdmissionTests`, each a falsifier with a no-op guard that the same source without the binding returns `None`:
-    - `// --- Falsifier 12 ---` `FloatBindingOfARenamedNameRefuses`.
-    - `// --- Falsifier 13 ---` `FloatBindingOfABakedPlainNameRefuses`.
-    - `// --- Falsifier 14 ---` `ObjectBindingOfARenamedTexturePlainNameRefuses`.
+    - `// --- Falsifier locked-source-alignment 12 ---` `FloatBindingOfARenamedNameRefuses`.
+    - `// --- Falsifier locked-source-alignment 13 ---` `FloatBindingOfABakedPlainNameRefuses`.
+    - `// --- Falsifier locked-source-alignment 14 ---` `ObjectBindingOfARenamedTexturePlainNameRefuses`.
     - `IndexedMaterialBindingIsRead`: `material[1]._X_S`.
     - `FloatBindingOfARenamedTextureScaleOffsetRefuses`: `material._T_ST.x` for a renamed `_T`.
     - `FloatBindingOfALivePropertyPasses`.

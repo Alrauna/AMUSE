@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using NUnit.Framework;
+using UnityEditor.PackageManager;
 
 namespace Alrauna.Amuse.Tests.Editor.Build
 {
@@ -21,8 +22,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
         private static string ProductionRoot()
         {
-            return Path.GetFullPath(
-                "Packages/com.alrauna.amuse/Editor");
+            var package = PackageInfo.FindForAssembly(
+                typeof(VendorLockToolSourceBanTests).Assembly);
+            Assert.That(
+                package,
+                Is.Not.Null,
+                "could not resolve the AMUSE package from the test"
+                + " assembly, so the product Editor source could not"
+                + " be scanned");
+            return package.assetPath + "/Editor";
         }
 
         [Test]

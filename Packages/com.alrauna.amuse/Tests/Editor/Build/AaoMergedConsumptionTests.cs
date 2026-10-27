@@ -708,11 +708,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// and that atlas must enter the admission. The observation pass
         /// after the optimizer probes the atlas on its slot while the
         /// build still runs, before NDMF persists build objects. The
-        /// atlas name must carry the pinned suffix, the admission must
-        /// accept the atlas over its corroborated slot material, and the
-        /// generated capture route must serve the atlas. Owner decision
-        /// Q8 of 2026-10-25 removed the admitted-version conjunct, so the
-        /// installed vendor version no longer refuses the real atlas.
+        /// atlas name must carry one of the two pinned markers, the
+        /// admission must accept the atlas over its corroborated slot
+        /// material, and the generated capture route must serve the
+        /// atlas. Owner decision Q8 of 2026-10-25 removed the
+        /// admitted-version conjunct, so the installed vendor version no
+        /// longer refuses the real atlas.
         /// </summary>
         [Test]
         public void RealAaoAtlasIsAdmittedThroughTheGeneratedRoute()
@@ -763,9 +764,20 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         OptimizerMergeObservation.Atlases,
                         Has.Count.EqualTo(1),
                         "Optimize Texture must pack the fixture texture" +
-                        " into one atlas whose name carries the pinned" +
-                        " suffix at the post-optimizer boundary");
+                        " into one atlas at the post-optimizer boundary");
                     var atlas = OptimizerMergeObservation.Atlases[0];
+                    var nameCarriesMarker =
+                        atlas.Name.EndsWith(
+                            AaoAtlasTextureAttestation.AtlasNameSuffix,
+                            StringComparison.Ordinal) ||
+                        atlas.Name.StartsWith(
+                            AaoAtlasTextureAttestation.MonotoneNamePrefix,
+                            StringComparison.Ordinal);
+                    Assert.That(
+                        nameCarriesMarker, Is.True,
+                        "the atlas name must carry one of the two pinned" +
+                        " Avatar Optimizer markers. The observed name" +
+                        " was: " + atlas.Name);
                     Assert.That(
                         atlas.HasAssetPath, Is.False,
                         "the real atlas stays a live in-memory texture" +

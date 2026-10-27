@@ -12698,11 +12698,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
-        /// The marker-stub override: the public project installs no VRChat
-        /// SDK, so no real proxy clip can exist and the live marker route is
-        /// unreachable. This stub reports the armed clip names as special
-        /// motions, exactly as the apply suite's stub does, so a fixture can
-        /// exercise the barrier-side marker refusal.
+        /// The marker-stub override: when a test arms special clip names,
+        /// the barrier is handed a stub host bindings that reports those
+        /// clips as special motions. The marker stub gives the suite exact
+        /// control over which clips count as special motions. The live
+        /// marker route is exercised by the survival audit of stage 1b.
         /// </summary>
         private sealed class MarkerStubBindings : IPlatformAnimatorBindings
         {

@@ -15,8 +15,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
     /// </summary>
     public sealed class LockedMaterialAdmissionTests
     {
-        // --- Falsifier 12: a decision that reads only the plain property
-        // states misses a binding on a renamed name ---
+        // --- Falsifier locked-source-alignment 12: a decision that reads
+        // only the plain property states misses a binding on a renamed
+        // name ---
 
         /// <summary>
         /// A float binding on a renamed name refuses, because the locked
@@ -46,8 +47,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "a float binding on a renamed name must refuse");
         }
 
-        // --- Falsifier 13: a decision that trusts the saved value of a
-        // baked property admits a binding on its plain name ---
+        // --- Falsifier locked-source-alignment 13: a decision that trusts
+        // the saved value of a baked property admits a binding on its
+        // plain name ---
 
         /// <summary>
         /// A float binding on the plain name of a baked property
@@ -75,8 +77,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "a float binding on a baked plain name must refuse");
         }
 
-        // --- Falsifier 14: a decision that reads only float curves
-        // misses an object reference curve on a renamed texture ---
+        // --- Falsifier locked-source-alignment 14: a decision that reads
+        // only float curves misses an object reference curve on a renamed
+        // texture ---
 
         /// <summary>
         /// An object reference binding on the plain name of a renamed
