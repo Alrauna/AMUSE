@@ -824,3 +824,23 @@ Before the runs, on 2026-10-26, `ProjectSettings/QualitySettings.asset`
 matched the committed file. After the runs the file still matched the
 committed file. The block reports `changed setting lines: none` for the
 two digested files.
+
+### Correction note of 2026-10-26, run record gate maps
+
+This note corrects the wording of the printed block above. It changes
+no recorded fact. The `gated fixtures excluded` line of the Task 19
+canonical run names one fixture class,
+`Alrauna.Amuse.Tests.Editor.Build.DaoMergedConsumptionTests`. The run
+actually excluded five gated tests of three gated fixtures: the two DAO
+tests, the real lock test of `RealThryLockCharacterizationTests`, and
+the two tier A tests of `VendorProductionOrderTests`. The
+`VendorRunRecord.GateVariables` and `GatedFixtures` maps predate the
+Task 17 and Task 18 gates, so the printed block under-reported the
+excluded fixtures and would have under-reported a set
+`AMUSE_PRODUCTION_ORDER_DISPATCH` gate. The `skip reasons` line of the
+same block names all five skips with their gate variables and full
+disclosures, so every recorded fact of the run stands. The fix round of
+this date extends both maps, and a run record from this fix onward
+names all three gate variables and all three gated fixtures. The fix
+round test runs of the same date covered `VendorRunRecordTests` and
+`VendorOptInGateTests` with 15 leaves, 15 passed, 0 failed.

@@ -4,7 +4,7 @@ using NUnit.Framework;
 namespace Alrauna.Amuse.Tests.Editor.Build
 {
     /// <summary>
-    /// Pins the vendor opt-in gate contract: the two documented
+    /// Pins the vendor opt-in gate contract: the three documented
     /// variable names, the named skip for a variable that is not 1,
     /// and the pass-through when the variable equals 1. Both tests
     /// that touch the environment save the variable first and
@@ -21,6 +21,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(
                 VendorOptInGate.DaoIntegration,
                 Is.EqualTo("AMUSE_DAO_INTEGRATION"));
+            Assert.That(
+                VendorOptInGate.ProductionOrderDispatch,
+                Is.EqualTo("AMUSE_PRODUCTION_ORDER_DISPATCH"));
         }
 
         [Test]

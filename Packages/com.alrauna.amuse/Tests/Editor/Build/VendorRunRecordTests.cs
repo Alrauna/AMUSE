@@ -154,13 +154,23 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         [Test]
         public void BuildReportNamesTheGatedFixtureAnUnsetGateExcluded()
         {
-            var variable = VendorOptInGate.DaoIntegration;
-            var saved = Environment.GetEnvironmentVariable(variable);
-            Environment.SetEnvironmentVariable(variable, null);
+            var variables = new[]
+            {
+                VendorOptInGate.RealThryLock,
+                VendorOptInGate.DaoIntegration,
+                VendorOptInGate.ProductionOrderDispatch,
+            };
+            var saved = new string[variables.Length];
+            for (var i = 0; i < variables.Length; i++)
+            {
+                saved[i] = Environment.GetEnvironmentVariable(
+                    variables[i]);
+                Environment.SetEnvironmentVariable(variables[i], null);
+            }
             try
             {
                 var report = VendorRunRecord.BuildReport(
-                    1, 1, 1, 0, 0, 0,
+                    1, 1, 1, 0, 3, 0,
                     TimeSpan.Zero, TimeSpan.Zero,
                     new string[0],
                     new VendorVersionEntry[0]);
@@ -170,21 +180,101 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(report,
                     Does.Contain("DaoMergedConsumptionTests"),
                     "the excluded gated fixture must be named");
-                Assert.That(report, Does.Contain(variable),
-                    "the unset gate variable must be named");
+                Assert.That(report,
+                    Does.Contain("RealThryLockCharacterizationTests"),
+                    "every mapped gated fixture must be named");
+                Assert.That(report,
+                    Does.Contain("VendorProductionOrderTests"),
+                    "every mapped gated fixture must be named");
+                foreach (var variable in variables)
+                {
+                    Assert.That(report, Does.Contain(variable),
+                        "the unset gate variable must be named");
+                }
             }
             finally
             {
-                Environment.SetEnvironmentVariable(variable, saved);
+                for (var i = 0; i < variables.Length; i++)
+                {
+                    Environment.SetEnvironmentVariable(
+                        variables[i], saved[i]);
+                }
+            }
+        }
+
+        [Test]
+        public void BuildReportListsASetProductionOrderGateAndSparesItsFixture()
+        {
+            var setVariable = VendorOptInGate.ProductionOrderDispatch;
+            var otherVariables = new[]
+            {
+                VendorOptInGate.RealThryLock,
+                VendorOptInGate.DaoIntegration,
+            };
+            var savedSet = Environment.GetEnvironmentVariable(setVariable);
+            var savedOthers = new string[otherVariables.Length];
+            Environment.SetEnvironmentVariable(setVariable, "1");
+            for (var i = 0; i < otherVariables.Length; i++)
+            {
+                savedOthers[i] = Environment.GetEnvironmentVariable(
+                    otherVariables[i]);
+                Environment.SetEnvironmentVariable(otherVariables[i], null);
+            }
+            try
+            {
+                var report = VendorRunRecord.BuildReport(
+                    1, 1, 1, 0, 3, 0,
+                    TimeSpan.Zero, TimeSpan.Zero,
+                    new string[0],
+                    new VendorVersionEntry[0]);
+
+                Assert.That(report,
+                    Does.Contain(
+                        "opt-in gates set: "
+                        + VendorOptInGate.ProductionOrderDispatch),
+                    "a set gate must be listed by its variable name");
+                Assert.That(report,
+                    Does.Contain("DaoMergedConsumptionTests"),
+                    "an unset gate still names its mapped fixture");
+                Assert.That(report,
+                    Does.Contain(
+                        "RealThryLockCharacterizationTests ("
+                        + VendorOptInGate.RealThryLock + " unset)"),
+                    "an unset gate still names its mapped fixture with"
+                    + " its variable");
+                Assert.That(report,
+                    Does.Not.Contain(
+                        "VendorProductionOrderTests ("
+                        + setVariable + " unset)"),
+                    "a set gate must spare its mapped fixture");
+            }
+            finally
+            {
+                for (var i = 0; i < otherVariables.Length; i++)
+                {
+                    Environment.SetEnvironmentVariable(
+                        otherVariables[i], savedOthers[i]);
+                }
+                Environment.SetEnvironmentVariable(setVariable, savedSet);
             }
         }
 
         [Test]
         public void BuildReportListsAGateThatWasSetAndExcludesNothing()
         {
-            var variable = VendorOptInGate.DaoIntegration;
-            var saved = Environment.GetEnvironmentVariable(variable);
-            Environment.SetEnvironmentVariable(variable, "1");
+            var variables = new[]
+            {
+                VendorOptInGate.RealThryLock,
+                VendorOptInGate.DaoIntegration,
+                VendorOptInGate.ProductionOrderDispatch,
+            };
+            var saved = new string[variables.Length];
+            for (var i = 0; i < variables.Length; i++)
+            {
+                saved[i] = Environment.GetEnvironmentVariable(
+                    variables[i]);
+                Environment.SetEnvironmentVariable(variables[i], "1");
+            }
             try
             {
                 var report = VendorRunRecord.BuildReport(
@@ -193,16 +283,22 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     new string[0],
                     new VendorVersionEntry[0]);
 
-                Assert.That(report,
-                    Does.Contain("opt-in gates set: AMUSE_DAO_INTEGRATION"),
-                    "a set gate must be listed by its variable name");
+                foreach (var variable in variables)
+                {
+                    Assert.That(report, Does.Contain(variable),
+                        "a set gate must be listed by its variable name");
+                }
                 Assert.That(report,
                     Does.Contain("gated fixtures excluded: none"),
                     "a set gate excludes no mapped fixture");
             }
             finally
             {
-                Environment.SetEnvironmentVariable(variable, saved);
+                for (var i = 0; i < variables.Length; i++)
+                {
+                    Environment.SetEnvironmentVariable(
+                        variables[i], saved[i]);
+                }
             }
         }
 

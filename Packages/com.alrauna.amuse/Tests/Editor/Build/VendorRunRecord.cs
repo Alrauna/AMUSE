@@ -51,6 +51,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             VendorOptInGate.RealThryLock,
             VendorOptInGate.DaoIntegration,
+            VendorOptInGate.ProductionOrderDispatch,
         };
 
         // The fixtures an unset gate excludes from a run. A later task
@@ -60,6 +61,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             (VendorOptInGate.DaoIntegration,
                 "Alrauna.Amuse.Tests.Editor.Build.DaoMergedConsumptionTests"),
+            (VendorOptInGate.RealThryLock,
+                "Alrauna.Amuse.Tests.Editor.Build."
+                + "RealThryLockCharacterizationTests"),
+            (VendorOptInGate.ProductionOrderDispatch,
+                "Alrauna.Amuse.Tests.Editor.Build."
+                + "VendorProductionOrderTests"),
         };
 
         // The read seams of the capture. Tests inject hand-built texts
