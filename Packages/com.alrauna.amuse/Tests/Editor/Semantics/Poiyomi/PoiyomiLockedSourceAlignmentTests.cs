@@ -13,7 +13,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
     /// no vendor text. The generated text of each case is written by hand so
     /// the expected bytes stay visible in the test.
     /// </summary>
-    public sealed class PoiyomiLockedSourceAlignmentTests
+    internal sealed class PoiyomiLockedSourceAlignmentTests
     {
         private const string LineMismatchDetail =
             "A generated line does not match the expected line.";
@@ -2155,6 +2155,222 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Assert.That(result.Source.Suffix, Is.EqualTo("_S"));
             Assert.That(result.Source.States["_W"], Is.EqualTo(LockedPropertyState.Renamed));
             Assert.That(result.Source.RenamedNames["_W"], Is.EqualTo("_W_S"));
+        }
+
+        // --- Falsifier 1 and Falsifier 9, era twins: the duplicated body tie. ---
+        // Y8 item 2 of the bundled locked original admission design says
+        // the tie rules key on consumption and text, not on era. The pair
+        // duplicates the wrapper body after the wrapper end and carries no
+        // era specific form. Both outcomes reproduce the generated text
+        // from the duplicate. The catch-up probe must walk to the end of
+        // the file and refuse undecided. The no-op guard is
+        // TieWithAKeptGuardAndNoDuplicateAlignsAndRecordsKept in the
+        // all-era tests above. It proves the fixture reaches the tie path.
+        [TestCase(PoiyomiLockEra.Bundled9364)]
+        [TestCase(PoiyomiLockEra.Thry274To2742)]
+        [TestCase(PoiyomiLockEra.Thry2743)]
+        public void TheDuplicatedBodyTieRefusesInEveryEra(PoiyomiLockEra era)
+        {
+            var body = new List<string>();
+            for (var i = 0; i < 61; i++)
+            {
+                body.Add("            o.Albedo = _A;");
+            }
+
+            var program = "            //ifex _W==0\n            //ifex _A==0\n" + Join(body)
+                + "\n            //endex\n            //endex\n" + Join(body);
+            var (original, generated) = ProgramPair(
+                "        _W (\"W\", Float) = 0\n        _A (\"A\", Float) = 0",
+                program,
+                Join(body));
+            var properties = new[]
+            {
+                Prop("_W", ShaderPropertyType.Float),
+                Prop("_A", ShaderPropertyType.Float)
+            };
+            var result = PoiyomiLockedSourceAlignment.AlignForEra(original, generated, properties, era);
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(result.Source, Is.Null);
+            Assert.That(result.RefusalDetail, Is.EqualTo(BlockTieDetail));
+        }
+
+        // --- Falsifier 2, Falsifier 3, and Falsifier 11 record halves, era twins: the zero-and-zero wrapper. ---
+        // Y3 adopts the removed trial of a wrapper whose two trials both
+        // consume zero generated lines. The adoption writes the record
+        // marker, and the later checks read that marker, so the record
+        // shape must hold in every era (Y8 item 2). The pair carries no
+        // era specific form. The no-op guard is
+        // ZeroAndZeroWrapperWithOneSurvivingBodyLineRecordsKept in the
+        // all-era tests above. It proves the fixture reaches the tie path.
+        [TestCase(PoiyomiLockEra.Bundled9364)]
+        [TestCase(PoiyomiLockEra.Thry274To2742)]
+        [TestCase(PoiyomiLockEra.Thry2743)]
+        public void TheZeroAndZeroWrapperResolvesInEveryEra(PoiyomiLockEra era)
+        {
+            var (original, generated) = ProgramPair(
+                "        _W (\"W\", Float) = 0\n        _A (\"A\", Float) = 0",
+                "            //ifex _W==0\n            #ifndef K\n            o.Albedo = _A;\n            #endif"
+                    + "\n            //endex\n            o.Specular = _W;",
+                "            o.Specular = _W;");
+            var properties = new[]
+            {
+                Prop("_W", ShaderPropertyType.Float),
+                Prop("_A", ShaderPropertyType.Float)
+            };
+            var result = PoiyomiLockedSourceAlignment.AlignForEra(original, generated, properties, era);
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Blocks.Count, Is.EqualTo(2));
+            Assert.That(result.Source.Blocks[0].Kind, Is.EqualTo(LockedBlockKind.Ifex));
+            Assert.That(result.Source.Blocks[0].Outcome, Is.EqualTo(LockedBlockOutcome.Removed));
+            Assert.That(result.Source.Blocks[0].ZeroAndZero, Is.True);
+            Assert.That(result.Source.Blocks[0].ConditionOrKeyword, Is.EqualTo("_W==0"));
+            Assert.That(result.Source.Blocks[0].OriginalLine, Is.EqualTo(LineOf(original, "//ifex _W==0")));
+            Assert.That(result.Source.Blocks[1].Kind, Is.EqualTo(LockedBlockKind.Ifndef));
+            Assert.That(result.Source.Blocks[1].Outcome, Is.EqualTo(LockedBlockOutcome.NotEvaluated));
+            Assert.That(result.Source.Blocks[1].ConditionOrKeyword, Is.EqualTo("K"));
+            Assert.That(result.Source.Blocks[1].OriginalLine, Is.EqualTo(LineOf(original, "#ifndef K")));
+        }
+
+        // --- Falsifier 6 and Falsifier 12, era twins: digit-led literals. ---
+        // Y5 widens the collected runs to full maximal runs and drops the
+        // digit-led ones. The rule keys on text, not on era, so the
+        // literals must not block the suffix in any era (Y8 item 2). The
+        // pair carries no era specific form. It bakes one hex literal,
+        // one decimal literal, and one exponent component. The no-op
+        // guards are the guard pairs of DigitLedHexLiteralDoesNotBlockTheSuffix
+        // and BakedDecimalAndExponentLiteralsDoNotBlockTheSuffix in the
+        // all-era tests above. They prove the fixture reaches the suffix
+        // search.
+        [TestCase(PoiyomiLockEra.Bundled9364)]
+        [TestCase(PoiyomiLockEra.Thry274To2742)]
+        [TestCase(PoiyomiLockEra.Thry2743)]
+        public void TheDigitLedLiteralsDoNotBlockTheSuffixInEveryEra(PoiyomiLockEra era)
+        {
+            var (original, generated) = SmallPair(
+                "        _P (\"P\", Float) = 0.5\n        _F (\"F\", Float) = 0"
+                    + "\n        _Q (\"Q\", Float) = 0\n        _V (\"V\", Vector) = (0, 0, 0, 0)",
+                null,
+                "        float _P;\n        float _Q;\n        float4 _V;"
+                    + "\n        #ifdef _F\n        o.Emission = _F;\n        o.Albedo *= 0x7ffffff;\n        #endif"
+                    + "\n        o.Albedo = _P;\n        o.Alpha = _Q;\n        o.Albedo += _V;",
+                ("float _P;", "float _P_S;"),
+                ("o.Albedo = _P;", "o.Albedo = _P_S;"),
+                ("_P (\"P\"", "_P_S (\"P\""),
+                ("o.Alpha = _Q;", "o.Alpha = 0.975;"),
+                ("o.Albedo += _V;", "o.Albedo += float4(0,1E-06,0,0);"));
+            var properties = new[]
+            {
+                Prop("_P", ShaderPropertyType.Float),
+                Prop("_F", ShaderPropertyType.Float),
+                Prop("_Q", ShaderPropertyType.Float),
+                Prop("_V", ShaderPropertyType.Vector)
+            };
+            var result = PoiyomiLockedSourceAlignment.AlignForEra(original, generated, properties, era);
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Suffix, Is.EqualTo("_S"));
+            Assert.That(result.Source.States["_P"], Is.EqualTo(LockedPropertyState.Renamed));
+            Assert.That(result.Source.RenamedNames["_P"], Is.EqualTo("_P_S"));
+            Assert.That(result.Source.States["_F"], Is.EqualTo(LockedPropertyState.Live));
+            Assert.That(result.Source.States["_Q"], Is.EqualTo(LockedPropertyState.Baked));
+            Assert.That(result.Source.BakedLiterals["_Q"], Is.EqualTo("0.975"));
+            Assert.That(result.Source.States["_V"], Is.EqualTo(LockedPropertyState.Baked));
+            Assert.That(result.Source.BakedLiterals["_V"], Is.EqualTo("float4(0,1E-06,0,0)"));
+        }
+
+        // --- Falsifier 4 and Falsifier 5, era twins: the earliest head boundary. ---
+        // Y6 splits only at the earliest start position, and the longest
+        // qualifying declared name decides at that position. The rule
+        // keys on text, not on era, so the suffix must derive in every
+        // era (Y8 item 2). The pair carries no era specific form. The
+        // later declared name _Cutoff is the trap. The no-op guard is
+        // PlainMaterialNameSuffixIsUnchanged in the all-era tests above.
+        // It proves the fixture reaches the suffix search.
+        [TestCase(PoiyomiLockEra.Bundled9364)]
+        [TestCase(PoiyomiLockEra.Thry274To2742)]
+        [TestCase(PoiyomiLockEra.Thry2743)]
+        public void TheEarliestHeadBoundarySuffixDerivesInEveryEra(PoiyomiLockEra era)
+        {
+            var (original, generated) = SmallPair(
+                "        _Color (\"Color\", Color) = (1, 1, 1, 1)\n        _Cutoff (\"Cutoff\", Float) = 0",
+                null,
+                "        float4 _Color;\n        float _Cutoff;\n        o.Albedo = _Color;\n        o.Alpha = _Cutoff;",
+                ("_Color", "_Color_Cutoff_X"));
+            var properties = new[]
+            {
+                Prop("_Color", ShaderPropertyType.Color),
+                Prop("_Cutoff", ShaderPropertyType.Float)
+            };
+            var result = PoiyomiLockedSourceAlignment.AlignForEra(original, generated, properties, era);
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Suffix, Is.EqualTo("_Cutoff_X"));
+            Assert.That(result.Source.States["_Color"], Is.EqualTo(LockedPropertyState.Renamed));
+            Assert.That(result.Source.RenamedNames["_Color"], Is.EqualTo("_Color_Cutoff_X"));
+            Assert.That(result.Source.States["_Cutoff"], Is.EqualTo(LockedPropertyState.Live));
+        }
+
+        // --- Falsifier 7, era twin: the braced display string window. ---
+        // Y7 counts braces outside strings and comments, so one unbalanced
+        // brace inside a display string cannot close the Properties
+        // window. The rule keys on text, not on era (Y8 item 2). The pair
+        // carries no era specific form. The no-op guard is the guard pair
+        // of DisplayStringWithUnbalancedBraceKeepsLaterPropertiesLines in
+        // the all-era tests above. It proves the fixture reaches the
+        // window.
+        [TestCase(PoiyomiLockEra.Bundled9364)]
+        [TestCase(PoiyomiLockEra.Thry274To2742)]
+        [TestCase(PoiyomiLockEra.Thry2743)]
+        public void TheBracedDisplayStringWindowYieldsTheArtifactInEveryEra(PoiyomiLockEra era)
+        {
+            var (original, generated) = SmallPair(
+                "        _Q (\"Q }\", Float) = 0\n        _W (\"W\", Float) = 0",
+                null,
+                null,
+                ("_W (\"W\"", "_W_S (\"W\""));
+            var result = PoiyomiLockedSourceAlignment.AlignForEra(
+                original,
+                generated,
+                new[] { Prop("_Q", ShaderPropertyType.Float), Prop("_W", ShaderPropertyType.Float) },
+                era);
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Suffix, Is.EqualTo("_S"));
+            Assert.That(result.Source.States["_W"], Is.EqualTo(LockedPropertyState.Renamed));
+            Assert.That(result.Source.RenamedNames["_W"], Is.EqualTo("_W_S"));
+        }
+
+        // --- Falsifier 8, era twin: the commented directive extent. ---
+        // Y4 tracks block comments in the extent finder, so a commented
+        // directive inside a comment span never opens a block. The rule
+        // keys on text, not on era (Y8 item 2). The pair carries no era
+        // specific form. The no-op guard is
+        // CommentSpanWithoutADirectiveAlignsTheSame in the all-era tests
+        // above. It proves the fixture reaches the extent finder.
+        [TestCase(PoiyomiLockEra.Bundled9364)]
+        [TestCase(PoiyomiLockEra.Thry274To2742)]
+        [TestCase(PoiyomiLockEra.Thry2743)]
+        public void TheCommentedDirectiveNeverOpensABlockInEveryEra(PoiyomiLockEra era)
+        {
+            var (original, generated) = ProgramPair(
+                "        _A (\"A\", Float) = 0\n        _B (\"B\", Float) = 0\n        _C (\"C\", Float) = 0",
+                "            //ifex _A==0\n            /*\n            //ifex _C==0\n            */"
+                    + "\n            //ifex _B==0\n            o.Albedo = _B;\n            //endex\n            //endex"
+                    + "\n            o.Alpha = 1;",
+                "            o.Alpha = 1;");
+            var properties = new[]
+            {
+                Prop("_A", ShaderPropertyType.Float),
+                Prop("_B", ShaderPropertyType.Float),
+                Prop("_C", ShaderPropertyType.Float)
+            };
+            var result = PoiyomiLockedSourceAlignment.AlignForEra(original, generated, properties, era);
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Blocks.Count, Is.EqualTo(2));
+            Assert.That(result.Source.Blocks[0].Outcome, Is.EqualTo(LockedBlockOutcome.Removed));
+            Assert.That(result.Source.Blocks[0].ConditionOrKeyword, Is.EqualTo("_A==0"));
+            Assert.That(result.Source.Blocks[0].OriginalLine, Is.EqualTo(LineOf(original, "//ifex _A==0")));
+            Assert.That(result.Source.Blocks[1].Outcome, Is.EqualTo(LockedBlockOutcome.NotEvaluated));
+            Assert.That(result.Source.Blocks[1].ConditionOrKeyword, Is.EqualTo("_B==0"));
+            Assert.That(result.Source.Blocks[1].OriginalLine, Is.EqualTo(LineOf(original, "//ifex _B==0")));
+            Assert.That(result.Source.States["_C"], Is.EqualTo(LockedPropertyState.Unused));
         }
     }
 }
