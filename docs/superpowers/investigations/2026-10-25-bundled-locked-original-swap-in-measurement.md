@@ -116,3 +116,30 @@ After the gated runs, the opt-in variable was removed and the suite ran once ung
 1. Stage 4 does not hold on 2026-10-27. The gate of stage 4 needs one aligned, cloned, restored, and consistent real lock per bundled row.
 2. The blocking refusals are aligner coverage gaps on real lock output, one at a Unity built in guard block on both rows and one at a renamed Properties line on the Toon row. Both are fail closed sentences of the existing rules.
 3. Widening the aligner rules to cover these shapes is a production change. It needs its own owner decision, because it moves the false positive boundary that the alignment design pins.
+
+## 11. Y10 time budget statement, 2026-10-27
+
+This section is the stage 5 statement of the admission design (Y10). All claims carry the date 2026-10-27.
+
+### 11.1 Source scan
+
+- Scan paths, relative to the package root: `Editor/Semantics/Poiyomi/`, `Editor/Build/TransientUnlockSwapIn.cs`, and `Editor/Build/TransientUnlockAvailability.cs`.
+- Scan patterns: `Stopwatch`, `DateTime.Now`, `Environment.TickCount`, and `Time.realtimeSinceStartup`.
+- Observed result: zero hits across all three paths. No time source exists in the aligner or the swap-in sources. Therefore no hit can take part in a refusal decision. The scan expectation holds.
+
+### 11.2 Rules and design facts
+
+- No step of the aligner or the swap-in refuses a material on elapsed time or on a step count. The scan of section 11.1 confirms this on 2026-10-27.
+- The only cap is the Y2 end-of-the-original-file evidence cap. It bounds evidence, not time.
+- Owner decision Q3, 2026-10-25: no time limit applies. Slow code stays unacceptable.
+- The memo clears at finish pass entry and at the end of apply. The A8.4 keying and lifetime stay unchanged.
+- Cost model. Each build pays the full align cost again per distinct generated shader. Each dry run whose memo is cold pays the align cost once per distinct generated shader. A second dry run in the same session without a build between pays nothing, because the memo still holds.
+
+### 11.3 Measured costs
+
+- The measured full walk costs and the dry-run cost are not measured as of 2026-10-27. Every gated case of record section 4 refused in the aligner phase. No full successful walk, no clone, no restore, and no dry-run align ran.
+- Lower bound only. The align-to-refusal times of record section 5 are 39766 to 47516 ms for the Toon row and 77067 to 82360 ms for the Two Pass row. These are times to a refusal, not full walk costs. A full successful walk reaches the end of the file and costs more.
+
+### 11.4 Gate
+
+- Stage 5 does not hold on 2026-10-27. The stage 5 gate needs the measured full walk costs and the dry-run cost. Those numbers need stage 4. Stage 4 does not hold on 2026-10-27, per record section 10.
