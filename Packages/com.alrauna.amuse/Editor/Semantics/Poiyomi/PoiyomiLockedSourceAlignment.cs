@@ -412,8 +412,12 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
                 // A name the original already holds as a whole token is no
                 // rename artifact. A substring check would wrongly drop a
-                // suffix form that only rides inside a longer name.
-                if (ContainsToken(state.OriginalText, candidate))
+                // suffix form that only rides inside a longer name. A run
+                // that starts with a digit is a baked literal print. It can
+                // never carry a rename, because every renamed form starts
+                // with a letter or an underscore (Y5 of the bundled locked
+                // original admission design).
+                if (ContainsToken(state.OriginalText, candidate) || char.IsDigit(candidate[0]))
                 {
                     return;
                 }
@@ -2134,6 +2138,31 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     }
                 }
 
+                // Fact 5 prints every component with the parameterless
+                // invariant format, so a small value carries an exponent
+                // tail. Y5 of the bundled locked original admission design
+                // reads that form.
+                if (i < text.Length && (text[i] == 'e' || text[i] == 'E'))
+                {
+                    var exp = i + 1;
+                    if (exp < text.Length && (text[exp] == '+' || text[exp] == '-'))
+                    {
+                        exp++;
+                    }
+
+                    var expDigits = 0;
+                    while (exp < text.Length && char.IsDigit(text[exp]) && expDigits < 3)
+                    {
+                        exp++;
+                        expDigits++;
+                    }
+
+                    if (expDigits > 0)
+                    {
+                        i = exp;
+                    }
+                }
+
                 if (digits == 0)
                 {
                     return false;
@@ -2496,7 +2525,11 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             var i = 0;
             while (i < line.Length)
             {
-                if (char.IsLetter(line[i]) || line[i] == '_')
+                // Y5 of the bundled locked original admission design: a run
+                // starts at any word character, so a collected form is the
+                // full maximal run. A digit-led literal stays one form. The
+                // artifact filter drops it, so it never refuses a pair.
+                if (IsWordChar(line[i]))
                 {
                     var start = i;
                     while (i < line.Length && (char.IsLetterOrDigit(line[i]) || line[i] == '_'))

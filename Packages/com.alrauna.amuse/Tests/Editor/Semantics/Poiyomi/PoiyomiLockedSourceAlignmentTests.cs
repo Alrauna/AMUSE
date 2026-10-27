@@ -946,6 +946,159 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Assert.That(result.RefusalDetail, Is.EqualTo(SuffixAmbiguousDetail));
         }
 
+        // --- Falsifier 6: a run scanner that starts runs only at letters and underscores. ---
+        // A scanner that starts a run only at a letter or an underscore
+        // splits the literal 0x7ffffff into the artifact x7ffffff. The
+        // original never holds that form, so the artifact has no declared
+        // name inside and the empty candidate set refuses before the walk
+        // (Y5 of the bundled locked original admission design). The guard
+        // pair without the literal aligns before and after the fix.
+
+        [Test]
+        public void DigitLedHexLiteralDoesNotBlockTheSuffix()
+        {
+            var guardProperties = "        _P (\"P\", Float) = 0.5\n        _F (\"F\", Float) = 0";
+            var (guardOriginal, guardGenerated) = SmallPair(
+                guardProperties,
+                null,
+                "        float _P;\n        #ifdef _F\n        o.Emission = _F;\n        #endif"
+                    + "\n        o.Albedo = _P;",
+                ("float _P;", "float _P_S;"),
+                ("o.Albedo = _P;", "o.Albedo = _P_S;"),
+                ("_P (\"P\"", "_P_S (\"P\""));
+            var properties = new[]
+            {
+                Prop("_P", ShaderPropertyType.Float),
+                Prop("_F", ShaderPropertyType.Float)
+            };
+            var guard = Align(guardOriginal, guardGenerated, properties);
+            Assert.That(guard.Succeeded, Is.True, guard.RefusalDetail ?? "refused");
+            Assert.That(guard.Source.Suffix, Is.EqualTo("_S"));
+            Assert.That(guard.Source.States["_F"], Is.EqualTo(LockedPropertyState.Live));
+
+            var (original, generated) = SmallPair(
+                guardProperties,
+                null,
+                "        float _P;\n        #ifdef _F\n        o.Emission = _F;"
+                    + "\n        o.Albedo *= 0x7ffffff;\n        #endif"
+                    + "\n        o.Albedo = _P;",
+                ("float _P;", "float _P_S;"),
+                ("o.Albedo = _P;", "o.Albedo = _P_S;"),
+                ("_P (\"P\"", "_P_S (\"P\""));
+            var result = Align(original, generated, properties);
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Suffix, Is.EqualTo("_S"));
+            Assert.That(result.Source.States["_P"], Is.EqualTo(LockedPropertyState.Renamed));
+            Assert.That(result.Source.RenamedNames["_P"], Is.EqualTo("_P_S"));
+            Assert.That(result.Source.States["_F"], Is.EqualTo(LockedPropertyState.Live));
+        }
+
+        // --- Falsifier 12: a run drop rule that relies on whole-token presence only. ---
+        // After the run start widening, the baked literals 0.975 and
+        // 1E-06 yield the digit-led runs 0, 975, 1E, and 06. The original
+        // holds only 0 as a whole token. A drop rule without the
+        // digit-led check keeps 975, 1E, and 06 as artifacts and refuses
+        // on the empty intersection before the walk (Y5 of the bundled
+        // locked original admission design). The float4 form is the fact
+        // 5 print of a small vector component. The guard pairs without
+        // the baked values align before and after the fix.
+
+        [Test]
+        public void BakedDecimalAndExponentLiteralsDoNotBlockTheSuffix()
+        {
+            var decimalProperties = "        _P (\"P\", Float) = 0.5\n        _Q (\"Q\", Float) = 0";
+            var decimalProgram = "        float _P;\n        float _Q;\n        o.Albedo = _P;\n        o.Alpha = _Q;";
+            var decimalGuardEdits = new[]
+            {
+                ("float _P;", "float _P_S;"),
+                ("o.Albedo = _P;", "o.Albedo = _P_S;"),
+                ("_P (\"P\"", "_P_S (\"P\"")
+            };
+            var decimalEdits = new[]
+            {
+                ("float _P;", "float _P_S;"),
+                ("o.Albedo = _P;", "o.Albedo = _P_S;"),
+                ("_P (\"P\"", "_P_S (\"P\""),
+                ("o.Alpha = _Q;", "o.Alpha = 0.975;")
+            };
+            var decimalNames = new[]
+            {
+                Prop("_P", ShaderPropertyType.Float),
+                Prop("_Q", ShaderPropertyType.Float)
+            };
+            var (guardOriginal, guardGenerated) = SmallPair(decimalProperties, null, decimalProgram, decimalGuardEdits);
+            var guard = Align(guardOriginal, guardGenerated, decimalNames);
+            Assert.That(guard.Succeeded, Is.True, guard.RefusalDetail ?? "refused");
+            Assert.That(guard.Source.Suffix, Is.EqualTo("_S"));
+            Assert.That(guard.Source.States["_Q"], Is.EqualTo(LockedPropertyState.Live));
+
+            var (decimalOriginal, decimalGenerated) = SmallPair(decimalProperties, null, decimalProgram, decimalEdits);
+            var decimalResult = Align(decimalOriginal, decimalGenerated, decimalNames);
+            Assert.That(decimalResult.Succeeded, Is.True, decimalResult.RefusalDetail ?? "refused");
+            Assert.That(decimalResult.Source.Suffix, Is.EqualTo("_S"));
+            Assert.That(decimalResult.Source.States["_P"], Is.EqualTo(LockedPropertyState.Renamed));
+            Assert.That(decimalResult.Source.States["_Q"], Is.EqualTo(LockedPropertyState.Baked));
+            Assert.That(decimalResult.Source.BakedLiterals["_Q"], Is.EqualTo("0.975"));
+
+            var vectorProperties = "        _P (\"P\", Float) = 0.5\n        _V (\"V\", Vector) = (0, 0, 0, 0)";
+            var vectorProgram = "        float _P;\n        float4 _V;\n        o.Albedo = _P;\n        o.Albedo += _V;";
+            var vectorGuardEdits = new[]
+            {
+                ("float _P;", "float _P_S;"),
+                ("o.Albedo = _P;", "o.Albedo = _P_S;"),
+                ("_P (\"P\"", "_P_S (\"P\"")
+            };
+            var vectorEdits = new[]
+            {
+                ("float _P;", "float _P_S;"),
+                ("o.Albedo = _P;", "o.Albedo = _P_S;"),
+                ("_P (\"P\"", "_P_S (\"P\""),
+                ("o.Albedo += _V;", "o.Albedo += float4(0,1E-06,0,0);")
+            };
+            var vectorNames = new[]
+            {
+                Prop("_P", ShaderPropertyType.Float),
+                Prop("_V", ShaderPropertyType.Vector)
+            };
+            var (vectorGuardOriginal, vectorGuardGenerated) = SmallPair(vectorProperties, null, vectorProgram, vectorGuardEdits);
+            var vectorGuard = Align(vectorGuardOriginal, vectorGuardGenerated, vectorNames);
+            Assert.That(vectorGuard.Succeeded, Is.True, vectorGuard.RefusalDetail ?? "refused");
+            Assert.That(vectorGuard.Source.Suffix, Is.EqualTo("_S"));
+            Assert.That(vectorGuard.Source.States["_V"], Is.EqualTo(LockedPropertyState.Live));
+
+            var (vectorOriginal, vectorGenerated) = SmallPair(vectorProperties, null, vectorProgram, vectorEdits);
+            var vectorResult = Align(vectorOriginal, vectorGenerated, vectorNames);
+            Assert.That(vectorResult.Succeeded, Is.True, vectorResult.RefusalDetail ?? "refused");
+            Assert.That(vectorResult.Source.Suffix, Is.EqualTo("_S"));
+            Assert.That(vectorResult.Source.States["_P"], Is.EqualTo(LockedPropertyState.Renamed));
+            Assert.That(vectorResult.Source.States["_V"], Is.EqualTo(LockedPropertyState.Baked));
+            Assert.That(vectorResult.Source.BakedLiterals["_V"], Is.EqualTo("float4(0,1E-06,0,0)"));
+        }
+
+        // A letter-led artifact the original never holds and that carries
+        // no declared name still refuses. Y5 drops only whole-token runs
+        // and digit-led runs, so an unknown identifier stays fail closed
+        // (Y5 of the bundled locked original admission design). This pins
+        // existing behavior and passes on its first possible run.
+
+        [Test]
+        public void NonDigitArtifactWithNoDeclaredNameStillRefuses()
+        {
+            var (original, generated) = SmallPair(
+                "        _P (\"P\", Float) = 0.5",
+                null,
+                "        float _P;\n        o.Albedo = _P;\n        o.Specular = 0.5;",
+                ("o.Specular = 0.5;", "o.Specular = Zed;"),
+                ("float _P;", "float _P_S;"),
+                ("o.Albedo = _P;", "o.Albedo = _P_S;"),
+                ("_P (\"P\"", "_P_S (\"P\""));
+            var properties = new[] { Prop("_P", ShaderPropertyType.Float) };
+            var result = Align(original, generated, properties);
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(result.Source, Is.Null);
+            Assert.That(result.RefusalDetail, Is.EqualTo(SuffixAmbiguousDetail));
+        }
+
         [Test]
         public void KeptIfexBlockIsRecordedKept()
         {
