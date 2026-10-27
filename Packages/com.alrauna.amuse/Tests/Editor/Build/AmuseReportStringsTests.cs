@@ -533,6 +533,46 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(hint, Does.Not.Contain(
                 "Check that the texture is a real imported asset"));
         }
+
+        [Test]
+        public void RestoreMismatchStringsDescribeAVerifiedOriginalThatFailedToAlign()
+        {
+            var description = AmuseReportStrings.Get(
+                "amuse.slotSeparation.TransientUnlockRestoreMismatch" +
+                ":description");
+            var reasonIndex =
+                description.IndexOf("{1}", StringComparison.Ordinal);
+
+            Assert.That(reasonIndex, Is.GreaterThan(0),
+                "the description formats the aligner reason sentence");
+
+            var beforeReason = description.Substring(0, reasonIndex);
+            Assert.That(
+                beforeReason,
+                Does.Contain(
+                    "The material is locked and its original shader is " +
+                    "verified."),
+                "the description states the verified original before " +
+                "the reason");
+
+            Assert.That(
+                beforeReason,
+                Does.Contain(
+                    "The locked shader text did not match what AMUSE " +
+                    "can reconstruct."),
+                "the description names the reconstruction miss before " +
+                "the reason");
+
+            var hint = AmuseReportStrings.Get(
+                "amuse.slotSeparation.TransientUnlockRestoreMismatch:hint");
+
+            Assert.That(
+                hint,
+                Does.EndWith(
+                    "The original shader is verified, so the miss is " +
+                    "in the locked shader text."),
+                "the hint points the reader at the locked shader text");
+        }
     }
 
     public sealed class AmuseBuildStatusStoreTests

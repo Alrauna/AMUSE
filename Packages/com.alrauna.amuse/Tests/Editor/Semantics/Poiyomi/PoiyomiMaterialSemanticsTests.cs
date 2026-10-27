@@ -525,7 +525,15 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 rows[2].NormalizedSourceHash,
                 Is.EqualTo(
                     "c812d4d39ce3352b6198fdfcb5de87eb07678739a4bce7e4afd18cea28be19f4"));
-            Assert.That(rows[2].LockedOriginalAdmitted, Is.False);
+            Assert.That(
+                rows[2].LockedOriginalAdmitted,
+                Is.False,
+                "the bundled rows stay refused until stage 7 of the " +
+                "2026-10-25 bundled locked original admission design, " +
+                "whose stages in order are block tie fix, suffix fix, " +
+                "release row safety, real lock measurement, time budget " +
+                "statement, window and report tests, flag change. An " +
+                "early flag flip fails these pins by name");
 
             Assert.That(
                 rows[3].ShaderName,
@@ -538,7 +546,15 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 rows[3].NormalizedSourceHash,
                 Is.EqualTo(
                     "4fd1d8c1e35bd4e81a21c1dd6545ceb022542b67aa9996cb8341da7f3b64b65f"));
-            Assert.That(rows[3].LockedOriginalAdmitted, Is.False);
+            Assert.That(
+                rows[3].LockedOriginalAdmitted,
+                Is.False,
+                "the bundled rows stay refused until stage 7 of the " +
+                "2026-10-25 bundled locked original admission design, " +
+                "whose stages in order are block tie fix, suffix fix, " +
+                "release row safety, real lock measurement, time budget " +
+                "statement, window and report tests, flag change. An " +
+                "early flag flip fails these pins by name");
         }
 
         [Test]
@@ -648,7 +664,15 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 out var row);
 
             Assert.That(matched, Is.True);
-            Assert.That(row.LockedOriginalAdmitted, Is.False);
+            Assert.That(
+                row.LockedOriginalAdmitted,
+                Is.False,
+                "the bundled rows stay refused until stage 7 of the " +
+                "2026-10-25 bundled locked original admission design, " +
+                "whose stages in order are block tie fix, suffix fix, " +
+                "release row safety, real lock measurement, time budget " +
+                "statement, window and report tests, flag change. An " +
+                "early flag flip fails these pins by name");
         }
 
         [Test]

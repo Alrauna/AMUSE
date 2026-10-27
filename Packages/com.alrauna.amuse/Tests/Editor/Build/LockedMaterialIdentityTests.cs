@@ -1,5 +1,6 @@
 using System.Linq;
 using NUnit.Framework;
+using UnityEditor;
 using UnityEngine;
 using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.Host;
@@ -110,8 +111,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         private const string LockedStandInShaderName =
             "Hidden/Locked/Alrauna/AmuseTests/LockedStandIn";
 
+        private const string TempFolder = "Assets/AmuseTests_LockedIdentity";
+
+        private const string BundledRowLockedStandInShaderName =
+            "Hidden/Locked/Alrauna/AmuseTests/BundledRowPrecheckStandIn";
+
         private readonly TestTransientScope _scope =
-            new TestTransientScope();
+            new TestTransientScope(TempFolder);
 
         [TearDown]
         public void DestroyOwnedObjects()
@@ -213,8 +219,93 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 LockedMaterialIdentity.AttestsLockedOriginal(
                     row.ShaderName, EvidenceOf(row)),
                 Is.False,
-                "a bundled row records no locked original admission, so " +
-                "it refuses as a locked original");
+                "the bundled rows stay refused until stage 7 of the " +
+                "2026-10-25 bundled locked original admission design, " +
+                "whose stages in order are block tie fix, suffix fix, " +
+                "release row safety, real lock measurement, time budget " +
+                "statement, window and report tests, flag change. An " +
+                "early flag flip fails these pins by name");
+        }
+
+        /// <summary>
+        /// Y12 of the 2026-10-25 bundled locked original admission
+        /// design, stage 6. The same bundled row evidence as a live
+        /// locked material keeps the named pre-check refusal while the
+        /// flag is off. This pin records the pre-flip negative as
+        /// characterization.
+        /// </summary>
+        [Test]
+        public void BundledRowLockedMaterialPrecheckKeepsTheNamedRefusalWhileTheFlagIsOff()
+        {
+            var material = NewBundledRowLockedMaterial();
+
+            Assert.That(
+                LockedMaterialIdentity.PreCheckRefusal(material),
+                Is.EqualTo(
+                    RendererAnalysisRefusal
+                        .LockedPoiyomiOriginalShaderUnattested),
+                "the bundled rows stay refused until stage 7 of the " +
+                "2026-10-25 bundled locked original admission design, " +
+                "whose stages in order are block tie fix, suffix fix, " +
+                "release row safety, real lock measurement, time budget " +
+                "statement, window and report tests, flag change. An " +
+                "early flag flip fails these pins by name");
+        }
+
+        /// <summary>
+        /// The bundled row locked fixture material. The identity tags
+        /// carry the bundled row's name and GUID, so the recorded
+        /// original shader resolves by the pinned row GUID to the
+        /// installed bundled file. The material's own shader needs the
+        /// locked name prefix, and no in-memory shader can carry one,
+        /// so the fixture writes one scratch stand-in shader asset. The
+        /// scope deletes the folder with the asset and its meta after
+        /// the test.
+        /// </summary>
+        private Material NewBundledRowLockedMaterial()
+        {
+            var row = BundledMainRow();
+            var assetPath = AssetDatabase.GUIDToAssetPath(row.AssetGuid);
+            var bundledShader = string.IsNullOrEmpty(assetPath)
+                ? null
+                : AssetDatabase.LoadAssetAtPath<Shader>(assetPath);
+            if (bundledShader == null)
+            {
+                Assert.Ignore(
+                    "the bundled 9.3 shader asset does not resolve from " +
+                    "its pinned row GUID. Install the Poiyomi package to " +
+                    "run this pin");
+            }
+
+            var lockedShader =
+                Shader.Find(BundledRowLockedStandInShaderName);
+            if (lockedShader == null)
+            {
+                _scope.EnsureTempFolder();
+                lockedShader = TestShaderWriter.WriteStandInShader(
+                    TempFolder + "/bundled_row_precheck_stand_in.shader",
+                    BundledRowLockedStandInShaderName,
+                    "_ShaderOptimizerEnabled " +
+                    "(\"Shader Optimizer Enabled\", Float) = 0");
+            }
+
+            var material = _scope.Track(new Material(lockedShader));
+            material.SetFloat(
+                LockedMaterialIdentity.OptimizerEnabledPropertyName, 1f);
+            material.SetOverrideTag(
+                LockedMaterialIdentity.OriginalShaderTagName,
+                row.ShaderName);
+            material.SetOverrideTag(
+                LockedMaterialIdentity.OriginalShaderGuidTagName,
+                row.AssetGuid);
+
+            Assert.That(
+                LockedMaterialIdentity.RecognizedLockedIdentity(material),
+                Is.True,
+                "the fixture must carry the recognized locked identity, " +
+                "or the pin proves nothing");
+
+            return material;
         }
 
         // --- Falsifier 8: a precondition that ignores the recorded original name ---

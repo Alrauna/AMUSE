@@ -722,11 +722,15 @@ namespace Alrauna.Amuse.Editor.Build
             ["amuse.slotSeparation.TransientUnlockRestoreMismatch:description"] =
                 "Material slot {0} of renderer '{2}' holds a locked " +
                 "material. AMUSE unlocked a copy of it for the build, but " +
-                "the copy did not pass verification. Reason: {1}. The " +
-                "slot keeps its original locked material.",
+                "the copy did not pass verification. The material is " +
+                "locked and its original shader is verified. The locked " +
+                "shader text did not match what AMUSE can reconstruct. " +
+                "Reason: {1}. The slot keeps its original locked material.",
             ["amuse.slotSeparation.TransientUnlockRestoreMismatch:hint"] =
                 "Check that the lock tool and the original shader are the " +
-                "installed versions the lock recorded.",
+                "installed versions the lock recorded. The original " +
+                "shader is verified, so the miss is in the locked shader " +
+                "text.",
             ["amuse.slotSeparation.TransientUnlockCloneRetained"] =
                 "AMUSE kept an unlocked copy for material slot {0} of " +
                 "renderer '{2}'.",
