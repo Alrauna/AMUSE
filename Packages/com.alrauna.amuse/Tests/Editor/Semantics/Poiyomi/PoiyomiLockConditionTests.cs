@@ -182,6 +182,32 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         }
 
         /// <summary>
+        /// Strict mode reads the Animated tag of one bare identifier. An
+        /// operand that is not one bare identifier sits outside the
+        /// accepted forms, so strict mode answers Unsupported. Removal
+        /// evidence mode never reads the operand and keeps the clause
+        /// true (A6.2). Characterization. This test passed on its first
+        /// run on 2026-10-27. It pins the existing answers.
+        /// </summary>
+        [Test]
+        public void StrictModeRefusesAMalformedIsNotAnimatedOperand()
+        {
+            var lenient = Evaluate(
+                "isNotAnimated(0)",
+                new SyntheticValues(),
+                PoiyomiLockConditionMode.RemovalEvidence);
+            Assert.That(lenient, Is.EqualTo(PoiyomiLockConditionOutcome.True),
+                "Removal evidence keeps the clause true without the tag.");
+
+            var strict = Evaluate(
+                "isNotAnimated(0)",
+                new SyntheticValues(),
+                PoiyomiLockConditionMode.Strict);
+            Assert.That(strict, Is.EqualTo(PoiyomiLockConditionOutcome.Unsupported),
+                "The operand is no bare identifier, so strict mode refuses it.");
+        }
+
+        /// <summary>
         /// RenderQueue reads the render queue of the values surface. The
         /// same text flips when the queue crosses 3000. Falsifies an
         /// evaluator that treats RenderQueue as an unknown property of 0.

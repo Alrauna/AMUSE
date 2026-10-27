@@ -42,29 +42,44 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         private const string OptimizerMissingDetail =
             "A program block misses the optimizer define.";
 
-        // --- Falsifier 1: an implementation that folds inner whitespace ---
+        private const string OutsideSetDetail =
+            "The original text holds a construct outside the accepted set.";
+
+        private const string MissingPassDetail =
+            "The original text holds no pass.";
+
+        private const string EnumWithoutBakeDetail =
+            "A render state enum text names a property that is not baked.";
+
+        private const string BlockAlignmentDetail =
+            "Neither outcome of a block matches the generated text.";
+
+        private const string BlockUnclosedDetail =
+            "A block in the original text never closes.";
+
+        // --- Falsifier locked-source-alignment 1: an implementation that folds inner whitespace ---
         // An implementation that trims or folds runs of spaces inside a line
         // before the compare aligns the mutated pair and fails the refusal
         // assertion (A3.2, Review Focus 1). The guard before the mutation
         // proves the fixture reaches the line matcher.
 
-        // --- Falsifier 2: an implementation that keeps the last literal ---
+        // --- Falsifier locked-source-alignment 2: an implementation that keeps the last literal ---
         // An implementation that overwrites the recorded literal on every
         // use aligns the two-literal pair and fails the refusal assertion.
         // The float bake test proves the hole path records one literal.
 
-        // --- Falsifier 3: an implementation that decides a state per use ---
+        // --- Falsifier locked-source-alignment 3: an implementation that decides a state per use ---
         // An implementation that lets one use stay live while another use
         // bakes aligns the mixed pair and fails the refusal assertion. The
         // float bake test proves the hole path reaches the state decision.
 
-        // --- Falsifier 4: an implementation that takes the first split ---
+        // --- Falsifier locked-source-alignment 4: an implementation that takes the first split ---
         // An implementation that reads the suffix from the first candidate
         // of the first artifact misses the disagreement between artifacts
         // and aligns the ambiguous pair. The underscore intersection test
         // proves the intersection path finds one suffix.
 
-        // --- Falsifier 5: an implementation that reuses one rename regex ---
+        // --- Falsifier locked-source-alignment 5: an implementation that reuses one rename regex ---
         // An implementation that runs the 2.74 left boundary rule in the
         // bundled era refuses the bundled fixture, because the collateral
         // line then never matches. The bundled success assertion is the
@@ -424,6 +439,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 if (left.Blocks[i].Kind != right.Blocks[i].Kind
                     || left.Blocks[i].Outcome != right.Blocks[i].Outcome
                     || left.Blocks[i].OriginalLine != right.Blocks[i].OriginalLine
+                    || left.Blocks[i].ZeroAndZero != right.Blocks[i].ZeroAndZero
                     || !string.Equals(
                         left.Blocks[i].ConditionOrKeyword,
                         right.Blocks[i].ConditionOrKeyword,
@@ -572,7 +588,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Assert.That(result.Source.SurvivingText, Does.Contain("float _P;"));
         }
 
-        // --- Falsifier 23: storage class before the type keyword ---
+        // --- Falsifier locked-source-alignment 23: storage class before the type keyword ---
         // An implementation that reads only the first token misses the
         // declaration on a storage class line. The aligner then opens a
         // hole for the declared name, the hole records an identifier use
@@ -901,6 +917,137 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Assert.That(result.Succeeded, Is.False);
             Assert.That(result.Source, Is.Null);
             Assert.That(result.RefusalDetail, Is.EqualTo(TwoLiteralsDetail));
+        }
+
+        // Characterization pins for five aligner refusal sentences. Each
+        // test holds one near pair that aligns as its no-op guard and one
+        // pair that refuses with the pinned sentence. They pin existing
+        // behavior. The spec stage 1 test list asks for one refusal test
+        // per retained sentence. The guard pairs passed on their first
+        // run on 2026-10-27.
+
+        // The fixture of this pin needed two corrections before it
+        // reached the sentence. The first shape refused in the suffix
+        // search, the second shape let the removed trial adopt the walk.
+        // Both refusals were existing behavior too. The final shape
+        // reached the block sentence and passed on 2026-10-27.
+        [Test]
+        public void ABlockWhoseBothTrialsDieRefusesWithTheBlockAlignmentSentence()
+        {
+            var (guardOriginal, guardGenerated) = ProgramPair(
+                "        _A (\"A\", Float) = 0",
+                "            //ifex _A==0\n            o.Albedo = _A;\n            //endex\n            o.Specular = _A;",
+                "            o.Albedo = _A;\n            o.Specular = _A;");
+            var guard = Align(guardOriginal, guardGenerated, new[] { Prop("_A", ShaderPropertyType.Float) });
+            Assert.That(guard.Succeeded, Is.True, guard.RefusalDetail ?? "refused");
+
+            // The generated text after the block kills both outcomes. The
+            // kept trial needs the specular line as the second generated
+            // line. The removed trial needs it as the first one. The
+            // fixture repeats the albedo line, so neither trial finds its
+            // line and the lookahead kills both. Both generated words
+            // also stand in the original, so the suffix search stays out
+            // of the way.
+            var (original, generated) = ProgramPair(
+                "        _A (\"A\", Float) = 0",
+                "            //ifex _A==0\n            o.Albedo = _A;\n            //endex\n            o.Specular = _A;",
+                "            o.Albedo = _A;\n            o.Albedo = _A;");
+            var result = Align(original, generated, new[] { Prop("_A", ShaderPropertyType.Float) });
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(result.Source, Is.Null);
+            Assert.That(result.RefusalDetail, Is.EqualTo(BlockAlignmentDetail));
+            Assert.That(result.OriginalLine, Is.EqualTo(LineOf(original, "//ifex _A==0")));
+        }
+
+        [Test]
+        public void AnUnclosedIfexBlockRefusesWithTheBlockUnclosedSentence()
+        {
+            var (guardOriginal, guardGenerated) = ProgramPair(
+                "        _A (\"A\", Float) = 0",
+                "            //ifex _A==0\n            o.Albedo = _A;\n            //endex",
+                "            o.Albedo = _A;");
+            var guard = Align(guardOriginal, guardGenerated, new[] { Prop("_A", ShaderPropertyType.Float) });
+            Assert.That(guard.Succeeded, Is.True, guard.RefusalDetail ?? "refused");
+
+            var (original, generated) = ProgramPair(
+                "        _A (\"A\", Float) = 0",
+                "            //ifex _A==0\n            o.Albedo = _A;",
+                "            o.Albedo = _A;");
+            var result = Align(original, generated, new[] { Prop("_A", ShaderPropertyType.Float) });
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(result.Source, Is.Null);
+            Assert.That(result.RefusalDetail, Is.EqualTo(BlockUnclosedDetail));
+            Assert.That(result.OriginalLine, Is.EqualTo(LineOf(original, "//ifex _A==0")));
+        }
+
+        [Test]
+        public void AnOriginalWithoutAPassRefusesWithTheMissingPassSentence()
+        {
+            var (guardOriginal, guardGenerated) = ProgramPair(
+                "        _A (\"A\", Float) = 0",
+                "            o.Albedo = _A;",
+                "            o.Albedo = _A;");
+            var guard = Align(guardOriginal, guardGenerated, new[] { Prop("_A", ShaderPropertyType.Float) });
+            Assert.That(guard.Succeeded, Is.True, guard.RefusalDetail ?? "refused");
+
+            var (original, generated) = ProgramPair(
+                "        _A (\"A\", Float) = 0",
+                "            o.Albedo = _A;",
+                "            o.Albedo = _A;");
+            original = original.Replace("        Pass\n", string.Empty);
+            generated = generated.Replace("        Pass\n", string.Empty);
+            var result = Align(original, generated, new[] { Prop("_A", ShaderPropertyType.Float) });
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(result.Source, Is.Null);
+            Assert.That(result.RefusalDetail, Is.EqualTo(MissingPassDetail));
+        }
+
+        [Test]
+        public void AGrabPassLineRefusesWithTheOutsideSetSentence()
+        {
+            var (guardOriginal, guardGenerated) = SmallPair(
+                "        _A (\"A\", Float) = 0",
+                null,
+                "            o.Albedo = _A;");
+            var guard = Align(guardOriginal, guardGenerated, new[] { Prop("_A", ShaderPropertyType.Float) });
+            Assert.That(guard.Succeeded, Is.True, guard.RefusalDetail ?? "refused");
+
+            var (original, generated) = SmallPair(
+                "        _A (\"A\", Float) = 0",
+                "        GrabPass\n        {\n        }",
+                "            o.Albedo = _A;");
+            var result = Align(original, generated, new[] { Prop("_A", ShaderPropertyType.Float) });
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(result.Source, Is.Null);
+            Assert.That(result.RefusalDetail, Is.EqualTo(OutsideSetDetail));
+            Assert.That(result.OriginalLine, Is.EqualTo(LineOf(original, "GrabPass")));
+        }
+
+        [Test]
+        public void EnumTextForAPropertyWithASurvivingUseRefusesWithTheEnumSentence()
+        {
+            // The guard holds the same enum text for a property with no
+            // surviving use. The enum text alone is fine (A5.6), so the
+            // guard aligns and proves the fixture reaches the enum check.
+            var (guardOriginal, guardGenerated) = SmallPair(
+                "        _C (\"C\", Float) = 0",
+                "        Cull [_C]",
+                "        float _C;",
+                ("Cull [_C]", "Cull Front"));
+            var guard = Align(guardOriginal, guardGenerated, new[] { Prop("_C", ShaderPropertyType.Float) });
+            Assert.That(guard.Succeeded, Is.True, guard.RefusalDetail ?? "refused");
+
+            // The live program use stays unbaked. The enum text then
+            // names a property that is not baked, and the walk refuses.
+            var (original, generated) = SmallPair(
+                "        _C (\"C\", Float) = 0",
+                "        Cull [_C]",
+                "        float _C;\n        o.Emission = _C;",
+                ("Cull [_C]", "Cull Front"));
+            var result = Align(original, generated, new[] { Prop("_C", ShaderPropertyType.Float) });
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(result.Source, Is.Null);
+            Assert.That(result.RefusalDetail, Is.EqualTo(EnumWithoutBakeDetail));
         }
 
         [Test]
@@ -1268,7 +1415,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Assert.That(result.Source.States["_A"], Is.EqualTo(LockedPropertyState.Live));
         }
 
-        // --- Falsifier 8: an implementation that never counts the window ---
+        // --- Falsifier locked-source-alignment 8: an implementation that never counts the window ---
         // An implementation that walks each candidate to the end of the
         // walk range in one step kills both hypotheses in one round and
         // refuses with the wrong sentence. The bounded window adopts the
@@ -1309,7 +1456,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Assert.That(result.OriginalLine, Is.EqualTo(LineOf(guardOriginal, "o.Specular = _A;")));
         }
 
-        // --- Falsifier 9: an implementation that treats an undecided nested block as a dead hypothesis ---
+        // --- Falsifier locked-source-alignment 9: an implementation that treats an undecided nested block as a dead hypothesis ---
         // An implementation that swallows the tie refusal of a nested
         // block records Removed for the outer block on text that grounds
         // no outcome. The tie must refuse the whole alignment. The guard
@@ -1815,7 +1962,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Assert.That(duplicated.Source, Is.Null);
         }
 
-        // --- Falsifier 7: Properties-region rename ---
+        // --- Falsifier locked-source-alignment 7: Properties-region rename ---
         // An implementation that reads the suffix only from program
         // identifiers and brackets misses the renamed Properties name and
         // refuses the fixture. The renamed Properties line and the renamed
@@ -2150,6 +2297,71 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             var result = Align(
                 original,
                 generated,
+                new[] { Prop("_Q", ShaderPropertyType.Float), Prop("_W", ShaderPropertyType.Float) });
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Suffix, Is.EqualTo("_S"));
+            Assert.That(result.Source.States["_W"], Is.EqualTo(LockedPropertyState.Renamed));
+            Assert.That(result.Source.RenamedNames["_W"], Is.EqualTo("_W_S"));
+        }
+
+        // Characterization for the Y7 block comment reading. The brace
+        // counter resumes after the closer on the same line, so a }
+        // after */ counts. The window then closes at the closer line and
+        // the gamma line after it leaves the window. The guard keeps the
+        // closer line clean and proves the fixture reaches the window.
+        // This test passed on its first run on 2026-10-27.
+        [Test]
+        public void BraceAfterTheBlockCommentCloserClosesThePropertiesWindow()
+        {
+            var guarded = BaseOriginal().Replace(
+                "        _P (\"P\", Float) = 0.5",
+                "        /*\n        a comment line\n        */\n        [Gamma] _H (\"H\", Float) = 0.5");
+            Assert.That(
+                PoiyomiLockedSourceAlignment.GammaPropertyNames(guarded),
+                Is.EqualTo(new[] { "_H" }));
+
+            var original = BaseOriginal().Replace(
+                "        _P (\"P\", Float) = 0.5",
+                "        /*\n        a comment line\n        */ }\n        [Gamma] _H (\"H\", Float) = 0.5");
+            Assert.That(PoiyomiLockedSourceAlignment.GammaPropertyNames(original), Is.Empty);
+        }
+
+        // Characterization for the Y7 commented block reading. A
+        // commented out Properties block before the real one contributes
+        // no window lines. The real block keeps the window, so its
+        // renamed lines still yield the artifact. The vendor deletes the
+        // block comment, so the generated text holds only the real
+        // block. This test passed on its first run on 2026-10-27.
+        [Test]
+        public void ACommentedOutPropertiesBlockBeforeTheRealOneYieldsNoWindowLines()
+        {
+            var (plainOriginal, plainGenerated) = SmallPair(
+                "        _Q (\"Q\", Float) = 0\n        _W (\"W\", Float) = 0",
+                null,
+                null,
+                ("_W (\"W\"", "_W_S (\"W\""));
+            var guard = Align(
+                plainOriginal,
+                plainGenerated,
+                new[] { Prop("_Q", ShaderPropertyType.Float), Prop("_W", ShaderPropertyType.Float) });
+            Assert.That(guard.Succeeded, Is.True, guard.RefusalDetail ?? "refused");
+
+            var commentedHead = Join(new[]
+            {
+                "/*",
+                "Shader \"Custom/Old\"",
+                "{",
+                "    Properties",
+                "    {",
+                "        _Old (\"Old\", Float) = 0",
+                "    }",
+                "}",
+                "*/"
+            });
+            var original = commentedHead + "\n" + plainOriginal;
+            var result = Align(
+                original,
+                plainGenerated,
                 new[] { Prop("_Q", ShaderPropertyType.Float), Prop("_W", ShaderPropertyType.Float) });
             Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
             Assert.That(result.Source.Suffix, Is.EqualTo("_S"));

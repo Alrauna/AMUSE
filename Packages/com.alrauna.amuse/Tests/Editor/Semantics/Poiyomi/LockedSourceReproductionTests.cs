@@ -464,7 +464,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             AssertConsistent(source, properties, locked, plan, "S_Tex", "S_Tex_S_ST");
         }
 
-        // --- Falsifier 8: baked value edited after lock ---
+        // --- Falsifier locked-source-alignment 8: baked value edited after lock ---
         // An implementation that copies the saved value instead of the
         // parsed literal writes one and fails the plan value assertion.
         // The guard runs the same fixture with the saved value zero. Both
@@ -672,7 +672,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 "The equal live value passes and the literal wins.");
         }
 
-        // --- Falsifier 9: enum-only property ---
+        // --- Falsifier locked-source-alignment 9: enum-only property ---
         // An implementation that writes no value for an unused property
         // misses the enum text and fails the plan value assertion. The
         // no-op guards prove the fixture reaches the path. The state is
@@ -821,7 +821,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 "The missing texture write refuses the check.");
         }
 
-        // --- Falsifier 10: shared generated shader ---
+        // --- Falsifier locked-source-alignment 10: shared generated shader ---
         // An implementation that reads the keyword list from the
         // OriginalKeywords tag writes an empty list and fails. The tag of
         // the fixture is empty. The no-op guard is the non-empty define
@@ -869,7 +869,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             AssertConsistent(source, properties, locked, plan);
         }
 
-        // --- Falsifier 22: keyword define consumed as the PROP define ---
+        // --- Falsifier locked-source-alignment 22: keyword define consumed as the PROP define ---
         // An implementation that reads the longest suffix takes the one
         // keyword define for the PROP define and drops the keyword. The
         // texture was empty at the lock and its texture keyword was
@@ -945,7 +945,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 "The false condition refuses the check.");
         }
 
-        // --- Falsifier 21: unsaved declared operand reads zero ---
+        // --- Falsifier locked-source-alignment 21: unsaved declared operand reads zero ---
         // An implementation that reads a missing saved entry as zero
         // accepts a removed block that the finished clone does not hold.
         // The saved entry was zero at the lock and a later edit cleared
@@ -1178,7 +1178,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 "The unsupported condition refuses the check.");
         }
 
-        // --- Falsifier 11: outline set to 2 ---
+        // --- Falsifier locked-source-alignment 11: outline set to 2 ---
         // An implementation that takes the compared value writes two and
         // fails the plan value assertion. An inequality fixes no value,
         // so the plan writes the declared default. The no-op guards prove
@@ -1234,7 +1234,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             AssertConsistent(source, properties, locked, plan);
         }
 
-        // --- Falsifier 12: fixed value overrides enum text ---
+        // --- Falsifier locked-source-alignment 12: fixed value overrides enum text ---
         // An implementation that writes the fixed value of A6.3 without
         // comparing it to the recorded enum text hides the disagreement.
         // The guards prove the fixture reaches the path. The state is
@@ -1282,7 +1282,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             AssertConsistent(agreeingSource, properties, agreeingLocked, agreeingPlan);
         }
 
-        // --- Falsifier 13: fixed value overrides a live bracket ---
+        // --- Falsifier locked-source-alignment 13: fixed value overrides a live bracket ---
         // An implementation that writes the fixed value of A6.3 without
         // comparing it to the live bracket value changes what the
         // bracket renders. The guards prove the fixture reaches the
