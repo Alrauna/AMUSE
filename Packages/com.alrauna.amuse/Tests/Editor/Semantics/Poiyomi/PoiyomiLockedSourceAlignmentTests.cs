@@ -2006,8 +2006,15 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             var (original, generated) = SmallPair(
                 "        _T (\"T\", 2D) = \"white\" {}\n        _Color (\"Color\", Color) = (1, 1, 1, 1)",
                 null,
-                "        sampler2D _T;\n        float4 _T_ST;\n        o.Albedo *= _T_ST;",
-                ("_T", "_T_Body_Color_1"));
+                "        sampler2D _T;\n        float4 _T_ST;\n        float4 _T_TexelSize;\n        o.Albedo *= _T_ST;",
+                // The texel size form holds the substring _T twice, once in
+                // the head and once behind _Texel. One wide replace renames
+                // it twice, so each renamed form gets an explicit edit.
+                ("_T (\"T\"", "_T_Body_Color_1 (\"T\""),
+                ("sampler2D _T;", "sampler2D _T_Body_Color_1;"),
+                ("float4 _T_ST;", "float4 _T_Body_Color_1_ST;"),
+                ("float4 _T_TexelSize;", "float4 _T_Body_Color_1_TexelSize;"),
+                ("o.Albedo *= _T_ST;", "o.Albedo *= _T_Body_Color_1_ST;"));
             var properties = new[]
             {
                 Prop("_T", ShaderPropertyType.Texture),
@@ -2020,6 +2027,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Assert.That(result.Source.RenamedNames["_T"], Is.EqualTo("_T_Body_Color_1"));
             Assert.That(result.Source.States["_T_ST"], Is.EqualTo(LockedPropertyState.Renamed));
             Assert.That(result.Source.RenamedNames["_T_ST"], Is.EqualTo("_T_Body_Color_1_ST"));
+            Assert.That(result.Source.States["_T_TexelSize"], Is.EqualTo(LockedPropertyState.Renamed));
+            Assert.That(result.Source.RenamedNames["_T_TexelSize"], Is.EqualTo("_T_Body_Color_1_TexelSize"));
         }
     }
 }
