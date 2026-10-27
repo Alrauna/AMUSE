@@ -311,9 +311,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             LockedBlockKind kind,
             LockedBlockOutcome outcome,
             string conditionOrKeyword,
-            int line)
+            int line,
+            bool zeroAndZero = false)
         {
-            return new LockedBlockRecord(kind, outcome, conditionOrKeyword, line);
+            return new LockedBlockRecord(kind, outcome, conditionOrKeyword, zeroAndZero, line);
         }
 
         /// <summary>

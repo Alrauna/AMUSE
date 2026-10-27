@@ -982,7 +982,28 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             var bodySurviving = BodyHasSurvivingLine(state, extent.BodyStart, extent.BodyEnd);
             var winner = candidates[0].State;
             var decidedByLookahead = false;
-            if (candidates.Count == 2 && bodySurviving)
+            var zeroAndZero = false;
+            var tie = candidates.Count == 2 && bodySurviving;
+            // Y3 of the bundled locked original admission design. Both
+            // trials consumed zero generated lines across the block, so
+            // the generated text is identical under both outcomes. Only
+            // an //ifex wrapper can hold this shape, because a kept ifdef
+            // or ifndef trial always consumes its directive line. The
+            // check sits before the lookahead, so no candidate walks
+            // past the wrapper and no later tie throws through it (Y2
+            // case e note).
+            var bothZero = tie
+                && keptResult.GenIndex == state.GenIndex
+                && removedResult.GenIndex == state.GenIndex;
+            if (bothZero)
+            {
+                // The text cannot pick an outcome, so Y3 adopts the
+                // removed trial. The adopted trial already holds the
+                // NotEvaluated records of the nested blocks.
+                zeroAndZero = true;
+                winner = removedResult;
+            }
+            else if (tie)
             {
                 decidedByLookahead = true;
                 while (true)
@@ -1056,12 +1077,14 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                         // design classifies the tie at this point, where
                         // both candidates stayed alive to the boundary
                         // and the code refused as undecided before that
-                        // design. The consumed count of a trial is its
-                        // generated index delta across the block. A
+                        // design as of 2026-10-25. The consumed count of
+                        // a trial is its generated index delta from the
+                        // block start to the growth boundary. A
                         // both-nonzero tie keeps the refusal (Y4). A
-                        // both-zero tie keeps the refusal until the
-                        // later plan task lands its rule. Exactly one
-                        // trial at zero runs the catch-up probe (Y2).
+                        // both-zero tie never reaches this point,
+                        // because Y3 adopts it before the lookahead
+                        // runs. Exactly one trial at zero runs the
+                        // catch-up probe (Y2).
                         var keptConsumed = keptResult.GenIndex - state.GenIndex;
                         var removedConsumed = removedResult.GenIndex - state.GenIndex;
                         if ((keptConsumed == 0) != (removedConsumed == 0))
@@ -1090,6 +1113,12 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             {
                 outcome = LockedBlockOutcome.Unobservable;
             }
+            else if (zeroAndZero)
+            {
+                // Y3 adopts the removed trial, so the record reads
+                // Removed and carries the marker.
+                outcome = LockedBlockOutcome.Removed;
+            }
             else if (!decidedByLookahead)
             {
                 outcome = keptResult != null ? LockedBlockOutcome.Kept : LockedBlockOutcome.Removed;
@@ -1104,7 +1133,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             // lands at the position of the block start, so the nested
             // records of the adopted winner follow it (A3.7, A4.4).
             var recordStart = state.Blocks.Count;
-            winner.Blocks.Insert(recordStart, new LockedBlockRecord(kind, outcome, conditionOrKeyword, startLine.Number));
+            winner.Blocks.Insert(recordStart, new LockedBlockRecord(kind, outcome, conditionOrKeyword, zeroAndZero, startLine.Number));
             state.AdoptFrom(winner);
             state.LookaheadRemaining = enclosingLookahead;
             state.GrowthBoundary = inheritedBoundary;
@@ -1190,8 +1219,10 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
                 if (TryBlockStart(trimmed, out var kind, out var text))
                 {
+                    // A skipped nested block is not the wrapper record,
+                    // so it never carries the marker (Y3).
                     state.Blocks.Add(new LockedBlockRecord(
-                        kind, LockedBlockOutcome.NotEvaluated, text, state.OriginalLines[i].Number));
+                        kind, LockedBlockOutcome.NotEvaluated, text, false, state.OriginalLines[i].Number));
                 }
             }
         }

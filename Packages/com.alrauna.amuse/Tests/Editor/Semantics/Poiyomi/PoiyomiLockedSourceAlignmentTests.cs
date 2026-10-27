@@ -1278,6 +1278,145 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Assert.That(result.RefusalDetail, Is.EqualTo(BlockTieDetail));
         }
 
+        // --- Falsifier 2: an M2 resolution that runs the old lookahead or decides kept. ---
+        // The vendor dropped the whole wrapper body, so both trials of the
+        // wrapper consume zero generated lines. Y3 of the bundled locked
+        // original admission design adopts the removed trial with no
+        // lookahead. The code as of 2026-10-25 ran the lookahead, found no
+        // difference, and refused undecided. The no-op guard below keeps
+        // one surviving body line, so the kept trial consumes text and the
+        // tie takes the Y2 catch-up path.
+
+        [Test]
+        public void ZeroAndZeroWrapperAlignsAndRecordsTheWrapperRemoved()
+        {
+            var (original, generated) = ProgramPair(
+                "        _W (\"W\", Float) = 0\n        _A (\"A\", Float) = 0",
+                "            //ifex _W==0\n            #ifndef K\n            o.Albedo = _A;\n            #endif"
+                    + "\n            //endex\n            o.Specular = _W;",
+                "            o.Specular = _W;");
+            var properties = new[]
+            {
+                Prop("_W", ShaderPropertyType.Float),
+                Prop("_A", ShaderPropertyType.Float)
+            };
+            var result = Align(original, generated, properties);
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Blocks.Count, Is.EqualTo(2));
+            Assert.That(result.Source.Blocks[0].Kind, Is.EqualTo(LockedBlockKind.Ifex));
+            Assert.That(result.Source.Blocks[0].Outcome, Is.EqualTo(LockedBlockOutcome.Removed));
+            Assert.That(result.Source.Blocks[0].ZeroAndZero, Is.True);
+            Assert.That(result.Source.Blocks[0].ConditionOrKeyword, Is.EqualTo("_W==0"));
+            Assert.That(result.Source.Blocks[0].OriginalLine, Is.EqualTo(LineOf(original, "//ifex _W==0")));
+            Assert.That(result.Source.Blocks[1].Kind, Is.EqualTo(LockedBlockKind.Ifndef));
+            Assert.That(result.Source.Blocks[1].Outcome, Is.EqualTo(LockedBlockOutcome.NotEvaluated));
+            Assert.That(result.Source.Blocks[1].ConditionOrKeyword, Is.EqualTo("K"));
+            Assert.That(result.Source.Blocks[1].OriginalLine, Is.EqualTo(LineOf(original, "#ifndef K")));
+        }
+
+        // The no-op guard of Falsifier 2 above. One surviving wrapper body
+        // line gives the kept trial a nonzero count, so the shape is no
+        // longer both zero. The tie then runs the Y2 catch-up path and
+        // records Kept. The guard proves the fixture reaches the tie path.
+
+        [Test]
+        public void ZeroAndZeroWrapperWithOneSurvivingBodyLineRecordsKept()
+        {
+            var (original, generated) = ProgramPair(
+                "        _W (\"W\", Float) = 0\n        _A (\"A\", Float) = 0",
+                "            //ifex _W==0\n            #ifndef K\n            o.Albedo = _A;\n            #endif"
+                    + "\n            o.Alpha = _W;\n            //endex\n            o.Specular = _W;",
+                "            o.Alpha = _W;\n            o.Specular = _W;");
+            var properties = new[]
+            {
+                Prop("_W", ShaderPropertyType.Float),
+                Prop("_A", ShaderPropertyType.Float)
+            };
+            var result = Align(original, generated, properties);
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Blocks.Count, Is.EqualTo(2));
+            Assert.That(result.Source.Blocks[0].Outcome, Is.EqualTo(LockedBlockOutcome.Kept));
+            Assert.That(result.Source.Blocks[0].ZeroAndZero, Is.False);
+            Assert.That(result.Source.Blocks[1].Outcome, Is.EqualTo(LockedBlockOutcome.Removed));
+        }
+
+        // The measured case e shape of the bundled locked original
+        // admission design. The zero-and-zero wrapper runs no lookahead
+        // (Y3), so a later tie cannot throw through it (Y2 case e note).
+        // The kept guard after the wrapper then resolves on its own. The
+        // plain line after the guard is load bearing. Without it the guard
+        // probe reaches the end of the original file and the shape refuses
+        // undecided.
+
+        [Test]
+        public void CaseEWrapperResolvesAndTheLaterKeptGuardRecordsKept()
+        {
+            var (original, generated) = ProgramPair(
+                "        _W (\"W\", Float) = 0\n        _A (\"A\", Float) = 0",
+                "            //ifex _W==0\n            #ifndef K\n            o.Albedo = _A;\n            #endif"
+                    + "\n            //endex\n            #ifdef _A\n            o.Emission = _A;\n            #endif"
+                    + "\n            o.Specular = _W;",
+                "            #ifdef _A\n            o.Emission = _A;\n            #endif\n            o.Specular = _W;");
+            var properties = new[]
+            {
+                Prop("_W", ShaderPropertyType.Float),
+                Prop("_A", ShaderPropertyType.Float)
+            };
+            var result = Align(original, generated, properties);
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Blocks.Count, Is.EqualTo(3));
+            Assert.That(result.Source.Blocks[0].Kind, Is.EqualTo(LockedBlockKind.Ifex));
+            Assert.That(result.Source.Blocks[0].Outcome, Is.EqualTo(LockedBlockOutcome.Removed));
+            Assert.That(result.Source.Blocks[0].ZeroAndZero, Is.True);
+            Assert.That(result.Source.Blocks[0].ConditionOrKeyword, Is.EqualTo("_W==0"));
+            Assert.That(result.Source.Blocks[1].Outcome, Is.EqualTo(LockedBlockOutcome.NotEvaluated));
+            Assert.That(result.Source.Blocks[2].Kind, Is.EqualTo(LockedBlockKind.Ifdef));
+            Assert.That(result.Source.Blocks[2].Outcome, Is.EqualTo(LockedBlockOutcome.Kept));
+            Assert.That(result.Source.Blocks[2].ConditionOrKeyword, Is.EqualTo("_A"));
+        }
+
+        // Y3 of the bundled locked original admission design keeps the
+        // Unobservable branch unchanged. A wrapper whose body holds only
+        // comments has no surviving line, so the tie path never runs and
+        // the record carries no marker. This test pins existing behavior
+        // and passes on its first possible run.
+
+        [Test]
+        public void CommentOnlyWrapperStaysUnobservable()
+        {
+            var (original, generated) = ProgramPair(
+                "        _A (\"A\", Float) = 0",
+                "            //ifex _A==0\n            // just a note\n            //endex\n            o.Alpha = 1;",
+                "            o.Alpha = 1;");
+            var result = Align(original, generated, new[] { Prop("_A", ShaderPropertyType.Float) });
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Blocks.Count, Is.EqualTo(1));
+            Assert.That(result.Source.Blocks[0].Kind, Is.EqualTo(LockedBlockKind.Ifex));
+            Assert.That(result.Source.Blocks[0].Outcome, Is.EqualTo(LockedBlockOutcome.Unobservable));
+            Assert.That(result.Source.Blocks[0].ZeroAndZero, Is.False);
+        }
+
+        // Y3 states the implication of the marker in reverse. A kept
+        // ifdef or ifndef trial always consumes its directive line, so a
+        // removed ifdef never meets the both zero shape. Its record
+        // carries no marker. This test pins existing behavior and passes
+        // on its first possible run.
+
+        [Test]
+        public void RemovedIfdefRecordIsNeverZeroAndZero()
+        {
+            var (original, generated) = ProgramPair(
+                "        _A (\"A\", Float) = 0",
+                "            #ifdef K\n            o.Albedo = _A;\n            #endif\n            o.Alpha = 1;",
+                "            o.Alpha = 1;");
+            var result = Align(original, generated, new[] { Prop("_A", ShaderPropertyType.Float) });
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Blocks.Count, Is.EqualTo(1));
+            Assert.That(result.Source.Blocks[0].Kind, Is.EqualTo(LockedBlockKind.Ifdef));
+            Assert.That(result.Source.Blocks[0].Outcome, Is.EqualTo(LockedBlockOutcome.Removed));
+            Assert.That(result.Source.Blocks[0].ZeroAndZero, Is.False);
+        }
+
         [Test]
         public void RemovedIfdefKeepsItsElseBody()
         {

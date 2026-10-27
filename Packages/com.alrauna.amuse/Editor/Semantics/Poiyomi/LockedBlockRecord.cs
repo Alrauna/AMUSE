@@ -19,9 +19,9 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
     /// <summary>
     /// One block record with its kind, its outcome, its condition or
-    /// keyword text, and the 1-based original line of the block start.
-    /// Task 2 fills no records. The aligner returns an empty list until
-    /// block hypotheses land (A3.7).
+    /// keyword text, the zero-and-zero marker of Y3, and the 1-based
+    /// original line of the block start. The aligner fills the list
+    /// during the block walk (A3.7).
     /// </summary>
     internal readonly struct LockedBlockRecord
     {
@@ -29,11 +29,13 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             LockedBlockKind kind,
             LockedBlockOutcome outcome,
             string conditionOrKeyword,
+            bool zeroAndZero,
             int originalLine)
         {
             Kind = kind;
             Outcome = outcome;
             ConditionOrKeyword = conditionOrKeyword;
+            ZeroAndZero = zeroAndZero;
             OriginalLine = originalLine;
         }
 
@@ -42,6 +44,14 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         internal LockedBlockOutcome Outcome { get; }
 
         internal string ConditionOrKeyword { get; }
+
+        /// <summary>
+        /// Marks a zero-and-zero record of Y3 in the bundled locked
+        /// original admission design. Only the wrapper record of a
+        /// both-zero tie carries the marker. The strict check of the
+        /// condition evaluator selects on it.
+        /// </summary>
+        internal bool ZeroAndZero { get; }
 
         internal int OriginalLine { get; }
     }
