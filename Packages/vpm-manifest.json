@@ -17,6 +17,21 @@
     },
     "com.anatawa12.avatar-optimizer": {
       "version": "1.9.20"
+    },
+    "com.vrcfury.vrcfury": {
+      "version": "1.1434.0"
+    },
+    "nadena.dev.modular-avatar": {
+      "version": "1.18.7"
+    },
+    "red.sim.lightvolumes": {
+      "version": "3.0.1"
+    },
+    "com.poiyomi.toon": {
+      "version": "10.0.27"
+    },
+    "at.pimaker.ltcgi": {
+      "version": "1.7.4"
     }
   },
   "locked": {
@@ -50,6 +65,34 @@
         "com.vrchat.avatars": ">=3.7.0 <3.11.0",
         "nadena.dev.ndmf": ">=1.8.0 <2.0.0"
       }
+    },
+    "com.vrcfury.vrcfury": {
+      "version": "1.1434.0",
+      "dependencies": {}
+    },
+    "nadena.dev.modular-avatar": {
+      "version": "1.18.7",
+      "dependencies": {
+        "nadena.dev.ndmf": ">=1.14.7 <2.0.0-a"
+      }
+    },
+    "red.sim.lightvolumes": {
+      "version": "3.0.1",
+      "dependencies": {}
+    },
+    "com.poiyomi.toon": {
+      "version": "10.0.27",
+      "dependencies": {
+        "com.poiyomi.thryeditor": ">=2.74.3"
+      }
+    },
+    "at.pimaker.ltcgi": {
+      "version": "1.7.4",
+      "dependencies": {}
+    },
+    "com.poiyomi.thryeditor": {
+      "version": "2.74.3",
+      "dependencies": {}
     }
   }
 }
