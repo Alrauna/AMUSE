@@ -685,3 +685,142 @@ Two environment facts of the same date, recorded for the owner:
   line initializer bakes stands unfixed in this task and is a record
   for an owner decision, because real Poiyomi programs declare locals
   with property initializers.
+
+## Run of 2026-10-26, Task 19 canonical validation, both assemblies
+
+Environment. The working tree of the dev project after Task 18, with the
+Task 19 document edits in place. The locked vendor set is the one in
+`Packages/vpm-manifest.json`. The local work date of the run is
+2026-10-26. The block dates itself 2026-10-26 in UTC. The suite-start
+line reported all 12 locked packages as Match and the
+`AMUSE_VRCSDK3_AVATARS` define active.
+
+How the runs were made. The callback recorder method of
+`.superpowers/sdd/full-run-recorder.md` ran both test assemblies, one at
+a time. The product assembly ran first, then the research assembly. Each
+forced refresh timed out once during the reload and succeeded on the
+retry, as the method expects. The product run delivered every row
+exactly once: one RUN_STARTED bookend, one RUN_FINISHED bookend, and no
+duplicate leaf name. The research run delivered the known double
+delivery, four milliseconds apart, and both footer pairs agree on every
+count. Every research leaf was counted once by full name. The printed
+report block of the product run was captured from the editor log and
+copied below. The temporary recorder and both data files were deleted
+after the runs, and a forced refresh then reported zero compile errors.
+
+The printed report block of the product run, copied from the editor log:
+
+```text
+=== AMUSE vendor run record ===
+date: 2026-10-26
+counts: discovered 3076, completed 3076, passed 3071, failed 0, skipped 5, inconclusive 0
+discovered basis: the leaf count of this assembly node in the test tree the runner loaded for the run. The catalog is filter blind, so a filtered run completes fewer leaves by selection, not by loss.
+durations: product 1672.7 s, research not part of this run, sum 1672.7 s
+opt-in gates set: none
+gated fixtures excluded: Alrauna.Amuse.Tests.Editor.Build.DaoMergedConsumptionTests (AMUSE_DAO_INTEGRATION unset)
+skip reasons:
+  - Alrauna.Amuse.Tests.Editor.Build.DaoMergedConsumptionTests.AaoAndDaoCombinedKeepsTheMergedSoundness: The opt-in variable AMUSE_DAO_INTEGRATION is not set to 1. Set AMUSE_DAO_INTEGRATION=1 in a disposable public integration project to run these tests. They delete project-level d4rkAvatarOptimizer output and must never run elsewhere.
+  - Alrauna.Amuse.Tests.Editor.Build.DaoMergedConsumptionTests.DaoMergeRunsInTheSdkSequenceAndPreservesSoundness: The opt-in variable AMUSE_DAO_INTEGRATION is not set to 1. Set AMUSE_DAO_INTEGRATION=1 in a disposable public integration project to run these tests. They delete project-level d4rkAvatarOptimizer output and must never run elsewhere.
+  - Alrauna.Amuse.Tests.Editor.Build.RealThryLockCharacterizationTests.RealThryLockOutputAlignsThroughTheProductionAligner: The opt-in variable AMUSE_REAL_THRY_LOCK is not set to 1. Set AMUSE_REAL_THRY_LOCK=1 in a disposable project to run the real lock. The lock writes vendor-owned cache data under Assets/_LockedShaderCache and calls the vendor usage counter over the network. It must never run in a project whose state matters.
+  - Alrauna.Amuse.Tests.Editor.Build.VendorProductionOrderTests.ModularAvatarMergeAnimatorKeepsTrianglesSoundVendorVRChat: The opt-in variable AMUSE_PRODUCTION_ORDER_DISPATCH is not set to 1. Set AMUSE_PRODUCTION_ORDER_DISPATCH=1 in a disposable project to run this fixture. The SDK callback dispatcher runs VRCFury, and VRCFury writes generated controllers into Packages/com.vrcfury.temp during the build.
+  - Alrauna.Amuse.Tests.Editor.Build.VendorProductionOrderTests.VRCFuryToggleKeepsTrianglesSoundVendorVRChat: The opt-in variable AMUSE_PRODUCTION_ORDER_DISPATCH is not set to 1. Set AMUSE_PRODUCTION_ORDER_DISPATCH=1 in a disposable project to run this fixture. The SDK callback dispatcher runs VRCFury, and VRCFury writes generated controllers into Packages/com.vrcfury.temp during the build.
+effective environment:
+  - at.pimaker.ltcgi locked 1.7.4, installed 1.7.4, Match
+  - com.anatawa12.avatar-optimizer locked 1.9.20, installed 1.9.20, Match
+  - com.poiyomi.thryeditor locked 2.74.3, installed 2.74.3, Match
+  - com.poiyomi.toon locked 10.0.27, installed 10.0.27, Match
+  - com.vrcfury.vrcfury locked 1.1434.0, installed 1.1434.0, Match
+  - com.vrchat.avatars locked 3.10.5, installed 3.10.5, Match
+  - com.vrchat.base locked 3.10.5, installed 3.10.5, Match
+  - d4rkpl4y3r.d4rkavataroptimizer locked 4.6.0, installed 4.6.0, Match
+  - jp.lilxyzw.liltoon locked 2.4.1, installed 2.4.1, Match
+  - nadena.dev.modular-avatar locked 1.18.7, installed 1.18.7, Match
+  - nadena.dev.ndmf locked 1.14.8, installed 1.14.8, Match
+  - red.sim.lightvolumes locked 3.0.1, installed 3.0.1, Match
+scripting defines: UNITY_POST_PROCESSING_STACK_V2;VRC_SDK_VRCSDK3;LTCGI_INCLUDED;VRC_LIGHT_VOLUMES;LTCGI_VRC_LIGHT_VOLUMES
+changed setting lines:
+  none
+```
+
+### Product assembly run, `Alrauna.Amuse.Tests.Editor`
+
+- Discovered leaf results: 3076, measured from the assembly node of the
+  loaded tree by the block.
+- Completed leaf results: 3076, counted once per delivered leaf. No
+  double delivery.
+- Passed: 3071.
+- Failed: 0.
+- Skipped: 5.
+- Inconclusive: 0.
+- Duration from the test framework bookends: 1674.8 seconds. The block
+  prints 1672.7 seconds, measured from the first test to the suite
+  teardown.
+
+### Research assembly run, `Alrauna.Amuse.Research.Tests.Editor`
+
+- Discovered leaf results: 151, the unique delivered leaf names.
+- Completed leaf results: 151.
+- Passed: 151.
+- Failed: 0.
+- Skipped: 0.
+- Inconclusive: 0.
+- Duration from the test framework bookends: 5.4 seconds. The callback
+  delivered the whole run twice, four milliseconds apart, and both
+  footer pairs agree on every count.
+
+### Both assemblies together
+
+- Result total: 3227.
+- Passed: 3222.
+- Failed: 0.
+- Skipped: 5.
+- Inconclusive: 0.
+- Duration of the product run: 1674.8 seconds.
+- Duration of the research run: 5.4 seconds.
+- Sum of both durations: 1680.2 seconds.
+
+Exit rule of the plan. This is the canonical validation run of the
+rework. Both assemblies are green with a named skip list of five tests.
+The failed count is 0, and the discovered count equals the completed
+count in both assemblies. For the product assembly the two numbers come
+from independent sources, the loaded tree and the delivered leaf
+results. For the research assembly both numbers come from the delivered
+leaf results, deduplicated by full name.
+
+Count changes against the Task 16 full run of this file, the last full
+product run before this one. The product leaf count went from 3069 to
+3076. Task 17 added the four `VendorProductionOrderTests` leaves, two
+tier A fixtures and their two tier B twins. Task 18 added the three
+`RealThryLockCharacterizationTests` leaves and changed no other leaf
+count, because its stand-in cutover removed counter assertions and not
+leaves. The failed count stayed 0.
+
+### Skipped test names, 5 tests
+
+No opt-in gate was set for this run, per V15. Every skip carries its
+gate reason in the block above.
+
+The gated DAO fixture, 2 tests:
+
+- `Alrauna.Amuse.Tests.Editor.Build.DaoMergedConsumptionTests.AaoAndDaoCombinedKeepsTheMergedSoundness`
+- `Alrauna.Amuse.Tests.Editor.Build.DaoMergedConsumptionTests.DaoMergeRunsInTheSdkSequenceAndPreservesSoundness`
+
+The gated real lock, 1 test:
+
+- `Alrauna.Amuse.Tests.Editor.Build.RealThryLockCharacterizationTests.RealThryLockOutputAlignsThroughTheProductionAligner`
+
+The gated production order, 2 tests:
+
+- `Alrauna.Amuse.Tests.Editor.Build.VendorProductionOrderTests.ModularAvatarMergeAnimatorKeepsTrianglesSoundVendorVRChat`
+- `Alrauna.Amuse.Tests.Editor.Build.VendorProductionOrderTests.VRCFuryToggleKeepsTrianglesSoundVendorVRChat`
+
+### Failed test names
+
+None.
+
+### Side-effect observation, QualitySettings
+
+Before the runs, on 2026-10-26, `ProjectSettings/QualitySettings.asset`
+matched the committed file. After the runs the file still matched the
+committed file. The block reports `changed setting lines: none` for the
+two digested files.

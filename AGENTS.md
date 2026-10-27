@@ -14,7 +14,7 @@ Public fixtures must be minimal, deterministic, redistributable, and legally pub
 
 One NDMF plugin, `AmusePlatformFinishPlugin` (`Packages/com.alrauna.amuse/Editor/Build/AmusePlatformFinishPlugin.cs`), registers five passes in `BuildPhase.PlatformFinish`:
 
-1. `AmuseStructuralGraphCheck` runs extension-free on real authored clips before animator virtualization, stores the enumerated controller graph and its structural refusal in state, and reports nothing itself.
+1. `AmuseStructuralGraphCheck` runs extension-free before the animator virtualization scope opens. It reads the committed controller graph. Its event scan resolves authored clip originals through the NDMF object registry, so an event that a plugin clone dropped still refuses the build. This read is decision V3 of the 2026-10-25 vendor-integrated tests design. The pass stores the enumerated graph and its structural refusal in state, and reports nothing itself.
 2. `AmuseAnimatorBindingsCapture` retains `IPlatformAnimatorBindings` from the active `AnimatorServicesContext` into build state before the extension deactivates.
 3. `AmusePlatformFinishPass` runs extension-free, so NDMF commits the animator graph first. It gates on `HostLifecycleCapability.Evaluate` (versions, platform, build path, build services). Per renderer it captures closed animation and material evidence, resolves per-slot runtime states, classifies triangle alpha exactly, plans mesh separation, and retains `PreparedAlphaSeparation`.
 4. `AlphaSeparationApply` revalidates every candidate against live state, finalizes, sweeps unreferenced AMUSE-owned clones, and performs the single mutation: animation curves, then `sharedMesh`, then `sharedMaterials`.

@@ -9,7 +9,9 @@
 # single package they are configured with, not by being untracked here.
 !com.alrauna.amuse.research
 
-# Vendor packages for local testing (Poiyomi, Thry, VRCFury, Modular Avatar).
+# Vendor packages are a permanent part of the dev environment. The test
+# suites run against the installed set (Poiyomi, Thry, VRCFury, Modular
+# Avatar, and the rest of the locked block of vpm-manifest.json).
 # Explicit so a future whitelist edit cannot expose them.
 com.poiyomi.*
 com.vrcfury.*
