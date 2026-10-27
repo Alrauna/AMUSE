@@ -2030,5 +2030,131 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Assert.That(result.Source.States["_T_TexelSize"], Is.EqualTo(LockedPropertyState.Renamed));
             Assert.That(result.Source.RenamedNames["_T_TexelSize"], Is.EqualTo("_T_Body_Color_1_TexelSize"));
         }
+
+        // Y7 of the bundled locked original admission design: the
+        // Properties window counts braces outside strings and comments.
+        // A display string with an unbalanced brace drove the whole line
+        // count to zero and closed the window before the later property
+        // lines. Each fixture pairs one untouched property line with one
+        // renamed property line after it. The program never references
+        // either property, so the renamed artifact can come only from the
+        // Properties window. A closed window then leaves no suffix
+        // candidate and the aligner refuses.
+
+        // --- Falsifier 7: a Properties window that counts braces inside display strings. ---
+        // An implementation that counts braces inside display strings lets
+        // one unbalanced } drive the depth to zero. The window then closes
+        // before the renamed property line, and the aligner refuses or
+        // derives a wrong suffix. The guard aligns the same block without
+        // the brace string and proves the fixture reaches the window.
+
+        [Test]
+        public void DisplayStringWithUnbalancedBraceKeepsLaterPropertiesLines()
+        {
+            var (guardOriginal, guardGenerated) = SmallPair(
+                "        _Q (\"Q\", Float) = 0\n        _W (\"W\", Float) = 0",
+                null,
+                null,
+                ("_W (\"W\"", "_W_S (\"W\""));
+            var guard = Align(
+                guardOriginal,
+                guardGenerated,
+                new[] { Prop("_Q", ShaderPropertyType.Float), Prop("_W", ShaderPropertyType.Float) });
+            Assert.That(guard.Succeeded, Is.True, guard.RefusalDetail ?? "refused");
+            Assert.That(guard.Source.States["_W"], Is.EqualTo(LockedPropertyState.Renamed));
+
+            var (original, generated) = SmallPair(
+                "        _Q (\"Q }\", Float) = 0\n        _W (\"W\", Float) = 0",
+                null,
+                null,
+                ("_W (\"W\"", "_W_S (\"W\""));
+            var result = Align(
+                original,
+                generated,
+                new[] { Prop("_Q", ShaderPropertyType.Float), Prop("_W", ShaderPropertyType.Float) });
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Suffix, Is.EqualTo("_S"));
+            Assert.That(result.Source.States["_W"], Is.EqualTo(LockedPropertyState.Renamed));
+            Assert.That(result.Source.RenamedNames["_W"], Is.EqualTo("_W_S"));
+        }
+
+        [Test]
+        public void EscapedQuoteInADisplayStringIsAccepted()
+        {
+            // The display string is "Q \" }". The backslash escapes the
+            // quote. The string skip ends at the real closing quote. The }
+            // inside the string does not count, so the window stays open
+            // and the renamed line still yields its artifact.
+            var (original, generated) = SmallPair(
+                "        _Q (\"Q \\\" }\", Float) = 0\n        _W (\"W\", Float) = 0",
+                null,
+                null,
+                ("_W (\"W\"", "_W_S (\"W\""));
+            var result = Align(
+                original,
+                generated,
+                new[] { Prop("_Q", ShaderPropertyType.Float), Prop("_W", ShaderPropertyType.Float) });
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Suffix, Is.EqualTo("_S"));
+            Assert.That(result.Source.States["_W"], Is.EqualTo(LockedPropertyState.Renamed));
+            Assert.That(result.Source.RenamedNames["_W"], Is.EqualTo("_W_S"));
+        }
+
+        [Test]
+        public void UnclosedDisplayStringIsAccepted()
+        {
+            // The display string never closes before the line end. The
+            // string skip ends at the line end. The } inside the string
+            // does not count, so the later Properties lines still count.
+            var (original, generated) = SmallPair(
+                "        _Q (\"Q } open, Float) = 0\n        _W (\"W\", Float) = 0",
+                null,
+                null,
+                ("_W (\"W\"", "_W_S (\"W\""));
+            var result = Align(
+                original,
+                generated,
+                new[] { Prop("_Q", ShaderPropertyType.Float), Prop("_W", ShaderPropertyType.Float) });
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Suffix, Is.EqualTo("_S"));
+            Assert.That(result.Source.States["_W"], Is.EqualTo(LockedPropertyState.Renamed));
+            Assert.That(result.Source.RenamedNames["_W"], Is.EqualTo("_W_S"));
+        }
+
+        // Characterization for Y7. A [Gamma] mark inside a quoted display
+        // string records no gamma name. This test passed on its first run
+        // on 2026-10-27. Skipping string contents can only remove gamma
+        // marks, and the vendor bakes with the real Unity flags, so the
+        // direction is safe.
+        [Test]
+        public void GammaMarkInsideAQuotedDisplayStringStopsCounting()
+        {
+            var original = BaseOriginal().Replace(
+                "        _P (\"P\", Float) = 0.5",
+                "        _G (\"G [Gamma]\", Float) = 0.5\n        [Gamma] _H (\"H\", Float) = 0.5");
+            var names = PoiyomiLockedSourceAlignment.GammaPropertyNames(original);
+            Assert.That(names, Is.EqualTo(new[] { "_H" }));
+        }
+
+        [Test]
+        public void LineCommentBraceDoesNotCloseThePropertiesWindow()
+        {
+            // The comment is a true line comment inside the block. Its }
+            // must not close the window. The later renamed line still
+            // yields its artifact.
+            var (original, generated) = SmallPair(
+                "        _Q (\"Q\", Float) = 0 // } close\n        _W (\"W\", Float) = 0",
+                null,
+                null,
+                ("_W (\"W\"", "_W_S (\"W\""));
+            var result = Align(
+                original,
+                generated,
+                new[] { Prop("_Q", ShaderPropertyType.Float), Prop("_W", ShaderPropertyType.Float) });
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Suffix, Is.EqualTo("_S"));
+            Assert.That(result.Source.States["_W"], Is.EqualTo(LockedPropertyState.Renamed));
+            Assert.That(result.Source.RenamedNames["_W"], Is.EqualTo("_W_S"));
+        }
     }
 }

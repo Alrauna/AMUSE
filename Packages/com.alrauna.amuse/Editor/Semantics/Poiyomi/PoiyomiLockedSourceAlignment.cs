@@ -138,26 +138,12 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
 
             var names = new List<string>();
-            var raw = originalText.Split(new[] { '\r', '\n' });
-            var inBlock = false;
-            var depth = 0;
-            foreach (var line in raw)
+            var lines = SplitLines(originalText);
+            foreach (var i in PropertiesWindow(lines))
             {
-                if (!inBlock)
-                {
-                    if (FirstToken(line.Trim()) == "Properties")
-                    {
-                        inBlock = true;
-                        depth = CountChar(line, '{') - CountChar(line, '}');
-                    }
-
-                    continue;
-                }
-
-                var depthBefore = depth;
-                depth += CountChar(line, '{') - CountChar(line, '}');
+                var line = lines[i].Text;
                 var gammaIndex = line.IndexOf("[Gamma]", StringComparison.Ordinal);
-                if (depthBefore > 0 && gammaIndex >= 0 && TryPropertiesName(line, out var name, out var nameStart))
+                if (gammaIndex >= 0 && TryPropertiesName(line, out var name, out var nameStart))
                 {
                     // The attribute must sit before the name, so a display
                     // string that only mentions the token does not count.
@@ -165,11 +151,6 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     {
                         names.Add(name);
                     }
-                }
-
-                if (depth <= 0 && depthBefore > 0)
-                {
-                    inBlock = false;
                 }
             }
 
@@ -2494,25 +2475,40 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
         private static List<int> PropertiesLineIndices(IReadOnlyList<LineRef> lines)
         {
+            return PropertiesWindow(lines);
+        }
+
+        /// <summary>
+        /// Returns the line indices inside the Properties block. The
+        /// window opens at the Properties header. The window closes at
+        /// the line that returns the brace depth to zero. The brace
+        /// counter skips the contents of double-quoted strings with
+        /// backslash escapes, of block comments, and of line comments
+        /// (Y7 of the bundled locked original admission design).
+        /// </summary>
+        private static List<int> PropertiesWindow(IReadOnlyList<LineRef> lines)
+        {
             var result = new List<int>();
             var inBlock = false;
             var depth = 0;
+            var inBlockComment = false;
             for (var i = 0; i < lines.Count; i++)
             {
                 var text = lines[i].Text;
+                var delta = CountBraceDelta(text, ref inBlockComment);
                 if (!inBlock)
                 {
                     if (FirstToken(text.Trim()) == "Properties")
                     {
                         inBlock = true;
-                        depth = CountChar(text, '{') - CountChar(text, '}');
+                        depth = delta;
                     }
 
                     continue;
                 }
 
                 var depthBefore = depth;
-                depth += CountChar(text, '{') - CountChar(text, '}');
+                depth += delta;
                 if (depthBefore > 0)
                 {
                     result.Add(i);
@@ -2525,6 +2521,89 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// Counts the open braces minus the close braces of one line for
+        /// the Properties window. The counter skips the contents of
+        /// double-quoted strings, of block comments, and of line comments
+        /// (Y7). A backslash escapes the next character, so an escaped
+        /// quote never ends the string. A string that never closes before
+        /// the line end ends at the line end and never swallows the next
+        /// line. A line comment ends at the line end. The block comment
+        /// state carries to the next line and ends at the line that
+        /// closes the comment.
+        /// </summary>
+        private static int CountBraceDelta(string text, ref bool inBlockComment)
+        {
+            var delta = 0;
+            var inString = false;
+            var i = 0;
+            while (i < text.Length)
+            {
+                if (inBlockComment)
+                {
+                    if (text[i] == '*' && i + 1 < text.Length && text[i + 1] == '/')
+                    {
+                        inBlockComment = false;
+                        i += 2;
+                        continue;
+                    }
+
+                    i++;
+                    continue;
+                }
+
+                var current = text[i];
+                if (inString)
+                {
+                    if (current == '\\')
+                    {
+                        i += 2;
+                        continue;
+                    }
+
+                    if (current == '"')
+                    {
+                        inString = false;
+                    }
+
+                    i++;
+                    continue;
+                }
+
+                if (current == '"')
+                {
+                    inString = true;
+                    i++;
+                    continue;
+                }
+
+                if (current == '/' && i + 1 < text.Length && text[i + 1] == '/')
+                {
+                    break;
+                }
+
+                if (current == '/' && i + 1 < text.Length && text[i + 1] == '*')
+                {
+                    inBlockComment = true;
+                    i += 2;
+                    continue;
+                }
+
+                if (current == '{')
+                {
+                    delta++;
+                }
+                else if (current == '}')
+                {
+                    delta--;
+                }
+
+                i++;
+            }
+
+            return delta;
         }
 
         private static void CollectIdentifiers(string line, ICollection<string> into)
@@ -2728,20 +2807,6 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
 
             return text.Substring(start, end - start);
-        }
-
-        private static int CountChar(string text, char c)
-        {
-            var count = 0;
-            foreach (var current in text)
-            {
-                if (current == c)
-                {
-                    count++;
-                }
-            }
-
-            return count;
         }
 
         // The declaration type keywords of fact 4. The closed list keeps
