@@ -486,40 +486,47 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
         private static HashSet<string> SuffixCandidates(WalkState state, string artifact)
         {
-            // A4.2 splits every artifact at a declared original name. The
-            // longest declared name that occurs in the artifact decides
-            // the split point, so one artifact yields one candidate set.
-            var longest = 0;
-            foreach (var name in state.Declared.Keys)
+            // A4.2 splits every artifact at a declared original name. Y6
+            // of the bundled locked original admission design narrows the
+            // split set. One artifact yields candidates only from the
+            // earliest position where a declared original name ends and
+            // an underscore follows. At that position the longest
+            // qualifying name decides the split point, so nested names
+            // give one split. Later positions give nothing. The
+            // underscore kills a prefix extension such as a declared name
+            // inside a longer token. A wrong suffix fails at the walk and
+            // never gives a false positive.
+            for (var start = 0; start < artifact.Length; start++)
             {
-                if (name.Length > longest && artifact.IndexOf(name, StringComparison.Ordinal) >= 0)
+                string longest = null;
+                foreach (var name in state.Declared.Keys)
                 {
-                    longest = name.Length;
+                    if (artifact.IndexOf(name, start, StringComparison.Ordinal) != start)
+                    {
+                        continue;
+                    }
+
+                    var end = start + name.Length;
+                    if (end >= artifact.Length || artifact[end] != '_')
+                    {
+                        continue;
+                    }
+
+                    if (longest == null || name.Length > longest.Length)
+                    {
+                        longest = name;
+                    }
+                }
+
+                if (longest != null)
+                {
+                    var set = new HashSet<string>(StringComparer.Ordinal);
+                    AddTailStripped(set, artifact.Substring(start + longest.Length));
+                    return set;
                 }
             }
 
-            var set = new HashSet<string>(StringComparer.Ordinal);
-            if (longest == 0)
-            {
-                return set;
-            }
-
-            foreach (var name in state.Declared.Keys)
-            {
-                if (name.Length != longest)
-                {
-                    continue;
-                }
-
-                var from = 0;
-                while ((from = artifact.IndexOf(name, from, StringComparison.Ordinal)) >= 0)
-                {
-                    AddTailStripped(set, artifact.Substring(from + name.Length));
-                    from += name.Length;
-                }
-            }
-
-            return set;
+            return new HashSet<string>(StringComparer.Ordinal);
         }
 
         private static void AddTailStripped(HashSet<string> set, string rest)

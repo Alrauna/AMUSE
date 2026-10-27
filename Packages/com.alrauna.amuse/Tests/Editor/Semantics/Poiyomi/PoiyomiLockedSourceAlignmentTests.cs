@@ -1860,5 +1860,166 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Assert.That(result.Source, Is.Null);
             Assert.That(result.RefusalDetail, Is.EqualTo(OptimizerMissingDetail));
         }
+
+        // --- Falsifier 4: a suffix split that tries every occurrence of a longest declared name. ---
+        // An implementation that splits at every occurrence of the longest
+        // declared name ties on the second occurrence and refuses the
+        // aligned pair (Y6 of the bundled locked original admission
+        // design). PlainMaterialNameSuffixIsUnchanged is the no-op guard
+        // and proves the fixture reaches the suffix search. The suffix
+        // string plays the role of the cleaned material name.
+        [Test]
+        public void EmbeddedDeclaredNameSuffixDerivesFromTheEarliestBoundary()
+        {
+            var (original, generated) = SmallPair(
+                "        _Color (\"Color\", Color) = (1, 1, 1, 1)",
+                null,
+                "        float4 _Color;\n        o.Albedo = _Color;",
+                ("_Color", "_Color_Body_Color_1"));
+            var result = Align(original, generated, new[] { Prop("_Color", ShaderPropertyType.Color) });
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Suffix, Is.EqualTo("_Body_Color_1"));
+            Assert.That(result.Source.States["_Color"], Is.EqualTo(LockedPropertyState.Renamed));
+            Assert.That(result.Source.RenamedNames["_Color"], Is.EqualTo("_Color_Body_Color_1"));
+        }
+
+        // --- Falsifier 5: a head rule that anchors anywhere but the earliest boundary. ---
+        // An implementation that anchors at a later declared name derives
+        // the wrong suffix and the walk refuses the aligned pair (Y6 of
+        // the bundled locked original admission design). The unrenamed
+        // live float is the later name. PlainMaterialNameSuffixIsUnchanged
+        // is the no-op guard and proves the fixture reaches the suffix
+        // search.
+        [Test]
+        public void HeadAnchorsAtTheEarliestBoundaryNotALaterName()
+        {
+            var (original, generated) = SmallPair(
+                "        _Color (\"Color\", Color) = (1, 1, 1, 1)\n        _Cutoff (\"Cutoff\", Float) = 0",
+                null,
+                "        float4 _Color;\n        float _Cutoff;\n        o.Albedo = _Color;\n        o.Alpha = _Cutoff;",
+                ("_Color", "_Color_Cutoff_X"));
+            var properties = new[]
+            {
+                Prop("_Color", ShaderPropertyType.Color),
+                Prop("_Cutoff", ShaderPropertyType.Float)
+            };
+            var result = Align(original, generated, properties);
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Suffix, Is.EqualTo("_Cutoff_X"));
+            Assert.That(result.Source.States["_Color"], Is.EqualTo(LockedPropertyState.Renamed));
+            Assert.That(result.Source.States["_Cutoff"], Is.EqualTo(LockedPropertyState.Live));
+        }
+
+        // Two renamed names embed one longer declared name. A split that
+        // scans the longest name gives the two artifacts disjoint
+        // candidate sets and refuses on the empty intersection (Y6 of the
+        // bundled locked original admission design). The earliest boundary
+        // gives one shared suffix.
+        [Test]
+        public void LongerEmbeddedNameStraddleDerivesOneSuffix()
+        {
+            var (original, generated) = SmallPair(
+                "        _Color (\"Color\", Color) = (1, 1, 1, 1)"
+                    + "\n        _EmissionColor (\"Emission\", Color) = (0, 0, 0, 0)"
+                    + "\n        _Cutoff (\"Cutoff\", Float) = 0",
+                null,
+                "        float4 _Color;\n        float4 _EmissionColor;\n        float _Cutoff;"
+                    + "\n        o.Albedo = _Color;\n        o.Emission = _EmissionColor;\n        o.Alpha = _Cutoff;",
+                ("_Color", "_Color_Cut_Cutoff_On"),
+                ("_EmissionColor", "_EmissionColor_Cut_Cutoff_On"));
+            var properties = new[]
+            {
+                Prop("_Color", ShaderPropertyType.Color),
+                Prop("_EmissionColor", ShaderPropertyType.Color),
+                Prop("_Cutoff", ShaderPropertyType.Float)
+            };
+            var result = Align(original, generated, properties);
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Suffix, Is.EqualTo("_Cut_Cutoff_On"));
+            Assert.That(result.Source.States["_Color"], Is.EqualTo(LockedPropertyState.Renamed));
+            Assert.That(result.Source.States["_EmissionColor"], Is.EqualTo(LockedPropertyState.Renamed));
+            Assert.That(result.Source.States["_Cutoff"], Is.EqualTo(LockedPropertyState.Live));
+        }
+
+        // Two declared names of one length sit in one artifact. A split
+        // that reads both ties and refuses the aligned pair (Y6 of the
+        // bundled locked original admission design). The earliest boundary
+        // breaks the tie.
+        [Test]
+        public void EmbeddedNameNoLongerTiesTheIntersection()
+        {
+            var (original, generated) = SmallPair(
+                "        _Cutoff (\"Cutoff\", Float) = 0\n        _Matcap (\"Matcap\", Float) = 0",
+                null,
+                "        float _Cutoff;\n        float _Matcap;\n        o.Alpha = _Cutoff;\n        o.Emission = _Matcap;",
+                ("_Cutoff", "_Cutoff_Body_Matcap_1"));
+            var properties = new[]
+            {
+                Prop("_Cutoff", ShaderPropertyType.Float),
+                Prop("_Matcap", ShaderPropertyType.Float)
+            };
+            var result = Align(original, generated, properties);
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Suffix, Is.EqualTo("_Body_Matcap_1"));
+            Assert.That(result.Source.States["_Cutoff"], Is.EqualTo(LockedPropertyState.Renamed));
+            Assert.That(result.Source.States["_Matcap"], Is.EqualTo(LockedPropertyState.Live));
+        }
+
+        // A plain material name with no embedded declared name keeps its
+        // suffix. The test passes on its first run and is recorded as
+        // characterization. It is the no-op guard for Falsifier 4 and
+        // Falsifier 5 (Y6 of the bundled locked original admission
+        // design).
+        [Test]
+        public void PlainMaterialNameSuffixIsUnchanged()
+        {
+            var (original, generated) = SmallPair(
+                "        _Color (\"Color\", Color) = (1, 1, 1, 1)",
+                null,
+                "        float4 _Color;\n        o.Albedo = _Color;",
+                ("_Color", "_Color_Body"));
+            var result = Align(original, generated, new[] { Prop("_Color", ShaderPropertyType.Color) });
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Suffix, Is.EqualTo("_Body"));
+            Assert.That(result.Source.States["_Color"], Is.EqualTo(LockedPropertyState.Renamed));
+
+            var (textureOriginal, textureGenerated) = SmallPair(
+                "        _MainTex (\"Main\", 2D) = \"white\" {}",
+                null,
+                "        sampler2D _MainTex;\n        o.Albedo *= tex2D(_MainTex, IN.uv).rgb;",
+                ("_MainTex", "_MainTex_Body"));
+            var texture = Align(
+                textureOriginal, textureGenerated, new[] { Prop("_MainTex", ShaderPropertyType.Texture) });
+            Assert.That(texture.Succeeded, Is.True, texture.RefusalDetail ?? "refused");
+            Assert.That(texture.Source.Suffix, Is.EqualTo("_Body"));
+            Assert.That(texture.Source.States["_MainTex"], Is.EqualTo(LockedPropertyState.Renamed));
+        }
+
+        // A renamed texture name embeds the longer declared name. A split
+        // that scans the longest name derives the wrong tail and the walk
+        // refuses (Y6 of the bundled locked original admission design).
+        // The earliest boundary at the renamed head keeps the suffix, and
+        // the tail strip still admits the derived forms.
+        [Test]
+        public void RenamedTextureWithAnEmbeddedNameKeepsTheSuffix()
+        {
+            var (original, generated) = SmallPair(
+                "        _T (\"T\", 2D) = \"white\" {}\n        _Color (\"Color\", Color) = (1, 1, 1, 1)",
+                null,
+                "        sampler2D _T;\n        float4 _T_ST;\n        o.Albedo *= _T_ST;",
+                ("_T", "_T_Body_Color_1"));
+            var properties = new[]
+            {
+                Prop("_T", ShaderPropertyType.Texture),
+                Prop("_Color", ShaderPropertyType.Color)
+            };
+            var result = Align(original, generated, properties);
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Suffix, Is.EqualTo("_Body_Color_1"));
+            Assert.That(result.Source.States["_T"], Is.EqualTo(LockedPropertyState.Renamed));
+            Assert.That(result.Source.RenamedNames["_T"], Is.EqualTo("_T_Body_Color_1"));
+            Assert.That(result.Source.States["_T_ST"], Is.EqualTo(LockedPropertyState.Renamed));
+            Assert.That(result.Source.RenamedNames["_T_ST"], Is.EqualTo("_T_Body_Color_1_ST"));
+        }
     }
 }
