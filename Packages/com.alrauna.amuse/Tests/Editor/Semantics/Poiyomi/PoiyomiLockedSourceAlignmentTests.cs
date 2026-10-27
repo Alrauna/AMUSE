@@ -1193,6 +1193,91 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Assert.That(result.RefusalDetail, Is.EqualTo(BlockTieDetail));
         }
 
+        // The measured M1 shape of the bundled locked original admission
+        // design. The inner block ties at the wrapper boundary, because no
+        // surviving line sits between the inner block end and the wrapper
+        // end. This test is the no-op guard of Falsifier 1 and Falsifier 9
+        // below. It proves the fixture reaches the tie path.
+        [Test]
+        public void TieWithAKeptGuardAndNoDuplicateAlignsAndRecordsKept()
+        {
+            var (original, generated) = ProgramPair(
+                "        _W (\"W\", Float) = 0\n        _A (\"A\", Float) = 0",
+                "            //ifex _W==0\n            //ifex _A==0\n            o.Albedo = _A;\n            o.Alpha = _A;\n            //endex\n            //endex\n            o.Specular = _W;",
+                "            o.Albedo = _A;\n            o.Alpha = _A;\n            o.Specular = _W;");
+            var properties = new[]
+            {
+                Prop("_W", ShaderPropertyType.Float),
+                Prop("_A", ShaderPropertyType.Float)
+            };
+            var result = Align(original, generated, properties);
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Blocks.Count, Is.EqualTo(2));
+            Assert.That(result.Source.Blocks[0].Kind, Is.EqualTo(LockedBlockKind.Ifex));
+            Assert.That(result.Source.Blocks[0].Outcome, Is.EqualTo(LockedBlockOutcome.Kept));
+            Assert.That(result.Source.Blocks[0].ConditionOrKeyword, Is.EqualTo("_W==0"));
+            Assert.That(result.Source.Blocks[0].OriginalLine, Is.EqualTo(LineOf(original, "//ifex _W==0")));
+            Assert.That(result.Source.Blocks[1].Kind, Is.EqualTo(LockedBlockKind.Ifex));
+            Assert.That(result.Source.Blocks[1].Outcome, Is.EqualTo(LockedBlockOutcome.Kept));
+            Assert.That(result.Source.Blocks[1].ConditionOrKeyword, Is.EqualTo("_A==0"));
+            Assert.That(result.Source.Blocks[1].OriginalLine, Is.EqualTo(LineOf(original, "//ifex _A==0")));
+        }
+
+        // --- Falsifier 1: a tie rule that decides kept whenever the kept trial consumed text, with no catch-up probe. ---
+        // The kept world and the removed world of the inner block both
+        // reproduce the generated text from the duplicate after the wrapper
+        // end. The catch-up probe must catch that and refuse undecided.
+        // The no-op guard is the pair without the duplicate above. It
+        // aligns and records both blocks Kept.
+        [Test]
+        public void TieWhoseBodyIsDuplicatedAfterTheBlockRefusesUndecided()
+        {
+            var (original, generated) = ProgramPair(
+                "        _W (\"W\", Float) = 0\n        _A (\"A\", Float) = 0",
+                "            //ifex _W==0\n            //ifex _A==0\n            o.Albedo = _A;\n            o.Alpha = _A;\n            o.Specular = _A;\n            //endex\n            //endex\n            o.Albedo = _A;\n            o.Alpha = _A;\n            o.Specular = _A;",
+                "            o.Albedo = _A;\n            o.Alpha = _A;\n            o.Specular = _A;");
+            var properties = new[]
+            {
+                Prop("_W", ShaderPropertyType.Float),
+                Prop("_A", ShaderPropertyType.Float)
+            };
+            var result = Align(original, generated, properties);
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(result.Source, Is.Null);
+            Assert.That(result.RefusalDetail, Is.EqualTo(BlockTieDetail));
+        }
+
+        // --- Falsifier 9: a catch-up probe capped by a constant step or line count instead of the end of the file. ---
+        // The probe must walk all 61 duplicated lines before its generated
+        // index reaches the rival index. A probe capped below 61 steps
+        // finds no death and no catch up and wrongly decides kept. The
+        // no-op guard is the Falsifier 1 guard pair above. It aligns.
+        [Test]
+        public void CatchUpProbeWalksPastAnyConstantCapAndRefusesUndecided()
+        {
+            var body = new List<string>();
+            for (var i = 0; i < 61; i++)
+            {
+                body.Add("            o.Albedo = _A;");
+            }
+
+            var program = "            //ifex _W==0\n            //ifex _A==0\n" + Join(body)
+                + "\n            //endex\n            //endex\n" + Join(body);
+            var (original, generated) = ProgramPair(
+                "        _W (\"W\", Float) = 0\n        _A (\"A\", Float) = 0",
+                program,
+                Join(body));
+            var properties = new[]
+            {
+                Prop("_W", ShaderPropertyType.Float),
+                Prop("_A", ShaderPropertyType.Float)
+            };
+            var result = Align(original, generated, properties);
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(result.Source, Is.Null);
+            Assert.That(result.RefusalDetail, Is.EqualTo(BlockTieDetail));
+        }
+
         [Test]
         public void RemovedIfdefKeepsItsElseBody()
         {

@@ -34,7 +34,7 @@ Status: 2026-10-25, second revision. Three adversarial reviews of the first revi
 - Never stage or commit `Packages/manifest.json`, `Packages/packages-lock.json`, `Packages/vpm-manifest.json`, `ProjectSettings/*`, or `Assets/default.unity*`. Stage explicit paths only. Never push. Every commit in this plan happens only with explicit owner authorization.
 - Unity runs only in the dev editor instance. Verify `Application.dataPath` of that instance matches the Assets folder of this repository before any MCP write or long call. Never run tests in the Census Lab project. A filtered run that reports 0 tests is a failure.
 - After new files: refresh Unity and read the console for compile errors before the next step.
-- Full validation runs both assemblies: `Alrauna.Amuse.Tests.Editor` and `Alrauna.Amuse.Research.Tests.Editor`. Task 1 records the baseline counts on their run date, before any code change. Never invent counts.
+- Full validation runs both assemblies: `Alrauna.Amuse.Tests.Editor` and `Alrauna.Amuse.Research.Tests.Editor`. Task 1 records the baseline counts on their run date, before any code change. Never invent counts. Baseline of Task 1, recorded on 2026-10-27 before any code change: product 3077 total, 3072 passed, 0 failed, 5 ignored. Research 151 total, 151 passed, 0 failed, 0 ignored. The 5 ignored tests are the named vendor gate skips.
 - Real vendor locks run only behind the `VendorOptInGate.RealThryLock` gate and only in the dev project (Y9).
 - Every status claim in a record or comment carries its date.
 

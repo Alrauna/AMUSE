@@ -1052,6 +1052,33 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
                     if (allAtEnd)
                     {
+                        // Y2 of the bundled locked original admission
+                        // design classifies the tie at this point, where
+                        // both candidates stayed alive to the boundary
+                        // and the code refused as undecided before that
+                        // design. The consumed count of a trial is its
+                        // generated index delta across the block. A
+                        // both-nonzero tie keeps the refusal (Y4). A
+                        // both-zero tie keeps the refusal until the
+                        // later plan task lands its rule. Exactly one
+                        // trial at zero runs the catch-up probe (Y2).
+                        var keptConsumed = keptResult.GenIndex - state.GenIndex;
+                        var removedConsumed = removedResult.GenIndex - state.GenIndex;
+                        if ((keptConsumed == 0) != (removedConsumed == 0))
+                        {
+                            var zeroState = keptConsumed == 0 ? keptResult : removedResult;
+                            var rivalState = keptConsumed == 0 ? removedResult : keptResult;
+                            if (ProbeCatchUp(zeroState, rivalState.GenIndex)
+                                == CatchUpProbeOutcome.Died)
+                            {
+                                // The zero trial died on a line it cannot
+                                // match, so the generated text forces the
+                                // rival outcome (Y2).
+                                winner = rivalState;
+                                break;
+                            }
+                        }
+
                         state.LookaheadRemaining = enclosingLookahead;
                         throw new RefusalException(BlockTieDetail, startLine.Number, true);
                     }
@@ -1085,6 +1112,49 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             {
                 state.OriginalIndex = extent.EndIndex + 1;
             }
+        }
+
+        /// <summary>
+        /// Walks the zero trial of a tie forward until it dies, catches up
+        /// with the rival trial, or reaches the end of the original file
+        /// (Y2). The zero trial must reproduce the generated lines that
+        /// the rival trial already consumed. The probe bypasses the
+        /// lookahead window counter and the growth boundary, because Y2
+        /// decides past both. The end of the original file is the only
+        /// cap, and it is an evidence bound, never a budget (Y10). A
+        /// nested undecided refusal propagates as undecided (Y2).
+        /// </summary>
+        private static CatchUpProbeOutcome ProbeCatchUp(WalkState zeroState, int rivalGeneratedIndex)
+        {
+            zeroState.GrowthBoundary = -1;
+            zeroState.LookaheadRemaining = -1;
+            var cap = zeroState.OriginalLines.Count;
+            while (zeroState.GenIndex < rivalGeneratedIndex
+                && zeroState.OriginalIndex < cap)
+            {
+                try
+                {
+                    WalkRange(zeroState, zeroState.OriginalIndex, zeroState.OriginalIndex + 1);
+                }
+                catch (RefusalException refusal)
+                {
+                    if (refusal.Undecided)
+                    {
+                        throw;
+                    }
+
+                    return CatchUpProbeOutcome.Died;
+                }
+
+                if (zeroState.GenIndex >= rivalGeneratedIndex)
+                {
+                    return CatchUpProbeOutcome.CaughtUp;
+                }
+            }
+
+            return zeroState.GenIndex >= rivalGeneratedIndex
+                ? CatchUpProbeOutcome.CaughtUp
+                : CatchUpProbeOutcome.ReachedFileEnd;
         }
 
         /// <summary>
@@ -2619,6 +2689,15 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             ScalarFloat,
             F0,
             Float4
+        }
+
+        // The end states of the tie catch-up probe (Y2 of the bundled
+        // locked original admission design).
+        private enum CatchUpProbeOutcome
+        {
+            Died,
+            CaughtUp,
+            ReachedFileEnd
         }
 
         private readonly struct LineRef
