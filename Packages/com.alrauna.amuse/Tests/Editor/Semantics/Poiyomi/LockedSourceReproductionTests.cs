@@ -72,6 +72,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             private readonly Dictionary<string, LockedTextureValue> textures =
                 new Dictionary<string, LockedTextureValue>();
 
+            private readonly Dictionary<string, bool> nonZeroAnimatedTags =
+                new Dictionary<string, bool>();
+
             internal FakeValues WithFloat(string name, float value)
             {
                 floats[name] = value;
@@ -93,6 +96,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             internal FakeValues WithTexture(string name, LockedTextureValue value)
             {
                 textures[name] = value;
+                return this;
+            }
+
+            internal FakeValues WithNonZeroAnimatedTag(string name, bool value)
+            {
+                nonZeroAnimatedTags[name] = value;
                 return this;
             }
 
@@ -164,6 +173,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             public bool TryGetTexture(string propertyName, out LockedTextureValue value)
             {
                 return textures.TryGetValue(propertyName, out value);
+            }
+
+            public bool HasNonZeroAnimatedTag(string propertyName)
+            {
+                return nonZeroAnimatedTags.TryGetValue(propertyName, out var value)
+                    && value;
             }
 
             internal FakeValues WithoutTexture(string name)
@@ -998,6 +1013,143 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 
             Assert.That(detail, Is.Null,
                 "The declared default holds the removed condition.");
+        }
+
+        // --- Falsifier 3: an M2 record that marks the inner guard
+        // Removed. ---
+        // The lock removes the wrapper body, so the zero-and-zero rule
+        // of Y3 records the wrapper Removed with the guard
+        // NotEvaluated. An implementation that adopts the kept trial's
+        // nested records marks the inner guard Removed. A6.1 then
+        // demands the guard keyword on the clone. The keyword sits in
+        // no pragma line, so no run carries it, and the check refuses.
+        // The strict wrapper check of Y3 makes the nested records
+        // moot. The no-op guard is the marker assertions. They prove
+        // the wrapper record reaches the removed-ifex branch of the
+        // check.
+        [Test]
+        public void LightVolumeWrapperRecordPassesTheConsistencyCheck()
+        {
+            var properties = new[]
+            {
+                Prop("_LightingEnableLightVolumes", ShaderPropertyType.Float)
+            };
+            var source = Source(
+                States(("_LightingEnableLightVolumes", LockedPropertyState.Live)),
+                blocks: Blocks(
+                    Block(
+                        LockedBlockKind.Ifex,
+                        LockedBlockOutcome.Removed,
+                        "_LightingEnableLightVolumes==0 && " +
+                        "isNotAnimated(_LightingEnableLightVolumes)",
+                        60,
+                        zeroAndZero: true),
+                    Block(
+                        LockedBlockKind.Ifndef,
+                        LockedBlockOutcome.NotEvaluated,
+                        "VRC_LIGHT_VOLUMES_INCLUDED",
+                        61)));
+
+            Assert.That(source.Blocks[0].Kind, Is.EqualTo(LockedBlockKind.Ifex),
+                "The wrapper record is an ifex record.");
+            Assert.That(source.Blocks[0].Outcome,
+                Is.EqualTo(LockedBlockOutcome.Removed),
+                "The wrapper record is Removed.");
+            Assert.That(source.Blocks[0].ZeroAndZero, Is.True,
+                "The wrapper record carries the zero-and-zero marker.");
+            Assert.That(source.Blocks[1].Outcome,
+                Is.EqualTo(LockedBlockOutcome.NotEvaluated),
+                "The guard record is NotEvaluated.");
+            Assert.That(source.DefineRuns[0],
+                Does.Not.Contain("VRC_LIGHT_VOLUMES_INCLUDED"),
+                "The guard keyword sits in no pragma line.");
+
+            var reproduced = new FakeValues()
+                .WithFloat("_LightingEnableLightVolumes", 0f)
+                .WithNonZeroAnimatedTag("_LightingEnableLightVolumes", false);
+            Assert.That(reproduced.Keywords,
+                Does.Not.Contain("VRC_LIGHT_VOLUMES_INCLUDED"),
+                "The clone keywords never hold the guard keyword.");
+
+            var detail = LockedSourceReproduction.CheckConsistency(
+                source,
+                properties,
+                reproduced);
+
+            Assert.That(detail, Is.Null,
+                "The strict wrapper check holds and the guard checks nothing.");
+        }
+
+        // --- Falsifier 11: a zero-and-zero record that reuses the A6.2
+        // isNotAnimated bypass. ---
+        // The lock keeps the wrapper and removes the inner body, and
+        // the inner body holds an alpha-relevant line. The wrapper
+        // markers are comments, so both wrapper trials consume zero
+        // generated lines. The zero-and-zero rule of Y3 adopts the
+        // removed trial. An implementation that reuses the A6.2
+        // removal evidence rule counts the isNotAnimated clause true.
+        // Strict mode reads the real Animated tag. Both tags are one,
+        // so the clause is false and the check refuses. The no-op
+        // guard is the same pair with the tag read false. It passes
+        // the check, so the fixture reaches the condition check.
+        [Test]
+        public void KeptWrapperWithAnAnimatedTagRefusesUnderTheStrictCheck()
+        {
+            var properties = new[]
+            {
+                Prop("P", ShaderPropertyType.Float),
+                Prop("Q", ShaderPropertyType.Float)
+            };
+            var source = Source(
+                States(("P", LockedPropertyState.Live), ("Q", LockedPropertyState.Live)),
+                blocks: Blocks(
+                    Block(
+                        LockedBlockKind.Ifex,
+                        LockedBlockOutcome.Removed,
+                        "P==0 && isNotAnimated(P)",
+                        70,
+                        zeroAndZero: true),
+                    Block(
+                        LockedBlockKind.Ifex,
+                        LockedBlockOutcome.NotEvaluated,
+                        "Q==1",
+                        71)));
+
+            Assert.That(source.Blocks[0].Outcome,
+                Is.EqualTo(LockedBlockOutcome.Removed),
+                "The zero-and-zero rule adopts the removed trial.");
+            Assert.That(source.Blocks[0].ZeroAndZero, Is.True,
+                "The wrapper record carries the zero-and-zero marker.");
+
+            var tagged = new FakeValues()
+                .WithFloat("P", 0f)
+                .WithFloat("Q", 1f)
+                .WithNonZeroAnimatedTag("P", true)
+                .WithNonZeroAnimatedTag("Q", true);
+
+            var detail = LockedSourceReproduction.CheckConsistency(
+                source,
+                properties,
+                tagged);
+
+            Assert.That(detail, Is.EqualTo(ConditionDetail),
+                "The true Animated tag fails the strict check.");
+
+            // No-op guard: the same pair with the tag read false passes
+            // the check. The fixture reaches the condition check.
+            var untagged = new FakeValues()
+                .WithFloat("P", 0f)
+                .WithFloat("Q", 1f)
+                .WithNonZeroAnimatedTag("P", false)
+                .WithNonZeroAnimatedTag("Q", false);
+
+            var passing = LockedSourceReproduction.CheckConsistency(
+                source,
+                properties,
+                untagged);
+
+            Assert.That(passing, Is.Null,
+                "The false tag read holds the strict check.");
         }
 
         /// <summary>

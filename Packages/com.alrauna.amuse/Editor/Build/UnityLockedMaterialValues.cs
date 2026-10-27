@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using UnityEditor;
 using UnityEngine;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
@@ -22,6 +23,7 @@ namespace Alrauna.Amuse.Editor.Build
         private const string RenderTypeTagName = "RenderType";
         private const string VrcFallbackTagName = "VRCFallback";
         private const string OriginalKeywordsTagName = "OriginalKeywords";
+        private const string AnimatedTagSuffix = "Animated";
         private const string GuidTokenPrefix = "guid:";
         private const string IdTokenPrefix = "id:";
 
@@ -182,6 +184,25 @@ namespace Alrauna.Amuse.Editor.Build
 
         public bool ProjectIsLinear =>
             PlayerSettings.colorSpace == ColorSpace.Linear;
+
+        /// <summary>
+        /// Reads the Animated override tag of one property (Y3). The
+        /// tag name is the property name plus the Animated suffix. The
+        /// read uses the serialized tag map like every override tag
+        /// read (A5.10). True means the tag text parses as an int
+        /// other than 0 in the invariant culture. A missing or
+        /// unparseable tag means not animated, so the read answers
+        /// false.
+        /// </summary>
+        public bool HasNonZeroAnimatedTag(string propertyName)
+        {
+            var text = OverrideTagOrNull(propertyName + AnimatedTagSuffix);
+            return int.TryParse(
+                text,
+                NumberStyles.Integer,
+                CultureInfo.InvariantCulture,
+                out var parsed) && parsed != 0;
+        }
 
         /// <summary>
         /// The material's own override tag. The read uses the serialized

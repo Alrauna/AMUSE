@@ -144,9 +144,12 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     continue;
                 }
 
+                // The fixed values of A6.3 come from the removal
+                // evidence, so the build reads RemovalEvidence (Y3).
                 var outcome = PoiyomiLockCondition.Evaluate(
                     block.ConditionOrKeyword,
-                    new LockValuesAdapter(locked, properties));
+                    new LockValuesAdapter(locked, properties),
+                    PoiyomiLockConditionMode.RemovalEvidence);
                 if (outcome == PoiyomiLockConditionOutcome.Unsupported)
                 {
                     return Refuse(ConditionUnsupportedDetail);
@@ -432,12 +435,18 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 else
                 {
                     // A removed ifex block needs its comparisons true on
-                    // the clone (A6.2). The evaluator ports the vendor
-                    // grammar, and isNotAnimated counts as true, because
-                    // the removal proves it held at lock time.
+                    // the clone (A6.2). A zero-and-zero record may not
+                    // use the removal as its own evidence, so its check
+                    // runs strict and reads the real Animated tag (Y3).
+                    // Every other record keeps the removal evidence
+                    // rule (A6.2). The evaluator ports the vendor
+                    // grammar.
                     var outcome = PoiyomiLockCondition.Evaluate(
                         block.ConditionOrKeyword,
-                        new LockValuesAdapter(reproduced, properties));
+                        new LockValuesAdapter(reproduced, properties),
+                        block.ZeroAndZero
+                            ? PoiyomiLockConditionMode.Strict
+                            : PoiyomiLockConditionMode.RemovalEvidence);
                     if (outcome == PoiyomiLockConditionOutcome.Unsupported)
                     {
                         return ConditionUnsupportedDetail;
@@ -1080,6 +1089,11 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             public bool IsTexture(string propertyName)
             {
                 return values.TryGetTexture(propertyName, out _);
+            }
+
+            public bool HasNonZeroAnimatedTag(string propertyName)
+            {
+                return values.HasNonZeroAnimatedTag(propertyName);
             }
 
             public bool TryGetNumber(string propertyName, out float value)

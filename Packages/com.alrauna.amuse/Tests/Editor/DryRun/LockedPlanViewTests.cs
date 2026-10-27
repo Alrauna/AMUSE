@@ -101,6 +101,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 new Vector2(1f, 1f), new Vector2(0f, 0f));
             locked.OriginalKeywords = new[] { "TAG_ONE" };
             locked.IsLinear = true;
+            locked.NonZeroAnimatedTags.Add("_LiveFloat");
 
             var plan = new LockedReproductionPlan(
                 new Dictionary<string, float>(),
@@ -135,6 +136,10 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 Is.EqualTo(new Vector2(0f, 0f)));
             Assert.That(view.TryGetFloat("_Missing", out _), Is.False,
                 "a name the locked view refuses stays refused");
+            Assert.That(view.HasNonZeroAnimatedTag("_LiveFloat"), Is.True,
+                "the animated tag read falls through to the locked values");
+            Assert.That(view.HasNonZeroAnimatedTag("_Missing"), Is.False,
+                "a refused name reads no animated tag");
             Assert.That(view.OriginalKeywordsTag,
                 Is.EqualTo(new[] { "TAG_ONE" }),
                 "the tag keywords stay a locked-side fact");
@@ -160,6 +165,9 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
 
             internal bool IsLinear;
 
+            internal readonly HashSet<string> NonZeroAnimatedTags =
+                new HashSet<string>();
+
             public bool TryGetFloat(string propertyName, out float value)
             {
                 return Floats.TryGetValue(propertyName, out value);
@@ -180,6 +188,11 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 string propertyName, out LockedTextureValue value)
             {
                 return Textures.TryGetValue(propertyName, out value);
+            }
+
+            public bool HasNonZeroAnimatedTag(string propertyName)
+            {
+                return NonZeroAnimatedTags.Contains(propertyName);
             }
 
             public int RenderQueue => 0;

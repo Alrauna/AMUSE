@@ -112,5 +112,14 @@ namespace Alrauna.Amuse.Editor.DryRun
         public IReadOnlyList<string> Keywords => plan.Keywords;
 
         public bool ProjectIsLinear => locked.ProjectIsLinear;
+
+        /// <summary>
+        /// The plan carries no Animated tag write, so the strict check
+        /// read falls through to the locked material (Y3).
+        /// </summary>
+        public bool HasNonZeroAnimatedTag(string propertyName)
+        {
+            return locked.HasNonZeroAnimatedTag(propertyName);
+        }
     }
 }
