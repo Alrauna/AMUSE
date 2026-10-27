@@ -790,18 +790,67 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         }
 
         /// <summary>
+        /// Tracks the in-comment state of one forward line scan. A line
+        /// inside a block comment, the opener line, and the closer line
+        /// are comment lines. The caller skips them before any directive
+        /// match. This mirrors the block comment drop of the walk
+        /// (fact 2) and carries the Y4 decision of the bundled locked
+        /// original admission design.
+        /// </summary>
+        private struct BlockCommentTracker
+        {
+            private bool _inComment;
+
+            internal bool ConsumedByComment(string trimmed)
+            {
+                if (_inComment)
+                {
+                    if (trimmed.EndsWith("*/", StringComparison.Ordinal))
+                    {
+                        _inComment = false;
+                    }
+
+                    return true;
+                }
+
+                if (trimmed.StartsWith("/*", StringComparison.Ordinal))
+                {
+                    if (!trimmed.EndsWith("*/", StringComparison.Ordinal))
+                    {
+                        _inComment = true;
+                    }
+
+                    return true;
+                }
+
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Finds the extent of one block. Nested directives deepen the
         /// count. An elif line is never special, so it stays part of the
-        /// body before an else (fact 11).
+        /// body before an else (fact 11). A block comment span drops
+        /// first (Y4), so a commented directive shaped line never
+        /// deepens the count.
         /// </summary>
         private static BlockExtent FindBlockExtent(WalkState state, int startIndex, LockedBlockKind kind)
         {
+            // One tracker serves both branches. The ifex branch always
+            // returns or throws, so the in-comment state never carries
+            // over (Y4).
+            var tracker = new BlockCommentTracker();
             if (kind == LockedBlockKind.Ifex)
             {
                 var depth = 1;
                 for (var i = startIndex + 1; i < state.OriginalLines.Count; i++)
                 {
                     var trimmed = state.OriginalLines[i].Text.Trim();
+                    if (tracker.ConsumedByComment(trimmed))
+                    {
+                        continue;
+                    }
+
                     if (IsIfexStart(trimmed))
                     {
                         depth++;
@@ -825,7 +874,13 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             var elseIndex = -1;
             for (var i = startIndex + 1; i < state.OriginalLines.Count; i++)
             {
-                var first = FirstToken(state.OriginalLines[i].Text.Trim());
+                var trimmed = state.OriginalLines[i].Text.Trim();
+                if (tracker.ConsumedByComment(trimmed))
+                {
+                    continue;
+                }
+
+                var first = FirstToken(trimmed);
                 if (first == "#ifdef" || first == "#ifndef" || first == "#if")
                 {
                     ifDepth++;
@@ -1193,27 +1248,12 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// </summary>
         private static void RecordSkippedBlocks(WalkState state, int bodyStart, int bodyEnd)
         {
-            var inBlockComment = false;
+            var tracker = new BlockCommentTracker();
             for (var i = bodyStart; i < bodyEnd; i++)
             {
                 var trimmed = state.OriginalLines[i].Text.Trim();
-                if (inBlockComment)
+                if (tracker.ConsumedByComment(trimmed))
                 {
-                    if (trimmed.EndsWith("*/", StringComparison.Ordinal))
-                    {
-                        inBlockComment = false;
-                    }
-
-                    continue;
-                }
-
-                if (trimmed.StartsWith("/*", StringComparison.Ordinal))
-                {
-                    if (!trimmed.EndsWith("*/", StringComparison.Ordinal))
-                    {
-                        inBlockComment = true;
-                    }
-
                     continue;
                 }
 
@@ -1234,28 +1274,13 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// </summary>
         private static bool BodyHasSurvivingLine(WalkState state, int bodyStart, int bodyEnd)
         {
-            var inBlockComment = false;
+            var tracker = new BlockCommentTracker();
             for (var i = bodyStart; i < bodyEnd; i++)
             {
                 var text = state.OriginalLines[i].Text;
                 var trimmed = text.Trim();
-                if (inBlockComment)
+                if (tracker.ConsumedByComment(trimmed))
                 {
-                    if (trimmed.EndsWith("*/", StringComparison.Ordinal))
-                    {
-                        inBlockComment = false;
-                    }
-
-                    continue;
-                }
-
-                if (trimmed.StartsWith("/*", StringComparison.Ordinal))
-                {
-                    if (!trimmed.EndsWith("*/", StringComparison.Ordinal))
-                    {
-                        inBlockComment = true;
-                    }
-
                     continue;
                 }
 

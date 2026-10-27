@@ -1023,6 +1023,69 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Assert.That(result.Source.States["_B"], Is.EqualTo(LockedPropertyState.Unused));
         }
 
+        // --- Falsifier 8: an extent finder that counts directive shaped lines inside block comments. ---
+        // The vendor deletes block comments wholesale, so the generated
+        // text never shows a commented directive. An extent finder with no
+        // comment tracking counts the commented //ifex line, mis-nests the
+        // wrapper, and refuses with the unclosed block sentence. The Y4
+        // comment tracking drops the span first, so the commented line
+        // records nothing and the real nested block records its own
+        // outcome.
+        [Test]
+        public void CommentedDirectiveInsideABlockNeverOpensABlock()
+        {
+            var (original, generated) = ProgramPair(
+                "        _A (\"A\", Float) = 0\n        _B (\"B\", Float) = 0\n        _C (\"C\", Float) = 0",
+                "            //ifex _A==0\n            /*\n            //ifex _C==0\n            */"
+                    + "\n            //ifex _B==0\n            o.Albedo = _B;\n            //endex\n            //endex"
+                    + "\n            o.Alpha = 1;",
+                "            o.Alpha = 1;");
+            var properties = new[]
+            {
+                Prop("_A", ShaderPropertyType.Float),
+                Prop("_B", ShaderPropertyType.Float),
+                Prop("_C", ShaderPropertyType.Float)
+            };
+            var result = Align(original, generated, properties);
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Blocks.Count, Is.EqualTo(2));
+            Assert.That(result.Source.Blocks[0].Outcome, Is.EqualTo(LockedBlockOutcome.Removed));
+            Assert.That(result.Source.Blocks[0].ConditionOrKeyword, Is.EqualTo("_A==0"));
+            Assert.That(result.Source.Blocks[0].OriginalLine, Is.EqualTo(LineOf(original, "//ifex _A==0")));
+            Assert.That(result.Source.Blocks[1].Outcome, Is.EqualTo(LockedBlockOutcome.NotEvaluated));
+            Assert.That(result.Source.Blocks[1].ConditionOrKeyword, Is.EqualTo("_B==0"));
+            Assert.That(result.Source.Blocks[1].OriginalLine, Is.EqualTo(LineOf(original, "//ifex _B==0")));
+            Assert.That(result.Source.States["_C"], Is.EqualTo(LockedPropertyState.Unused));
+        }
+
+        // The no-op guard of Falsifier 8 above. The same wrapper holds the
+        // comment span with no commented directive inside. The old count
+        // was already right on this shape, so the pair aligns before and
+        // after the fix. The guard proves the fixture reaches the extent
+        // scan and the block records.
+        [Test]
+        public void CommentSpanWithoutADirectiveAlignsTheSame()
+        {
+            var (original, generated) = ProgramPair(
+                "        _A (\"A\", Float) = 0\n        _B (\"B\", Float) = 0",
+                "            //ifex _A==0\n            /*\n            */"
+                    + "\n            //ifex _B==0\n            o.Albedo = _B;\n            //endex\n            //endex"
+                    + "\n            o.Alpha = 1;",
+                "            o.Alpha = 1;");
+            var properties = new[]
+            {
+                Prop("_A", ShaderPropertyType.Float),
+                Prop("_B", ShaderPropertyType.Float)
+            };
+            var result = Align(original, generated, properties);
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Blocks.Count, Is.EqualTo(2));
+            Assert.That(result.Source.Blocks[0].Outcome, Is.EqualTo(LockedBlockOutcome.Removed));
+            Assert.That(result.Source.Blocks[0].ZeroAndZero, Is.True);
+            Assert.That(result.Source.Blocks[1].Outcome, Is.EqualTo(LockedBlockOutcome.NotEvaluated));
+            Assert.That(result.Source.Blocks[1].ConditionOrKeyword, Is.EqualTo("_B==0"));
+        }
+
         [Test]
         public void BlockWhoseBodyRepeatsTheFollowingTextGrowsTheLookahead()
         {
