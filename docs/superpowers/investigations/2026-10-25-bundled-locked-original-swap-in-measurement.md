@@ -130,7 +130,7 @@ This section is the stage 5 statement of the admission design (Y10). All claims 
 ### 11.2 Rules and design facts
 
 - No step of the aligner or the swap-in refuses a material on elapsed time or on a step count. The scan of section 11.1 confirms this on 2026-10-27.
-- The only cap is the Y2 end-of-the-original-file evidence cap. It bounds evidence, not time.
+- The only new cap is the Y2 end-of-the-original-file evidence cap. Every cap of the aligner bounds evidence, not time.
 - Owner decision Q3, 2026-10-25: no time limit applies. Slow code stays unacceptable.
 - The memo clears at finish pass entry and at the end of apply. The A8.4 keying and lifetime stay unchanged.
 - Cost model. Each build pays the full align cost again per distinct generated shader. Each dry run whose memo is cold pays the align cost once per distinct generated shader. A second dry run in the same session without a build between pays nothing, because the memo still holds.
