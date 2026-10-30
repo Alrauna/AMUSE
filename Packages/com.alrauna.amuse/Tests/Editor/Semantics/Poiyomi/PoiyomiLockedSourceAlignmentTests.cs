@@ -57,6 +57,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         private const string BlockUnclosedDetail =
             "A block in the original text never closes.";
 
+        private const string MalformedPropertiesDetail =
+            "The Properties text is not well formed.";
+
         // --- Falsifier locked-source-alignment 1: an implementation that folds inner whitespace ---
         // An implementation that trims or folds runs of spaces inside a line
         // before the compare aligns the mutated pair and fails the refusal
@@ -1655,7 +1658,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         {
             var (original, generated) = ProgramPair(
                 "        _W (\"W\", Float) = 0\n        _A (\"A\", Float) = 0",
-                "            //ifex _W==0\n            #ifndef K\n            o.Albedo = _A;\n            #endif"
+                "            #pragma shader_feature K"
+                    + "\n            //ifex _W==0\n            #ifndef K\n            o.Albedo = _A;\n            #endif"
                     + "\n            //endex\n            o.Specular = _W;",
                 "            o.Specular = _W;");
             var properties = new[]
@@ -1716,7 +1720,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         {
             var (original, generated) = ProgramPair(
                 "        _W (\"W\", Float) = 0\n        _A (\"A\", Float) = 0",
-                "            //ifex _W==0\n            #ifndef K\n            o.Albedo = _A;\n            #endif"
+                "            #pragma shader_feature K"
+                    + "\n            //ifex _W==0\n            #ifndef K\n            o.Albedo = _A;\n            #endif"
                     + "\n            //endex\n            #ifdef _A\n            o.Emission = _A;\n            #endif"
                     + "\n            o.Specular = _W;",
                 "            #ifdef _A\n            o.Emission = _A;\n            #endif\n            o.Specular = _W;");
@@ -2247,12 +2252,85 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Assert.That(result.Source.RenamedNames["_W"], Is.EqualTo("_W_S"));
         }
 
+        // LA3 replaces the Y7 line-local string rule. One shared
+        // Properties scan now tracks the quoted-string, line-comment,
+        // and block-comment state across physical lines, and it serves
+        // all three consumers: the original Properties routing, the
+        // generated rename artifacts, and the Gamma attribute walk. The
+        // old UnclosedDisplayStringIsAccepted case pinned the dropped
+        // rule and is gone.
+
+        // --- Falsifier LA-F5: a scanner that refuses a valid multiline
+        // display string or loses the later duplicate. ---
+        // The display string of _M runs over three physical lines. The
+        // continuation line holds an unbalanced brace that stays string
+        // data. The plain-plus-renamed duplicate of _D follows, and the
+        // real structural block close comes after it. The aligner must
+        // accept the pair, find the exact suffix, and consume every
+        // generated line. A mutated duplicate copy and one extra
+        // generated line must refuse.
+
         [Test]
-        public void UnclosedDisplayStringIsAccepted()
+        public void MultilineDisplayStringKeepsDuplicateRenamedProperty()
         {
-            // The display string never closes before the line end. The
-            // string skip ends at the line end. The } inside the string
-            // does not count, so the later Properties lines still count.
+            var propertiesLines = "        _M (\"M line {\n" +
+                "{ open brace inside string\n" +
+                "        more\", Float) = 0\n" +
+                "        _D (\"D\", Float) = 0.5\n" +
+                "        _E (\"E\", Float) = 0";
+            var (original, generated) = SmallPair(
+                propertiesLines,
+                null,
+                "        float _D;\n        o.Albedo = _D;",
+                ("o.Albedo = _D;", "o.Albedo = _D_S;"),
+                ("float _D;", "float _D_S;"),
+                ("        _D (\"D\", Float) = 0.5\n        _E",
+                    "        _D (\"D\", Float) = 0.5\n        _D_S (\"D\", Float) = 0.5\n        _E"));
+            var properties = new[]
+            {
+                Prop("_M", ShaderPropertyType.Float),
+                Prop("_D", ShaderPropertyType.Float),
+                Prop("_E", ShaderPropertyType.Float)
+            };
+            var result = Align(original, generated, properties);
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Suffix, Is.EqualTo("_S"));
+            Assert.That(result.Source.States["_D"], Is.EqualTo(LockedPropertyState.Renamed));
+            Assert.That(result.Source.RenamedNames["_D"], Is.EqualTo("_D_S"));
+            // Success already proves full consumption: the walk refuses
+            // any generated line that no original edit produces.
+
+            // Mutating only the renamed copy must refuse.
+            var mutatedGenerated = generated.Replace(
+                "        _D_S (\"D\", Float) = 0.5",
+                "        _D_S (\"D\", Float) = 0.9");
+            Assert.That(mutatedGenerated, Is.Not.EqualTo(generated),
+                "fixture guard: the mutated copy must change the text");
+            var mutated = Align(original, mutatedGenerated, properties);
+            Assert.That(mutated.Succeeded, Is.False);
+            Assert.That(mutated.Source, Is.Null);
+
+            // One extra generated line must refuse.
+            var extraGenerated = generated.Replace(
+                "        _E (\"E\", Float) = 0",
+                "        _E (\"E\", Float) = 0\n        _Extra (\"E\", Float) = 0");
+            Assert.That(extraGenerated, Is.Not.EqualTo(generated),
+                "fixture guard: the extra line must change the text");
+            var extra = Align(original, extraGenerated, properties);
+            Assert.That(extra.Succeeded, Is.False);
+            Assert.That(extra.Source, Is.Null);
+        }
+
+        // --- Falsifier LA-F6: an implementation that keeps the old
+        // line-local acceptance for an unclosed display string. ---
+        // The display string of _Q never closes before the text end.
+        // The shared scan reports malformed state, and the alignment
+        // refuses with the fixed detail and the Properties opening
+        // line. No source record comes back.
+
+        [Test]
+        public void MalformedOriginalPropertiesRefuses()
+        {
             var (original, generated) = SmallPair(
                 "        _Q (\"Q } open, Float) = 0\n        _W (\"W\", Float) = 0",
                 null,
@@ -2262,9 +2340,192 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 original,
                 generated,
                 new[] { Prop("_Q", ShaderPropertyType.Float), Prop("_W", ShaderPropertyType.Float) });
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(result.Source, Is.Null);
+            Assert.That(result.RefusalDetail, Is.EqualTo(MalformedPropertiesDetail));
+            Assert.That(result.OriginalLine, Is.EqualTo(LineOf(original, "    Properties")));
+        }
+
+        [Test]
+        public void MalformedGeneratedPropertiesRefuses()
+        {
+            // Only the generated side carries the unclosed string. The
+            // refusal maps to the related original Properties opening
+            // line, never to a generated position (LA3).
+            var (original, generated) = SmallPair(
+                "        _Q (\"Q\", Float) = 0\n        _W (\"W\", Float) = 0",
+                null,
+                null,
+                ("_Q (\"Q\", Float) = 0", "_Q (\"Q } open, Float) = 0"),
+                ("_W (\"W\"", "_W_S (\"W\""));
+            var result = Align(
+                original,
+                generated,
+                new[] { Prop("_Q", ShaderPropertyType.Float), Prop("_W", ShaderPropertyType.Float) });
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(result.Source, Is.Null);
+            Assert.That(result.RefusalDetail, Is.EqualTo(MalformedPropertiesDetail));
+            Assert.That(result.OriginalLine, Is.EqualTo(LineOf(original, "    Properties")));
+        }
+
+        [Test]
+        public void MalformedUnfinishedBlockCommentRefuses()
+        {
+            // The block comment opener never closes. The text ends
+            // inside the comment, so the scan is malformed and the
+            // alignment refuses (LA3).
+            var (original, generated) = SmallPair(
+                "        /* never closed\n        _W (\"W\", Float) = 0",
+                null,
+                null,
+                ("_W (\"W\"", "_W_S (\"W\""));
+            var result = Align(
+                original,
+                generated,
+                new[] { Prop("_W", ShaderPropertyType.Float) });
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(result.Source, Is.Null);
+            Assert.That(result.RefusalDetail, Is.EqualTo(MalformedPropertiesDetail));
+            Assert.That(result.OriginalLine, Is.EqualTo(LineOf(original, "    Properties")));
+        }
+
+        [Test]
+        public void MalformedUnfinishedPropertiesBlockRefuses()
+        {
+            // The text ends inside the open Properties block. The block
+            // never returns its depth to zero, so the scan is malformed
+            // and the alignment refuses with the malformed detail before
+            // any structural precheck runs (LA3).
+            var original = BaseOriginal().Remove(
+                BaseOriginal().IndexOf("    }\n    SubShader", System.StringComparison.Ordinal));
+            var generated = BaseGenerated().Remove(
+                BaseGenerated().IndexOf("    }\n    SubShader", System.StringComparison.Ordinal));
+            var result = Align(original, generated, BaseProperties());
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(result.Source, Is.Null);
+            Assert.That(result.RefusalDetail, Is.EqualTo(MalformedPropertiesDetail));
+            Assert.That(result.OriginalLine, Is.EqualTo(LineOf(original, "    Properties")));
+        }
+
+        // --- Falsifier LA-F7: an implementation that answers an empty
+        // Gamma set for malformed text. ---
+        // The Gamma walk must throw the invariant exception with the
+        // fixed detail instead of a silent empty set (LA3).
+
+        [Test]
+        public void MalformedGammaSourceThrows()
+        {
+            var original = BaseOriginal().Replace(
+                "        _P (\"P\", Float) = 0.5",
+                "        _P (\"P } open, Float) = 0.5");
+            var thrown = Assert.Throws<System.InvalidOperationException>(
+                () => PoiyomiLockedSourceAlignment.GammaPropertyNames(original));
+            Assert.That(thrown.Message, Is.EqualTo(MalformedPropertiesDetail));
+        }
+
+        // LA3: the scanner recognizes the Properties keyword and its
+        // structural opening brace only outside strings and comments.
+        // The keyword and the brace may sit on the same line or on
+        // separate lines.
+
+        [Test]
+        public void PropertiesKeywordAndBraceOnTheSameLineAligns()
+        {
+            var original = BaseOriginal().Replace(
+                "    Properties\n    {",
+                "    Properties {");
+            var generated = BaseGenerated().Replace(
+                "    Properties\n    {",
+                "    Properties {");
+            var result = Align(original, generated, BaseProperties());
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+        }
+
+        [Test]
+        public void PropertiesKeywordAndBraceOnSeparateLinesAligns()
+        {
+            // The base fixture holds the header and the brace on
+            // separate lines. The case pins that form explicitly.
+            var (original, generated) = BasePair();
+            var result = Align(original, generated, BaseProperties());
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+        }
+
+        // LA3: inside a quoted string, comment markers and braces are
+        // data for the shared Properties scanner. The vendor lock still
+        // deletes raw comment lines from the generated text without
+        // quote state, and its block comment rule swallows the lines
+        // between a raw opener and its closer. The fixture uses one
+        // opener line, one middle line, and one closer line inside the
+        // multiline display string, drops all three from the generated
+        // side, and keeps an unbalanced string brace on a normal
+        // surviving continuation line.
+
+        [Test]
+        public void CommentMarkersInsideAMultilineDisplayStringAreData()
+        {
+            var propertiesLines = "        _M (\"M line {\n" +
+                "{\n" +
+                "// } slash marker inside string\n" +
+                "/*\n" +
+                "} middle marker inside string\n" +
+                "*/\n" +
+                "        more\", Float) = 0\n" +
+                "        _W (\"W\", Float) = 0";
+            var (original, generated) = SmallPair(
+                propertiesLines,
+                null,
+                null,
+                ("// } slash marker inside string\n", ""),
+                ("/*\n", ""),
+                ("} middle marker inside string\n", ""),
+                ("*/\n", ""),
+                ("_W (\"W\"", "_W_S (\"W\""));
+            Assert.That(original.Contains("// } slash marker inside string"), Is.True,
+                "fixture guard: the original keeps the slash marker line");
+            Assert.That(original.Contains("} middle marker inside string"), Is.True,
+                "fixture guard: the original keeps the marker lines");
+            Assert.That(generated.Contains("slash marker"), Is.False,
+                "fixture guard: the vendor comment rule removed the slash line");
+            Assert.That(generated.Contains("middle marker"), Is.False,
+                "fixture guard: the vendor comment rule removed the middle line");
+            Assert.That(generated.Contains("/*"), Is.False,
+                "fixture guard: the vendor comment rule removed the opener");
+            Assert.That(generated.Contains("*/"), Is.False,
+                "fixture guard: the vendor comment rule removed the closer");
+            Assert.That(generated.Contains("\n{\n"), Is.True,
+                "fixture guard: the surviving continuation brace stayed");
+            var result = Align(
+                original,
+                generated,
+                new[] { Prop("_M", ShaderPropertyType.Float), Prop("_W", ShaderPropertyType.Float) });
             Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
             Assert.That(result.Source.Suffix, Is.EqualTo("_S"));
-            Assert.That(result.Source.States["_W"], Is.EqualTo(LockedPropertyState.Renamed));
+            Assert.That(result.Source.RenamedNames["_W"], Is.EqualTo("_W_S"));
+        }
+
+        // LA3: a backslash escapes the next character on the same line.
+        // A terminal backslash does not escape the first character of
+        // the next line. The string stays open across the newline, and
+        // the next line's own quote closes it.
+
+        [Test]
+        public void TerminalBackslashDoesNotEscapeTheNextLine()
+        {
+            var propertiesLines = "        _Q (\"one \\\n" +
+                "\" kept, Float) = 0\n" +
+                "        _W (\"W\", Float) = 0";
+            var (original, generated) = SmallPair(
+                propertiesLines,
+                null,
+                null,
+                ("_W (\"W\"", "_W_S (\"W\""));
+            var result = Align(
+                original,
+                generated,
+                new[] { Prop("_Q", ShaderPropertyType.Float), Prop("_W", ShaderPropertyType.Float) });
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Suffix, Is.EqualTo("_S"));
             Assert.That(result.Source.RenamedNames["_W"], Is.EqualTo("_W_S"));
         }
 
@@ -2421,7 +2682,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         {
             var (original, generated) = ProgramPair(
                 "        _W (\"W\", Float) = 0\n        _A (\"A\", Float) = 0",
-                "            //ifex _W==0\n            #ifndef K\n            o.Albedo = _A;\n            #endif"
+                "            #pragma shader_feature K"
+                    + "\n            //ifex _W==0\n            #ifndef K\n            o.Albedo = _A;\n            #endif"
                     + "\n            //endex\n            o.Specular = _W;",
                 "            o.Specular = _W;");
             var properties = new[]
@@ -2583,6 +2845,1623 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Assert.That(result.Source.Blocks[1].ConditionOrKeyword, Is.EqualTo("_B==0"));
             Assert.That(result.Source.Blocks[1].OriginalLine, Is.EqualTo(LineOf(original, "//ifex _B==0")));
             Assert.That(result.Source.States["_C"], Is.EqualTo(LockedPropertyState.Unused));
+        }
+
+        // --- LA2 of the locked source transform conformance design ------
+        // Spec: docs/superpowers/specs/2026-10-28-locked-source-transform-conformance-design.md
+        // The installed era keeps a guard frame when its keyword cannot
+        // have been harvested before the guard, or when the keyword sits
+        // in the installed exception set. The historical eras keep their
+        // speculative resolver. Each comment names the wrong implementation
+        // the case catches. This file holds planned expectations only. The
+        // controller observes the pre-change and post-change results.
+
+        // Builds a pair whose text ends inside the program, so no line
+        // after the program can break a tie (A3.7). The head construction
+        // follows TieAtTheEndOfTheFileRefuses. The optional define line
+        // lands first in the generated define run.
+        private static (string Original, string Generated) EndedProgramPair(
+            string propertiesLines,
+            string programLines,
+            string generatedProgramLines,
+            string extraGeneratedDefineLine = null)
+        {
+            var originalLines = new List<string>
+            {
+                "Shader \"Custom/Small\"",
+                "{",
+                "    Properties",
+                "    {",
+                "        [ThryShaderOptimizerLockButton] _Lock (\"Lock\", Float) = 0"
+            };
+            if (!string.IsNullOrEmpty(propertiesLines))
+            {
+                originalLines.AddRange(propertiesLines.Split('\n'));
+            }
+
+            originalLines.Add("    }");
+            originalLines.Add("    SubShader");
+            originalLines.Add("    {");
+            originalLines.Add("        Pass");
+            originalLines.Add("        {");
+            originalLines.Add("            CGPROGRAM");
+            if (!string.IsNullOrEmpty(programLines))
+            {
+                originalLines.AddRange(programLines.Split('\n'));
+            }
+
+            var generatedLines = new List<string>
+            {
+                "Shader \"Hidden/Locked/Custom/Small/k1\"",
+                "{",
+                "    Properties",
+                "    {",
+                "        [ThryShaderOptimizerLockButton] _Lock (\"Lock\", Float) = 1"
+            };
+            if (!string.IsNullOrEmpty(propertiesLines))
+            {
+                generatedLines.AddRange(propertiesLines.Split('\n'));
+            }
+
+            generatedLines.Add("    }");
+            generatedLines.Add("    SubShader");
+            generatedLines.Add("    {");
+            generatedLines.Add("        Pass");
+            generatedLines.Add("        {");
+            generatedLines.Add("            CGPROGRAM");
+            if (!string.IsNullOrEmpty(extraGeneratedDefineLine))
+            {
+                generatedLines.Add(extraGeneratedDefineLine);
+            }
+
+            generatedLines.Add(" #define OPTIMIZER_ENABLED ");
+            if (!string.IsNullOrEmpty(generatedProgramLines))
+            {
+                generatedLines.AddRange(generatedProgramLines.Split('\n'));
+            }
+
+            return (Join(originalLines), Join(generatedLines));
+        }
+
+        // The controller measured this shape in memory against the
+        // baseline installed era resolver on 2026-10-29. The baseline
+        // refuses at the first K frame. Every K guard precedes the only
+        // K pragma, so proved retention must decide all four frames kept
+        // and explain the exact text. The generated text is the original
+        // text with the pragma line deleted.
+        private static string NestedRetainedProgram(string includeOperand)
+        {
+            var head = includeOperand == null
+                ? ""
+                : "            #include \"" + includeOperand + "\"\n";
+            return head
+                + "            #ifdef K\n            first = 0;\n            second = 0;\n            #endif"
+                + "\n            #ifdef L\n            left = 0;\n            #else\n            right = 0;"
+                + "\n            #ifdef M\n            inner = 0;\n            #ifdef K\n            nested = 0;"
+                + "\n            #endif\n            afterNested = 0;\n            #else\n            other = 0;"
+                + "\n            #endif\n            #endif"
+                + "\n            #pragma shader_feature K\n            tail = 0;";
+        }
+
+        private static string NestedRetainedGeneratedProgram(string includeOperand)
+        {
+            var head = includeOperand == null
+                ? ""
+                : "            #include \"" + includeOperand + "\"\n";
+            return head
+                + "            #ifdef K\n            first = 0;\n            second = 0;\n            #endif"
+                + "\n            #ifdef L\n            left = 0;\n            #else\n            right = 0;"
+                + "\n            #ifdef M\n            inner = 0;\n            #ifdef K\n            nested = 0;"
+                + "\n            #endif\n            afterNested = 0;\n            #else\n            other = 0;"
+                + "\n            #endif\n            #endif"
+                + "\n            tail = 0;";
+        }
+
+        // LA-F1. Wrong implementation: treat every installed era simple
+        // guard as removable, or demand a fabricated keyword define before
+        // keeping the frame. The first K guard sits before the only K
+        // pragma, so the vendor cannot have harvested K there. The same
+        // holds for the nested K, L, and M guards. All four frames stay
+        // verbatim, with both compiler branches of L and M. Forced
+        // retention must decide kept without a removed trial and without
+        // a K define in the facts.
+        [Test]
+        public void GuardBeforeItsPragmaKeepsTheCompilerFrame()
+        {
+            var properties = new LockedSourceProperty[] { };
+            var (original, generated) = ProgramPair(
+                null,
+                NestedRetainedProgram(null),
+                NestedRetainedGeneratedProgram(null));
+            var thry2743 = PoiyomiLockedSourceAlignment.AlignForEra(
+                original, generated, properties, PoiyomiLockEra.Thry2743);
+            Assert.That(thry2743.Succeeded, Is.True, thry2743.RefusalDetail ?? "refused");
+            var source = thry2743.Source;
+            Assert.That(source.Blocks.Count, Is.EqualTo(4));
+            Assert.That(source.Blocks[0].Kind, Is.EqualTo(LockedBlockKind.Ifdef));
+            Assert.That(source.Blocks[0].Outcome, Is.EqualTo(LockedBlockOutcome.Kept));
+            Assert.That(source.Blocks[0].ConditionOrKeyword, Is.EqualTo("K"));
+            Assert.That(source.Blocks[0].OriginalLine, Is.EqualTo(LineOf(original, "#ifdef K")));
+            Assert.That(source.Blocks[1].Kind, Is.EqualTo(LockedBlockKind.Ifdef));
+            Assert.That(source.Blocks[1].Outcome, Is.EqualTo(LockedBlockOutcome.Kept));
+            Assert.That(source.Blocks[1].ConditionOrKeyword, Is.EqualTo("L"));
+            Assert.That(source.Blocks[2].Kind, Is.EqualTo(LockedBlockKind.Ifdef));
+            Assert.That(source.Blocks[2].Outcome, Is.EqualTo(LockedBlockOutcome.Kept));
+            Assert.That(source.Blocks[2].ConditionOrKeyword, Is.EqualTo("M"));
+            Assert.That(source.Blocks[3].Kind, Is.EqualTo(LockedBlockKind.Ifdef));
+            Assert.That(source.Blocks[3].Outcome, Is.EqualTo(LockedBlockOutcome.Kept));
+            Assert.That(source.Blocks[3].ConditionOrKeyword, Is.EqualTo("K"));
+            Assert.That(source.SurvivingText, Does.Contain("#ifdef K\n            first = 0;"));
+            Assert.That(source.SurvivingText, Does.Contain("#ifdef L\n            left = 0;\n            #else"));
+            Assert.That(source.SurvivingText, Does.Contain("#ifdef M\n            inner = 0;"));
+            Assert.That(source.SurvivingText, Does.Contain("nested = 0;\n            #endif\n            afterNested = 0;"));
+            Assert.That(source.SurvivingText, Does.Contain("tail = 0;"));
+            Assert.That(source.SurvivingText.Contains("shader_feature"), Is.False);
+            Assert.That(source.DefineRuns.Count, Is.EqualTo(1));
+            Assert.That(source.DefineRuns[0], Is.EqualTo(new[] { "OPTIMIZER_ENABLED" }));
+
+            // Era isolation. Both historical resolvers keep their
+            // contracts and still refuse this shape (LA-F12).
+            foreach (var era in new[] { PoiyomiLockEra.Bundled9364, PoiyomiLockEra.Thry274To2742 })
+            {
+                var historical = PoiyomiLockedSourceAlignment.AlignForEra(original, generated, properties, era);
+                Assert.That(historical.Succeeded, Is.False, era.ToString());
+                Assert.That(historical.Source, Is.Null);
+            }
+
+            // One mutated body line must refuse. Forced retention never
+            // retries the frame as removed.
+            var mutatedGenerated = ProgramPair(
+                null,
+                NestedRetainedProgram(null),
+                NestedRetainedGeneratedProgram(null).Replace("first = 0;", "first = 1;")).Generated;
+            var mutated = PoiyomiLockedSourceAlignment.AlignForEra(
+                original, mutatedGenerated, properties, PoiyomiLockEra.Thry2743);
+            Assert.That(mutated.Succeeded, Is.False);
+            Assert.That(mutated.Source, Is.Null);
+        }
+
+        // LA-F2. Wrong implementation: derive non-removal from property
+        // names or from the current cursor spelling. The harvested
+        // keyword K names no property, and the vendor harvested it before
+        // the guard, so it can still remove the frame with its whole
+        // first branch. The retained line lives in the else branch, so
+        // the removal record stays valid. The mutation turns the else
+        // body into a second fact, which conflicts with the live use.
+        [Test]
+        public void HarvestedNonPropertyGuardCanStillBeRemoved()
+        {
+            var (original, generated) = ProgramPair(
+                "        _A (\"A\", Float) = 0",
+                "            #pragma shader_feature K\n            #ifdef K\n            o.Emission = _A;"
+                    + "\n            #else\n            o.Albedo = _A;\n            #endif\n            o.Specular = _A;",
+                "            o.Albedo = _A;\n            o.Specular = _A;");
+            var result = Align(original, generated, new[] { Prop("_A", ShaderPropertyType.Float) });
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Blocks.Count, Is.EqualTo(1));
+            Assert.That(result.Source.Blocks[0].Kind, Is.EqualTo(LockedBlockKind.Ifdef));
+            Assert.That(result.Source.Blocks[0].Outcome, Is.EqualTo(LockedBlockOutcome.Removed));
+            Assert.That(result.Source.Blocks[0].ConditionOrKeyword, Is.EqualTo("K"));
+            Assert.That(result.Source.States["_A"], Is.EqualTo(LockedPropertyState.Live));
+
+            // One mutated generated body line must still refuse. A bound
+            // literal conflicts with the live use, and a rejected literal
+            // breaks the line match.
+            var mutated = Align(
+                original,
+                generated.Replace("o.Albedo = _A;", "o.Albedo = 0.25;"),
+                new[] { Prop("_A", ShaderPropertyType.Float) });
+            Assert.That(mutated.Succeeded, Is.False);
+            Assert.That(mutated.Source, Is.Null);
+        }
+
+        // LA-F2. Wrong implementation: treat a harvested exception
+        // keyword as removable, or generalize a new exception from a
+        // Unity looking name. The keyword sits in the installed exception
+        // set, so the vendor keeps both compiler branches even though the
+        // prefix map holds an earlier harvest.
+        [Test]
+        public void ExemptKeywordKeepsBothCompilerBranches()
+        {
+            var (original, generated) = ProgramPair(
+                "        _A (\"A\", Float) = 0",
+                "            #pragma shader_feature UNITY_SINGLE_PASS_STEREO"
+                    + "\n            #ifdef UNITY_SINGLE_PASS_STEREO\n            o.Albedo = _A;"
+                    + "\n            #else\n            o.Alpha = _A;\n            #endif"
+                    + "\n            o.Specular = _A;",
+                "            #ifdef UNITY_SINGLE_PASS_STEREO\n            o.Albedo = _A;"
+                    + "\n            #else\n            o.Alpha = _A;\n            #endif"
+                    + "\n            o.Specular = _A;");
+            var result = Align(original, generated, new[] { Prop("_A", ShaderPropertyType.Float) });
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Blocks.Count, Is.EqualTo(1));
+            Assert.That(result.Source.Blocks[0].Kind, Is.EqualTo(LockedBlockKind.Ifdef));
+            Assert.That(result.Source.Blocks[0].Outcome, Is.EqualTo(LockedBlockOutcome.Kept));
+            Assert.That(result.Source.Blocks[0].ConditionOrKeyword, Is.EqualTo("UNITY_SINGLE_PASS_STEREO"));
+            Assert.That(result.Source.SurvivingText, Does.Contain("#ifdef UNITY_SINGLE_PASS_STEREO"));
+            Assert.That(result.Source.SurvivingText, Does.Contain("#else"));
+            Assert.That(result.Source.States["_A"], Is.EqualTo(LockedPropertyState.Live));
+
+            // One mutated else branch line must refuse in every era.
+            var mutated = Align(
+                original,
+                generated.Replace("o.Alpha = _A;", "o.Alpha = 0.5;"),
+                new[] { Prop("_A", ShaderPropertyType.Float) });
+            Assert.That(mutated.Succeeded, Is.False);
+            Assert.That(mutated.Source, Is.Null);
+        }
+
+        // LA-F3. Wrong implementation: forget outer frame ownership while
+        // passing through a hypothesis, or drop the enclosing lookahead
+        // state at a forced decision. The inner wrapper is ambiguous, so
+        // its tie lookahead runs with an active window and the owner end
+        // as the boundary. That lookahead reaches the retained K frame,
+        // so the forced decision runs inside an active enclosing
+        // lookahead. The distinguishing line after the owner extent
+        // repeats the frame body. A forced walk that adopts past its
+        // owner consumes it in the wrong place, so the exact records and
+        // the surviving text expose it.
+        [Test]
+        public void RetainedFrameInsideLookaheadDoesNotAdoptPastItsOwner()
+        {
+            var properties = new[]
+            {
+                Prop("_W", ShaderPropertyType.Float),
+                Prop("_A", ShaderPropertyType.Float)
+            };
+            var program = "            //ifex _W==0"
+                + "\n            //ifex _A==0\n            o.Albedo = _A;\n            //endex"
+                + "\n            #ifdef K\n            o.Alpha = _A;\n            #endif"
+                + "\n            #pragma shader_feature K"
+                + "\n            //endex"
+                + "\n            o.Alpha = _A;";
+            var generatedProgram = "            o.Albedo = _A;"
+                + "\n            #ifdef K\n            o.Alpha = _A;\n            #endif"
+                + "\n            o.Alpha = _A;";
+            var (original, generated) = ProgramPair(
+                "        _W (\"W\", Float) = 0\n        _A (\"A\", Float) = 0",
+                program,
+                generatedProgram);
+            var thry2743 = PoiyomiLockedSourceAlignment.AlignForEra(
+                original, generated, properties, PoiyomiLockEra.Thry2743);
+            Assert.That(thry2743.Succeeded, Is.True, thry2743.RefusalDetail ?? "refused");
+            var source = thry2743.Source;
+            Assert.That(source.Blocks.Count, Is.EqualTo(3));
+            Assert.That(source.Blocks[0].Kind, Is.EqualTo(LockedBlockKind.Ifex));
+            Assert.That(source.Blocks[0].Outcome, Is.EqualTo(LockedBlockOutcome.Kept));
+            Assert.That(source.Blocks[0].ConditionOrKeyword, Is.EqualTo("_W==0"));
+            Assert.That(source.Blocks[1].Kind, Is.EqualTo(LockedBlockKind.Ifex));
+            Assert.That(source.Blocks[1].Outcome, Is.EqualTo(LockedBlockOutcome.Kept));
+            Assert.That(source.Blocks[1].ConditionOrKeyword, Is.EqualTo("_A==0"));
+            Assert.That(source.Blocks[2].Kind, Is.EqualTo(LockedBlockKind.Ifdef));
+            Assert.That(source.Blocks[2].Outcome, Is.EqualTo(LockedBlockOutcome.Kept));
+            Assert.That(source.Blocks[2].ConditionOrKeyword, Is.EqualTo("K"));
+
+            // The frame body and the tail line survive, so the forced
+            // walk consumed nothing past its owner. Success already proves
+            // full generated consumption through the final check.
+            Assert.That(
+                source.SurvivingText.Split(new[] { "o.Alpha = _A;" }, System.StringSplitOptions.None).Length,
+                Is.EqualTo(3));
+            Assert.That(source.States["_A"], Is.EqualTo(LockedPropertyState.Live));
+            Assert.That(source.States["_W"], Is.EqualTo(LockedPropertyState.Unused));
+        }
+
+        // LA-F3. Wrong implementation: drop the removed inner records or
+        // the else body facts while walking a retained outer frame. The
+        // outer K frame is proved retained. The inner M guard is harvested
+        // before its guard, and M is disabled, so the vendor removes the
+        // inner frame together with its body. The retained outer else
+        // body bakes two uses of one literal, so a single changed
+        // literal is a genuine two literal conflict and refuses.
+        [Test]
+        public void RetainedOuterFrameKeepsRemovedInnerFacts()
+        {
+            var properties = new[]
+            {
+                Prop("_A", ShaderPropertyType.Float),
+                new LockedSourceProperty("_B", ShaderPropertyType.Float, false, false, 0.5f)
+            };
+            var (original, generated) = ProgramPair(
+                "        _A (\"A\", Float) = 0\n        _B (\"B\", Float) = 0.5",
+                "            #pragma shader_feature M\n            #ifdef K\n            #ifdef M"
+                    + "\n            o.Emission = _A;\n            #endif\n            #else"
+                    + "\n            o.Alpha = _B;\n            o.Specular = _B;\n            #endif"
+                    + "\n            o.Albedo = _A;",
+                "            #ifdef K\n            #else"
+                    + "\n            o.Alpha = 0.5;\n            o.Specular = 0.5;\n            #endif"
+                    + "\n            o.Albedo = _A;");
+            var result = Align(original, generated, properties);
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Blocks.Count, Is.EqualTo(2));
+            Assert.That(result.Source.Blocks[0].Kind, Is.EqualTo(LockedBlockKind.Ifdef));
+            Assert.That(result.Source.Blocks[0].Outcome, Is.EqualTo(LockedBlockOutcome.Kept));
+            Assert.That(result.Source.Blocks[0].ConditionOrKeyword, Is.EqualTo("K"));
+            Assert.That(result.Source.Blocks[1].Kind, Is.EqualTo(LockedBlockKind.Ifdef));
+            Assert.That(result.Source.Blocks[1].Outcome, Is.EqualTo(LockedBlockOutcome.Removed));
+            Assert.That(result.Source.Blocks[1].ConditionOrKeyword, Is.EqualTo("M"));
+            Assert.That(result.Source.SurvivingText, Does.Contain("#else"));
+            Assert.That(result.Source.States["_A"], Is.EqualTo(LockedPropertyState.Live));
+            Assert.That(result.Source.States["_B"], Is.EqualTo(LockedPropertyState.Baked));
+            Assert.That(result.Source.BakedLiterals["_B"], Is.EqualTo("0.5"));
+
+            // One mutated baked literal conflicts with the untouched twin
+            // use and must refuse.
+            var mutated = Align(
+                original,
+                generated.Replace("o.Specular = 0.5;", "o.Specular = 0.75;"),
+                properties);
+            Assert.That(mutated.Succeeded, Is.False);
+            Assert.That(mutated.Source, Is.Null);
+        }
+
+        // LA-F4. Wrong implementation: narrow the prefix map by guessed
+        // exclusion outcomes, or skip unreachable lines in the scan. The
+        // three pragmas sit inside the removed _W wrapper, so the vendor
+        // never harvested K, L, or M. The conservative map still counts
+        // all three before every guard of the nested shape, so the
+        // correct optimization stays disabled and the nested shape keeps
+        // its measured refusal. An index that skips exclusions proves a
+        // false retention and wrongly accepts. The control runs the same
+        // nested shape without the excluded pragmas and must succeed.
+        [Test]
+        public void ExcludedPragmaDoesNotProveActualHarvest()
+        {
+            var (controlOriginal, controlGenerated) = ProgramPair(
+                null,
+                NestedRetainedProgram(null),
+                NestedRetainedGeneratedProgram(null));
+            var control = PoiyomiLockedSourceAlignment.AlignForEra(
+                controlOriginal, controlGenerated, new LockedSourceProperty[] { }, PoiyomiLockEra.Thry2743);
+            Assert.That(control.Succeeded, Is.True, control.RefusalDetail ?? "refused");
+
+            var excludedHead = "            //ifex _W==0"
+                + "\n            #pragma shader_feature K"
+                + "\n            #pragma shader_feature L"
+                + "\n            #pragma shader_feature M"
+                + "\n            //endex\n";
+            var (original, generated) = ProgramPair(
+                "        _W (\"W\", Float) = 0",
+                excludedHead + NestedRetainedProgram(null),
+                NestedRetainedGeneratedProgram(null));
+            var result = PoiyomiLockedSourceAlignment.AlignForEra(
+                original, generated, new[] { Prop("_W", ShaderPropertyType.Float) }, PoiyomiLockEra.Thry2743);
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(result.Source, Is.Null);
+        }
+
+        // LA-F4. Wrong implementation: extract the pragma keyword by
+        // removing only the first prefix occurrence in the line. The
+        // commented block holds pragma shaped lines where a second pragma
+        // prefix is glued to the keyword with no space. The vendor
+        // replaces every prefix occurrence in the line, so K, L, and M
+        // emerge from the unreachable block, and LA2 deliberately indexes
+        // it. A leading only extraction misses all three, proves a false
+        // absence, and accepts the nested shape. The control runs the
+        // same nested shape without the commented block and must succeed.
+        [Test]
+        public void EmbeddedPragmaPrefixesCannotProveKeywordAbsence()
+        {
+            var (controlOriginal, controlGenerated) = ProgramPair(
+                null,
+                NestedRetainedProgram(null),
+                NestedRetainedGeneratedProgram(null));
+            var control = PoiyomiLockedSourceAlignment.AlignForEra(
+                controlOriginal, controlGenerated, new LockedSourceProperty[] { }, PoiyomiLockEra.Thry2743);
+            Assert.That(control.Succeeded, Is.True, control.RefusalDetail ?? "refused");
+
+            var commentedHead = "            /*"
+                + "\n            #pragma shader_feature K#pragma shader_feature"
+                + "\n            #pragma shader_feature L#pragma shader_feature"
+                + "\n            #pragma shader_feature M#pragma shader_feature"
+                + "\n            */\n";
+            var (original, generated) = ProgramPair(
+                null,
+                commentedHead + NestedRetainedProgram(null),
+                NestedRetainedGeneratedProgram(null));
+            var result = PoiyomiLockedSourceAlignment.AlignForEra(
+                original, generated, new LockedSourceProperty[] { }, PoiyomiLockEra.Thry2743);
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(result.Source, Is.Null);
+        }
+
+        // LA2 owner bound. Wrong implementation: let the tie lookahead of
+        // an eligible inner guard run to the outer frame end, so it
+        // consumes the outer else region inside the inner resolution and
+        // the outer else walk then mismatches. In proved retention the
+        // body lookahead stops at the body end, and only the else body
+        // judges to the frame end. J is harvested and enabled, so its
+        // directive stays with its define, and K is harvested after its
+        // guard, so the vendor retains both compiler branches with no K
+        // define. The two keyword flags are independent, so the define
+        // run assertion takes any order and rejects an invented keyword.
+        // The controller observed the installed refusal at the
+        // outer else before this fix. The historical resolvers keep
+        // their refusal for this shape.
+        [Test]
+        public void ProvedRetainedElseFrameBoundsInnerLookahead()
+        {
+            var properties = new LockedSourceProperty[] { };
+            const string Program = "            #pragma shader_feature J"
+                + "\n            float4 vert(float4 v : POSITION) : SV_POSITION { return v; }"
+                + "\n            float4 frag() : SV_Target"
+                + "\n            {"
+                + "\n            #ifdef K"
+                + "\n            #ifdef J"
+                + "\n                return float4(1, 0, 0, 1);"
+                + "\n            #endif"
+                + "\n            #else"
+                + "\n                return float4(0, 1, 0, 1);"
+                + "\n            #endif"
+                + "\n            #pragma shader_feature K"
+                + "\n                return float4(0, 0, 1, 1);"
+                + "\n            }";
+            const string GeneratedProgram = "            float4 vert(float4 v : POSITION) : SV_POSITION { return v; }"
+                + "\n            float4 frag() : SV_Target"
+                + "\n            {"
+                + "\n            #ifdef K"
+                + "\n            #ifdef J"
+                + "\n                return float4(1, 0, 0, 1);"
+                + "\n            #endif"
+                + "\n            #else"
+                + "\n                return float4(0, 1, 0, 1);"
+                + "\n            #endif"
+                + "\n                return float4(0, 0, 1, 1);"
+                + "\n            }";
+            var (original, generated) = ProgramPair(null, Program, GeneratedProgram);
+            generated = generated.Replace(
+                "            CGPROGRAM\n #define OPTIMIZER_ENABLED ",
+                "            CGPROGRAM\n #define OPTIMIZER_ENABLED \n #define J ");
+            var thry2743 = PoiyomiLockedSourceAlignment.AlignForEra(
+                original, generated, properties, PoiyomiLockEra.Thry2743);
+            Assert.That(thry2743.Succeeded, Is.True, thry2743.RefusalDetail ?? "refused");
+            Assert.That(thry2743.Source.Blocks.Count, Is.EqualTo(2));
+            Assert.That(thry2743.Source.Blocks[0].Kind, Is.EqualTo(LockedBlockKind.Ifdef));
+            Assert.That(thry2743.Source.Blocks[0].Outcome, Is.EqualTo(LockedBlockOutcome.Kept));
+            Assert.That(thry2743.Source.Blocks[0].ConditionOrKeyword, Is.EqualTo("K"));
+            Assert.That(thry2743.Source.Blocks[1].Kind, Is.EqualTo(LockedBlockKind.Ifdef));
+            Assert.That(thry2743.Source.Blocks[1].Outcome, Is.EqualTo(LockedBlockOutcome.Kept));
+            Assert.That(thry2743.Source.Blocks[1].ConditionOrKeyword, Is.EqualTo("J"));
+            Assert.That(thry2743.Source.DefineRuns.Count, Is.EqualTo(1));
+            Assert.That(
+                thry2743.Source.DefineRuns[0],
+                Is.EquivalentTo(new[] { "OPTIMIZER_ENABLED", "J" }));
+
+            // Era isolation. Both historical resolvers keep their refusal
+            // for this shape.
+            foreach (var era in new[] { PoiyomiLockEra.Bundled9364, PoiyomiLockEra.Thry274To2742 })
+            {
+                var historical = PoiyomiLockedSourceAlignment.AlignForEra(original, generated, properties, era);
+                Assert.That(historical.Succeeded, Is.False, era.ToString());
+                Assert.That(historical.Source, Is.Null);
+            }
+
+            // One mutated inner branch return must refuse.
+            var mutatedGenerated = ProgramPair(
+                null,
+                Program,
+                GeneratedProgram.Replace("return float4(1, 0, 0, 1);", "return float4(0, 0, 0, 1);")).Generated;
+            mutatedGenerated = mutatedGenerated.Replace(
+                "            CGPROGRAM\n #define OPTIMIZER_ENABLED ",
+                "            CGPROGRAM\n #define OPTIMIZER_ENABLED \n #define J ");
+            var mutated = PoiyomiLockedSourceAlignment.AlignForEra(
+                original, mutatedGenerated, properties, PoiyomiLockEra.Thry2743);
+            Assert.That(mutated.Succeeded, Is.False);
+            Assert.That(mutated.Source, Is.Null);
+        }
+
+        // LA-F4. Wrong implementation: prove include closure from a
+        // spelling outside the proved set, or skip the include scan. The
+        // allowlist accepts this spelling, so the include precheck lets
+        // the pair reach the walk. The unproved include must disable
+        // forced retention for the whole input, so the ambiguous shape
+        // keeps its baseline refusal and gains no acceptance.
+        [Test]
+        public void UnprovedIncludeCannotEnableForcedRetention()
+        {
+            var (original, generated) = ProgramPair(
+                null,
+                NestedRetainedProgram("HLSLSupport.cginc"),
+                NestedRetainedGeneratedProgram("HLSLSupport.cginc"));
+            var result = PoiyomiLockedSourceAlignment.AlignForEra(
+                original, generated, new LockedSourceProperty[] { }, PoiyomiLockEra.Thry2743);
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(result.Source, Is.Null);
+        }
+
+        // LA-F4. Wrong implementation: case fold the include operand. The
+        // case changed spelling passes the allowlist read, but the proof
+        // extracts the literal operand without case folding, so closure
+        // stays unproved and the optimization stays disabled.
+        [Test]
+        public void CaseChangedIncludeOperandCannotEnableForcedRetention()
+        {
+            var (original, generated) = ProgramPair(
+                null,
+                NestedRetainedProgram("unitycg.cginc"),
+                NestedRetainedGeneratedProgram("unitycg.cginc"));
+            var result = PoiyomiLockedSourceAlignment.AlignForEra(
+                original, generated, new LockedSourceProperty[] { }, PoiyomiLockEra.Thry2743);
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(result.Source, Is.Null);
+        }
+
+        // Positive control for the two include refusals above. The exact
+        // proved spelling satisfies closure, so forced retention explains
+        // the exact text in the installed era. The historical resolver
+        // keeps its contract and still refuses the same shape (LA-F12).
+        [Test]
+        public void ProvedIncludeSpellingEnablesForcedRetention()
+        {
+            var properties = new LockedSourceProperty[] { };
+            var (original, generated) = ProgramPair(
+                null,
+                NestedRetainedProgram("UnityCG.cginc"),
+                NestedRetainedGeneratedProgram("UnityCG.cginc"));
+            var thry2743 = PoiyomiLockedSourceAlignment.AlignForEra(
+                original, generated, properties, PoiyomiLockEra.Thry2743);
+            Assert.That(thry2743.Succeeded, Is.True, thry2743.RefusalDetail ?? "refused");
+            Assert.That(thry2743.Source.Blocks.Count, Is.EqualTo(4));
+            Assert.That(thry2743.Source.Blocks[0].Outcome, Is.EqualTo(LockedBlockOutcome.Kept));
+            Assert.That(thry2743.Source.Blocks[0].ConditionOrKeyword, Is.EqualTo("K"));
+            Assert.That(thry2743.Source.SurvivingText, Does.Contain("#include \"UnityCG.cginc\""));
+            Assert.That(thry2743.Source.SurvivingText.Contains("shader_feature"), Is.False);
+
+            // Era isolation. Both historical resolvers keep their
+            // contracts and still refuse this shape (LA-F12).
+            foreach (var era in new[] { PoiyomiLockEra.Bundled9364, PoiyomiLockEra.Thry274To2742 })
+            {
+                var historical = PoiyomiLockedSourceAlignment.AlignForEra(original, generated, properties, era);
+                Assert.That(historical.Succeeded, Is.False, era.ToString());
+                Assert.That(historical.Source, Is.Null);
+            }
+        }
+
+        // LA-F2. Wrong implementation: waive the ambiguity because the
+        // guard text repeats. The pragma harvests K before both guards,
+        // so the removal question stays open for both. The duplicated
+        // frames at the end of the text stay genuinely ambiguous and must
+        // refuse in the installed era too.
+        [Test]
+        public void RepeatedGuardTextDoesNotWaiveAmbiguity()
+        {
+            var (original, generated) = EndedProgramPair(
+                "        _A (\"A\", Float) = 0",
+                "            #pragma shader_feature K"
+                    + "\n            #ifdef K\n            o.Albedo = _A;\n            #endif"
+                    + "\n            #ifdef K\n            o.Albedo = _A;\n            #endif",
+                "            #ifdef K\n            o.Albedo = _A;\n            #endif"
+                    + "\n            #ifdef K\n            o.Albedo = _A;\n            #endif",
+                " #define K ");
+            var result = PoiyomiLockedSourceAlignment.AlignForEra(
+                original, generated, new[] { Prop("_A", ShaderPropertyType.Float) }, PoiyomiLockEra.Thry2743);
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(result.Source, Is.Null);
+        }
+
+        // LA-F12, guard half. Wrong implementation: keep the raw directive
+        // remainder in the installed era record, or unify the eras through
+        // a hidden fallback. The installed era extracts the vendor keyword
+        // from a recognized simple guard, so its kept block operand is the
+        // bare keyword. The historical eras keep the raw remainder. Both
+        // direct calls succeed, and the shared entry refuses the fact
+        // disagreement. The body and tail lines read no property.
+        [Test]
+        public void SuccessfulErasWithDifferentGuardFactsRefuseSharedAlignment()
+        {
+            var properties = new[] { Prop("_A", ShaderPropertyType.Float) };
+            var original = Join(new[]
+            {
+                "Shader \"Custom/Small\"",
+                "{",
+                "    Properties",
+                "    {",
+                "        [ThryShaderOptimizerLockButton] _Lock (\"Lock\", Float) = 0",
+                "        _A (\"A\", Float) = 0",
+                "    }",
+                "    SubShader",
+                "    {",
+                "        Pass",
+                "        {",
+                "            CGPROGRAM",
+                "            #pragma vertex vert",
+                "            #pragma shader_feature K",
+                "            #ifdef K // synthetic note",
+                "            o.Albedo = 0.1;",
+                "            #endif",
+                "            o.Specular = 0.2;",
+                "            ENDCG",
+                "        }",
+                "    }",
+                "}"
+            });
+            var generated = Join(new[]
+            {
+                "Shader \"Hidden/Locked/Custom/Small/k1\"",
+                "{",
+                "    Properties",
+                "    {",
+                "        [ThryShaderOptimizerLockButton] _Lock (\"Lock\", Float) = 1",
+                "        _A (\"A\", Float) = 0",
+                "    }",
+                "    SubShader",
+                "    {",
+                "        Pass",
+                "        {",
+                "            CGPROGRAM",
+                " #define K ",
+                " #define OPTIMIZER_ENABLED ",
+                "            #pragma vertex vert",
+                "            #ifdef K // synthetic note",
+                "            o.Albedo = 0.1;",
+                "            #endif",
+                "            o.Specular = 0.2;",
+                "            ENDCG",
+                "        }",
+                "    }",
+                "}"
+            });
+            var bundled = PoiyomiLockedSourceAlignment.AlignForEra(
+                original, generated, properties, PoiyomiLockEra.Bundled9364);
+            Assert.That(bundled.Succeeded, Is.True, bundled.RefusalDetail ?? "refused");
+            Assert.That(bundled.Source.Blocks.Count, Is.EqualTo(1));
+            Assert.That(bundled.Source.Blocks[0].Kind, Is.EqualTo(LockedBlockKind.Ifdef));
+            Assert.That(bundled.Source.Blocks[0].Outcome, Is.EqualTo(LockedBlockOutcome.Kept));
+            Assert.That(bundled.Source.Blocks[0].ConditionOrKeyword, Is.EqualTo("K // synthetic note"));
+            var thry2743 = PoiyomiLockedSourceAlignment.AlignForEra(
+                original, generated, properties, PoiyomiLockEra.Thry2743);
+            Assert.That(thry2743.Succeeded, Is.True, thry2743.RefusalDetail ?? "refused");
+            Assert.That(thry2743.Source.Blocks.Count, Is.EqualTo(1));
+            Assert.That(thry2743.Source.Blocks[0].Kind, Is.EqualTo(LockedBlockKind.Ifdef));
+            Assert.That(thry2743.Source.Blocks[0].Outcome, Is.EqualTo(LockedBlockOutcome.Kept));
+            Assert.That(thry2743.Source.Blocks[0].ConditionOrKeyword, Is.EqualTo("K"));
+            var shared = Align(original, generated, properties);
+            Assert.That(shared.Succeeded, Is.False);
+            Assert.That(shared.Source, Is.Null);
+        }
+
+        // --- LA-F8: an implementation that exempts every property on a
+        // line that starts with a type keyword. The local initializer
+        // `float c = _P;` starts with a type token, so the broad
+        // declaration read keeps the identifier and the bake refuses.
+        // The vendor rule checks the token before the property, so the
+        // initializer bakes while the true declaration stays. The
+        // no-op guard is the success case itself: it reaches the
+        // matcher only when the declaration and the initializer sit on
+        // separate walked lines.
+        private static (string Original, string Generated) InitializerPair()
+        {
+            return ProgramPair(
+                "        _P (\"P\", Float) = 0.5",
+                "            float _P;\n            float c = _P;",
+                "            float _P;\n            float c = 0.5;");
+        }
+
+        [Test]
+        public void LocalInitializerBakesWhileUniformDeclarationStays()
+        {
+            var properties = new[] { Prop("_P", ShaderPropertyType.Float) };
+            var (original, generated) = InitializerPair();
+            var result = PoiyomiLockedSourceAlignment.AlignForEra(
+                original, generated, properties, PoiyomiLockEra.Thry2743);
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.States["_P"], Is.EqualTo(LockedPropertyState.Baked));
+            Assert.That(result.Source.BakedLiterals["_P"], Is.EqualTo("0.5"));
+            Assert.That(result.Source.SurvivingText, Does.Contain("float _P;"));
+
+            // A second use with another literal is conflicting evidence.
+            var conflicting = ProgramPair(
+                "        _P (\"P\", Float) = 0.5",
+                "            float _P;\n            float c = _P;\n            o.Albedo = _P;",
+                "            float _P;\n            float c = 0.5;\n            o.Albedo = 0.75;");
+            var conflict = PoiyomiLockedSourceAlignment.AlignForEra(
+                conflicting.Original, conflicting.Generated, properties, PoiyomiLockEra.Thry2743);
+            Assert.That(conflict.Succeeded, Is.False);
+            Assert.That(conflict.Source, Is.Null);
+            Assert.That(conflict.RefusalDetail, Is.EqualTo(TwoLiteralsDetail));
+
+            // An edited declaration name is no vendor edit.
+            var (editedOriginal, editedGenerated) = InitializerPair();
+            editedGenerated = editedGenerated.Replace("float _P;", "float _Q;");
+            var edited = PoiyomiLockedSourceAlignment.AlignForEra(
+                editedOriginal, editedGenerated, properties, PoiyomiLockEra.Thry2743);
+            Assert.That(edited.Succeeded, Is.False);
+            Assert.That(edited.Source, Is.Null);
+        }
+
+        // --- LA-F12, occurrence half: the corrected occurrence rule runs
+        // only in the installed era. The historical eras keep the broad
+        // declaration read, so the same baked initializer pair refuses
+        // there. The unchanged identifier initializer is the no-op guard:
+        // it proves each historical refusal comes from the bake and not
+        // from a broken fixture.
+        [Test]
+        public void InitializerBakingIsLimitedToTheInstalledEra()
+        {
+            var properties = new[] { Prop("_P", ShaderPropertyType.Float) };
+            var (original, baked) = InitializerPair();
+            var installed = PoiyomiLockedSourceAlignment.AlignForEra(
+                original, baked, properties, PoiyomiLockEra.Thry2743);
+            Assert.That(installed.Succeeded, Is.True, installed.RefusalDetail ?? "refused");
+            Assert.That(installed.Source.States["_P"], Is.EqualTo(LockedPropertyState.Baked));
+            Assert.That(installed.Source.BakedLiterals["_P"], Is.EqualTo("0.5"));
+            foreach (var era in new[] { PoiyomiLockEra.Bundled9364, PoiyomiLockEra.Thry274To2742 })
+            {
+                var historical = PoiyomiLockedSourceAlignment.AlignForEra(
+                    original, baked, properties, era);
+                Assert.That(historical.Succeeded, Is.False, "a historical era baked the initializer");
+                Assert.That(historical.Source, Is.Null);
+            }
+
+            var (liveOriginal, liveGenerated) = ProgramPair(
+                "        _P (\"P\", Float) = 0.5",
+                "            float _P;\n            float c = _P;",
+                "            float _P;\n            float c = _P;");
+            foreach (var era in new[]
+            {
+                PoiyomiLockEra.Bundled9364,
+                PoiyomiLockEra.Thry274To2742,
+                PoiyomiLockEra.Thry2743
+            })
+            {
+                var control = PoiyomiLockedSourceAlignment.AlignForEra(
+                    liveOriginal, liveGenerated, properties, era);
+                Assert.That(control.Succeeded, Is.True, control.RefusalDetail ?? "refused");
+            }
+        }
+
+        // --- LA-F9: reorder hint deletion and the exposure bakes. The
+        // original joins the branch hint substring to the property
+        // spelling, so the vendor token pass sees no property token. The
+        // vendor leaves the identifier in the text and deletes the hint
+        // last. An alleged baked output refuses. The separated hint
+        // control bakes, which proves the fixture reaches the matcher.
+        [Test]
+        public void HintDeletionCannotCreateABakedPropertyUse()
+        {
+            var properties = new[] { Prop("_P", ShaderPropertyType.Float) };
+            var (original, exposed) = ProgramPair(
+                "        _P (\"P\", Float) = 0.5",
+                "            float c = UNITY_BRANCH_P;",
+                "            float c = _P;");
+            var exposedResult = PoiyomiLockedSourceAlignment.AlignForEra(
+                original, exposed, properties, PoiyomiLockEra.Thry2743);
+            Assert.That(exposedResult.Succeeded, Is.True, exposedResult.RefusalDetail ?? "refused");
+            Assert.That(exposedResult.Source.States["_P"], Is.EqualTo(LockedPropertyState.Unused));
+
+            var (_, alleged) = ProgramPair(
+                "        _P (\"P\", Float) = 0.5",
+                "            float c = UNITY_BRANCH_P;",
+                "            float c = 0.5;");
+            var allegedResult = PoiyomiLockedSourceAlignment.AlignForEra(
+                original, alleged, properties, PoiyomiLockEra.Thry2743);
+            Assert.That(allegedResult.Succeeded, Is.False);
+            Assert.That(allegedResult.Source, Is.Null);
+
+            // The deleted hint leaves its trailing space in the vendor
+            // output, so the control carries one leading space.
+            var (controlOriginal, controlGenerated) = ProgramPair(
+                "        _P (\"P\", Float) = 0.5",
+                "            UNITY_BRANCH float c = _P;",
+                "             float c = 0.5;");
+            var control = PoiyomiLockedSourceAlignment.AlignForEra(
+                controlOriginal, controlGenerated, properties, PoiyomiLockEra.Thry2743);
+            Assert.That(control.Succeeded, Is.True, control.RefusalDetail ?? "refused");
+            Assert.That(control.Source.States["_P"], Is.EqualTo(LockedPropertyState.Baked));
+            Assert.That(control.Source.BakedLiterals["_P"], Is.EqualTo("0.5"));
+        }
+
+        // --- LA-F9: a repeated property token makes the later vendor
+        // token pass revisit the exempt declaration occurrence and bake
+        // it. The exact vendor result keeps one literal, so it fits the
+        // closed record contract. The broad declaration read exempts
+        // both occurrences and refuses the vendor output. The negative
+        // half bakes a lone declaration that no revisit justifies, so
+        // the exact replay must refuse it. The unchanged declaration is
+        // the positive guard for both halves.
+        [Test]
+        public void RepeatedTokenVisitCannotHideARevisitedDeclaration()
+        {
+            var properties = new[]
+            {
+                new LockedSourceProperty("_P", ShaderPropertyType.Float, false, false, 2f)
+            };
+            var (original, generated) = ProgramPair(
+                "        _P (\"P\", Float) = 2",
+                "            int _P; o.Albedo = _P;",
+                "            int 2; o.Albedo = 2;");
+            var result = PoiyomiLockedSourceAlignment.AlignForEra(
+                original, generated, properties, PoiyomiLockEra.Thry2743);
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.States["_P"], Is.EqualTo(LockedPropertyState.Baked));
+            Assert.That(result.Source.BakedLiterals["_P"], Is.EqualTo("2"));
+
+            var (loneOriginal, loneGenerated) = ProgramPair(
+                "        _P (\"P\", Float) = 2",
+                "            int _P;",
+                "            int 2;");
+            var loneBakedResult = PoiyomiLockedSourceAlignment.AlignForEra(
+                loneOriginal, loneGenerated, properties, PoiyomiLockEra.Thry2743);
+            Assert.That(loneBakedResult.Succeeded, Is.False);
+            Assert.That(loneBakedResult.Source, Is.Null);
+
+            var (unchangedOriginal, unchangedGenerated) = ProgramPair(
+                "        _P (\"P\", Float) = 2",
+                "            int _P;",
+                "            int _P;");
+            var unchangedResult = PoiyomiLockedSourceAlignment.AlignForEra(
+                unchangedOriginal, unchangedGenerated, properties, PoiyomiLockEra.Thry2743);
+            Assert.That(unchangedResult.Succeeded, Is.True, unchangedResult.RefusalDetail ?? "refused");
+            Assert.That(unchangedResult.Source.States["_P"], Is.EqualTo(LockedPropertyState.Unused));
+        }
+
+        // --- LA-F9: a property spelling inside a quoted string is no
+        // exact token, because the quote is outside the vendor separator
+        // set. The text stays exact and the property records no use. An
+        // alleged bake through the quotes refuses. The plain use control
+        // bakes, which proves the fixture reaches the matcher.
+        [Test]
+        public void NonVendorSeparatorCannotCreateABake()
+        {
+            var properties = new[] { Prop("_P", ShaderPropertyType.Float) };
+            var (original, unchanged) = ProgramPair(
+                "        _P (\"P\", Float) = 0.5",
+                "            o.Albedo = \"_P\";",
+                "            o.Albedo = \"_P\";");
+            var unchangedResult = PoiyomiLockedSourceAlignment.AlignForEra(
+                original, unchanged, properties, PoiyomiLockEra.Thry2743);
+            Assert.That(unchangedResult.Succeeded, Is.True, unchangedResult.RefusalDetail ?? "refused");
+            Assert.That(unchangedResult.Source.States["_P"], Is.EqualTo(LockedPropertyState.Unused));
+
+            var (_, alleged) = ProgramPair(
+                "        _P (\"P\", Float) = 0.5",
+                "            o.Albedo = \"_P\";",
+                "            o.Albedo = \"0.5\";");
+            var allegedResult = PoiyomiLockedSourceAlignment.AlignForEra(
+                original, alleged, properties, PoiyomiLockEra.Thry2743);
+            Assert.That(allegedResult.Succeeded, Is.False);
+            Assert.That(allegedResult.Source, Is.Null);
+
+            var (controlOriginal, controlGenerated) = ProgramPair(
+                "        _P (\"P\", Float) = 0.5",
+                "            o.Albedo = _P;",
+                "            o.Albedo = 0.5;");
+            var control = PoiyomiLockedSourceAlignment.AlignForEra(
+                controlOriginal, controlGenerated, properties, PoiyomiLockEra.Thry2743);
+            Assert.That(control.Succeeded, Is.True, control.RefusalDetail ?? "refused");
+            Assert.That(control.Source.BakedLiterals["_P"], Is.EqualTo("0.5"));
+        }
+
+        // --- LA-F9: the recognized inline comment shape keeps its
+        // identifier spelling and records no use, while the eligible use
+        // on the same line bakes. The mixed-use read of the comment
+        // spelling refuses a vendor valid output.
+        [Test]
+        public void InlineCommentSkipKeepsTheCommentIdentifier()
+        {
+            var properties = new[] { Prop("_P", ShaderPropertyType.Float) };
+            var (original, generated) = ProgramPair(
+                "        _P (\"P\", Float) = 0.5",
+                "            o.Albedo = _P/*_P*/;",
+                "            o.Albedo = 0.5/*_P*/;");
+            var result = PoiyomiLockedSourceAlignment.AlignForEra(
+                original, generated, properties, PoiyomiLockEra.Thry2743);
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.States["_P"], Is.EqualTo(LockedPropertyState.Baked));
+            Assert.That(result.Source.BakedLiterals["_P"], Is.EqualTo("0.5"));
+        }
+
+        // --- Retained mixed-use protection on the installed path. One
+        // line shows the identifier at one eligible occurrence and a
+        // literal at the other. The vendor never produces that text.
+        [Test]
+        public void SameLineMixedUsesRefuse()
+        {
+            var properties = new[] { Prop("_P", ShaderPropertyType.Float) };
+            var (original, generated) = ProgramPair(
+                "        _P (\"P\", Float) = 0.5",
+                "            o.Albedo = _P + _P;",
+                "            o.Albedo = _P + 0.5;");
+            var result = PoiyomiLockedSourceAlignment.AlignForEra(
+                original, generated, properties, PoiyomiLockEra.Thry2743);
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(result.Source, Is.Null);
+            Assert.That(result.RefusalDetail, Is.EqualTo(MixedUsesDetail));
+        }
+
+        // --- Retained two literal protection on the installed path. One
+        // line shows two different literals for one property. The vendor
+        // prints one value, so the text refuses. The pin keeps the
+        // refusal and the empty record, not one fixed detail sentence.
+        [Test]
+        public void SameLineTwoLiteralsRefuse()
+        {
+            var properties = new[] { Prop("_P", ShaderPropertyType.Float) };
+            var (original, generated) = ProgramPair(
+                "        _P (\"P\", Float) = 0.5",
+                "            o.Albedo = _P + _P;",
+                "            o.Albedo = 0.5 + 0.75;");
+            var result = PoiyomiLockedSourceAlignment.AlignForEra(
+                original, generated, properties, PoiyomiLockEra.Thry2743);
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(result.Source, Is.Null);
+        }
+
+        // --- LA-F10: a file wide first declaration scan reads the
+        // integer declaration inside the removed region and forces the
+        // integer print. The vendor deletes removed lines before the
+        // occurrence pass, so the surviving walk never sees the
+        // declaration and the fractional literal stays.
+        [Test]
+        public void RemovedIntegerDeclarationDoesNotSetLiteralFormat()
+        {
+            var properties = new[]
+            {
+                Prop("_K", ShaderPropertyType.Float),
+                Prop("_P", ShaderPropertyType.Float)
+            };
+            var (original, generated) = ProgramPair(
+                "        _K (\"K\", Float) = 0\n        _P (\"P\", Float) = 0.5",
+                "            //ifex _K==0\n            int _P;\n            //endex\n            o.Albedo = _P;",
+                "            o.Albedo = 0.5;");
+            var result = PoiyomiLockedSourceAlignment.AlignForEra(
+                original, generated, properties, PoiyomiLockEra.Thry2743);
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Blocks.Count, Is.EqualTo(1));
+            Assert.That(result.Source.Blocks[0].Outcome, Is.EqualTo(LockedBlockOutcome.Removed));
+            Assert.That(result.Source.States["_P"], Is.EqualTo(LockedPropertyState.Baked));
+            Assert.That(result.Source.BakedLiterals["_P"], Is.EqualTo("0.5"));
+        }
+
+        // --- LA-F10: the losing kept trial walks a fixed line and the
+        // declaration, then dies on the distinct losing body line. The
+        // winning removed trial bakes before its own later surviving
+        // declaration, so the winner reads a clean format state. A
+        // shared or leaked format map forces the integer print in the
+        // winning bake.
+        [Test]
+        public void LosingTrialDoesNotLeakDeclarationFormat()
+        {
+            var properties = new[]
+            {
+                Prop("_K", ShaderPropertyType.Float),
+                Prop("_P", ShaderPropertyType.Float)
+            };
+            var (original, generated) = ProgramPair(
+                "        _K (\"K\", Float) = 0\n        _P (\"P\", Float) = 0.5",
+                "            //ifex _K==0\n            o.Albedo = 0.5;\n            int _P;\n            o.Gloss = 1;\n"
+                    + "            //endex\n            o.Albedo = _P;\n            int _P;\n            o.Alpha = 2;",
+                "            o.Albedo = 0.5;\n            int _P;\n            o.Alpha = 2;");
+            var result = PoiyomiLockedSourceAlignment.AlignForEra(
+                original, generated, properties, PoiyomiLockEra.Thry2743);
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Blocks[0].Outcome, Is.EqualTo(LockedBlockOutcome.Removed));
+            Assert.That(result.Source.States["_P"], Is.EqualTo(LockedPropertyState.Baked));
+            Assert.That(result.Source.BakedLiterals["_P"], Is.EqualTo("0.5"));
+        }
+
+        // --- LA-F10: the kept exclusion block holds the integer
+        // declaration. The losing removed trial dies early on the kept
+        // body text. Twelve distinct property free lines then push the
+        // first bake past one lookahead window, so a missing format map
+        // adoption cannot hide behind the window. The integer literal
+        // needs the adopted map of the winning trial.
+        [Test]
+        public void WinningTrialDeclarationFormatControlsLaterUse()
+        {
+            var properties = new[]
+            {
+                Prop("_K", ShaderPropertyType.Float),
+                Prop("_P", ShaderPropertyType.Float)
+            };
+            var filler = new System.Text.StringBuilder();
+            for (var i = 1; i <= 12; i++)
+            {
+                filler.Append("            o.Uv = 0.").Append(i).Append(";\n");
+            }
+
+            var (original, generated) = ProgramPair(
+                "        _K (\"K\", Float) = 0\n        _P (\"P\", Float) = 0.5",
+                "            //ifex _K==0\n            int _P;\n            o.Gloss = 1;\n            //endex\n"
+                    + filler + "            o.Albedo = _P;",
+                "            int _P;\n            o.Gloss = 1;\n" + filler + "            o.Albedo = 2;");
+            var result = PoiyomiLockedSourceAlignment.AlignForEra(
+                original, generated, properties, PoiyomiLockEra.Thry2743);
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Blocks[0].Outcome, Is.EqualTo(LockedBlockOutcome.Kept));
+            Assert.That(result.Source.States["_P"], Is.EqualTo(LockedPropertyState.Baked));
+            Assert.That(result.Source.BakedLiterals["_P"], Is.EqualTo("2"));
+        }
+
+        // --- LA-F10 record half: a later surviving declaration changes
+        // the print from the point the vendor observes it. The integer
+        // declaration in the first program block and the float
+        // declaration in the second block give the decimal print.
+        [Test]
+        public void LaterSurvivingDeclarationControlsFirstBake()
+        {
+            var properties = new[] { Prop("_P", ShaderPropertyType.Float) };
+            var original = Join(new[]
+            {
+                "Shader \"Custom/Small\"",
+                "{",
+                "    Properties",
+                "    {",
+                "        [ThryShaderOptimizerLockButton] _Lock (\"Lock\", Float) = 0",
+                "        _P (\"P\", Float) = 0.5",
+                "    }",
+                "    SubShader",
+                "    {",
+                "        Pass",
+                "        {",
+                "            CGPROGRAM",
+                "            #pragma vertex vert",
+                "            int _P;",
+                "            ENDCG",
+                "        }",
+                "        Pass",
+                "        {",
+                "            CGPROGRAM",
+                "            #pragma vertex vert",
+                "            float _P;",
+                "            o.Albedo = _P;",
+                "            ENDCG",
+                "        }",
+                "    }",
+                "}"
+            });
+            var generated = Join(new[]
+            {
+                "Shader \"Hidden/Locked/Custom/Small/k1\"",
+                "{",
+                "    Properties",
+                "    {",
+                "        [ThryShaderOptimizerLockButton] _Lock (\"Lock\", Float) = 1",
+                "        _P (\"P\", Float) = 0.5",
+                "    }",
+                "    SubShader",
+                "    {",
+                "        Pass",
+                "        {",
+                "            CGPROGRAM",
+                " #define OPTIMIZER_ENABLED ",
+                "            #pragma vertex vert",
+                "            int _P;",
+                "            ENDCG",
+                "        }",
+                "        Pass",
+                "        {",
+                "            CGPROGRAM",
+                " #define OPTIMIZER_ENABLED ",
+                "            #pragma vertex vert",
+                "            float _P;",
+                "            o.Albedo = 0.5;",
+                "            ENDCG",
+                "        }",
+                "    }",
+                "}"
+            });
+            var result = PoiyomiLockedSourceAlignment.AlignForEra(
+                original, generated, properties, PoiyomiLockEra.Thry2743);
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.States["_P"], Is.EqualTo(LockedPropertyState.Baked));
+            Assert.That(result.Source.BakedLiterals["_P"], Is.EqualTo("0.5"));
+        }
+
+        // --- LA-F10 positive control: a surviving integer declaration
+        // sets the integer print for the first bake on the walked order.
+        [Test]
+        public void SurvivingIntegerDeclarationControlsTheFirstBake()
+        {
+            var properties = new[] { Prop("_P", ShaderPropertyType.Float) };
+            var (original, generated) = ProgramPair(
+                "        _P (\"P\", Float) = 2",
+                "            int _P;\n            o.Albedo = _P;",
+                "            int _P;\n            o.Albedo = 2;");
+            var result = PoiyomiLockedSourceAlignment.AlignForEra(
+                original, generated, properties, PoiyomiLockEra.Thry2743);
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.States["_P"], Is.EqualTo(LockedPropertyState.Baked));
+            Assert.That(result.Source.BakedLiterals["_P"], Is.EqualTo("2"));
+        }
+
+        // --- LA4 declaration read control: whitespace between the
+        // declared name and the semicolon stays a declaration. The
+        // identifier keeps its exact spacing and the later use bakes
+        // with the integer format. Characterization, not RED.
+        [Test]
+        public void DeclarationWhitespaceBeforeSemicolonKeepsTheIdentifier()
+        {
+            var properties = new[] { Prop("_P", ShaderPropertyType.Float) };
+            var (original, generated) = ProgramPair(
+                "        _P (\"P\", Float) = 2",
+                "            int _P \t;\n            o.Albedo = _P;",
+                "            int _P \t;\n            o.Albedo = 2;");
+            var result = PoiyomiLockedSourceAlignment.AlignForEra(
+                original, generated, properties, PoiyomiLockEra.Thry2743);
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.States["_P"], Is.EqualTo(LockedPropertyState.Baked));
+            Assert.That(result.Source.BakedLiterals["_P"], Is.EqualTo("2"));
+        }
+
+        // --- LA-F10 boundary: a format change between two bakes makes
+        // one property need two literal texts. The single literal
+        // contract refuses it. The pin keeps the refusal and the empty
+        // record, not one fixed detail sentence.
+        [Test]
+        public void TwoLiteralTextsAcrossAFormatChangeRefuse()
+        {
+            var properties = new[] { Prop("_P", ShaderPropertyType.Float) };
+            var (original, generated) = ProgramPair(
+                "        _P (\"P\", Float) = 2",
+                "            int _P;\n            o.Albedo = _P;\n            float _P;\n            o.Alpha = _P;",
+                "            int _P;\n            o.Albedo = 2;\n            float _P;\n            o.Alpha = 0.5;");
+            var result = PoiyomiLockedSourceAlignment.AlignForEra(
+                original, generated, properties, PoiyomiLockEra.Thry2743);
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(result.Source, Is.Null);
+        }
+
+        // --- LA4 sampler amendment falsifiers: the installed vendor
+        // holds no constant for a texture name, so a declared texture
+        // whose only program occurrence is its sampler declaration is
+        // Unused in every era. A separate real read stays Live. The
+        // declaration rename stays verified, and the derived texture
+        // constants keep their vector bakes. The plan gates the
+        // production edit on these four cases.
+
+        // The plain sampler-only declaration and the storage-prefix
+        // form record no use. The direct installed era call is the
+        // expected RED point: the source reading on 2026-10-29 found
+        // that the installed era invents a Live use before this
+        // correction, so the shared alignment refuses with the era
+        // disagreement sentence.
+        [Test]
+        public void SamplerDeclarationRemainsUnusedAcrossEras()
+        {
+            var properties = new[]
+            {
+                Prop("_T", ShaderPropertyType.Texture),
+                Prop("_U", ShaderPropertyType.Texture)
+            };
+            var (original, generated) = ProgramPair(
+                "        _T (\"T\", 2D) = \"white\" {}\n        _U (\"U\", 2D) = \"white\" {}",
+                "            sampler2D _T;\n            uniform sampler2D _U;",
+                "            sampler2D _T;\n            uniform sampler2D _U;");
+            foreach (var era in new[]
+            {
+                PoiyomiLockEra.Bundled9364,
+                PoiyomiLockEra.Thry274To2742,
+                PoiyomiLockEra.Thry2743
+            })
+            {
+                var result = PoiyomiLockedSourceAlignment.AlignForEra(
+                    original, generated, properties, era);
+                Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+                Assert.That(result.Source.States["_T"], Is.EqualTo(LockedPropertyState.Unused));
+                Assert.That(result.Source.States["_U"], Is.EqualTo(LockedPropertyState.Unused));
+            }
+
+            var shared = Align(original, generated, properties);
+            Assert.That(shared.Succeeded, Is.True, shared.RefusalDetail ?? "refused");
+            Assert.That(shared.Source.States["_T"], Is.EqualTo(LockedPropertyState.Unused));
+            Assert.That(shared.Source.States["_U"], Is.EqualTo(LockedPropertyState.Unused));
+        }
+
+        // The separate-line read is Live in every era and in the shared
+        // alignment. The same-line read after the declaration semicolon
+        // pins occurrence-specific recognition in the direct installed
+        // era only, because the historical eras keep their broad
+        // declaration-line read for that form.
+        [Test]
+        public void SamplerReadRemainsLiveAcrossEras()
+        {
+            var properties = new[] { Prop("_T", ShaderPropertyType.Texture) };
+            var (original, generated) = ProgramPair(
+                "        _T (\"T\", 2D) = \"white\" {}",
+                "            sampler2D _T;\n            o.Albedo *= tex2D(_T, IN.uv).rgb;",
+                "            sampler2D _T;\n            o.Albedo *= tex2D(_T, IN.uv).rgb;");
+            foreach (var era in new[]
+            {
+                PoiyomiLockEra.Bundled9364,
+                PoiyomiLockEra.Thry274To2742,
+                PoiyomiLockEra.Thry2743
+            })
+            {
+                var result = PoiyomiLockedSourceAlignment.AlignForEra(
+                    original, generated, properties, era);
+                Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+                Assert.That(result.Source.States["_T"], Is.EqualTo(LockedPropertyState.Live));
+            }
+
+            var shared = Align(original, generated, properties);
+            Assert.That(shared.Succeeded, Is.True, shared.RefusalDetail ?? "refused");
+            Assert.That(shared.Source.States["_T"], Is.EqualTo(LockedPropertyState.Live));
+
+            var (sameOriginal, sameGenerated) = ProgramPair(
+                "        _T (\"T\", 2D) = \"white\" {}",
+                "            sampler2D _T; o.Albedo *= tex2D(_T, IN.uv).rgb;",
+                "            sampler2D _T; o.Albedo *= tex2D(_T, IN.uv).rgb;");
+            var sameLine = PoiyomiLockedSourceAlignment.AlignForEra(
+                sameOriginal, sameGenerated, properties, PoiyomiLockEra.Thry2743);
+            Assert.That(sameLine.Succeeded, Is.True, sameLine.RefusalDetail ?? "refused");
+            Assert.That(sameLine.Source.States["_T"], Is.EqualTo(LockedPropertyState.Live));
+        }
+
+        // The renamed declaration keeps the exact suffix and the exact
+        // renamed name in every era. A changed generated declaration
+        // name and an alleged literal in the declaration both refuse
+        // with no source record. The changed name form keeps the suffix
+        // search unambiguous, so the refusal comes from the declaration
+        // verify and not from the earlier ambiguous-suffix gate.
+        [Test]
+        public void RenamedSamplerDeclarationStaysVerified()
+        {
+            var properties = new[] { Prop("_T", ShaderPropertyType.Texture) };
+            var (original, generated) = SmallPair(
+                "        _T (\"T\", 2D) = \"white\" {}",
+                null,
+                "        sampler2D _T;",
+                ("_T", "_T_S"));
+            foreach (var era in new[]
+            {
+                PoiyomiLockEra.Bundled9364,
+                PoiyomiLockEra.Thry274To2742,
+                PoiyomiLockEra.Thry2743
+            })
+            {
+                var result = PoiyomiLockedSourceAlignment.AlignForEra(
+                    original, generated, properties, era);
+                Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+                Assert.That(result.Source.Suffix, Is.EqualTo("_S"));
+                Assert.That(result.Source.RenamedNames["_T"], Is.EqualTo("_T_S"));
+                Assert.That(result.Source.States["_T"], Is.EqualTo(LockedPropertyState.Renamed));
+            }
+
+            // A longer wrong spelling under the same suffix.
+            var changedName = generated.Replace("sampler2D _T_S;", "sampler2D _T_S_ST;");
+            foreach (var era in new[]
+            {
+                PoiyomiLockEra.Bundled9364,
+                PoiyomiLockEra.Thry274To2742,
+                PoiyomiLockEra.Thry2743
+            })
+            {
+                var changed = PoiyomiLockedSourceAlignment.AlignForEra(
+                    original, changedName, properties, era);
+                Assert.That(changed.Succeeded, Is.False, "a changed declaration name aligned");
+                Assert.That(changed.Source, Is.Null);
+            }
+
+            var changedShared = Align(original, changedName, properties);
+            Assert.That(changedShared.Succeeded, Is.False);
+            Assert.That(changedShared.Source, Is.Null);
+
+            // A baked literal in place of the declared identifier.
+            var allegedLiteral = generated.Replace("sampler2D _T_S;", "sampler2D 0.5;");
+            foreach (var era in new[]
+            {
+                PoiyomiLockEra.Bundled9364,
+                PoiyomiLockEra.Thry274To2742,
+                PoiyomiLockEra.Thry2743
+            })
+            {
+                var alleged = PoiyomiLockedSourceAlignment.AlignForEra(
+                    original, allegedLiteral, properties, era);
+                Assert.That(alleged.Succeeded, Is.False, "an alleged declaration literal aligned");
+                Assert.That(alleged.Source, Is.Null);
+            }
+
+            var allegedShared = Align(original, allegedLiteral, properties);
+            Assert.That(allegedShared.Succeeded, Is.False);
+            Assert.That(allegedShared.Source, Is.Null);
+        }
+
+        // The derived texture names stay vector constant candidates.
+        // The installed era bakes both local initializer reads with the
+        // exact printed forms. This control must pass before and after
+        // the sampler correction, so a blanket texture skip cannot hide
+        // behind the amendment.
+        [Test]
+        public void TextureDerivedInitializerStillRecordsBothLiterals()
+        {
+            var properties = new[] { Prop("_T", ShaderPropertyType.Texture) };
+            var (original, generated) = ProgramPair(
+                "        _T (\"T\", 2D) = \"white\" {}",
+                "            sampler2D _T;\n            float4 st = _T_ST;\n            float4 ts = _T_TexelSize;",
+                "            sampler2D _T;\n            float4 st = float4(2,0.5,0.25,0.125);\n"
+                    + "            float4 ts = float4(0.25,0.5,4,2);");
+            var installed = PoiyomiLockedSourceAlignment.AlignForEra(
+                original, generated, properties, PoiyomiLockEra.Thry2743);
+            Assert.That(installed.Succeeded, Is.True, installed.RefusalDetail ?? "refused");
+            Assert.That(
+                installed.Source.BakedLiterals["_T_ST"],
+                Is.EqualTo("float4(2,0.5,0.25,0.125)"));
+            Assert.That(
+                installed.Source.BakedLiterals["_T_TexelSize"],
+                Is.EqualTo("float4(0.25,0.5,4,2)"));
+            Assert.That(installed.Source.States["_T_ST"], Is.EqualTo(LockedPropertyState.Baked));
+            Assert.That(
+                installed.Source.States["_T_TexelSize"],
+                Is.EqualTo(LockedPropertyState.Baked));
+        }
+
+        // --- LA11 crossing control span ownership ---
+        // The vendor skips excluded lines before its preprocessor logic.
+        // A pair of wrappers with one condition therefore holds the
+        // frame opener and else line in the first wrapper and the frame
+        // close in the second. Each generated text below follows the
+        // vendor stream rules applied by hand to the reduced original.
+        // POI_X has no pragma, so the installed era retains the frame.
+
+        private const string CrossingProperties = "        _W (\"W\", Float) = 0";
+
+        private const string CrossingOriginalProgram =
+            "            //ifex _W==0\n            #ifdef POI_X\n            o.Albedo = 1;\n            #else\n            //endex"
+            + "\n            o.Albedo = 2;\n            //ifex _W==0\n            #endif\n            o.Alpha = 1;"
+            + "\n            //endex\n            o.Specular = 3;";
+
+        private const string CrossingBothKept =
+            "            #ifdef POI_X\n            o.Albedo = 1;\n            #else\n            o.Albedo = 2;"
+            + "\n            #endif\n            o.Alpha = 1;\n            o.Specular = 3;";
+
+        private const string ElseWrappedOriginalProgram =
+            "            #ifdef POI_X\n            o.Albedo = 1;\n            //ifex _W==0\n            #else"
+            + "\n            o.Albedo = 2;\n            #endif\n            o.Alpha = 1;\n            //endex"
+            + "\n            o.Specular = 3;";
+
+        private static LockedSourceAlignmentResult AlignInstalled(
+            string original, string generated, params LockedSourceProperty[] properties)
+        {
+            return PoiyomiLockedSourceAlignment.AlignForEra(
+                original, generated, properties, PoiyomiLockEra.Thry2743);
+        }
+
+        private static LockedSourceProperty[] CrossingPropertyTable()
+        {
+            return new[] { Prop("_W", ShaderPropertyType.Float) };
+        }
+
+        // --- Falsifier LA-F13 and LA-F14 ---
+        // A crossing wrapper consumes the frame close. The frame walk
+        // must not walk it again, and a missing, changed, or doubled
+        // close must still refuse. The plain frame control keeps its
+        // close check, so a skipped close step cannot hide behind the
+        // crossing path.
+        [Test]
+        public void CrossingWrapperClosesFrameOnce()
+        {
+            var properties = CrossingPropertyTable();
+            var (original, generated) = ProgramPair(CrossingProperties, CrossingOriginalProgram, CrossingBothKept);
+            var result = AlignInstalled(original, generated, properties);
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            // Positive guard: both wrappers and the frame are kept records.
+            var blocks = result.Source.Blocks;
+            Assert.That(blocks.Count(b => b.Kind == LockedBlockKind.Ifex), Is.EqualTo(2));
+            Assert.That(
+                blocks.Where(b => b.Kind == LockedBlockKind.Ifex).All(b => b.Outcome == LockedBlockOutcome.Kept),
+                Is.True);
+            Assert.That(
+                blocks.Single(b => b.Kind == LockedBlockKind.Ifdef).Outcome,
+                Is.EqualTo(LockedBlockOutcome.Kept));
+
+            var missing = CrossingBothKept.Replace("            #endif\n", string.Empty);
+            var changed = CrossingBothKept.Replace("            #endif", "            #endif // x");
+            var doubled = CrossingBothKept.Replace("            #endif", "            #endif\n            #endif");
+            foreach (var mutated in new[] { missing, changed, doubled })
+            {
+                var (mutatedOriginal, mutatedGenerated) = ProgramPair(
+                    CrossingProperties, CrossingOriginalProgram, mutated);
+                var refused = AlignInstalled(mutatedOriginal, mutatedGenerated, properties);
+                Assert.That(refused.Succeeded, Is.False);
+                Assert.That(refused.Source, Is.Null);
+            }
+
+            // The plain frame control keeps its close check.
+            const string PlainOriginal =
+                "            #ifdef POI_X\n            o.Albedo = 1;\n            #else\n            o.Albedo = 2;"
+                + "\n            #endif\n            o.Specular = 3;";
+            var (plainOriginal, plainGenerated) = ProgramPair(CrossingProperties, PlainOriginal, PlainOriginal);
+            Assert.That(AlignInstalled(plainOriginal, plainGenerated, properties).Succeeded, Is.True);
+            foreach (var mutated in new[]
+            {
+                PlainOriginal.Replace("            #endif\n", string.Empty),
+                PlainOriginal.Replace("            #endif", "            #endif // x"),
+                PlainOriginal.Replace("            #endif", "            #endif\n            #endif"),
+            })
+            {
+                var (o, g) = ProgramPair(CrossingProperties, PlainOriginal, mutated);
+                Assert.That(AlignInstalled(o, g, properties).Succeeded, Is.False);
+            }
+        }
+
+        // --- Falsifier LA-F15 ---
+        // A wrapper that starts in the frame body holds the else line
+        // and the close. Each is consumed once. A changed else line
+        // refuses.
+        [Test]
+        public void CrossingWrapperElseLineIsConsumedOnce()
+        {
+            var properties = CrossingPropertyTable();
+            var keptText =
+                "            #ifdef POI_X\n            o.Albedo = 1;\n            #else\n            o.Albedo = 2;"
+                + "\n            #endif\n            o.Alpha = 1;\n            o.Specular = 3;";
+            var (original, generated) = ProgramPair(CrossingProperties, ElseWrappedOriginalProgram, keptText);
+            var result = AlignInstalled(original, generated, properties);
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.Blocks.Count(b => b.Kind == LockedBlockKind.Ifex), Is.EqualTo(1));
+            Assert.That(
+                result.Source.Blocks.Single(b => b.Kind == LockedBlockKind.Ifex).Outcome,
+                Is.EqualTo(LockedBlockOutcome.Kept));
+
+            var changedElse = keptText.Replace("            #else", "            #else // x");
+            var (changedOriginal, changedGenerated) = ProgramPair(
+                CrossingProperties, ElseWrappedOriginalProgram, changedElse);
+            var refused = AlignInstalled(changedOriginal, changedGenerated, properties);
+            Assert.That(refused.Succeeded, Is.False);
+            Assert.That(refused.Source, Is.Null);
+        }
+
+        // --- Falsifier LA-F16 ---
+        // Both wrappers removed leave only the middle lines. A forced
+        // removal of every crossing wrapper cannot pass the both-kept
+        // case, which must stay aligned with kept records.
+        [Test]
+        public void BothCrossingWrappersRemovedKeepsMiddleLines()
+        {
+            var properties = CrossingPropertyTable();
+            var removedText = "            o.Albedo = 2;\n            o.Specular = 3;";
+            var (original, generated) = ProgramPair(CrossingProperties, CrossingOriginalProgram, removedText);
+            var result = AlignInstalled(original, generated, properties);
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            var wrappers = result.Source.Blocks.Where(b => b.Kind == LockedBlockKind.Ifex).ToList();
+            Assert.That(wrappers.Count, Is.EqualTo(2));
+            Assert.That(wrappers.All(b => b.Outcome == LockedBlockOutcome.Removed), Is.True);
+
+            var (keptOriginal, keptGenerated) = ProgramPair(
+                CrossingProperties, CrossingOriginalProgram, CrossingBothKept);
+            var kept = AlignInstalled(keptOriginal, keptGenerated, properties);
+            Assert.That(kept.Succeeded, Is.True, kept.RefusalDetail ?? "refused");
+            Assert.That(
+                kept.Source.Blocks.Where(b => b.Kind == LockedBlockKind.Ifex).All(b => b.Outcome == LockedBlockOutcome.Kept),
+                Is.True);
+        }
+
+        // --- Falsifier LA-F17 ---
+        // The first wrapper kept and the second removed leave a frame
+        // with no close. A cursor beyond the close is not a consumed
+        // close, so both shapes refuse.
+        [Test]
+        public void RemovedSecondWrapperRefusesUnbalancedFrame()
+        {
+            var properties = CrossingPropertyTable();
+            var unbalanced =
+                "            #ifdef POI_X\n            o.Albedo = 1;\n            #else\n            o.Albedo = 2;"
+                + "\n            o.Specular = 3;";
+            var (original, generated) = ProgramPair(CrossingProperties, CrossingOriginalProgram, unbalanced);
+            var result = AlignInstalled(original, generated, properties);
+            Assert.That(result.Succeeded, Is.False);
+            Assert.That(result.Source, Is.Null);
+
+            var elseWrappedUnbalanced =
+                "            #ifdef POI_X\n            o.Albedo = 1;\n            o.Specular = 3;";
+            var (elseOriginal, elseGenerated) = ProgramPair(
+                CrossingProperties, ElseWrappedOriginalProgram, elseWrappedUnbalanced);
+            var elseResult = AlignInstalled(elseOriginal, elseGenerated, properties);
+            Assert.That(elseResult.Succeeded, Is.False);
+            Assert.That(elseResult.Source, Is.Null);
+        }
+
+        // --- Characterization for LA-F18 ---
+        // A bake in the frame body commits with the winning crossing
+        // alignment. Trial isolation is the existing clone and adopt
+        // behavior, and the crossing path adds no shared state. The
+        // refused case checks only that a refusal returns no source.
+        // It cannot tell isolated trials from shared ones, so it is
+        // characterization and not a falsifier.
+        [Test]
+        public void LosingCrossingTrialCommitsNoFacts()
+        {
+            var properties = new[]
+            {
+                Prop("_W", ShaderPropertyType.Float),
+                Prop("_P", ShaderPropertyType.Float),
+            };
+            const string Props = "        _W (\"W\", Float) = 0\n        _P (\"P\", Float) = 0.5";
+            var program = CrossingOriginalProgram.Replace("o.Albedo = 1;", "float c = _P;");
+            var kept = CrossingBothKept.Replace("o.Albedo = 1;", "float c = 0.5;");
+            var (original, generated) = ProgramPair(Props, program, kept);
+            var result = AlignInstalled(original, generated, properties);
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.States["_P"], Is.EqualTo(LockedPropertyState.Baked));
+            Assert.That(result.Source.BakedLiterals["_P"], Is.EqualTo("0.5"));
+
+            var unbalanced = kept.Replace("            #endif\n            o.Alpha = 1;\n", string.Empty);
+            var (lostOriginal, lostGenerated) = ProgramPair(Props, program, unbalanced);
+            var refused = AlignInstalled(lostOriginal, lostGenerated, properties);
+            Assert.That(refused.Succeeded, Is.False);
+            Assert.That(refused.Source, Is.Null);
+        }
+
+        // --- Falsifier LA-F19 ---
+        // The historical eras keep their saved frame walk. The crossing
+        // input refuses under both of them, before and after LA11.
+        [Test]
+        public void HistoricalErasKeepCrossingResults()
+        {
+            var properties = CrossingPropertyTable();
+            var (original, generated) = ProgramPair(CrossingProperties, CrossingOriginalProgram, CrossingBothKept);
+            foreach (var era in new[] { PoiyomiLockEra.Bundled9364, PoiyomiLockEra.Thry274To2742 })
+            {
+                var result = PoiyomiLockedSourceAlignment.AlignForEra(original, generated, properties, era);
+                Assert.That(result.Succeeded, Is.False, era.ToString());
+                Assert.That(result.Source, Is.Null, era.ToString());
+            }
+
+            // Positive guard: the installed era does align this input.
+            Assert.That(AlignInstalled(original, generated, properties).Succeeded, Is.True);
+        }
+
+        // --- Falsifier LA-F20 ---
+        // Frames with no crossing keep their results. A retained frame
+        // stays Kept. A removable keyword frame stays Removed and keeps
+        // its else body only.
+        [Test]
+        public void NonCrossingFramesKeepPriorResults()
+        {
+            var properties = CrossingPropertyTable();
+            const string Retained =
+                "            #ifdef POI_X\n            o.Albedo = 1;\n            #else\n            o.Albedo = 2;"
+                + "\n            #endif\n            o.Specular = 3;";
+            var (retainedOriginal, retainedGenerated) = ProgramPair(CrossingProperties, Retained, Retained);
+            var retained = AlignInstalled(retainedOriginal, retainedGenerated, properties);
+            Assert.That(retained.Succeeded, Is.True, retained.RefusalDetail ?? "refused");
+            Assert.That(retained.Source.Blocks.Single().Outcome, Is.EqualTo(LockedBlockOutcome.Kept));
+
+            const string Removable =
+                "            #pragma shader_feature POI_X\n            #ifdef POI_X\n            o.Albedo = 1;"
+                + "\n            #else\n            o.Albedo = 2;\n            #endif\n            o.Specular = 3;";
+            const string RemovedGenerated = "            o.Albedo = 2;\n            o.Specular = 3;";
+            var (removableOriginal, removableGenerated) = ProgramPair(CrossingProperties, Removable, RemovedGenerated);
+            var removable = AlignInstalled(removableOriginal, removableGenerated, properties);
+            Assert.That(removable.Succeeded, Is.True, removable.RefusalDetail ?? "refused");
+            Assert.That(removable.Source.Blocks.Single().Outcome, Is.EqualTo(LockedBlockOutcome.Removed));
+        }
+
+        // The bundled originals harvest the frame keyword in an early
+        // pragma, so the prefix map cannot prove retention and their
+        // crossing frames walk speculatively. The same crossing must
+        // close once there, and a missing close or an unbalanced
+        // second wrapper must still refuse.
+        [Test]
+        public void SpeculativeCrossingFrameClosesOnce()
+        {
+            var properties = CrossingPropertyTable();
+            var original = "            #pragma shader_feature POI_X\n" + CrossingOriginalProgram;
+            const string DefineRun = "CGPROGRAM\n #define OPTIMIZER_ENABLED ";
+            const string DefineRunWithKeyword = DefineRun + "\n #define POI_X ";
+            var (keptOriginal, keptGenerated) = ProgramPair(CrossingProperties, original, CrossingBothKept);
+            keptGenerated = keptGenerated.Replace(DefineRun, DefineRunWithKeyword);
+            var result = AlignInstalled(keptOriginal, keptGenerated, properties);
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(
+                result.Source.Blocks.Single(b => b.Kind == LockedBlockKind.Ifdef).Outcome,
+                Is.EqualTo(LockedBlockOutcome.Kept));
+            Assert.That(
+                result.Source.Blocks.Where(b => b.Kind == LockedBlockKind.Ifex).All(b => b.Outcome == LockedBlockOutcome.Kept),
+                Is.True);
+
+            var missing = CrossingBothKept.Replace("            #endif\n", string.Empty);
+            var (missingOriginal, missingGenerated) = ProgramPair(CrossingProperties, original, missing);
+            missingGenerated = missingGenerated.Replace(DefineRun, DefineRunWithKeyword);
+            Assert.That(AlignInstalled(missingOriginal, missingGenerated, properties).Succeeded, Is.False);
+
+            var unbalanced =
+                "            #ifdef POI_X\n            o.Albedo = 1;\n            #else\n            o.Albedo = 2;"
+                + "\n            o.Specular = 3;";
+            var (lostOriginal, lostGenerated) = ProgramPair(CrossingProperties, original, unbalanced);
+            lostGenerated = lostGenerated.Replace(DefineRun, DefineRunWithKeyword);
+            Assert.That(AlignInstalled(lostOriginal, lostGenerated, properties).Succeeded, Is.False);
         }
     }
 }

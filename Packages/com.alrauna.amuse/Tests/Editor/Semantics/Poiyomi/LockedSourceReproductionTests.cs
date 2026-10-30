@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
 using NUnit.Framework;
 using UnityEngine;
@@ -622,6 +623,57 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Assert.That(gammaProjectPlan.ColorWrites["_Color"],
                 Is.EqualTo(new Color(0.5f, 0.25f, 0.125f, 0.75f)),
                 "A gamma project keeps the raw components.");
+        }
+
+        /// <summary>
+        /// LA3: text on a continuation line inside a multiline display
+        /// string is string data. It cannot create a fake Gamma property
+        /// name, and the real Gamma color keeps the full value path. The
+        /// property's Gamma flag comes from the extracted name set, so
+        /// the value assertion exercises the whole propagation. The HDR
+        /// and Gamma flags agree, so the linear project inverts the
+        /// baked RGB and keeps the exact alpha (A5.4, fact 6). A lost
+        /// Gamma flag would leave the HDR color raw and fail this check.
+        /// </summary>
+        [Test]
+        public void MultilineDisplayTextCannotCreateGammaProperties()
+        {
+            var text = string.Join("\n", new[]
+            {
+                "Shader \"Custom/GammaScan\"",
+                "{",
+                "    Properties",
+                "    {",
+                "        _F (\"F line {",
+                "[Gamma] _Fake (F, Float) = 0",
+                "        tail\", Float) = 0",
+                "        [HDR][Gamma] _H (\"H\", Color) = (0.5, 0.25, 0.125, 0.75)",
+                "    }",
+                "}",
+                ""
+            });
+            var names = PoiyomiLockedSourceAlignment.GammaPropertyNames(text);
+            Assert.That(names, Is.EqualTo(new[] { "_H" }),
+                "Only the real declaration outside the string counts.");
+
+            var properties = new[]
+            {
+                Prop(
+                    "_H",
+                    ShaderPropertyType.Color,
+                    hdr: true,
+                    gamma: names.Contains("_H"))
+            };
+            var source = Source(
+                States(("_H", LockedPropertyState.Baked)),
+                baked: Names(("_H", "float4(0.5,0.25,0.125,0.75)")));
+            var locked = new FakeValues().WithProjectLinear(true);
+            var plan = BuiltPlan(source, properties, locked);
+
+            var expected = new Color(0.5f, 0.25f, 0.125f).gamma;
+            expected.a = 0.75f;
+            Assert.That(plan.ColorWrites["_H"], Is.EqualTo(expected),
+                "The agreeing HDR and Gamma flags invert the baked RGB in the linear project.");
         }
 
         /// <summary>
@@ -1417,6 +1469,354 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 "The override tag moves to the plan.");
             Assert.That(plan.VrcFallbackTag, Is.EqualTo("Fallback"),
                 "The fallback tag moves to the plan.");
+        }
+
+        /// <summary>Joins fixture lines with one newline.</summary>
+        private static string Join(IEnumerable<string> lines)
+        {
+            return string.Join("\n", lines);
+        }
+
+        /// <summary>
+        /// Builds one installed era pair whose program body holds a true
+        /// declaration and a typed local initializer read (LA4). The
+        /// generated program body is written by hand.
+        /// </summary>
+        private static (string Original, string Generated) InitializerPair(
+            string generatedLastProgramLine)
+        {
+            var original = Join(new[]
+            {
+                "Shader \"Custom/Small\"",
+                "{",
+                "    Properties",
+                "    {",
+                "        [ThryShaderOptimizerLockButton] _Lock (\"Lock\", Float) = 0",
+                "        _P (\"P\", Float) = 0.5",
+                "    }",
+                "    SubShader",
+                "    {",
+                "        Pass",
+                "        {",
+                "            CGPROGRAM",
+                "            #pragma vertex vert",
+                "            float _P;",
+                "            float c = _P;",
+                "            ENDCG",
+                "        }",
+                "    }",
+                "}"
+            });
+            var generated = Join(new[]
+            {
+                "Shader \"Hidden/Locked/Custom/Small/k1\"",
+                "{",
+                "    Properties",
+                "    {",
+                "        [ThryShaderOptimizerLockButton] _Lock (\"Lock\", Float) = 1",
+                "        _P (\"P\", Float) = 0.5",
+                "    }",
+                "    SubShader",
+                "    {",
+                "        Pass",
+                "        {",
+                "            CGPROGRAM",
+                " #define OPTIMIZER_ENABLED ",
+                "            #pragma vertex vert",
+                "            float _P;",
+                "            float c = " + generatedLastProgramLine + ";",
+                "            ENDCG",
+                "        }",
+                "    }",
+                "}"
+            });
+            return (original, generated);
+        }
+
+        /// <summary>
+        /// The installed era bake of a local initializer reads a scalar
+        /// that the plan writes back as one float (LA4). The alignment
+        /// facts and the planned value both come from the real aligner
+        /// and the real builder, not from a hand built record.
+        /// </summary>
+        [Test]
+        public void BakedInitializerLiteralPlansTheFloatWrite()
+        {
+            var properties = new[]
+            {
+                Prop("_Lock", ShaderPropertyType.Float),
+                Prop("_P", ShaderPropertyType.Float, 0.5f)
+            };
+            var (original, generated) = InitializerPair("0.5");
+            var aligned = PoiyomiLockedSourceAlignment.AlignForEra(
+                original, generated, properties, PoiyomiLockEra.Thry2743);
+            Assert.That(aligned.Succeeded, Is.True, aligned.RefusalDetail ?? "refused");
+            Assert.That(
+                aligned.Source.BakedLiterals["_P"], Is.EqualTo("0.5"),
+                "The initializer bake records the literal.");
+            var plan = BuiltPlan(aligned.Source, properties, new FakeValues());
+            Assert.That(plan.FloatWrites["_P"], Is.EqualTo(0.5f),
+                "The baked initializer plans the float write.");
+        }
+
+        /// <summary>
+        /// The kept exclusion block declaration format decides the
+        /// integer print of the first bake (LA4). The plan writes the
+        /// integer value (LA-F10).
+        /// </summary>
+        [Test]
+        public void WinningTrialFormatPlansIntegerWrite()
+        {
+            var properties = new[]
+            {
+                Prop("_Lock", ShaderPropertyType.Float),
+                Prop("_K", ShaderPropertyType.Float),
+                Prop("_P", ShaderPropertyType.Float, 0.5f)
+            };
+            var filler = new System.Text.StringBuilder();
+            for (var i = 1; i <= 12; i++)
+            {
+                filler.Append("                o.Uv = 0.").Append(i).Append(";\n");
+            }
+
+            var original = Join(new[]
+            {
+                "Shader \"Custom/Small\"",
+                "{",
+                "    Properties",
+                "    {",
+                "        [ThryShaderOptimizerLockButton] _Lock (\"Lock\", Float) = 0",
+                "        _K (\"K\", Float) = 0",
+                "        _P (\"P\", Float) = 0.5",
+                "    }",
+                "    SubShader",
+                "    {",
+                "        Pass",
+                "        {",
+                "            CGPROGRAM",
+                "            #pragma vertex vert",
+                "            //ifex _K==0",
+                "            int _P;",
+                "            o.Gloss = 1;",
+                "            //endex",
+                filler + "            o.Albedo = _P;",
+                "            ENDCG",
+                "        }",
+                "    }",
+                "}"
+            });
+            var generated = Join(new[]
+            {
+                "Shader \"Hidden/Locked/Custom/Small/k1\"",
+                "{",
+                "    Properties",
+                "    {",
+                "        [ThryShaderOptimizerLockButton] _Lock (\"Lock\", Float) = 1",
+                "        _K (\"K\", Float) = 0",
+                "        _P (\"P\", Float) = 0.5",
+                "    }",
+                "    SubShader",
+                "    {",
+                "        Pass",
+                "        {",
+                "            CGPROGRAM",
+                " #define OPTIMIZER_ENABLED ",
+                "            #pragma vertex vert",
+                "            int _P;",
+                "            o.Gloss = 1;",
+                filler + "            o.Albedo = 2;",
+                "            ENDCG",
+                "        }",
+                "    }",
+                "}"
+            });
+            var aligned = PoiyomiLockedSourceAlignment.AlignForEra(
+                original, generated, properties, PoiyomiLockEra.Thry2743);
+            Assert.That(aligned.Succeeded, Is.True, aligned.RefusalDetail ?? "refused");
+            Assert.That(
+                aligned.Source.BakedLiterals["_P"], Is.EqualTo("2"),
+                "The kept declaration sets the integer print.");
+            var plan = BuiltPlan(aligned.Source, properties, new FakeValues());
+            Assert.That(plan.FloatWrites["_P"], Is.EqualTo(2f),
+                "The kept declaration format plans the integer write.");
+        }
+
+        /// <summary>
+        /// A later surviving float declaration changes the print before
+        /// the first bake (LA4). The plan writes the decimal value.
+        /// </summary>
+        [Test]
+        public void LaterDeclarationPlansTheFirstBake()
+        {
+            var properties = new[]
+            {
+                Prop("_Lock", ShaderPropertyType.Float),
+                Prop("_P", ShaderPropertyType.Float, 0.5f)
+            };
+            var original = Join(new[]
+            {
+                "Shader \"Custom/Small\"",
+                "{",
+                "    Properties",
+                "    {",
+                "        [ThryShaderOptimizerLockButton] _Lock (\"Lock\", Float) = 0",
+                "        _P (\"P\", Float) = 0.5",
+                "    }",
+                "    SubShader",
+                "    {",
+                "        Pass",
+                "        {",
+                "            CGPROGRAM",
+                "            #pragma vertex vert",
+                "            int _P;",
+                "            ENDCG",
+                "        }",
+                "        Pass",
+                "        {",
+                "            CGPROGRAM",
+                "            #pragma vertex vert",
+                "            float _P;",
+                "            o.Albedo = _P;",
+                "            ENDCG",
+                "        }",
+                "    }",
+                "}"
+            });
+            var generated = Join(new[]
+            {
+                "Shader \"Hidden/Locked/Custom/Small/k1\"",
+                "{",
+                "    Properties",
+                "    {",
+                "        [ThryShaderOptimizerLockButton] _Lock (\"Lock\", Float) = 1",
+                "        _P (\"P\", Float) = 0.5",
+                "    }",
+                "    SubShader",
+                "    {",
+                "        Pass",
+                "        {",
+                "            CGPROGRAM",
+                " #define OPTIMIZER_ENABLED ",
+                "            #pragma vertex vert",
+                "            int _P;",
+                "            ENDCG",
+                "        }",
+                "        Pass",
+                "        {",
+                "            CGPROGRAM",
+                " #define OPTIMIZER_ENABLED ",
+                "            #pragma vertex vert",
+                "            float _P;",
+                "            o.Albedo = 0.5;",
+                "            ENDCG",
+                "        }",
+                "    }",
+                "}"
+            });
+            var aligned = PoiyomiLockedSourceAlignment.AlignForEra(
+                original, generated, properties, PoiyomiLockEra.Thry2743);
+            Assert.That(aligned.Succeeded, Is.True, aligned.RefusalDetail ?? "refused");
+            Assert.That(
+                aligned.Source.BakedLiterals["_P"], Is.EqualTo("0.5"),
+                "The later float declaration sets the decimal print.");
+            var plan = BuiltPlan(aligned.Source, properties, new FakeValues());
+            Assert.That(plan.FloatWrites["_P"], Is.EqualTo(0.5f),
+                "The later declaration plans the decimal write.");
+        }
+
+        // --- Falsifier LA-F11: an unconstrained changed scalar is not
+        // claimed as detected. ---
+        // A6 and the seventh fact are residual checks. The check reads
+        // the define runs and the recorded removed blocks. It does not
+        // compare a restored scalar with its literal. The fixture holds
+        // one baked scalar that no removed condition, bracket read, enum
+        // text, or define run reads. The plan applies, the view takes
+        // the planned value, and a later change of the same view stays
+        // consistent. This characterizes the check boundary. It is no
+        // request to strengthen the check.
+        [Test]
+        public void UnconstrainedBakedScalarChangeKeepsConsistency()
+        {
+            var properties = new[] { Prop("_P", ShaderPropertyType.Float) };
+            var source = Source(
+                States(("_P", LockedPropertyState.Baked)),
+                baked: Names(("_P", "0.75")));
+
+            // The no-op guard: the fixture constrains nothing. No block
+            // or run reads the scalar.
+            Assert.That(source.Blocks, Is.Empty,
+                "The fixture records no removed block.");
+            Assert.That(source.BracketReads.ContainsKey("_P"), Is.False,
+                "The fixture holds no bracket read of the scalar.");
+            Assert.That(source.EnumValues.ContainsKey("_P"), Is.False,
+                "The fixture holds no enum text for the scalar.");
+            foreach (var run in source.DefineRuns)
+            {
+                Assert.That(run, Does.Not.Contain("_P"),
+                    "No define run reads the scalar.");
+            }
+
+            var locked = new FakeValues();
+            var plan = BuiltPlan(source, properties, locked);
+
+            var view = locked.Apply(plan);
+            Assert.That(view.TryGetFloat("_P", out var applied), Is.True,
+                "The applied view holds the scalar.");
+            Assert.That(applied, Is.EqualTo(0.75f),
+                "The applied view takes the planned literal value.");
+
+            view.WithFloat("_P", 9f);
+            Assert.That(view.TryGetFloat("_P", out var changed), Is.True,
+                "The changed view still holds the scalar.");
+            Assert.That(changed, Is.EqualTo(9f),
+                "The changed value stays on the view.");
+
+            var detail = LockedSourceReproduction.CheckConsistency(
+                source,
+                properties,
+                view);
+
+            Assert.That(detail, Is.Null,
+                "The check does not compare the changed scalar with " +
+                "its literal.");
+        }
+
+        // --- Falsifier LA-F11: a false removed condition still refuses
+        // after the plan applies. ---
+        // The existing refusal test builds its reproduced view by hand.
+        // This case adds the requested transition. The plan applies, the
+        // view holds the condition at the lock value, and a later edit
+        // of the operand on the same view refuses with the fixed
+        // sentence.
+        [Test]
+        public void ChangedConditionOperandRefusesAfterTheAppliedPlan()
+        {
+            var properties = new[] { Prop("_X", ShaderPropertyType.Float) };
+            var source = Source(
+                States(("_X", LockedPropertyState.Live)),
+                blocks: Blocks(Block(
+                    LockedBlockKind.Ifex,
+                    LockedBlockOutcome.Removed,
+                    "_X==1",
+                    12)));
+            var locked = new FakeValues().WithFloat("_X", 1f);
+
+            var plan = BuiltPlan(source, properties, locked);
+            var view = locked.Apply(plan);
+            Assert.That(
+                LockedSourceReproduction.CheckConsistency(
+                    source, properties, view),
+                Is.Null,
+                "The applied plan holds the removed condition.");
+
+            view.WithFloat("_X", 0f);
+            var detail = LockedSourceReproduction.CheckConsistency(
+                source,
+                properties,
+                view);
+
+            Assert.That(detail, Is.EqualTo(ConditionDetail),
+                "The changed operand refuses the check.");
         }
     }
 }

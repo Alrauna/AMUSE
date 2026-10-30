@@ -38,6 +38,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             "The texture defines of a program block do not match the " +
             "textures of the material.";
 
+        private const string MalformedPropertiesDetail =
+            "The Properties text is not well formed.";
+
         // A GUID-shaped marker that resolves to no asset. It is a
         // synthetic constant, not the GUID of any real asset.
         private const string UnresolvableGuid =
@@ -133,6 +136,35 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     reproduction.Plan.TextureWrites.Count,
                 Is.GreaterThan(0),
                 "fixture guard: the plan must hold at least one write");
+        }
+
+        // --- Falsifier LA-F7 at the memo boundary: an implementation
+        // that catches the malformed invariant into an empty Gamma set. ---
+        // The property table capture must propagate the invariant
+        // exception for a malformed original text (LA3). The shader
+        // argument is the valid owned synthetic fixture shader. Only the
+        // text argument is malformed, so no invalid shader asset is
+        // imported for this check.
+
+        [Test]
+        public void MalformedOriginalTextPropagatesTheInvariantFromPropertiesOf()
+        {
+            var fixture = new LockedSourceFixture();
+            var validText = LockedMaterialIdentity.ReadOriginalText(
+                fixture.Original);
+            Assert.That(validText, Is.Not.Null,
+                "fixture guard: the shipped synthetic original must be readable");
+            var malformedText = validText.Replace(
+                "_Color (\"Color\", Color) = (1,1,1,1)",
+                "_Color (\"Color never closes {",
+                System.StringComparison.Ordinal);
+            Assert.That(malformedText, Is.Not.EqualTo(validText),
+                "fixture guard: the malformed edit must change the text");
+
+            var thrown = Assert.Throws<System.InvalidOperationException>(
+                () => LockedSourceAlignmentMemo.PropertiesOf(
+                    fixture.Original, malformedText));
+            Assert.That(thrown.Message, Is.EqualTo(MalformedPropertiesDetail));
         }
 
         // --- Falsifier 1: an implementation that derives the rename from
@@ -521,6 +553,80 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             AssertRefusal(
                 result, FlagPropertyMissingDetail, UnresolvableGuid);
+        }
+
+        // --- Falsifier LA-F11: the initializer result is a real
+        // restoration. ---
+        // The generated initializer line is hand written through the
+        // explicit generated line seam. The expected scalar comes from
+        // that independent text, not from the fixture helper bake rule.
+        // The production reconstruction must restore the literal on a
+        // clone, rebind the recorded original, clear the lock flag, and
+        // leave both shader files unchanged. The locked source material
+        // keeps its shader and its saved state.
+        [Test]
+        public void InitializerBakeRestoresTheScalarOnTheOriginalShader()
+        {
+            var fixture = new LockedSourceFixture();
+            fixture.WithProgramHeadLines("            float _MainTexUV;");
+            fixture.WithFragmentLines(
+                "                float c = _MainTexUV;");
+            // The independent oracle: the generated initializer line with
+            // the literal spelled out. No helper bake rule produces it.
+            fixture.WithGeneratedLine(
+                "float c =",
+                "                float c = 0.25;");
+            var locked = Track(fixture.Locked("InitializerCape"));
+
+            // The saved value disagrees with the literal, so only the
+            // initializer bake can produce the restored scalar.
+            locked.SetFloat("_MainTexUV", 0.5f);
+
+            // The reconstruction consumes a copy. The locked source
+            // material keeps the partner shader and its saved state.
+            var clone = Track(new Material(locked));
+            AssertGuard(fixture, clone);
+
+            var originalTextBefore =
+                LockedMaterialIdentity.ReadOriginalText(fixture.Original);
+            var generatedTextBefore =
+                LockedMaterialIdentity.ReadOriginalText(fixture.Partner);
+
+            var result = LockedMaterialReconstruction.TryApply(
+                clone,
+                shader => shader == fixture.Original);
+
+            Assert.That(result.Outcome,
+                Is.EqualTo(TransientUnlockRestoreOutcome.Succeeded),
+                result.Detail ?? "the reconstruction refused");
+            Assert.That(result.Detail, Is.Null);
+            Assert.That(clone.shader, Is.SameAs(fixture.Original),
+                "the reconstruction must rebind the recorded original");
+            Assert.That(clone.GetFloat("_MainTexUV"),
+                Is.EqualTo(0.25f),
+                "the initializer literal must reach the restored " +
+                "scalar");
+            Assert.That(clone.GetFloat(
+                    LockedMaterialIdentity.OptimizerEnabledPropertyName),
+                Is.EqualTo(0f),
+                "the lock flag must clear after the reconstruction");
+            Assert.That(locked.shader, Is.SameAs(fixture.Partner),
+                "the locked source keeps the generated shader");
+            Assert.That(locked.GetFloat("_MainTexUV"),
+                Is.EqualTo(0.5f),
+                "the locked source keeps its saved value");
+            Assert.That(locked.GetFloat(
+                    LockedMaterialIdentity.OptimizerEnabledPropertyName),
+                Is.EqualTo(1f),
+                "the locked source keeps its lock flag");
+            Assert.That(
+                LockedMaterialIdentity.ReadOriginalText(fixture.Original),
+                Is.EqualTo(originalTextBefore),
+                "the recorded original file must stay unchanged");
+            Assert.That(
+                LockedMaterialIdentity.ReadOriginalText(fixture.Partner),
+                Is.EqualTo(generatedTextBefore),
+                "the generated locked file must stay unchanged");
         }
     }
 }
