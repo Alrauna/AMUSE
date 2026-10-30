@@ -327,6 +327,22 @@ Docs cut over on 2026-10-30: both READMEs, the repository guide overview, the vi
 
 Hygiene after the runs: gate absent, vendor cache digest byte equal to the same day baseline, owned fixture folders absent, scenes clean. Both bundled admission flags are now true. The lilToon fixture migration remains open and follows next.
 
+## LilToon stand-in migration
+
+Status: 2026-10-30. The owner chose to run the Poiyomi admission and the lilToon fixture migration in the same session, so the full suite gate could end at zero failures.
+
+Observed on 2026-10-30: four committed test stand-in shaders declared the two vendor Multi container names. Two declared the base container name and two declared the outline container name. With the vendor package also installed under the same names, the editor name lookup could answer either asset, and the binding changed with import order. The real source ground check passed on 2026-10-27 and failed on 2026-10-30 with the same project content.
+
+The change: the Multi eligibility fixtures and the Multi capture fixtures now run on the installed vendor containers loaded by their pinned asset GUIDs. The mode render state moved to the material level, the way the vendor editor writes it: a RenderType override tag of TransparentCutout and the mode queue, 2450 at cutout mode and 2460 at transparent mode. The vendor shader drives its blend and depth state from material properties, so no fixture lost a surface. The four stand-in shader files and their meta files are deleted. The transient shader minters keep the vendor names, because the name is the test subject there, and their windows clean up.
+
+| Verification stage on 2026-10-30 | Total | Passed | Failed | Skipped |
+|---|---:|---:|---:|---:|
+| Ground check plus the three migrated suites | 83 | 83 | 0 | 0 |
+| Full product assembly | 3217 | 3198 | 0 | 19 |
+| Research assembly | 151 | 151 | 0 | 0 |
+
+The nineteen product skips are the named opt-in gate skips. The ground check now resolves both container names to the vendor assets. The stage 7 zero failure gate is met literally.
+
 ## Earlier execution records
 
 
