@@ -1085,86 +1085,23 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
-        // The test scoped attestation delegate. It answers the
-        // production answer for every non-bundled row and for unrelated
-        // shaders, and adds true only for a locked material whose
-        // resolved original is one of the two bundled rows. The row flag
-        // of the bundled rows is false until stage 7 (Y9).
+        // The attestation seam. Since the stage 7 flag change of
+        // 2026-10-30 the bundled rows admit through production, so the
+        // seam is the production check itself. The earlier override
+        // that simulated admission for the bundled rows is gone. A
+        // production regression can no longer hide behind the seam.
         internal static bool TestScopedAttestation(Material material)
         {
-            return LockedMaterialIdentity.OriginalShaderAttested(material)
-                || ResolvesToBundledRow(material);
+            return LockedMaterialIdentity.OriginalShaderAttested(material);
         }
 
-        // The bundled row override. It applies the same conjunction as
-        // the production seam (K8.3) and flips only the row admission
-        // bit. A material whose recorded original names a release row
-        // fails the name rule on this install, so the override answers
-        // false for it and the seam stays faithful.
-        private static bool ResolvesToBundledRow(Material material)
-        {
-            if (material == null)
-            {
-                return false;
-            }
-
-            var recordedName = material.GetTag(
-                LockedMaterialIdentity.OriginalShaderTagName, true, null);
-            var recordedGuid = material.GetTag(
-                LockedMaterialIdentity.OriginalShaderGuidTagName,
-                true, null);
-            if (string.IsNullOrEmpty(recordedName) ||
-                string.IsNullOrEmpty(recordedGuid))
-            {
-                return false;
-            }
-
-            var resolvedPath =
-                AssetDatabase.GUIDToAssetPath(recordedGuid);
-            var resolved = string.IsNullOrEmpty(resolvedPath)
-                ? null
-                : AssetDatabase.LoadAssetAtPath<Shader>(resolvedPath);
-            if (resolved == null)
-            {
-                return false;
-            }
-
-            // The name rule of the production seam (K8.2).
-            if (!string.Equals(
-                    recordedName, resolved.name,
-                    StringComparison.Ordinal))
-            {
-                return false;
-            }
-
-            var sourceText = LockedMaterialIdentity.ReadOriginalText(
-                resolved);
-            if (sourceText == null)
-            {
-                return false;
-            }
-
-            if (!AssetDatabase.TryGetGUIDAndLocalFileIdentifier(
-                    resolved, out var guid, out long _))
-            {
-                return false;
-            }
-
-            return PoiyomiSourceAttestation.TryMatchAdmittedSource(
-                resolved.name,
-                guid.ToLowerInvariant(),
-                PoiyomiSourceAttestation.ComputeNormalizedSourceHash(
-                    sourceText),
-                out var row)
-                && !row.LockedOriginalAdmitted;
-        }
-
-        // The fidelity pin. One assertion per suite run. A material
-        // whose recorded original names the 9.3.64 release row resolves
-        // on this install to the bundled file, so the production name
-        // rule answers false. The seam must answer exactly what the
-        // production check answers for it, and true for the bundled row
-        // of the live lock.
+        // The fidelity pin. One assertion per suite run. Since the
+        // stage 7 flag change of 2026-10-30 the seam is the production
+        // check, so this pin guards against a future seam that answers
+        // more than production. A material whose recorded original
+        // names the 9.3.64 release row resolves on this install to the
+        // bundled file, so the production name rule answers false for
+        // it.
         private static void PinFidelityOnce(
             Shader bundledShader, string runDate)
         {
@@ -1871,7 +1808,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     RealVendorLockTestSupport.Dated(
                         "the normal dry-run preview did not finish",
                         runDate, null));
-                AssertPreviewKeepsNamedRefusal(dryRun, runDate);
+                AssertPreviewShowsDeferredConversion(dryRun, runDate);
             }
             finally
             {
@@ -1905,10 +1842,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             return mesh;
         }
 
-        // The unchanged named bundled-original refusal, and no deferred
-        // conversion. Both row lists hold only this run, because the
-        // session cache starts and ends cleared.
-        private static void AssertPreviewKeepsNamedRefusal(
+        // Since the stage 7 flag change of 2026-10-30 the bundled rows
+        // admit, so the preview shows the deferred conversion and no
+        // named bundled-original refusal. Both row lists hold only this
+        // run, because the session cache starts and ends cleared.
+        private static void AssertPreviewShowsDeferredConversion(
             AlphaSeparationDryRun dryRun, string runDate)
         {
             var namedRefusal = AmuseReportStrings.Format(
@@ -1921,17 +1859,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 rows.Any(row =>
                     row.Kind == MaterialTransformationRowKind.Renderer &&
                     row.Sentence.Contains(namedRefusal)),
-                Is.True,
+                Is.False,
                 RealVendorLockTestSupport.Dated(
-                    "the normal preview rows do not carry the named"
-                    + " bundled-original refusal", runDate, null));
+                    "the normal preview still carries the named"
+                    + " bundled-original refusal after admission",
+                    runDate, null));
             Assert.That(
                 rows.Any(row => row.Sentence.StartsWith(
                     "Deferred:", StringComparison.Ordinal)),
-                Is.False,
+                Is.True,
                 RealVendorLockTestSupport.Dated(
-                    "the normal preview shows a deferred conversion",
-                    runDate, null));
+                    "the normal preview shows no deferred conversion"
+                    + " after admission", runDate, null));
             var slotRows = rows.Where(row =>
                 row.Kind == MaterialTransformationRowKind.Slot).ToList();
             Assert.That(
@@ -1941,10 +1880,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     + " count", runDate, null));
             Assert.That(
                 slotRows[0].Sentence,
-                Is.EqualTo(RowText.RefusedSlotSentence()),
+                Is.EqualTo(RowText.DeferredSlotSentence(1)),
                 RealVendorLockTestSupport.Dated(
-                    "the locked slot does not show the named refused"
-                    + " sentence", runDate, null));
+                    "the locked slot does not show the deferred"
+                    + " sentence after admission", runDate, null));
         }
 
         // The mirror proof. The private mirror invocation reaches the

@@ -175,13 +175,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         private static PoiyomiAdmittedSource ReleaseMainRow()
         {
             return PoiyomiSourceAttestation.AdmittedSources().Single(
-                row => !row.IsTwoPass && row.LockedOriginalAdmitted);
+                row => row.ShaderName == ".poiyomi/Poiyomi Toon");
         }
 
         private static PoiyomiAdmittedSource BundledMainRow()
         {
             return PoiyomiSourceAttestation.AdmittedSources().Single(
-                row => !row.IsTwoPass && !row.LockedOriginalAdmitted);
+                row => row.ShaderName ==
+                    ".poiyomi/Old Versions/9.3/Poiyomi Toon");
         }
 
         [Test]
@@ -197,17 +198,19 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "admitted locked original");
         }
 
-        // --- Falsifier 7: a precondition that reuses the identity gate alone ---
-        // The bundled rows attest through the identity gate now, so this
-        // falsifier guards the row admission rule itself.
+        // --- Falsifier 7: a precondition that reuses the identity gate ---
+        // The bundled rows attest through the identity gate, so this
+        // falsifier guards the row admission rule itself. Since stage 7
+        // of the 2026-10-25 admission design, flipped on 2026-10-30,
+        // the row admission bit is true and the row attests.
         [Test]
-        public void BundledRowRefusesAsALockedOriginal()
+        public void BundledRowWithAMatchingTagAttestsTheLockedOriginal()
         {
             var row = BundledMainRow();
 
             // No-op guard: the bundled row evidence must pass the identity
-            // gate. Without this guard a broken identity gate would let the
-            // refusal assertion pass while proving nothing.
+            // gate. Without this guard a broken identity gate would let
+            // the attestation assertion pass while proving nothing.
             Assert.That(
                 PoiyomiSourceAttestation.TryVerifyPoiyomiIdentity(
                     EvidenceOf(row), out _),
@@ -218,38 +221,30 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(
                 LockedMaterialIdentity.AttestsLockedOriginal(
                     row.ShaderName, EvidenceOf(row)),
-                Is.False,
-                "the bundled rows stay refused until stage 7 of the " +
-                "2026-10-25 bundled locked original admission design, " +
-                "whose stages in order are block tie fix, suffix fix, " +
-                "release row safety, real lock measurement, time budget " +
-                "statement, window and report tests, flag change. An " +
-                "early flag flip fails these pins by name");
+                Is.True,
+                "the bundled rows admit locked originals since stage 7 " +
+                "of the 2026-10-25 bundled locked original admission " +
+                "design, flipped on 2026-10-30");
         }
 
         /// <summary>
         /// Y12 of the 2026-10-25 bundled locked original admission
-        /// design, stage 6. The same bundled row evidence as a live
-        /// locked material keeps the named pre-check refusal while the
-        /// flag is off. This pin records the pre-flip negative as
-        /// characterization.
+        /// design, stage 6, rewritten for stage 7. The same bundled row
+        /// evidence as a live locked material passes the pre-check,
+        /// because the row admission bit is true since the stage 7
+        /// flag change of 2026-10-30.
         /// </summary>
         [Test]
-        public void BundledRowLockedMaterialPrecheckKeepsTheNamedRefusalWhileTheFlagIsOff()
+        public void BundledRowLockedMaterialPrecheckPassesAfterAdmission()
         {
             var material = NewBundledRowLockedMaterial();
 
             Assert.That(
                 LockedMaterialIdentity.PreCheckRefusal(material),
-                Is.EqualTo(
-                    RendererAnalysisRefusal
-                        .LockedPoiyomiOriginalShaderUnattested),
-                "the bundled rows stay refused until stage 7 of the " +
-                "2026-10-25 bundled locked original admission design, " +
-                "whose stages in order are block tie fix, suffix fix, " +
-                "release row safety, real lock measurement, time budget " +
-                "statement, window and report tests, flag change. An " +
-                "early flag flip fails these pins by name");
+                Is.EqualTo(RendererAnalysisRefusal.None),
+                "the bundled rows admit locked originals since stage 7 " +
+                "of the 2026-10-25 bundled locked original admission " +
+                "design, flipped on 2026-10-30");
         }
 
         /// <summary>

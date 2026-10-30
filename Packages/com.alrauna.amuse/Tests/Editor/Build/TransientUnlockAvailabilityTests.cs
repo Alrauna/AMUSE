@@ -75,17 +75,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
         /// <summary>
         /// Y12 of the 2026-10-25 bundled locked original admission
-        /// design, stage 6. The fixture carries the recognized locked
-        /// identity, and its identity tags name the bundled admitted
-        /// row. The row does not admit locked originals while the flag
-        /// is off, so the material cannot make the window eligible.
-        /// This pin records the pre-flip negative as characterization.
-        /// The eligibility gate is the only consent gate, so the false
-        /// answer also pins the coupling: an ineligible build cannot
-        /// open the window path.
+        /// design, stage 6, rewritten for stage 7. The fixture carries
+        /// the recognized locked identity, and its identity tags name
+        /// the bundled admitted row. The row admits locked originals
+        /// since the stage 7 flag change of 2026-10-30, so the material
+        /// makes the window eligible. The eligibility gate is the only
+        /// consent gate, so the true answer also pins the coupling.
         /// </summary>
         [Test]
-        public void BundledRowLockedMaterialIsNotWindowEligibleWhileTheFlagIsOff()
+        public void BundledRowLockedMaterialMakesTheWindowEligibleAfterAdmission()
         {
             var material = NewBundledRowLockedMaterial();
 
@@ -93,13 +91,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 TransientUnlockAvailability.WindowEligibleForConsent(
                     new[] { material },
                     LockedMaterialIdentity.OriginalShaderAttested),
-                Is.False,
-                "the bundled rows stay refused until stage 7 of the " +
-                "2026-10-25 bundled locked original admission design, " +
-                "whose stages in order are block tie fix, suffix fix, " +
-                "release row safety, real lock measurement, time budget " +
-                "statement, window and report tests, flag change. An " +
-                "early flag flip fails these pins by name");
+                Is.True,
+                "the bundled rows admit locked originals since stage 7 " +
+                "of the 2026-10-25 bundled locked original admission " +
+                "design, flipped on 2026-10-30");
         }
 
         /// <summary>
@@ -116,8 +111,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             var row = PoiyomiSourceAttestation.AdmittedSources().Single(
                 candidate =>
-                    !candidate.IsTwoPass &&
-                    !candidate.LockedOriginalAdmitted);
+                    candidate.ShaderName ==
+                        ".poiyomi/Old Versions/9.3/Poiyomi Toon");
             var assetPath = AssetDatabase.GUIDToAssetPath(row.AssetGuid);
             var bundledShader = string.IsNullOrEmpty(assetPath)
                 ? null

@@ -303,6 +303,30 @@ Limits of the product run counts: a failed job returns no summary from the bridg
 
 Observed on 2026-10-30: hygiene held after every run. The gate stayed absent. The vendor cache root digest matched the same day baseline exactly. All owned fixture folders stayed absent. Every loaded scene stayed clean. Both settings assets stayed byte equal to the pre-run snapshot. The working tree on disk held exactly the same modified and untracked files as before the runs. Fifty two vendor and built in shader assets carried in memory dirty flags with no disk change. They were left untouched.
 
+## Stage 7 admission flip
+
+Status: 2026-10-30. The owner directed the stage 7 cutover of the 2026-10-25 bundled locked original admission design, with the lilToon fixture migration to follow in the same session.
+
+Observed on 2026-10-30: the pins were rewritten to post admission expectations first, while the row flags stayed false. The focused filter of four classes holds 75 leaves. The RED run failed exactly the five rewritten bundled pins, each naming the still false admission bit. The flag flip is the only production behavior change. Two row arguments in the attestation table changed from false to true.
+
+| Verification stage | Matched | Passed | Failed |
+|---|---:|---:|---:|
+| Four class filter before the flip | 75 | 70 | 5 |
+| Four class filter after the flip | 75 | 75 | 0 |
+| Gated default Toon case after the flip | 1 | 1 | 0 |
+| Full product assembly after the flip | 3465 | 3217 completed | 1 |
+| Research assembly | 151 | 151 | 0 |
+
+The one product failure is the pre existing lilToon Multi ground check drift already recorded above. No failure names the Poiyomi admission.
+
+Observed on 2026-10-30: two pre flip pins existed that the 2026-10-25 plan predates, because the gated harness was rewritten later. First, the gated attestation seam carried a bundled row override gated on the false flag. The cutover replaced the seam with the production check itself and deleted the override, so a production regression can no longer hide behind the seam. Second, the gated preview phase pinned the named bundled original refusal. The cutover rewrote it to pin the deferred conversion and the absence of the refusal. The gated default Toon case then passed end to end, about 82 seconds, with the real vendor lock, the production attestation, the aligner, the swap in, the deferred preview, the mirror, the restore, and the teardown.
+
+Observed on 2026-10-30: one gated rerun refused at the isolation preflight with unrelated dirty assets. The suite predicate named one object, the quality settings manager, dirty in memory with no disk change. The dirt appeared during earlier tool driven runs and cleared as test residue. The disk file never changed.
+
+Docs cut over on 2026-10-30: both READMEs, the repository guide overview, the vision document, the product changelog, and dated amendment notes on three decisions of the 2026-10-23 locked source alignment design.
+
+Hygiene after the runs: gate absent, vendor cache digest byte equal to the same day baseline, owned fixture folders absent, scenes clean. Both bundled admission flags are now true. The lilToon fixture migration remains open and follows next.
+
 ## Earlier execution records
 
 

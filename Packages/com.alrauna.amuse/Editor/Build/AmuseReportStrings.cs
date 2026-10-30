@@ -180,10 +180,8 @@ namespace Alrauna.Amuse.Editor.Build
                 "when the shader is missing, when its source is not " +
                 "verified, when the recorded name does not match the " +
                 "shader file, or when locked materials on that shader " +
-                "are not supported. That includes the bundled 9.3 " +
-                "shader that Poiyomi 10.x packages ship. AMUSE cannot " +
-                "read a locked material, so it changed nothing on this " +
-                "renderer.",
+                "are not supported. AMUSE cannot read a locked " +
+                "material, so it changed nothing on this renderer.",
             ["amuse.renderer.LockedPoiyomiOriginalShaderUnattested:hint"] =
                 "Unlock the material, then run the build again. AMUSE " +
                 "converts the unlocked material when it supports its " +

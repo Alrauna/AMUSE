@@ -5,12 +5,11 @@ All notable changes to AMUSE are documented in this file.
 ## [Unreleased] - 2026-10-21
 
 ### Added
-- Support for the 9.3 main and Two Pass shaders that Poiyomi 10.x packages bundle. The support covers unlocked materials and locked materials whose recorded original is a 9.3.64 release shader.
+- Support for the 9.3 main and Two Pass shaders that Poiyomi 10.x packages bundle. The support covers unlocked materials and locked materials whose recorded original is a 9.3.64 release shader or one of the two bundled 9.3 rows. The bundled locked rows follow the same reconstruction contract as the release rows.
 
 ### Fixed
 - A material animation binding of a proof-relevant property with a rename suffix now refuses its renderer. The rule is shader-independent and also covers lilToon. The binding name is a proof-relevant property name followed by an underscore and a suffix, for example `material._Color_<suffix>`. Bindings such as a texture's `_TexelSize` or `_HDR` on a texture whose scale-offset AMUSE reads also refuse.
 - A locked Poiyomi material refuses unless its recorded original shader name tag equals the resolved shader name. An orphan lock with no recorded original keeps its earlier behavior.
-- A locked material whose original resolves to a bundled Poiyomi shader refuses. The material keeps its original slot.
 - 2026-10-29. Locked-source alignment proves when the Thry 2.74.3 rules require a compiler guard to stay. Nested lookahead stays inside the proved frame's current branch.
 - 2026-10-29. Locked-source alignment shares one validated Properties scan for multiline display strings, rename records, and Gamma attributes. Malformed Properties text refuses instead of guessing material metadata.
 - 2026-10-29. The Thry 2.74.3 alignment model matches property reads inside local initializers. It replays the vendor occurrence edits before recording a bake. Literal format follows surviving declarations and stays isolated between block trials.
@@ -23,7 +22,7 @@ All notable changes to AMUSE are documented in this file.
 - The package listing download menu no longer stacks one download action per menu open. The menu item now holds one stable action that reads the package address stored by the last row-button click. The row button stores its own address on every activation, including when the menu is already open, and a row click no longer also closes the open menu. The download opens in a new tab without an opener relationship.
 
 ### Changed
-- AMUSE rebuilds a locked Poiyomi material from its generated locked shader when its recorded original is a 9.3.64 release shader. The build aligns the generated text with the attested original shader text. An edit after the lock that changes what the locked material renders is reproduced on the rebuild, or the build refuses the slot with a named cause. A locked material refuses when a renderer that shows it carries a material property block. A locked material refuses when an animation binds a property that the locked shader bakes, renames, or ignores. The refusal covers every slot of that material on every renderer that shows it. A locked material whose animations bind renamed, baked, or unused properties stays refused until a later curve rewrite. That refusal is a known coverage gap.
+- AMUSE rebuilds a locked Poiyomi material from its generated locked shader when its recorded original is a 9.3.64 release shader or one of the two bundled 9.3 rows. The build aligns the generated text with the attested original shader text. An edit after the lock that changes what the locked material renders is reproduced on the rebuild, or the build refuses the slot with a named cause. A locked material refuses when a renderer that shows it carries a material property block. A locked material refuses when an animation binds a property that the locked shader bakes, renames, or ignores. The refusal covers every slot of that material on every renderer that shows it. A locked material whose animations bind renamed, baked, or unused properties stays refused until a later curve rewrite. That refusal is a known coverage gap.
 - Poiyomi attestation checks the shader file. The check covers the shader name, the file GUID, and the canonical digest. The package name and the package version no longer take part.
 - An old 9.x shader file can share a pinned GUID with different bytes. Such a file reports a modified source in the conversion detail.
 - The research probe finds the admitted shader file. The probe no longer looks up only the 9.3.64 shader name.

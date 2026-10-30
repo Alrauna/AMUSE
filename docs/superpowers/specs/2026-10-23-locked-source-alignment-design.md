@@ -102,6 +102,12 @@ These facts come from a source read of the vendor packages and scans of the two 
    - Kept: the whole body aligns, nested blocks included.
    - Removed: the block is skipped. The `#else` body of a removed `#ifdef` block is walked like any kept body, nested blocks included. Then the next 8 surviving original lines after the block align.
 
+   Amendment 2026-10-30: item 7 is amended by Y2, Y3, and Y4 of
+   `docs/superpowers/specs/2026-10-25-bundled-locked-original-admission-design.md`
+   for the bundled 9.3 rows, and by LA11 of
+   `docs/superpowers/specs/2026-10-28-locked-source-transform-conformance-design.md`
+   for crossing control spans.
+
    The record states one of four outcomes per block:
    - `Kept`: only the kept hypothesis aligned.
    - `Removed`: only the removed hypothesis aligned.
@@ -121,6 +127,10 @@ These facts come from a source read of the vendor packages and scans of the two 
    - `Unused`: no use survives.
    Mixed program uses refuse.
 2. The suffix. Collect every surviving renamed artifact: generated Properties names that the original does not declare, generated program identifiers, and generated bracket names. For each artifact, collect every split into a declared original name, `_`, and a remainder. Intersect the remainders across all artifacts. The intersection must hold exactly one value `S`. No artifact at all means no rename. Otherwise refuse. The walk then refuses any artifact that the rename of the era with `S` does not produce.
+
+   Amendment 2026-10-30: item 2 is amended by Y5 and Y6 of
+   `docs/superpowers/specs/2026-10-25-bundled-locked-original-admission-design.md`
+   for digit-led suffix artifacts and the suffix head boundary.
 3. Bracket reads. ShaderLab `[P]` references are recorded separately as live reads of `P` or of its renamed name. A `Cull` or `ColorMask` bracket that became enum text records the enum value instead.
 4. The record also holds: the define run per program block, the outcome of each `//ifex` block with its condition text, the outcome of each `#ifdef` and `#ifndef` block with its keyword, the surviving original text (for occurrence tests), and the era.
 
@@ -149,6 +159,10 @@ Only removed blocks need checks. A kept block is compiled by both `L` and `U`.
 
 1. A `Removed` `#ifdef K` needs `K` absent from the keywords of `U`. A `Removed` `#ifndef K` needs `K` present.
 2. A `Removed` `//ifex` block needs its comparisons true on `U`. Its `isNotAnimated` clauses count as true, because the removal shows that the vendor saw them true. The evaluator ports the vendor grammar of fact 9: first top-level `&&` or `||` split, no precedence, a non-property non-number operand reads 0, texture operands compare false, `RenderQueue` reads the queue of `U`. A condition outside the forms of fact 10 refuses.
+
+   Amendment 2026-10-30: item 2 is amended for zero-and-zero records
+   by Y3 of
+   `docs/superpowers/specs/2026-10-25-bundled-locked-original-admission-design.md`.
 3. An `Unused` property that is a comparison operand of a removed block. Its value in `U` is not recorded in the text. An `==` comparison fixes the value. Any other comparison does not, so `U.P` must equal the declared default of the original, and the condition must be true at that value. Otherwise refuse.
 4. `Unobservable` and `NotEvaluated` blocks get no check.
 
