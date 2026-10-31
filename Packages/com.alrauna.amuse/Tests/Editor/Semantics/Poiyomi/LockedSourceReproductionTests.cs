@@ -1262,6 +1262,43 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         }
 
         /// <summary>
+        /// An inequality fixes no compared value (A6.3, amendment of
+        /// 2026-10-30). When the declared default fails the removed
+        /// condition, the plan takes the live value of the locked
+        /// material, because that value holds every removed condition
+        /// that reads the operand.
+        /// </summary>
+        [Test]
+        public void UnusedOperandOfAnInequalityTakesTheLiveValueWhenTheDefaultFails()
+        {
+            var properties = new[]
+            {
+                Prop("_P", ShaderPropertyType.Float, defaultFloat: 5f)
+            };
+            var source = Source(
+                States(("_P", LockedPropertyState.Unused)),
+                blocks: Blocks(Block(
+                    LockedBlockKind.Ifex,
+                    LockedBlockOutcome.Removed,
+                    "_P!=5",
+                    24)));
+
+            Assert.That(properties[0].DefaultFloat, Is.EqualTo(5f),
+                "The declared default fails the removed condition.");
+            var locked = new FakeValues().WithFloat("_P", 1f);
+            Assert.That(
+                locked.TryGetFloat("_P", out var live) && live == 1f,
+                Is.True,
+                "The live value holds the removed condition.");
+
+            var plan = BuiltPlan(source, properties, locked);
+
+            Assert.That(plan.FloatWrites["_P"], Is.EqualTo(1f),
+                "The live value replaces the failing default.");
+            AssertConsistent(source, properties, locked, plan);
+        }
+
+        /// <summary>
         /// An equality fixes the value of an unused operand (A6.3). The
         /// declared default of the fixture differs, so the compared value
         /// wins.

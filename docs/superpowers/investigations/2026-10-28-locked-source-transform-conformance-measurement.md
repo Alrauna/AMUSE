@@ -343,6 +343,57 @@ The change: the Multi eligibility fixtures and the Multi capture fixtures now ru
 
 The nineteen product skips are the named opt-in gate skips. The ground check now resolves both container names to the vendor assets. The stage 7 zero failure gate is met literally.
 
+## Census Lab locked material diagnosis
+
+Status: 2026-10-30. Privacy note: this section describes one private avatar by role. It names no avatar, no material, no asset path, and no instance.
+
+The owner reported that the locked Poiyomi 9.3 materials of a Census Lab avatar do not convert, while the unlocked ones do. The observation holds after the stage 7 admission flip. Read-only probes of the Lab editor and its build report found two distinct causes across five locked materials, all locked by Thry 2.74.3 on the bundled 9.3 shader.
+
+Cause one, two materials. The pair attests, the aligner aligns, and the reproduction plan builds. The consistency check then refuses, because a removed condition block reads an inequality on a property the lock recorded as program unused. Rule A6.3 writes the declared shader default for such a property. The default makes the removed condition false, so the check refuses. The live material holds a different value, one that makes the removed condition true and agrees with the removal evidence. The rule closes a real gap, but it is wider than the evidence needs: for a program unused property, every use is the removed condition itself, so any value that keeps the removed condition true keeps the block inert. A follow-up can extend the rule to prefer the declared default and accept the live value when the default fails and the live value satisfies every removed condition. The change needs a spec amendment for A6.3 and a RED test first.
+
+Cause two, three materials. The Thry 2.74.3 era of the aligner refuses with the fixed sentence about neither block outcome matching the generated text. Each material fails at a different kept frame: the UDIM discard frame, the light probe frame, and the detail frame. The generated bodies of those frames carry inline baked literals where the original carries property names. Nine isolated line shapes from those bodies, tested one by one against the current aligner, all align. So the failing construct is composite or contextual, not one missing line shape. Root causing needs a trace through the block resolver on the real pair, with the pair reduced under a structure aware harness. Manual line range removals desynchronized the pairs and proved nothing. This remains an open coverage defect: a real Thry 2.74.3 lock of the bundled shader can refuse, so the display shows a named refusal instead of a conversion.
+
+The same avatar also holds refused slots whose materials are not locked: unlocked old 9.3 slots, one current Poiyomi slot, and slots on other shader families. Those are ordinary semantics coverage limits, not lock defects. Roughly forty unlocked old 9.3 slots render untouchable, which is correct proof behavior for them.
+
+No production code changed for this diagnosis. All probes were read only. Every scratch probe file and report was deleted after the run.
+
+## A6.3 live value acceptance
+
+Status: 2026-10-30. The owner approved the first follow-up of the diagnosis above. The change widens the value choice of rule A6.3. The declared default stays the first choice for a program unused operand that no equality fixes. When the default fails a removed condition that reads the operand, the live value of the locked material becomes the second choice, and it wins only when it holds every removed condition that reads the operand. The enum text and bracket read disagreement rules still apply to the chosen value. The amendment of 2026-10-30 in the alignment design records the rule.
+
+TDD record: the pin test observed RED first with the plan value expected at the live value and reported at the declared default. The fix then passed the pin and every earlier pin of the rule, including the default preference, the enum text refusal, and the bracket read refusal.
+
+| Verification stage on 2026-10-30 | Total | Passed | Failed | Skipped |
+|---|---:|---:|---:|---:|
+| RED pin before the fix | 1 | 0 | 1 | 0 |
+| Locked source reproduction suite after the fix | 42 | 42 | 0 | 0 |
+| Gated default Toon real lock with the fix | 1 | 1 | 0 | 0 |
+| Full product assembly with the fix | 3218 ran | no summary | 1 named | not reported |
+
+The failed job carries no summary counts, so that row lists the observed facts. The failure list held exactly one entry.
+
+The one named failure is the AAO merged consumption test. It fails only on a repeat run inside one editor domain, and it fails the same way on clean head without this change, first observed during these repeat runs. The failure sits in the vendor asset saver path of NDMF. It is a pre-existing order dependence outside this change set, and a first run per domain passes. Hygiene held after the gated run: the gate returned to absent, the vendor cache digest stayed byte equal to the baseline, and the owned fixture folders stayed absent.
+
+End to end proof in the private Lab project, read only, after its package reference rebuilt: the two locked materials that refused at the consistency check now align, reproduce, and pass the check. The three materials that refuse in the aligner keep their refusal. That second cause stays open.
+
+
+## Lab build after the A6.3 fix
+
+Status: 2026-10-31. Privacy note: this section describes one private avatar by role and names no avatar, material, asset path, or instance.
+
+The owner restarted the Lab project and ran a play mode test build. The avatar now holds thirty locked materials, most of them locked after the earlier diagnosis ran on five. The build report names the causes per slot.
+
+Findings from the report:
+
+1. Twenty-six of the thirty locked materials refuse in the aligner with the fixed sentence about neither block outcome matching. This is cause two of the earlier diagnosis, now measured at full avatar scale. The bundled row attestation and the unlock window both work. The reconstruction text check is the only blocker for these.
+2. Four locked materials pass every verification step and the report holds no refusal for them. Two of the four are the pair the A6.3 fix unblocked. The fix holds in a real build.
+3. A few locked materials record the current Poiyomi shader as their original. Those refuse at attestation by design, because the current shader family is outside the supported sources.
+4. The build summary reports zero moved triangles. The four verified locks also moved none, while the same materials read fully convertible before the owner locked them. The report names no cause for them, so no refusal exists. Why their triangles proved nothing in this build stays open as the next diagnostic.
+
+No production change followed this read. All probes stayed read only. One diagnostic mistake is recorded: two synchronous probes held the Lab editor main thread for long stretches. Later reads used the stored build report and disk scans instead.
+
+Unrelated finding recorded: the repeat-in-domain failure above, and a quality settings write that one run left on disk and that this session restored to its committed value before the final runs.
+
 ## Earlier execution records
 
 

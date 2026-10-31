@@ -167,10 +167,16 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     }
 
                     // An equality fixes the compared value. Any other
-                    // comparison fixes no value, so the declared default
-                    // applies (A6.3).
+                    // comparison fixes no value, so the declared
+                    // default applies first. When the default fails a
+                    // removed condition that reads the operand, the
+                    // live value applies when it holds every removed
+                    // condition that reads the operand (A6.3,
+                    // amendment of 2026-10-30).
                     var compared = FixedEqualityValue(block.ConditionOrKeyword, name);
-                    fixedValues[name] = compared ?? operand.DefaultFloat;
+                    fixedValues[name] = compared
+                        ?? ChooseNonEqualityValue(
+                            name, operand, source, locked, properties);
                 }
             }
 
@@ -927,6 +933,148 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// Chooses the plan value of one unused operand that no
+        /// equality fixes (A6.3, amendment of 2026-10-30). The declared
+        /// default comes first. When the default fails a removed
+        /// condition that reads the operand, the live value of the
+        /// locked material comes second, and it wins only when it holds
+        /// every removed condition that reads the operand. Any other
+        /// outcome keeps the default, so the consistency check of A6.2
+        /// refuses as before.
+        /// </summary>
+        private static float ChooseNonEqualityValue(
+            string name,
+            LockedSourceProperty operand,
+            AlignedLockedSource source,
+            ILockedMaterialValues locked,
+            IReadOnlyList<LockedSourceProperty> properties)
+        {
+            if (HoldsEveryRemovedCondition(
+                    name, operand.DefaultFloat, source, locked, properties))
+            {
+                return operand.DefaultFloat;
+            }
+
+            return locked.TryGetFloat(name, out var live)
+                && HoldsEveryRemovedCondition(
+                    name, live, source, locked, properties)
+                ? live
+                : operand.DefaultFloat;
+        }
+
+        /// <summary>
+        /// True when the candidate value keeps every removed condition
+        /// that reads the operand true under the removal evidence rules
+        /// (A6.2). The pin reads one candidate while every other name
+        /// reads the locked view, the same view the removal evidence
+        /// loop of <see cref="Build"/> reads.
+        /// </summary>
+        private static bool HoldsEveryRemovedCondition(
+            string name,
+            float candidate,
+            AlignedLockedSource source,
+            ILockedMaterialValues locked,
+            IReadOnlyList<LockedSourceProperty> properties)
+        {
+            var pinned = new PinnedValues(locked, name, candidate);
+            var adapter = new LockValuesAdapter(pinned, properties);
+            foreach (var block in source.Blocks)
+            {
+                if (block.Kind != LockedBlockKind.Ifex
+                    || block.Outcome != LockedBlockOutcome.Removed)
+                {
+                    continue;
+                }
+
+                var operands = PoiyomiLockCondition.ComparisonOperands(
+                    block.ConditionOrKeyword);
+                if (!ContainsName(operands, name))
+                {
+                    continue;
+                }
+
+                if (PoiyomiLockCondition.Evaluate(
+                        block.ConditionOrKeyword,
+                        adapter,
+                        PoiyomiLockConditionMode.RemovalEvidence)
+                    == PoiyomiLockConditionOutcome.False)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// One locked values view with one float pinned to a candidate
+        /// value. Every other read passes through unchanged.
+        /// </summary>
+        private sealed class PinnedValues : ILockedMaterialValues
+        {
+            private readonly ILockedMaterialValues values;
+            private readonly string pinnedName;
+            private readonly float pinnedValue;
+
+            internal PinnedValues(
+                ILockedMaterialValues values,
+                string pinnedName,
+                float pinnedValue)
+            {
+                this.values = values
+                    ?? throw new ArgumentNullException(nameof(values));
+                this.pinnedName = pinnedName
+                    ?? throw new ArgumentNullException(nameof(pinnedName));
+                this.pinnedValue = pinnedValue;
+            }
+
+            public bool TryGetFloat(string propertyName, out float value)
+            {
+                if (propertyName == pinnedName)
+                {
+                    value = pinnedValue;
+                    return true;
+                }
+
+                return values.TryGetFloat(propertyName, out value);
+            }
+
+            public bool TryGetVector(string propertyName, out Vector4 value)
+            {
+                return values.TryGetVector(propertyName, out value);
+            }
+
+            public bool TryGetColor(string propertyName, out Color value)
+            {
+                return values.TryGetColor(propertyName, out value);
+            }
+
+            public bool TryGetTexture(
+                string propertyName, out LockedTextureValue value)
+            {
+                return values.TryGetTexture(propertyName, out value);
+            }
+
+            public int RenderQueue => values.RenderQueue;
+
+            public string RenderTypeTag => values.RenderTypeTag;
+
+            public string VrcFallbackTag => values.VrcFallbackTag;
+
+            public IReadOnlyList<string> OriginalKeywordsTag =>
+                values.OriginalKeywordsTag;
+
+            public IReadOnlyList<string> Keywords => values.Keywords;
+
+            public bool ProjectIsLinear => values.ProjectIsLinear;
+
+            public bool HasNonZeroAnimatedTag(string propertyName)
+            {
+                return values.HasNonZeroAnimatedTag(propertyName);
+            }
         }
 
         /// <summary>

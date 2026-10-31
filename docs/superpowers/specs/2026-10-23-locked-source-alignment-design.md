@@ -164,6 +164,20 @@ Only removed blocks need checks. A kept block is compiled by both `L` and `U`.
    by Y3 of
    `docs/superpowers/specs/2026-10-25-bundled-locked-original-admission-design.md`.
 3. An `Unused` property that is a comparison operand of a removed block. Its value in `U` is not recorded in the text. An `==` comparison fixes the value. Any other comparison does not, so `U.P` must equal the declared default of the original, and the condition must be true at that value. Otherwise refuse.
+
+   Amendment 2026-10-30: item 3 is widened for the value choice. The
+   declared default stays the first choice. When the default fails a
+   removed condition that reads the operand, the live value of the
+   locked material becomes the second choice, and it applies when it
+   holds every removed condition that reads the operand. The rule is
+   sound because the property is program unused, so the removed
+   conditions are its only use, and A6.2 checks the same conditions on
+   `U`. A live value that fails the conditions keeps the default, and
+   the check of A6.2 refuses as before. The enum text and the bracket
+   read disagreement rules of A5.6 and A5.7 still apply to the chosen
+   value. Cause: real Thry 2.74.3 locks of the bundled 9.3 shader carry
+   operands whose declared default fails their own removed inequality,
+   while the live value holds it.
 4. `Unobservable` and `NotEvaluated` blocks get no check.
 
 ### A7. Trust boundary
