@@ -425,6 +425,17 @@ namespace Alrauna.Amuse.Editor.Build
             ["amuse.summary.SeparatorSwitchOff:description"] =
                 "Some slots did not separate because a separator " +
                 "switch is off.",
+            // --- Untouchable census disclosure. The play record names
+            // every kept slot, but the record dies with the editor
+            // session. This entry is the part a later console
+            // comparison can still read. It exists so a build pair
+            // that differs only in silently kept slots leaves a trace.
+            ["amuse.summary.UntouchableCensus"] =
+                "AMUSE kept slots untouched.",
+            ["amuse.summary.UntouchableCensus:description"] =
+                "AMUSE kept {0} material slots with {1} triangles " +
+                "fully on their original materials. The inspector " +
+                "record names each slot.",
 
             // --- Proof sampling disclosure. One key per closed policy
             // value; {0} names the captured build target. The summary

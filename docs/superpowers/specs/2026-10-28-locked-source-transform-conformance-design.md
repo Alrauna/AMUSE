@@ -174,6 +174,27 @@ Approaches: adding sampler types to the constant list is wrong because those nam
 
 Review status: 2026-10-29. Adversarial review accepted the amendment after requiring the explicit same-line read falsifier. The saved amendment includes that correction. No new vendor edit primitive or flag change is authorized.
 
+### LA4 recorded-print amendment
+
+Status: 2026-10-31. A real vendor lock on the bundled row refused at a kept feature frame. A structure-aware trace of the installed walk found the exact cause. A later occurrence of one baked property can sit behind an unprocessed occurrence of another property whose token the vendor visits later in the same line. The generated position map then names that other property's literal, so the positional literal read fails and the whole line refused.
+
+The vendor replaces every eligible occurrence of a baked property with the one recorded print. The installed inference learns that print from the first occurrence of the same line. The amendment adds one fallback for the installed era. When the positional read of a later occurrence fails and the line proposal already holds the recorded literal print, splice the recorded print at the occurrence and let the exact replay of the line verify the full prediction. A wrong print refuses at the replay compare, so the fallback stays fail closed. The single-literal contract and the mixed-use refusal stay unchanged. A first occurrence never uses the fallback, because no print is recorded yet.
+
+Falsifier: `SwizzledColorBakeWithSiblingScalarAligns` pins the shape under the direct installed era entry. A swizzled color use prints the whole color and keeps the swizzle on the literal, with a baked sibling scalar between the two uses. The pair mirrors a real locked line where a matcap color bakes twice beside a baked theme index on one line. The shape aligns under both historical eras, so the test must pin the installed era directly and not use the shared all-era entry.
+
+### LA4 recorded-kind amendment
+
+Status: 2026-11-01. The mirror of the recorded-print amendment for the identifier kind. A real vendor lock on the bundled row refused at a texture sampling line inside a guard that the retention rule keeps. The line uses one texture name twice and three sibling properties once each. The per-line replay visits tokens in property-name order, so both name occurrences are read before any sibling literal is spliced. The second name occurrence sits behind the not-yet-applied sibling bake, the position map points inside shifted text, and the identifier read fails. A texture property has no literal shape, so no fallback existed and the line refused. The refusal killed the kept trial of the enclosing outline wrapper, the wrapper resolved removed, and the whole family refused with the sentence of the outermost diverging frame.
+
+The vendor keeps every occurrence of a live property under its identifier spelling. The amendment adds one fallback for the installed era. When the positional identifier read of a later occurrence fails and the line proposal already recorded the property as an identifier, keep the spelling and let the exact replay of the line verify the full prediction. A wrong keep refuses at the replay compare, so the fallback stays fail closed. A first occurrence never uses the fallback, because no kind is recorded yet, and the mixed-use refusal stays unchanged.
+
+Falsifier: `PrunedMacroGuardBetweenSiblingFramesAlignsAndRecordsKeptAndRemoved` pins the shape inside a mode-sibling region that mirrors the real stochastic sampling layout, with the sampling line carrying two name uses and three sibling bakes. Its era twin keeps the fallback guards and aligns in every era. The mutation half refuses a changed macro body or a changed tail line, so the fixture is not vacuously green.
+
+Left unchanged: the literal path, the declaration exemptions, LA2 guards, and every existing protection. The joined defined-directive frontier named below stayed open until this date and closed as a mislabel: those directives align verbatim and the real killer was this line shape.
+
+Left unchanged: historical eras, the all-era entry, LA2 guards, and declaration exemptions. The joined defined-directive frontier closed on 2026-11-01 as a mislabel of the recorded-kind shape above.
+
+
 
 ### Soundness
 

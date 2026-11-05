@@ -390,7 +390,83 @@ Findings from the report:
 3. A few locked materials record the current Poiyomi shader as their original. Those refuse at attestation by design, because the current shader family is outside the supported sources.
 4. The build summary reports zero moved triangles. The four verified locks also moved none, while the same materials read fully convertible before the owner locked them. The report names no cause for them, so no refusal exists. Why their triangles proved nothing in this build stays open as the next diagnostic.
 
-No production change followed this read. All probes stayed read only. One diagnostic mistake is recorded: two synchronous probes held the Lab editor main thread for long stretches. Later reads used the stored build report and disk scans instead.
+The Lab probes of this read stayed read only. One diagnostic mistake is recorded: two synchronous probes held the Lab editor main thread for long stretches. Later reads used the stored build report and disk scans instead.
+
+## Aligner coverage root cause and first fix
+
+Status: 2026-10-31. Privacy note: this section names no avatar, material, asset path, or instance. One private avatar by role provided the failing locks.
+
+The coverage defect of the earlier diagnosis was traced with a structure-aware harness. The harness ran the production aligner on one real failing pair outside the build, with reflection hooks that logged every refusal and every program-line comparison. No production file changed for the harness, and the harness itself was deleted after use.
+
+Findings:
+
+1. The kept body of the first refusing frame aligned line by line. The walk matched every baked literal, including swizzled color uses.
+2. The kept trial then died on a later line of the same pass. One line held two uses of one color property with a swizzle, and one baked integer property between them. The vendor visits the color token first and replaces both uses in one visit. The installed-era inference read the second use at a generated position that assumed the integer was already spliced. The integer token came later in the token order, so the position named the integer literal and the read refused.
+3. The removed trial also died, because the kept body exists in the generated text. Both deaths made the resolver refuse at the outermost undecided frame, which reported an earlier line than the true divergence.
+4. The same line shape aligned under both historical eras. A test through the shared all-era entry passed by accident. The fix test pins the installed era directly.
+
+The fix: when the positional read of a later occurrence fails and the line proposal already recorded the literal print of the same property, the inference splices the recorded print and the exact replay verifies the line. The vendor replaces every eligible occurrence of a baked property with one print, so the splice is the vendor rule. A wrong print refuses at the replay compare.
+
+Evidence: the pinned test failed first with the exact production refusal sentence, then passed after the fix. A scratch run of the real failing pair moved its refusal from the original frame line to a line about twenty-seven thousand lines later, in a joined defined-directive frame. The minimal synthetic cases, including the verbatim real line shape, all align after the fix.
+
+Lab end to end check after the fix, read only, on the real locked pairs of the same avatar: the control pair and two of the three refusing pairs now align fully under the installed era. The third refusing pair advanced from the original frame line to the joined defined-directive gap about twenty-seven thousand lines later. A fourth pair of the earlier consistency fix was not rechecked in this pass and cannot regress, because the new fallback runs only where the previous code refused. The full build check waits for the owner's next test build.
+
+Open after this fix: the shading frame refusal family moved to its own root cause section below. The zero moved triangles question moved to its own diagnosis below.
+
+## Zero moved triangles diagnosis
+
+Status: 2026-10-31. Privacy note: this section names no avatar, material, asset path, or instance beyond the role of the outfit pieces.
+
+The question: four locked materials passed verification in the owner's test build, yet the summary moved zero triangles and held no refusal entry for their holders.
+
+Findings:
+
+1. The production reconstruction ran on an in-memory clone of one of the four. It succeeded, swapped the shader to the bundled row, and preserved the alpha-relevant values exactly: mask mode two, cutoff, and render queue all matched the locked material.
+
+2. The locked material and the reconstruction both hold no bound alpha mask texture, and mask mode two is the declared default of the shader. The semantics test suite pins that exact shape, an unbound mask in multiply mode, as provable with the chain unchanged. So the reconstructed materials classify the same way as their unlocked twins. The reconstruction path is not the cause.
+
+3. The holder objects are active and their renderers enabled in the avatar prefab, so a hidden state at rest does not explain the silence.
+
+4. The build report names two merged skinned meshes whose generated names begin with the parent folder name of the four holders. The avatar optimizer concatenated the children of that folder into those meshes. Both merged meshes carry two locked slots that refuse in the aligner, and the report also holds the all-unknown classification entry for them twice. The four verified materials almost certainly sat as slots of those merged meshes at build time, and every triangle of the merged meshes came back unknown, so nothing moved.
+
+5. The per-slot record of that build lived in session state only. The owner restarted the Lab project after the build, so the record is gone and the exact per-slot answers cannot be recovered.
+
+Conclusion: the zero moved count is not a defect of the locked reconstruction path. The four materials landed inside merged meshes whose classification returned unknown for every triangle. The exact cause inside those meshes, most likely the temp material textures of another merged child or the animation closure of the merged mesh, needs the per-slot record of one fresh test build. One new play mode test build answers it.
+
+## Refusal family at the shading frame, root cause
+
+Status: 2026-10-31. Privacy note: this section names no avatar, material, asset path, or instance. The material under test is the one locked pair of the owner's avatar that still refuses, identified in earlier sections by role.
+
+The earlier record called this the joined defined directive gap, because the walk stopped near a frame whose first body line joins two defined tests. That label is wrong. An instrumented run of the production aligner on the real pair settled the question. The instrumented run attached trace hooks to the refusal constructor, the block resolver, and both line matchers, and wrote a progressive log. The scratch harness was deleted after the run and the dev console returned to zero errors.
+
+Findings:
+
+1. The joined directives are innocent. The lock keeps every joined condition directive byte for byte, joined by and or by or. The plain line replay matches them, with their whole frames, across all passes. No code change is needed for them.
+
+2. The refusal sentence names the outermost wrapper, not the divergence. The block alignment sentence at the shading frame line is a cascade artifact. Nested trials die far away and the loss surfaces at the first frame whose two hypotheses both fail. This repeats the earlier pattern where a reported line sat about twenty thousand lines before the true divergence.
+
+3. The true chain runs three levels deep. The correct walk aligns the whole fragment body of the second pass, including every property bake. It aligns the crossing region where an ifex frame opens inside a defined guard and closes inside its else branch. It aligns the vertex program and the light volume includes of the third pass, and the stochastic sampling blocks, including the bake of the sampling density to one point zero.
+
+4. The original shader holds five passes. The lock emits four. The early z pass is wrapped in a property frame whose condition held, so the lock removed the whole pass, and the aligner resolved that removal correctly. This whole pass removal is already inside the model.
+
+5. The outline pass is wrapped the same way. Its wrapper condition did not hold, so the lock kept the pass, and the kept hypothesis consumes it correctly for thousands of lines with no refusal.
+
+6. A follow up run with the pair window over the whole shadow caster pass settled the loss. The kept outline hypothesis never consumes the shadow caster pass at all. The walk that dies at the shadow caster header holds the cursor of the second pass end, which proves the outline wrapper resolved as removed, the wrong outcome. The pair log shows the full sequence. The wrong walk matches the pass keyword and the opening brace against the locked outline pass header, then dies on the name line. A second walk skips the whole shadow caster pass and dies on the last closing brace of the file against the locked pass keyword.
+
+7. The loss enters one level deeper. Inside the third pass, the stochastic sampling region holds two sibling property frames, one per sampling mode. The active mode block is kept and aligns, including the density bake. The inactive mode block, the hextile frame, refuses with both hypotheses dead. Its refusal is not undecided, so it kills the kept trial of the enclosing outline wrapper. With only the removed trial left, the outline wrapper resolves as removed, and the walk lands one pass short. Every later mismatch follows from that one wrong outcome.
+
+8. The macro rewrite theory is wrong. A read only scout mapped the whole stochastic region line by line against the locked text. The lock keeps the active mode frames verbatim, prunes the inactive frames and the fallback macro guards wholesale, and holds no rewritten macro. The removed outcome of the inactive sibling is text valid line by line.
+
+9. A use site trace on one line settled the true killer. Inside the kept outline guard of the third pass sits a texture sampling line that uses the same texture property twice and three sibling properties once each: a uv channel indexer, a pan vector, and a channel indexer. The per line replay visits tokens in property name order, not in line order. It reads both occurrences of the texture name before any sibling bakes. The second name occurrence sits behind the not yet applied uv channel bake, so the position map points inside shifted text, the identifier read fails, and a texture property has no literal fallback, so the line refuses.
+
+10. That one line refusal, inside a guard the retention rule forces kept, kills the kept trial of the outline wrapper. The wrapper then resolves removed, the walk lands one pass short, and every later mismatch follows. The refusal surfaces at the shading frame line of the second pass as a cascade artifact.
+
+11. The fix landed and mirrors the recorded print amendment: when the positional identifier read fails and the proposal already recorded the property as an identifier, the match keeps the spelling and the exact whole line replay verifies the prediction. A wrong keep still refuses there, so the rule stays fail closed. The rule runs only where the old code refused.
+
+12. Observed results after the fix: the synthetic miniature with the exact line shape refused before the fix with the production sentence and aligns after it, with the expected nine block records. The real pair of the refusing family now aligns fully under the installed era in the dev editor. The full product assembly ran twice. The first run held two failures, both in the new fixtures: the fallback sat before the literal read and hid the mixed use sentence, and the era twin carried the installed-era line shape into the historical eras. The fallback moved behind the literal read, so a genuine literal read still names the conflict, and the era twin now uses its own original without the sampling line. The second run of the full assembly completed on the corrected code with an idle editor and zero error entries in the console. Its per-test summary was not readable through the tool bridge, so the four governing tests were invoked directly after the run and passed: the mixed use sentence test, the era twin, the new falsifier with its record table and mutation halves, and the recorded print falsifier of the earlier fix. The fallback change is strictly narrower than the first version, because it now fires only where the pre-fix code threw. The end to end build check waits for the owner's next test build.
+
+Conclusion: the blocker was never a directive family and never the mode siblings. One identifier occurrence of a live texture property sat behind an unprocessed later token literal, the positional read failed, and no fallback existed for the identifier kind. The recorded kind fallback closes it. The joined directives, the mode siblings, and the pass wrappers all aligned all along once this line replayed.
+
 
 Unrelated finding recorded: the repeat-in-domain failure above, and a quality settings write that one run left on disk and that this session restored to its committed value before the final runs.
 

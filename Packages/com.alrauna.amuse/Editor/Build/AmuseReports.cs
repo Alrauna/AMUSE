@@ -798,6 +798,36 @@ namespace Alrauna.Amuse.Editor.Build
         }
 
         /// <summary>
+        /// Reports how many slots this run kept fully on their original
+        /// materials with nothing movable. The play record names each
+        /// kept slot, but the record dies with the editor session. This
+        /// entry is the part a later console comparison can still read,
+        /// so a build pair that differs only in silently kept slots
+        /// leaves a trace. Design decision of the 2026-11-01
+        /// bimodality investigation.
+        /// </summary>
+        internal static void UntouchableCensus(
+            GameObject avatarRoot,
+            int slotCount,
+            int triangleCount)
+        {
+            if (slotCount <= 0)
+            {
+                return;
+            }
+
+            using (ErrorReport.WithContextObject(avatarRoot))
+            {
+                ErrorReport.ReportError(
+                    Localizer,
+                    ErrorSeverity.Information,
+                    "amuse.summary.UntouchableCensus",
+                    slotCount,
+                    triangleCount);
+            }
+        }
+
+        /// <summary>
         /// The captured build target, named for the reader. Only the
         /// targets with a proof policy get their own name; a target
         /// without one keeps a plain name, because the selection refused

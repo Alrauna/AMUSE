@@ -2622,6 +2622,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 return;
             }
 
+
             var shape = LiteralShapeOf(state, name);
             if (state.Era == PoiyomiLockEra.Thry2743
                 && (shape == LiteralShape.ScalarFloat || shape == LiteralShape.F0))
@@ -2671,6 +2672,44 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 }
 
                 result = SpliceWork(work, index, name.Length, text, map, start);
+                return;
+            }
+            else if (known == MatchKind.Literal)
+            {
+                // LA4 amendment: a later occurrence of the same baked
+                // property can sit behind an unprocessed occurrence of
+                // another property whose token the vendor visits later.
+                // The generated position then names that other literal,
+                // so the read cannot trust the map. The vendor replaces
+                // every eligible occurrence of a baked property with the
+                // one recorded print, so the fallback splices the
+                // recorded print and the exact replay of this line
+                // verifies the whole prediction. A wrong print refuses
+                // there, so the fallback stays fail closed.
+                result = SpliceWork(
+                    work,
+                    index,
+                    name.Length,
+                    proposal.LiteralPrints[name],
+                    map,
+                    index);
+                return;
+            }
+
+            if (known == MatchKind.Identifier)
+            {
+                // LA4 amendment: a later occurrence of the same live
+                // property can sit behind an unprocessed literal of a
+                // property whose token the vendor visits later. The
+                // position map then points inside shifted text, so the
+                // identifier read and the literal read both fail. The
+                // mixed use refusal stays first, because a genuine
+                // literal read still names the conflict. The vendor
+                // keeps every occurrence of a live property, so the
+                // fallback keeps the spelling and the exact replay of
+                // this line verifies the whole prediction. A wrong keep
+                // refuses there, so the fallback stays fail closed.
+                result = work;
                 return;
             }
 

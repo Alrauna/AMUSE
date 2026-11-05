@@ -1225,6 +1225,37 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Assert.That(vectorResult.Source.BakedLiterals["_V"], Is.EqualTo("float4(0,1E-06,0,0)"));
         }
 
+        // A swizzled color use bakes the whole color and keeps the
+        // swizzle on the literal. A real vendor lock prints
+        // float4(1,1,1,1).rgb for _MatcapColor.rgb beside a baked int
+        // sibling on the same line, twice per line. The pair mirrors
+        // that shape.
+
+        [Test]
+        public void SwizzledColorBakeWithSiblingScalarAligns()
+        {
+            var properties = "        _C (\"C\", Color) = (1, 1, 1, 1)\n        _T (\"T\", Int) = 0";
+            var program = "        float4 _C;\n        float _T;\n        o.M = float4(theme(p, _C.rgb, _T), _C.a);";
+            var edits = new[]
+            {
+                ("theme(p, _C.rgb, _T)", "theme(p, float4(1,1,1,1).rgb, 0.0)"),
+                ("_C.a);", "float4(1,1,1,1).a);")
+            };
+            var names = new[]
+            {
+                Prop("_C", ShaderPropertyType.Color),
+                Prop("_T", ShaderPropertyType.Int)
+            };
+            var (original, generated) = SmallPair(properties, null, program, edits);
+            var result = PoiyomiLockedSourceAlignment.AlignForEra(
+                original, generated, names, PoiyomiLockEra.Thry2743);
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            Assert.That(result.Source.States["_C"], Is.EqualTo(LockedPropertyState.Baked));
+            Assert.That(result.Source.BakedLiterals["_C"], Is.EqualTo("float4(1,1,1,1)"));
+            Assert.That(result.Source.States["_T"], Is.EqualTo(LockedPropertyState.Baked));
+            Assert.That(result.Source.BakedLiterals["_T"], Is.EqualTo("0.0"));
+        }
+
         // A letter-led artifact the original never holds and that carries
         // no declared name still refuses. Y5 drops only whole-token runs
         // and digit-led runs, so an unknown identifier stays fail closed
@@ -4462,6 +4493,162 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             var (lostOriginal, lostGenerated) = ProgramPair(CrossingProperties, original, unbalanced);
             lostGenerated = lostGenerated.Replace(DefineRun, DefineRunWithKeyword);
             Assert.That(AlignInstalled(lostOriginal, lostGenerated, properties).Succeeded, Is.False);
+        }
+
+        private const string StochasticGuardProperties =
+            "        _Mode (\"Mode\", Float) = 0\n        _EnableOutlines (\"Outlines\", Float) = 0";
+
+        private const string StochasticGuardOriginalProgram =
+            "            #include \"UnityCG.cginc\"\n            //ifex _EnableOutlines!=1\n            //ifex _Mode!=0"
+            + "\n            #if defined(_MODE_DELIOT)\n            #define SAMPLE_MACRO(uv) (DeliotSample(uv))\n            #endif"
+            + "\n            //endex\n            //ifex _Mode!=1\n            #if defined(_MODE_HEXTILE)"
+            + "\n            #define SAMPLE_MACRO(uv) (HextileSample(uv))\n            #endif\n            //endex"
+            + "\n            //ifex _Mode!=2\n            #ifndef SAMPLE_MACRO\n            #define SAMPLE_MACRO(uv) (PlainSample(uv))"
+            + "\n            #endif\n            #ifndef SAMPLE_MACRO_PAN\n            #define SAMPLE_MACRO_PAN(uv) (PlainSamplePan(uv))"
+            + "\n            #endif\n            //endex"
+            + "\n            //ifex _Mode==2\n            #if !defined(_MODE_NONE)\n            float2 Hash2D2D(float2 s)"
+            + "\n            {\n            return frac(s);\n            }\n            #endif\n            //endex"
+            + "\n            //ifex _Mode!=0\n            #if defined(_MODE_DELIOT)\n            float4 DeliotSample(float2 uv)"
+            + "\n            {\n            return uv;\n            }\n            #endif\n            //endex"
+            + "\n            //ifex _Mode!=1\n            #if defined(_MODE_HEXTILE)\n            float4 HextileSample(float2 uv)"
+            + "\n            {\n            return uv;\n            }\n            #endif\n            //endex"
+            + "\n            float om = _OutlineMask.SampleLevel(sampler_linear_repeat, TRANSFORM_TEX(poiMesh.uv[_OutlineMaskUV], _OutlineMask) + _Time.x * _OutlineMaskPan, 0)[_OutlineMaskChannel];"
+            + "\n            o.Albedo = SAMPLE_MACRO(float2(0, 0));\n            o.Emission = 0.5;\n            //endex";
+
+        private const string StochasticGuardPrunedGeneratedProgram =
+            "            #include \"UnityCG.cginc\"\n            #if defined(_MODE_DELIOT)\n            #define SAMPLE_MACRO(uv) (DeliotSample(uv))\n            #endif"
+            + "\n            #if !defined(_MODE_NONE)\n            float2 Hash2D2D(float2 s)"
+            + "\n            {\n            return frac(s);\n            }\n            #endif"
+            + "\n            #if defined(_MODE_DELIOT)\n            float4 DeliotSample(float2 uv)"
+            + "\n            {\n            return uv;\n            }\n            #endif"
+            + "\n            float om = _OutlineMask.SampleLevel(sampler_linear_repeat, TRANSFORM_TEX(poiMesh.uv[0.0], _OutlineMask) + _Time.x * float4(0,0,0,0), 0)[0.0];"
+            + "\n            o.Albedo = SAMPLE_MACRO(float2(0, 0));\n            o.Emission = 0.5;";
+
+        private const string StochasticGuardKeptGeneratedProgram =
+            "            #include \"UnityCG.cginc\"\n            #if defined(_MODE_DELIOT)\n            #define SAMPLE_MACRO(uv) (DeliotSample(uv))\n            #endif"
+            + "\n            #ifndef SAMPLE_MACRO\n            #define SAMPLE_MACRO(uv) (PlainSample(uv))\n            #endif"
+            + "\n            #ifndef SAMPLE_MACRO_PAN\n            #define SAMPLE_MACRO_PAN(uv) (PlainSamplePan(uv))\n            #endif"
+            + "\n            #if !defined(_MODE_NONE)\n            float2 Hash2D2D(float2 s)"
+            + "\n            {\n            return frac(s);\n            }\n            #endif"
+            + "\n            #if defined(_MODE_DELIOT)\n            float4 DeliotSample(float2 uv)"
+            + "\n            {\n            return uv;\n            }\n            #endif"
+            + "\n            o.Albedo = SAMPLE_MACRO(float2(0, 0));\n            o.Emission = 0.5;";
+
+        // The no-op twin uses its own original without the sampling line.
+        // The sampling line is an installed-era shape, so the cross-era
+        // claim of this twin stays limited to the guard frames.
+        private const string StochasticGuardKeptOriginalProgram =
+            "            #include \"UnityCG.cginc\"\n            //ifex _EnableOutlines!=1\n            //ifex _Mode!=0"
+            + "\n            #if defined(_MODE_DELIOT)\n            #define SAMPLE_MACRO(uv) (DeliotSample(uv))\n            #endif"
+            + "\n            //endex\n            //ifex _Mode!=1\n            #if defined(_MODE_HEXTILE)"
+            + "\n            #define SAMPLE_MACRO(uv) (HextileSample(uv))\n            #endif\n            //endex"
+            + "\n            //ifex _Mode!=2\n            #ifndef SAMPLE_MACRO\n            #define SAMPLE_MACRO(uv) (PlainSample(uv))"
+            + "\n            #endif\n            #ifndef SAMPLE_MACRO_PAN\n            #define SAMPLE_MACRO_PAN(uv) (PlainSamplePan(uv))"
+            + "\n            #endif\n            //endex"
+            + "\n            //ifex _Mode==2\n            #if !defined(_MODE_NONE)\n            float2 Hash2D2D(float2 s)"
+            + "\n            {\n            return frac(s);\n            }\n            #endif\n            //endex"
+            + "\n            //ifex _Mode!=0\n            #if defined(_MODE_DELIOT)\n            float4 DeliotSample(float2 uv)"
+            + "\n            {\n            return uv;\n            }\n            #endif\n            //endex"
+            + "\n            //ifex _Mode!=1\n            #if defined(_MODE_HEXTILE)\n            float4 HextileSample(float2 uv)"
+            + "\n            {\n            return uv;\n            }\n            #endif\n            //endex"
+            + "\n            o.Albedo = SAMPLE_MACRO(float2(0, 0));\n            o.Emission = 0.5;\n            //endex";
+
+        // --- Falsifier LA-F21: pruned macro guard between mode siblings. ---
+        // Wrong implementation: the walk resolves each sibling frame with
+        // independent trials, and the inactive sibling or the pruned macro
+        // guard region kills the enclosing kept trial, so the outer wrapper
+        // resolves removed and the walk lands one pass short. The corrected
+        // implementation resolves the inactive sibling and the guard region
+        // as removed, so the pair aligns with the records below.
+        [Test]
+        public void PrunedMacroGuardBetweenSiblingFramesAlignsAndRecordsKeptAndRemoved()
+        {
+            var properties = new[]
+            {
+                Prop("_Mode", ShaderPropertyType.Float),
+                Prop("_EnableOutlines", ShaderPropertyType.Float),
+                Prop("_OutlineMask", ShaderPropertyType.Texture),
+                Prop("_OutlineMaskUV", ShaderPropertyType.Float),
+                Prop("_OutlineMaskPan", ShaderPropertyType.Vector),
+                Prop("_OutlineMaskChannel", ShaderPropertyType.Float)
+            };
+            var (original, generated) = ProgramPair(
+                StochasticGuardProperties,
+                StochasticGuardOriginalProgram,
+                StochasticGuardPrunedGeneratedProgram);
+            var result = AlignInstalled(original, generated, properties);
+            Assert.That(result.Succeeded, Is.True, result.RefusalDetail ?? "refused");
+            var source = result.Source;
+            Assert.That(source.Blocks.Count, Is.EqualTo(9));
+            Assert.That(source.Blocks[0].Kind, Is.EqualTo(LockedBlockKind.Ifex));
+            Assert.That(source.Blocks[0].Outcome, Is.EqualTo(LockedBlockOutcome.Kept));
+            Assert.That(source.Blocks[0].ConditionOrKeyword, Is.EqualTo("_EnableOutlines!=1"));
+            Assert.That(source.Blocks[1].Outcome, Is.EqualTo(LockedBlockOutcome.Kept));
+            Assert.That(source.Blocks[1].ConditionOrKeyword, Is.EqualTo("_Mode!=0"));
+            Assert.That(source.Blocks[2].Outcome, Is.EqualTo(LockedBlockOutcome.Removed));
+            Assert.That(source.Blocks[2].ConditionOrKeyword, Is.EqualTo("_Mode!=1"));
+            Assert.That(source.Blocks[3].Outcome, Is.EqualTo(LockedBlockOutcome.Removed));
+            Assert.That(source.Blocks[3].ConditionOrKeyword, Is.EqualTo("_Mode!=2"));
+            Assert.That(source.Blocks[4].Kind, Is.EqualTo(LockedBlockKind.Ifndef));
+            Assert.That(source.Blocks[4].Outcome, Is.EqualTo(LockedBlockOutcome.NotEvaluated));
+            Assert.That(source.Blocks[4].ConditionOrKeyword, Is.EqualTo("SAMPLE_MACRO"));
+            Assert.That(source.Blocks[5].Outcome, Is.EqualTo(LockedBlockOutcome.NotEvaluated));
+            Assert.That(source.Blocks[5].ConditionOrKeyword, Is.EqualTo("SAMPLE_MACRO_PAN"));
+            Assert.That(source.Blocks[6].Outcome, Is.EqualTo(LockedBlockOutcome.Kept));
+            Assert.That(source.Blocks[6].ConditionOrKeyword, Is.EqualTo("_Mode==2"));
+            Assert.That(source.Blocks[7].Outcome, Is.EqualTo(LockedBlockOutcome.Kept));
+            Assert.That(source.Blocks[7].ConditionOrKeyword, Is.EqualTo("_Mode!=0"));
+            Assert.That(source.Blocks[8].Outcome, Is.EqualTo(LockedBlockOutcome.Removed));
+            Assert.That(source.Blocks[8].ConditionOrKeyword, Is.EqualTo("_Mode!=1"));
+            Assert.That(source.Blocks, Has.All.Matches<LockedBlockRecord>(b => !b.ZeroAndZero));
+            Assert.That(source.SurvivingText, Does.Contain("SAMPLE_MACRO(float2(0, 0))"));
+
+            var mutatedMacro = StochasticGuardPrunedGeneratedProgram
+                .Replace("(DeliotSample(uv))", "(DeliotSample(uv, 1.0))");
+            var (macroOriginal, macroGenerated) = ProgramPair(
+                StochasticGuardProperties, StochasticGuardOriginalProgram, mutatedMacro);
+            var macroResult = AlignInstalled(macroOriginal, macroGenerated, properties);
+            Assert.That(macroResult.Succeeded, Is.False);
+            Assert.That(macroResult.Source, Is.Null);
+
+            var mutatedTail = StochasticGuardPrunedGeneratedProgram
+                .Replace("o.Emission = 0.5;", "o.Emission = 0.75;");
+            var (tailOriginal, tailGenerated) = ProgramPair(
+                StochasticGuardProperties, StochasticGuardOriginalProgram, mutatedTail);
+            var tailResult = AlignInstalled(tailOriginal, tailGenerated, properties);
+            Assert.That(tailResult.Succeeded, Is.False);
+            Assert.That(tailResult.Source, Is.Null);
+        }
+
+        // The no-op guard of LA-F21. The same region with the vendor keeping
+        // the fallback guards aligns in every era, before and after the fix.
+        [Test]
+        public void KeptMacroGuardRegionAlignsInEveryEra()
+        {
+            var properties = new[]
+            {
+                Prop("_Mode", ShaderPropertyType.Float),
+                Prop("_EnableOutlines", ShaderPropertyType.Float),
+                Prop("_OutlineMask", ShaderPropertyType.Texture),
+                Prop("_OutlineMaskUV", ShaderPropertyType.Float),
+                Prop("_OutlineMaskPan", ShaderPropertyType.Vector),
+                Prop("_OutlineMaskChannel", ShaderPropertyType.Float)
+            };
+            var (original, generated) = ProgramPair(
+                StochasticGuardProperties,
+                StochasticGuardKeptOriginalProgram,
+                StochasticGuardKeptGeneratedProgram);
+            foreach (var era in new[]
+            {
+                PoiyomiLockEra.Bundled9364, PoiyomiLockEra.Thry274To2742,
+                PoiyomiLockEra.Thry2743
+            })
+            {
+                var result = PoiyomiLockedSourceAlignment.AlignForEra(
+                    original, generated, properties, era);
+                Assert.That(result.Succeeded, Is.True,
+                    result.RefusalDetail ?? "refused in " + era);
+            }
         }
     }
 }
