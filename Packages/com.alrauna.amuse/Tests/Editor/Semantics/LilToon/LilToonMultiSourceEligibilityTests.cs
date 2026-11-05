@@ -16,21 +16,19 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
     /// and refuses everything else, with the regular cutout and transparent
     /// evaluators held up as the parity oracles on every shared row.
     /// <para>
-    /// Every fixture drives the production capture path over a committed
-    /// container stand-in carrying the real container identity, because the
-    /// Task 5 mode-consistency gate reads that name: its outline-tone
-    /// keyword derivation needs the outline shader identity. The declared
-    /// render state of the cutout stand-ins is the vendor cutout form the
-    /// vendor editor writes at cutout mode: blend One/Zero,
-    /// <c>_AlphaToMask</c> 1, RenderType TransparentCutout, queue 2450. The
-    /// declared render state of the transparent stand-ins is the vendor
-    /// transparent form the vendor editor writes at transparent mode:
-    /// blend One/OneMinusSrcAlpha on both pairs, <c>_AlphaToMask</c> 0,
-    /// <c>_ZWrite</c> on, RenderType TransparentCutout, queue 2460. The
-    /// keyword feature facts are exercised as runtime scalars through
-    /// captured evidence, never as keyword reads: each disabled-mask
-    /// control is a vendor-state fixture itself, whose keyword set is
-    /// exactly the pinned derivation's output for that state - the mode
+    /// Every fixture drives the production capture path over the
+    /// installed vendor container itself, loaded by its pinned GUID,
+    /// because the Task 5 mode-consistency gate reads that name: its
+    /// outline-tone keyword derivation needs the outline shader
+    /// identity. The vendor editor writes the mode render state at the
+    /// material level, so each fixture writes the RenderType override
+    /// tag and the mode queue itself: TransparentCutout at queue 2450
+    /// for cutout mode, TransparentCutout at queue 2460 for
+    /// transparent mode. The keyword feature facts are exercised as
+    /// runtime scalars through captured evidence, never as keyword
+    /// reads: each disabled-mask control is a vendor-state fixture
+    /// itself, whose keyword set is exactly the pinned derivation's
+    /// output for that state - the mode
     /// keyword alone at cutout mode, <c>UNITY_UI_CLIP_RECT</c> at
     /// transparent mode.
     /// </para>
@@ -46,79 +44,91 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
     /// </summary>
     public sealed class LilToonMultiSourceEligibilityTests : LilToonFixtureTestBase
     {
-        // The stand-ins carry the real container identities as their shader
-        // names, `_lil/lilToonMulti` and `Hidden/lilToonMultiOutline`,
-        // because the Task 5 mode-consistency gate reads the captured name:
-        // only its outline-tone keyword derivation consumes the container
-        // identity, and no eligibility row does.
-        private const string BaseContainerShaderPath =
-            "Packages/com.alrauna.amuse/Tests/Editor/Semantics/LilToon/" +
-            "LilToonMultiCutoutTest.shader";
-        private const string OutlineContainerShaderPath =
-            "Packages/com.alrauna.amuse/Tests/Editor/Semantics/LilToon/" +
-            "LilToonMultiOutlineCutoutTest.shader";
-        private const string BaseTransparentContainerShaderPath =
-            "Packages/com.alrauna.amuse/Tests/Editor/Semantics/LilToon/" +
-            "LilToonMultiTransparentTest.shader";
-        private const string OutlineTransparentContainerShaderPath =
-            "Packages/com.alrauna.amuse/Tests/Editor/Semantics/LilToon/" +
-            "LilToonMultiOutlineTransparentTest.shader";
+        // The fixtures run on the installed vendor containers, loaded by
+        // their pinned asset GUIDs. The GUID loads are the only reliable
+        // resolve, because a name lookup matches any shader that carries
+        // a container name. The cutout and transparent forms of one
+        // container are the same vendor shader, so the mode pairs share
+        // one GUID. The values mirror the ground check pins measured
+        // from the installed meta files. The former stand-ins are gone:
+        // their vendor-mimic names shadowed the vendor shaders in the
+        // editor name map.
+        private const string BaseContainerShaderGuid =
+            "9294844b15dca184d914a632279b24e1";
+        private const string OutlineContainerShaderGuid =
+            "51b2dee0ab07bd84d8147601ff89e511";
+        private const string BaseTransparentContainerShaderGuid =
+            BaseContainerShaderGuid;
+        private const string OutlineTransparentContainerShaderGuid =
+            OutlineContainerShaderGuid;
         private const int CutoutMode = 1;
         private const int TransparentMode = 2;
 
         // --- Shared fixture state ----------------------------------------------
 
         /// <summary>
-        /// One committed container stand-in at the mode-1 vendor cutout
-        /// state: the mode scalar at one, both Multi gate scalars at zero,
-        /// and exactly the keyword set the pinned derivation produces for
-        /// that state. The mask, dither, dissolve, distance fade, and
-        /// outline tone features are all off, so the derived set is the
-        /// mode keyword alone. The stand-in loads by its own asset path:
-        /// the container identities are vendor-mimic names, and the
-        /// resolution fixtures mint same-named temp shaders in their own
-        /// runs, so a name lookup here could answer with the wrong asset.
+        /// One vendor container material at the mode-1 vendor cutout
+        /// state: the mode scalar at one, both Multi gate scalars at
+        /// zero, and exactly the keyword set the pinned derivation
+        /// produces for that state. The mask, dither, dissolve, distance
+        /// fade, and outline tone features are all off, so the derived
+        /// set is the mode keyword alone. The vendor editor writes the
+        /// mode render state at the material level, so the fixture writes
+        /// the RenderType override tag and the cutout queue the same way.
         /// </summary>
-        private Material CutoutModeContainerMaterial(string shaderAssetPath)
+        private Material CutoutModeContainerMaterial(string shaderGuid)
         {
-            var shader =
-                AssetDatabase.LoadAssetAtPath<Shader>(shaderAssetPath);
-            Assert.That(shader, Is.Not.Null, shaderAssetPath);
-            var material = Track(new Material(shader));
+            var material = Track(new Material(
+                LoadVendorContainer(shaderGuid)));
             material.SetFloat("_TransparentMode", 1f);
             material.SetFloat("_UseClippingCanceller", 0f);
             material.SetFloat("_AsOverlay", 0f);
+            material.SetOverrideTag("RenderType", "TransparentCutout");
+            material.renderQueue = 2450;
             material.shaderKeywords = new[] { "UNITY_UI_ALPHACLIP" };
             return material;
         }
 
         /// <summary>
-        /// One committed container stand-in at the mode-2 vendor transparent
+        /// One vendor container material at the mode-2 vendor transparent
         /// state: the mode scalar at two, both Multi gate scalars at zero,
         /// and exactly the keyword set the pinned derivation produces for
         /// that state - <c>UNITY_UI_CLIP_RECT</c> alone, the alpha-clip
         /// keyword being cutout-only and no feature being on. The mask,
         /// dither, dissolve, distance fade, and outline tone features are
         /// all off, and the derivation writes no dither keyword at mode 2
-        /// for any dither value, so the derived set stays the mode keyword.
-        /// The stand-in loads by its own asset path for the same reason the
-        /// cutout helper loads by path, compounded here: the two
-        /// transparent stand-ins share the vendor-mimic container names
-        /// with the cutout stand-ins, so a name lookup could answer with
-        /// any of the four.
+        /// for any dither value, so the derived set stays the mode
+        /// keyword. The transparent render state is material level state,
+        /// written the same way as the cutout state with its own queue.
         /// </summary>
-        private Material TransparentModeContainerMaterial(
-            string shaderAssetPath)
+        private Material TransparentModeContainerMaterial(string shaderGuid)
         {
-            var shader =
-                AssetDatabase.LoadAssetAtPath<Shader>(shaderAssetPath);
-            Assert.That(shader, Is.Not.Null, shaderAssetPath);
-            var material = Track(new Material(shader));
+            var material = Track(new Material(
+                LoadVendorContainer(shaderGuid)));
             material.SetFloat("_TransparentMode", 2f);
             material.SetFloat("_UseClippingCanceller", 0f);
             material.SetFloat("_AsOverlay", 0f);
+            material.SetOverrideTag("RenderType", "TransparentCutout");
+            material.renderQueue = 2460;
             material.shaderKeywords = new[] { "UNITY_UI_CLIP_RECT" };
             return material;
+        }
+
+        // The vendor container load. A GUID load is the only reliable
+        // resolve, because a name lookup matches any shader that carries
+        // a container name, and the resolution fixtures mint same-named
+        // temp shaders in their own runs.
+        private static Shader LoadVendorContainer(string shaderGuid)
+        {
+            var assetPath = AssetDatabase.GUIDToAssetPath(shaderGuid);
+            var shader = string.IsNullOrEmpty(assetPath)
+                ? null
+                : AssetDatabase.LoadAssetAtPath<Shader>(assetPath);
+            Assert.That(
+                shader, Is.Not.Null,
+                "the installed vendor container must resolve by its " +
+                "pinned GUID");
+            return shader;
         }
 
         private static void AssertRefusal(
@@ -258,7 +268,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         public void VendorCutoutStateAtCutoutModeOnTheBaseContainerIsConvertible()
         {
             var material =
-                CutoutModeContainerMaterial(BaseContainerShaderPath);
+                CutoutModeContainerMaterial(BaseContainerShaderGuid);
 
             AssertConvertible(EvaluateMulti(material));
         }
@@ -274,7 +284,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         public void QueueTwoThousandAtCutoutModeRefusesAsUnsupportedRenderQueue()
         {
             var material =
-                CutoutModeContainerMaterial(BaseContainerShaderPath);
+                CutoutModeContainerMaterial(BaseContainerShaderGuid);
             material.renderQueue = 2000;
 
             AssertRefusal(
@@ -301,7 +311,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         public void AlphaMaskScalarOnAtCutoutModeRefuses()
         {
             var material =
-                CutoutModeContainerMaterial(BaseContainerShaderPath);
+                CutoutModeContainerMaterial(BaseContainerShaderGuid);
             material.SetFloat("_AlphaMaskMode", 1f);
             material.shaderKeywords = new[]
             {
@@ -328,7 +338,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         public void DitherScalarOnAtCutoutModeRefuses()
         {
             var material =
-                CutoutModeContainerMaterial(BaseContainerShaderPath);
+                CutoutModeContainerMaterial(BaseContainerShaderGuid);
             material.SetFloat("_UseDither", 0.5f);
 
             AssertRefusal(
@@ -350,7 +360,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         public void DissolveScalarOnAtCutoutModeRefuses()
         {
             var material =
-                CutoutModeContainerMaterial(BaseContainerShaderPath);
+                CutoutModeContainerMaterial(BaseContainerShaderGuid);
             material.SetVector(
                 "_DissolveParams", new Vector4(0.5f, 0f, 0.5f, 0.1f));
             material.shaderKeywords = new[]
@@ -369,8 +379,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         /// <c>MaxProvableCutoff</c> premises carry over with the cutout
         /// vocabulary, and the parity oracle is a real differential on the
         /// shared surface. Twin leg: the regular cutout evaluator over the
-        /// regular cutout stand-in. Multi leg: the Multi evaluator over the
-        /// base container stand-in. Both legs carry the identical threshold
+        /// regular cutout stand-in. Multi leg: the Multi evaluator over
+        /// the base vendor container. Both legs carry the identical threshold
         /// state, and both must refuse with the same named refusal.
         /// </summary>
         // --- Falsifier: a mode-1 gate that admits a threshold above the bound, or that refuses it with anything but the cutout vocabulary, fails this fixture. ---
@@ -384,7 +394,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 twinResult,
                 LilToonOpaqueConversionRefusal.ClipThresholdDiscardsOpaqueAlpha);
 
-            var multi = CutoutModeContainerMaterial(BaseContainerShaderPath);
+            var multi = CutoutModeContainerMaterial(BaseContainerShaderGuid);
             multi.SetFloat("_Cutoff", 1f);
             var multiResult = EvaluateMulti(multi);
 
@@ -404,7 +414,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         /// of its own. Twin leg, labeled: the regular cutout evaluator over
         /// the regular cutout stand-in, which is the evaluator the regular
         /// outline wrapper itself converts through. Multi leg, labeled: the
-        /// Multi evaluator over the outline container stand-in set to the
+        /// Multi evaluator over the outline vendor container set to the
         /// same scalar surface as the admitted twin state. The
         /// outline-alpha protection question (F0 §7.3) is a pre-existing
         /// regular-family scope fact; this fixture neither widens nor
@@ -418,8 +428,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             var twinResult = EvaluateRegularCutoutTwin(twin);
             AssertConvertible(twinResult);
 
-            var multi = CutoutModeContainerMaterial(
-                OutlineContainerShaderPath);
+            var multi = CutoutModeContainerMaterial(OutlineContainerShaderGuid);
             // The same scalar surface as the supported regular cutout
             // stand-in, whose fresh alpha destination factor is the
             // OneMinusSrcAlpha class both evaluators admit.
@@ -438,7 +447,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         /// convertible to the same degree. Twin leg: the regular cutout
         /// evaluator over the regular cutout stand-in at its fresh
         /// canonical defaults. Multi leg: the Multi evaluator over the
-        /// base container stand-in set to those same scalars. Equal
+        /// base vendor container set to those same scalars. Equal
         /// outcomes and equal depth-test divergence - the Multi follower
         /// never widens or narrows the regular family's verdict.
         /// </summary>
@@ -449,7 +458,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             var twin = NewCutoutFixtureMaterial();
             var twinResult = EvaluateRegularCutoutTwin(twin);
 
-            var multi = CutoutModeContainerMaterial(BaseContainerShaderPath);
+            var multi = CutoutModeContainerMaterial(BaseContainerShaderGuid);
             // The same scalar surface as the supported regular cutout
             // stand-in, whose fresh alpha destination factor is the
             // OneMinusSrcAlpha class both evaluators admit.
@@ -488,8 +497,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         public void
             VendorTransparentStateAtTransparentModeOnTheBaseContainerIsConvertible()
         {
-            var material = TransparentModeContainerMaterial(
-                BaseTransparentContainerShaderPath);
+            var material = TransparentModeContainerMaterial(BaseTransparentContainerShaderGuid);
 
             AssertConvertible(
                 EvaluateMultiAtMode(material, TransparentMode));
@@ -506,8 +514,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void QueueTwoThousandAtTransparentModeRefusesAsUnsupportedRenderQueue()
         {
-            var material = TransparentModeContainerMaterial(
-                BaseTransparentContainerShaderPath);
+            var material = TransparentModeContainerMaterial(BaseTransparentContainerShaderGuid);
             material.renderQueue = 2000;
 
             AssertRefusal(
@@ -526,8 +533,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void WorldsOverrideQueueThreeThousandAtTransparentModeIsConvertible()
         {
-            var material = TransparentModeContainerMaterial(
-                BaseTransparentContainerShaderPath);
+            var material = TransparentModeContainerMaterial(BaseTransparentContainerShaderGuid);
             material.renderQueue = 3000;
 
             AssertConvertible(
@@ -557,8 +563,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void DistanceFadeStrengthOnAtTransparentModeRefuses()
         {
-            var material = TransparentModeContainerMaterial(
-                BaseTransparentContainerShaderPath);
+            var material = TransparentModeContainerMaterial(BaseTransparentContainerShaderGuid);
             material.SetVector(
                 "_DistanceFade", new Vector4(0.1f, 0.01f, 0.5f, 0f));
             material.shaderKeywords = new[]
@@ -592,8 +597,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void DistanceFadeStrengthOnAtCutoutModeRefusesThroughDelegation()
         {
-            var material = CutoutModeContainerMaterial(
-                BaseContainerShaderPath);
+            var material = CutoutModeContainerMaterial(BaseContainerShaderGuid);
             material.SetVector(
                 "_DistanceFade", new Vector4(0.1f, 0.01f, 0.5f, 0f));
             material.SetVector(
@@ -623,8 +627,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void MissingDerivedFadeKeywordAtCutoutModeRefusesAsUnattested()
         {
-            var material = CutoutModeContainerMaterial(
-                BaseContainerShaderPath);
+            var material = CutoutModeContainerMaterial(BaseContainerShaderGuid);
             material.SetVector(
                 "_DistanceFade", new Vector4(0.1f, 0.01f, 0.5f, 0f));
             material.SetVector(
@@ -651,8 +654,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void DitherScalarOnAtTransparentModeStaysConvertible()
         {
-            var material = TransparentModeContainerMaterial(
-                BaseTransparentContainerShaderPath);
+            var material = TransparentModeContainerMaterial(BaseTransparentContainerShaderGuid);
             material.SetFloat("_UseDither", 1f);
 
             AssertConvertible(
@@ -662,10 +664,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         /// <summary>
         /// The Multi transparent identity is Normal-class only: it has no
         /// <c>FORWARD_BACK</c> pre-pass and no <c>_PreCutoff</c>, so the
-        /// admitted mode-2 evidence carries no pre-pass fact of any kind,
-        /// and no eligibility row may demand one. The material here is the
-        /// admitted vendor transparent state over a stand-in that declares
-        /// no <c>_PreCutoff</c> property at all, captured under a request
+        /// admitted mode-2 evidence carries no pre-pass fact of any kind.
+        /// The material here is the admitted vendor transparent state on
+        /// the vendor container, which declares no <c>_PreCutoff</c>
+        /// property at all, captured under a request
         /// that carries no pre-pass field either; a schema row or gate that
         /// demanded a pre-pass analogue would refuse this state as a missing
         /// fact.
@@ -674,13 +676,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void TransparentModeWithoutPrePassFactsIsConvertible()
         {
-            var material = TransparentModeContainerMaterial(
-                BaseTransparentContainerShaderPath);
+            var material = TransparentModeContainerMaterial(BaseTransparentContainerShaderGuid);
 
             Assert.That(
                 material.HasProperty("_PreCutoff"), Is.False,
                 "the Normal-class Multi transparent state declares no " +
-                "_PreCutoff; the stand-in must not grow one");
+                "_PreCutoff; the vendor container must not grow one");
 
             AssertConvertible(
                 EvaluateMultiAtMode(material, TransparentMode));
@@ -698,7 +699,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         /// Twin leg, labeled: the regular transparent evaluator over the
         /// regular transparent stand-in, which is the evaluator the regular
         /// outline wrapper itself converts through. Multi leg, labeled: the
-        /// Multi evaluator over the outline container stand-in at the same
+        /// Multi evaluator over the outline vendor container at the same
         /// plain transparent scalar surface as the fresh twin state. The
         /// outline-alpha protection question (F0 §7.3) is a pre-existing
         /// regular-family scope fact; this fixture neither widens nor
@@ -712,8 +713,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             var twinResult = EvaluateRegularTransparentTwin(twin);
             AssertConvertible(twinResult);
 
-            var multi = TransparentModeContainerMaterial(
-                OutlineTransparentContainerShaderPath);
+            var multi = TransparentModeContainerMaterial(OutlineTransparentContainerShaderGuid);
             var multiResult =
                 EvaluateMultiAtMode(multi, TransparentMode);
 
@@ -744,26 +744,25 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         // The production capture schema plus the production evaluator at mode 1.
-        // The committed cutout container stand-in already declares the recipe
-        // scalars, so the widened capture evaluates instead of throwing.
+        // The vendor container material carries the recipe scalars at
+        // their vendor defaults, so the widened capture evaluates instead of throwing.
         // --- Falsifier: a conversion boundary that throws on the first admissible Multi conversion fails this fixture. ---
         [Test]
         public void ProductionMultiCaptureEvaluatesModeOneEligibilityToConvertible()
         {
-            var material = CutoutModeContainerMaterial(BaseContainerShaderPath);
+            var material = CutoutModeContainerMaterial(BaseContainerShaderGuid);
             Assert.DoesNotThrow(
                 () => EvaluateUnderProductionRequest(material, CutoutMode));
             AssertConvertible(
                 EvaluateUnderProductionRequest(material, CutoutMode));
         }
 
-        // The mode-2 twin on the committed transparent container stand-in.
+        // The mode-2 twin on the vendor transparent container material.
         // --- Falsifier: a widened request that flips a mode-2 admission into a refusal fails this fixture. ---
         [Test]
         public void ProductionMultiCaptureEvaluatesModeTwoEligibilityToConvertible()
         {
-            var material = TransparentModeContainerMaterial(
-                BaseTransparentContainerShaderPath);
+            var material = TransparentModeContainerMaterial(BaseTransparentContainerShaderGuid);
             Assert.DoesNotThrow(
                 () => EvaluateUnderProductionRequest(material, TransparentMode));
             AssertConvertible(

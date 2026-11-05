@@ -16,6 +16,20 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
     }
 
     /// <summary>
+    /// The check mode of one removed condition (Y3). RemovalEvidence is
+    /// the rule as of 2026-10-25: isNotAnimated counts as true, because
+    /// the vendor removal proves the clause held at lock time (A6.2).
+    /// Strict reads the real Animated tag. A zero-and-zero record may
+    /// not use the removal as its own evidence, so its check runs
+    /// strict.
+    /// </summary>
+    internal enum PoiyomiLockConditionMode
+    {
+        RemovalEvidence,
+        Strict
+    }
+
+    /// <summary>
     /// The lock-time property numbers that a condition reads. The surface is
     /// plain strings and numbers. It never touches a Unity object.
     /// </summary>
@@ -29,19 +43,29 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
         /// <summary>Reads the number of a declared numeric property.</summary>
         bool TryGetNumber(string propertyName, out float value);
+
+        /// <summary>
+        /// True when the material carries an Animated override tag for
+        /// the name and the tag text parses as an int other than 0
+        /// (Y3). Strict mode reads it for an isNotAnimated clause.
+        /// </summary>
+        bool HasNonZeroAnimatedTag(string propertyName);
     }
 
     /// <summary>
-    /// Evaluates one ifex lock condition text with the grammar of spec fact
-    /// 9. The text splits at the first top-level join `&&` or `||` with no
-    /// precedence. An operand must be one bare identifier or one number.
-    /// A bare identifier that is not a declared property reads 0. A texture
-    /// operand makes the comparison false. RenderQueue reads the render
-    /// queue. isNotAnimated counts as true, because the vendor removal
-    /// proves that the clause held at lock time (A6.2). Only a number may
-    /// carry trailing comment text, as the one fact 10 condition with a
-    /// trailing comment requires. A condition outside the accepted forms of
-    /// spec fact 10 is Unsupported, so the caller refuses.
+    /// Evaluates one ifex lock condition text with the grammar of spec
+    /// fact 9. The text splits at the first top-level join `&&` or `||`
+    /// with no precedence. An operand must be one bare identifier or one
+    /// number. A bare identifier that is not a declared property reads
+    /// 0. A texture operand makes the comparison false. RenderQueue
+    /// reads the render queue. isNotAnimated answers by mode. In
+    /// RemovalEvidence mode it counts as true, because the vendor
+    /// removal proves that the clause held at lock time (A6.2). In
+    /// Strict mode it reads the real Animated tag of the operand (Y3).
+    /// Only a number may carry trailing comment text, as the one fact
+    /// 10 condition with a trailing comment requires. A condition
+    /// outside the accepted forms of spec fact 10 is Unsupported, so
+    /// the caller refuses.
     /// </summary>
     internal static class PoiyomiLockCondition
     {
@@ -53,11 +77,13 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         private static readonly string[] VendorNames = { "ThryEditor", "VRCSDK" };
 
         /// <summary>
-        /// Evaluates the whole condition text against the lock-time values.
+        /// Evaluates the whole condition text against the lock-time
+        /// values in the given mode (Y3).
         /// </summary>
         internal static PoiyomiLockConditionOutcome Evaluate(
             string conditionText,
-            IPoiyomiLockConditionValues values)
+            IPoiyomiLockConditionValues values,
+            PoiyomiLockConditionMode mode)
         {
             if (conditionText == null)
             {
@@ -69,7 +95,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 throw new ArgumentNullException(nameof(values));
             }
 
-            return EvaluateRange(conditionText, 0, conditionText.Length, values);
+            return EvaluateRange(conditionText, 0, conditionText.Length, values, mode);
         }
 
         /// <summary>
@@ -94,16 +120,17 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             string text,
             int start,
             int end,
-            IPoiyomiLockConditionValues values)
+            IPoiyomiLockConditionValues values,
+            PoiyomiLockConditionMode mode)
         {
             var join = TopLevelJoinIndex(text, start, end, out var isAnd);
             if (join < 0)
             {
-                return EvaluateLeaf(text, start, end, values);
+                return EvaluateLeaf(text, start, end, values, mode);
             }
 
-            var left = EvaluateRange(text, start, join, values);
-            var right = EvaluateRange(text, join + JoinLength, end, values);
+            var left = EvaluateRange(text, start, join, values, mode);
+            var right = EvaluateRange(text, join + JoinLength, end, values, mode);
 
             // One unsupported clause makes the whole verdict unsupported.
             // The caller refuses, so the join fails closed (A6.2).
@@ -131,7 +158,8 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             string text,
             int start,
             int end,
-            IPoiyomiLockConditionValues values)
+            IPoiyomiLockConditionValues values,
+            PoiyomiLockConditionMode mode)
         {
             TrimRange(text, ref start, ref end);
             if (start >= end)
@@ -142,12 +170,10 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             var nameEnd = IdentifierEnd(text, start, end);
             if (nameEnd > start && nameEnd < end && text[nameEnd] == '(')
             {
-                // The clause holds, because the removal proves it held at
-                // lock time (A6.2). The operand text is not read.
                 if (IsName(text, start, nameEnd, IsNotAnimatedName) &&
                     EndsAtBalancedCloseParen(text, nameEnd, end))
                 {
-                    return PoiyomiLockConditionOutcome.True;
+                    return EvaluateIsNotAnimated(text, nameEnd, end, values, mode);
                 }
 
                 // Any other function, or text after the close paren, sits
@@ -165,6 +191,41 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             var left = ResolveOperand(text, start, operatorIndex, values);
             var right = ResolveOperand(text, operatorIndex + operatorLength, end, values);
             return Compare(left, right, text, operatorIndex, operatorLength);
+        }
+
+        /// <summary>
+        /// Answers one isNotAnimated clause. RemovalEvidence mode holds,
+        /// because the removal proves the clause held at lock time
+        /// (A6.2). Strict mode reads the real Animated tag (Y3). The
+        /// clause holds when the tag is not a nonzero number. An
+        /// operand that is not one bare identifier sits outside the
+        /// accepted forms, so strict mode refuses it.
+        /// </summary>
+        private static PoiyomiLockConditionOutcome EvaluateIsNotAnimated(
+            string text,
+            int openIndex,
+            int end,
+            IPoiyomiLockConditionValues values,
+            PoiyomiLockConditionMode mode)
+        {
+            if (mode == PoiyomiLockConditionMode.RemovalEvidence)
+            {
+                return PoiyomiLockConditionOutcome.True;
+            }
+
+            // The close paren ends the leaf (EndsAtBalancedCloseParen).
+            var operandStart = openIndex + 1;
+            var operandEnd = end - 1;
+            TrimRange(text, ref operandStart, ref operandEnd);
+            var nameEnd = IdentifierEnd(text, operandStart, operandEnd);
+            if (nameEnd == operandStart || nameEnd != operandEnd)
+            {
+                return PoiyomiLockConditionOutcome.Unsupported;
+            }
+
+            var propertyName = text.Substring(
+                operandStart, operandEnd - operandStart);
+            return Verdict(!values.HasNonZeroAnimatedTag(propertyName));
         }
 
         private static PoiyomiLockConditionOutcome Compare(

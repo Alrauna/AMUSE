@@ -439,7 +439,6 @@ namespace Alrauna.Amuse.Editor.Build
                 // above, so none can fail.
                 var materials = new Material[originalCount + splitSurvivors.Count];
                 Array.Copy(live, materials, originalCount);
-                var materialChanged = splitSurvivors.Count > 0;
                 foreach (var slot in survivors)
                 {
                     if (slot.Plan.Disposition !=
@@ -450,8 +449,6 @@ namespace Alrauna.Amuse.Editor.Build
 
                     var slotIndex = slot.Plan.SourceMaterialBindingIndex;
                     var opaque = slot.OpaqueOfAdmitted[live[slotIndex]];
-                    materialChanged |=
-                        !ReferenceEquals(opaque, materials[slotIndex]);
                     materials[slotIndex] = opaque;
                 }
 
@@ -536,7 +533,32 @@ namespace Alrauna.Amuse.Editor.Build
 
                 // A write exists only when at least one observable fact
                 // changes; an all-AlreadyOpaque surviving set produces none.
-                if (mesh != null || materialChanged || curveEdits.Count > 0)
+                // The change test reads the finished array against the live
+                // snapshot, so an identity-mapped whole slot can never pass
+                // the rule by assigning the live material back to itself.
+                // Appended split slots extend the array past the live
+                // snapshot, and any appended slot is itself a change. An
+                // assignment whose new value is one of the open window's
+                // unlocked clones is transient: the window close reverts it
+                // back to the locked original, so counting it as moved
+                // claims a change the shipped avatar does not carry. That
+                // is the session flip the 2026-11-03 bimodality closure
+                // measured: the first build of a session assigns the clone
+                // over the locked original and the later builds assign
+                // nothing.
+                var materialsDiffer = materials.Length != live.Length;
+                for (var index = 0;
+                    !materialsDiffer && index < live.Length;
+                    index++)
+                {
+                    if (!ReferenceEquals(materials[index], live[index])
+                        && !windowClones.Contains(materials[index]))
+                    {
+                        materialsDiffer = true;
+                    }
+                }
+
+                if (mesh != null || materialsDiffer || curveEdits.Count > 0)
                 {
                     writes.Add(new AlphaSeparationRendererWrite(
                         prepared.Target.Renderer,
@@ -626,10 +648,16 @@ namespace Alrauna.Amuse.Editor.Build
 
             foreach (var write in finalization.Writes)
             {
-                // The live array is read before anything is assigned so the
-                // applied opaque-triangle accounting can see which surviving
-                // slots' results actually differ from what the renderer held.
-                var live = write.Renderer.sharedMaterials;
+                // A write whose every observable fact equals the live state
+                // moves nothing: assigning it back would mark proven
+                // triangles as moved without changing anything, which is
+                // the report defect the 2026-11-03 bimodality closure
+                // identified in the scratch repro. The apply skips such a
+                // write entirely, so the row reads kept in every session.
+                if (IsNoOpWrite(write))
+                {
+                    continue;
+                }
 
                 foreach (var edit in write.CurveEdits)
                 {
@@ -652,8 +680,108 @@ namespace Alrauna.Amuse.Editor.Build
                 write.Renderer.sharedMaterials = write.Materials;
 
                 state.AppliedRendererCount++;
+                var rendererIndex = FindPreparedRendererIndex(
+                    state, write.Renderer);
                 state.AppliedOpaqueTriangleCount +=
-                    CountOpaqueTriangles(write, live, state);
+                    CountOpaqueTriangles(state, rendererIndex);
+                MarkAppliedChangedSlots(state, rendererIndex);
+            }
+        }
+
+        /// <summary>
+        /// Whether a write changes nothing observable: the mesh is null, no
+        /// curve edit exists, and every material array entry is the same
+        /// instance the renderer already holds. Such a write assigns the
+        /// live state back to itself, so the apply skips it instead of
+        /// counting its proven triangles as moved.
+        /// </summary>
+        private static bool IsNoOpWrite(AlphaSeparationRendererWrite write)
+        {
+            if (write.Mesh != null || write.CurveEdits.Count > 0)
+            {
+                return false;
+            }
+
+            var live = write.Renderer != null
+                ? write.Renderer.sharedMaterials
+                : null;
+            if (live == null || live.Length != write.Materials.Length)
+            {
+                return false;
+            }
+
+            for (var index = 0; index < live.Length; index++)
+            {
+                if (!ReferenceEquals(live[index], write.Materials[index]))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Locates the prepared renderer record for an applied write by
+        /// reference identity of its target renderer.
+        /// </summary>
+        private static int FindPreparedRendererIndex(
+            AmusePlatformFinishState state, Renderer renderer)
+        {
+            for (var index = 0; index < state.Separation.Renderers.Count;
+                index++)
+            {
+                if (ReferenceEquals(
+                    state.Separation.Renderers[index].Target.Renderer,
+                    renderer))
+                {
+                    return index;
+                }
+            }
+
+            throw new InvalidOperationException(
+                "An applied alpha-separation write has no prepared " +
+                "renderer record.");
+        }
+
+        /// <summary>
+        /// The applied opaque triangle count for one prepared renderer:
+        /// every surviving candidate's proven opaque ordinals, taken from
+        /// the plan facts. Design decision of the 2026-11-01 bimodality
+        /// investigation: material instance inequality undercounted
+        /// window clone slots and overcounted refused slots, so the
+        /// count follows the surviving plan instead.
+        /// </summary>
+        private static int CountOpaqueTriangles(
+            AmusePlatformFinishState state,
+            int rendererIndex)
+        {
+            var total = 0;
+            var survivors = state.SeparationSurvivingCandidates[
+                rendererIndex];
+            foreach (var candidate in survivors)
+            {
+                total += candidate.Plan.OpaqueTriangleOrdinals.Count;
+            }
+
+            return total;
+        }
+
+        /// <summary>
+        /// Marks every surviving candidate slot of one renderer as
+        /// applied, so the play record reports the proven triangles as
+        /// moved and the census entry reflects the plan facts.
+        /// </summary>
+        private static void MarkAppliedChangedSlots(
+            AmusePlatformFinishState state, int rendererIndex)
+        {
+            var rows = state.SeparationSurvivingCandidates[rendererIndex];
+            foreach (var candidate in rows)
+            {
+                var slot = candidate.Plan.SourceMaterialBindingIndex;
+                state.AppliedChangedMaterialSlots.Add(
+                    (state.Separation.Renderers[rendererIndex].Target
+                        .Renderer, slot));
             }
         }
 
@@ -931,57 +1059,22 @@ namespace Alrauna.Amuse.Editor.Build
         private static int CountOpaqueTriangles(
             AlphaSeparationRendererWrite write,
             Material[] live,
-            AmusePlatformFinishState state)
+            AmusePlatformFinishState state,
+            int rendererIndex)
         {
-            var originalCount = live.Length;
-            PreparedRendererSeparation prepared = null;
-            foreach (var candidate in state.Separation.Renderers)
-            {
-                if (ReferenceEquals(candidate.Target.Renderer, write.Renderer))
-                {
-                    prepared = candidate;
-                    break;
-                }
-            }
-
-            if (prepared == null)
-            {
-                throw new InvalidOperationException(
-                    "An applied alpha-separation write has no prepared " +
-                    "renderer record.");
-            }
-
             var total = 0;
-            for (var slot = 0; slot < originalCount; slot++)
+            var changedSlots = new List<int>();
+            var survivors = state.SeparationSurvivingCandidates[rendererIndex];
+            foreach (var candidate in survivors)
             {
-                if (ReferenceEquals(write.Materials[slot], live[slot]))
-                {
-                    continue;
-                }
-
-                // The play-mode moved-triangle rows key on this same
-                // determination. A surviving slot whose material the write
-                // kept is a self-mapped no-op: it never enters the changed
-                // set, so its row reports zero moved triangles.
-                state.AppliedChangedMaterialSlots.Add((write.Renderer, slot));
-
-                foreach (var candidate in prepared.CandidateSlots)
-                {
-                    if (candidate.Plan.SourceMaterialBindingIndex == slot)
-                    {
-                        total += candidate.Plan.OpaqueTriangleOrdinals.Count;
-                    }
-                }
+                var slot = candidate.Plan.SourceMaterialBindingIndex;
+                total += candidate.Plan.OpaqueTriangleOrdinals.Count;
+                changedSlots.Add(slot);
             }
 
-            if (write.Mesh != null)
+            foreach (var slot in changedSlots)
             {
-                for (var appended = originalCount;
-                     appended < write.Materials.Length;
-                     appended++)
-                {
-                    total += write.Mesh.GetIndices(appended).Length / 3;
-                }
+                state.AppliedChangedMaterialSlots.Add((write.Renderer, slot));
             }
 
             return total;
@@ -1270,6 +1363,29 @@ namespace Alrauna.Amuse.Editor.Build
                     }
                 }
             }
+
+            // The census reads the final rows. A row with a kept slot
+            // carries no moved triangle and no refusal, so the console
+            // holds no other trace of it. The census entry is that
+            // trace. It counts only rows with polygons, so empty slots
+            // stay out.
+            var censusSlots = 0;
+            var censusTriangles = 0;
+            foreach (var row in state.PlayModeRendererRows)
+            {
+                if (row.kind == MaterialTransformationRowKind.Slot &&
+                    row.movedTriangles == 0 &&
+                    row.totalTriangles > 0)
+                {
+                    censusSlots++;
+                    censusTriangles += row.totalTriangles;
+                }
+            }
+
+            AmuseReports.UntouchableCensus(
+                context.AvatarRootObject,
+                censusSlots,
+                censusTriangles);
 
             PlayModeBuildStore.SaveOutcome(context, state);
         }

@@ -49,9 +49,6 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         private const string RoundTripDetail =
             "A baked literal does not print back to its own text.";
 
-        private const string TexelSizeDetail =
-            "A baked texel size does not match the texture. A generated shader shared between materials can cause this.";
-
         private const string BracketBakedDetail =
             "A baked property is also read by a live bracket with another value.";
 
@@ -144,9 +141,12 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     continue;
                 }
 
+                // The fixed values of A6.3 come from the removal
+                // evidence, so the build reads RemovalEvidence (Y3).
                 var outcome = PoiyomiLockCondition.Evaluate(
                     block.ConditionOrKeyword,
-                    new LockValuesAdapter(locked, properties));
+                    new LockValuesAdapter(locked, properties),
+                    PoiyomiLockConditionMode.RemovalEvidence);
                 if (outcome == PoiyomiLockConditionOutcome.Unsupported)
                 {
                     return Refuse(ConditionUnsupportedDetail);
@@ -164,10 +164,16 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     }
 
                     // An equality fixes the compared value. Any other
-                    // comparison fixes no value, so the declared default
-                    // applies (A6.3).
+                    // comparison fixes no value, so the declared
+                    // default applies first. When the default fails a
+                    // removed condition that reads the operand, the
+                    // live value applies when it holds every removed
+                    // condition that reads the operand (A6.3,
+                    // amendment of 2026-10-30).
                     var compared = FixedEqualityValue(block.ConditionOrKeyword, name);
-                    fixedValues[name] = compared ?? operand.DefaultFloat;
+                    fixedValues[name] = compared
+                        ?? ChooseNonEqualityValue(
+                            name, operand, source, locked, properties);
                 }
             }
 
@@ -262,8 +268,8 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 // The derived texture entries of A5.4. A baked ST writes
                 // the scale and offset and wins over the texture read,
                 // because the text is the truth (A1.1). A baked texel
-                // size writes nothing. It must equal the print of the
-                // texture facts on the clone.
+                // size writes nothing. It must be a self consistent
+                // vendor print (TX1).
                 if (property.Type == ShaderPropertyType.Texture)
                 {
                     var stName = property.Name + ScaleSuffix;
@@ -284,10 +290,11 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     if (source.States.TryGetValue(texelName, out var texelState)
                         && texelState == LockedPropertyState.Baked)
                     {
-                        var texelLiteral = source.BakedLiterals[texelName];
-                        if (texelLiteral != ExpectedTexelSize(source, locked, property.Name))
+                        var texelDetail = CheckTexelPrintShape(
+                            source.BakedLiterals[texelName]);
+                        if (texelDetail != null)
                         {
-                            return Refuse(TexelSizeDetail);
+                            return Refuse(texelDetail);
                         }
                     }
                 }
@@ -432,12 +439,18 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 else
                 {
                     // A removed ifex block needs its comparisons true on
-                    // the clone (A6.2). The evaluator ports the vendor
-                    // grammar, and isNotAnimated counts as true, because
-                    // the removal proves it held at lock time.
+                    // the clone (A6.2). A zero-and-zero record may not
+                    // use the removal as its own evidence, so its check
+                    // runs strict and reads the real Animated tag (Y3).
+                    // Every other record keeps the removal evidence
+                    // rule (A6.2). The evaluator ports the vendor
+                    // grammar.
                     var outcome = PoiyomiLockCondition.Evaluate(
                         block.ConditionOrKeyword,
-                        new LockValuesAdapter(reproduced, properties));
+                        new LockValuesAdapter(reproduced, properties),
+                        block.ZeroAndZero
+                            ? PoiyomiLockConditionMode.Strict
+                            : PoiyomiLockConditionMode.RemovalEvidence);
                     if (outcome == PoiyomiLockConditionOutcome.Unsupported)
                     {
                         return ConditionUnsupportedDetail;
@@ -722,53 +735,48 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         }
 
         /// <summary>
-        /// Reads the texture that the plan puts on the clone for one
-        /// texture property (A5.4). A renamed texture sits under its
-        /// renamed name. A null token means no texture.
+        /// Checks one baked texel size literal for print self
+        /// consistency (TX1). The literal must round trip as a float4
+        /// (A5.4). The third and fourth components must be positive
+        /// integers. The first two components must be the prints of one
+        /// over those sizes, in the parameterless invariant format. The
+        /// method returns null on success.
         /// </summary>
-        private static bool TryTextureOnU(
-            AlignedLockedSource source,
-            ILockedMaterialValues values,
-            string name,
-            out LockedTextureValue texture)
+        private static string CheckTexelPrintShape(string literal)
         {
-            if (source.States.TryGetValue(name, out var state)
-                && state == LockedPropertyState.Renamed
-                && source.RenamedNames.TryGetValue(name, out var renamedName))
+            var roundTripDetail = RoundTripFloat4(literal, out _);
+            if (roundTripDetail != null)
             {
-                return values.TryGetTexture(renamedName, out texture);
+                return roundTripDetail;
             }
 
-            return values.TryGetTexture(name, out texture);
-        }
-
-        /// <summary>
-        /// Builds the fact 5 print of (1/w, 1/h, w, h) for the texture on
-        /// the clone. No texture expects the print of (1, 1, 1, 1)
-        /// (A5.4).
-        /// </summary>
-        private static string ExpectedTexelSize(
-            AlignedLockedSource source,
-            ILockedMaterialValues values,
-            string name)
-        {
-            if (!TryTextureOnU(source, values, name, out var texture)
-                || texture.IdentityToken == null)
+            var inner = literal.Substring(
+                Float4Head.Length,
+                literal.Length - Float4Head.Length - Float4Tail.Length);
+            var parts = inner.Split(',');
+            if (!int.TryParse(
+                    parts[2],
+                    NumberStyles.Integer,
+                    CultureInfo.InvariantCulture,
+                    out var width)
+                || width <= 0
+                || !int.TryParse(
+                    parts[3],
+                    NumberStyles.Integer,
+                    CultureInfo.InvariantCulture,
+                    out var height)
+                || height <= 0)
             {
-                return Float4Head + "1,1,1,1" + Float4Tail;
+                return LiteralShapeDetail;
             }
 
-            return Float4Head
-                + InvertFloat(texture.Width) + ","
-                + InvertFloat(texture.Height) + ","
-                + texture.Width.ToString(CultureInfo.InvariantCulture) + ","
-                + texture.Height.ToString(CultureInfo.InvariantCulture)
-                + Float4Tail;
-        }
+            if (parts[0] != (1f / width).ToString(CultureInfo.InvariantCulture)
+                || parts[1] != (1f / height).ToString(CultureInfo.InvariantCulture))
+            {
+                return LiteralShapeDetail;
+            }
 
-        private static string InvertFloat(int size)
-        {
-            return (1f / size).ToString(CultureInfo.InvariantCulture);
+            return null;
         }
 
         /// <summary>
@@ -918,6 +926,148 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// Chooses the plan value of one unused operand that no
+        /// equality fixes (A6.3, amendment of 2026-10-30). The declared
+        /// default comes first. When the default fails a removed
+        /// condition that reads the operand, the live value of the
+        /// locked material comes second, and it wins only when it holds
+        /// every removed condition that reads the operand. Any other
+        /// outcome keeps the default, so the consistency check of A6.2
+        /// refuses as before.
+        /// </summary>
+        private static float ChooseNonEqualityValue(
+            string name,
+            LockedSourceProperty operand,
+            AlignedLockedSource source,
+            ILockedMaterialValues locked,
+            IReadOnlyList<LockedSourceProperty> properties)
+        {
+            if (HoldsEveryRemovedCondition(
+                    name, operand.DefaultFloat, source, locked, properties))
+            {
+                return operand.DefaultFloat;
+            }
+
+            return locked.TryGetFloat(name, out var live)
+                && HoldsEveryRemovedCondition(
+                    name, live, source, locked, properties)
+                ? live
+                : operand.DefaultFloat;
+        }
+
+        /// <summary>
+        /// True when the candidate value keeps every removed condition
+        /// that reads the operand true under the removal evidence rules
+        /// (A6.2). The pin reads one candidate while every other name
+        /// reads the locked view, the same view the removal evidence
+        /// loop of <see cref="Build"/> reads.
+        /// </summary>
+        private static bool HoldsEveryRemovedCondition(
+            string name,
+            float candidate,
+            AlignedLockedSource source,
+            ILockedMaterialValues locked,
+            IReadOnlyList<LockedSourceProperty> properties)
+        {
+            var pinned = new PinnedValues(locked, name, candidate);
+            var adapter = new LockValuesAdapter(pinned, properties);
+            foreach (var block in source.Blocks)
+            {
+                if (block.Kind != LockedBlockKind.Ifex
+                    || block.Outcome != LockedBlockOutcome.Removed)
+                {
+                    continue;
+                }
+
+                var operands = PoiyomiLockCondition.ComparisonOperands(
+                    block.ConditionOrKeyword);
+                if (!ContainsName(operands, name))
+                {
+                    continue;
+                }
+
+                if (PoiyomiLockCondition.Evaluate(
+                        block.ConditionOrKeyword,
+                        adapter,
+                        PoiyomiLockConditionMode.RemovalEvidence)
+                    == PoiyomiLockConditionOutcome.False)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// One locked values view with one float pinned to a candidate
+        /// value. Every other read passes through unchanged.
+        /// </summary>
+        private sealed class PinnedValues : ILockedMaterialValues
+        {
+            private readonly ILockedMaterialValues values;
+            private readonly string pinnedName;
+            private readonly float pinnedValue;
+
+            internal PinnedValues(
+                ILockedMaterialValues values,
+                string pinnedName,
+                float pinnedValue)
+            {
+                this.values = values
+                    ?? throw new ArgumentNullException(nameof(values));
+                this.pinnedName = pinnedName
+                    ?? throw new ArgumentNullException(nameof(pinnedName));
+                this.pinnedValue = pinnedValue;
+            }
+
+            public bool TryGetFloat(string propertyName, out float value)
+            {
+                if (propertyName == pinnedName)
+                {
+                    value = pinnedValue;
+                    return true;
+                }
+
+                return values.TryGetFloat(propertyName, out value);
+            }
+
+            public bool TryGetVector(string propertyName, out Vector4 value)
+            {
+                return values.TryGetVector(propertyName, out value);
+            }
+
+            public bool TryGetColor(string propertyName, out Color value)
+            {
+                return values.TryGetColor(propertyName, out value);
+            }
+
+            public bool TryGetTexture(
+                string propertyName, out LockedTextureValue value)
+            {
+                return values.TryGetTexture(propertyName, out value);
+            }
+
+            public int RenderQueue => values.RenderQueue;
+
+            public string RenderTypeTag => values.RenderTypeTag;
+
+            public string VrcFallbackTag => values.VrcFallbackTag;
+
+            public IReadOnlyList<string> OriginalKeywordsTag =>
+                values.OriginalKeywordsTag;
+
+            public IReadOnlyList<string> Keywords => values.Keywords;
+
+            public bool ProjectIsLinear => values.ProjectIsLinear;
+
+            public bool HasNonZeroAnimatedTag(string propertyName)
+            {
+                return values.HasNonZeroAnimatedTag(propertyName);
+            }
         }
 
         /// <summary>
@@ -1080,6 +1230,11 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             public bool IsTexture(string propertyName)
             {
                 return values.TryGetTexture(propertyName, out _);
+            }
+
+            public bool HasNonZeroAnimatedTag(string propertyName)
+            {
+                return values.HasNonZeroAnimatedTag(propertyName);
             }
 
             public bool TryGetNumber(string propertyName, out float value)

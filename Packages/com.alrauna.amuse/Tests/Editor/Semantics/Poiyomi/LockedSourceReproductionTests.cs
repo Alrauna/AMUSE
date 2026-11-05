@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
 using NUnit.Framework;
 using UnityEngine;
@@ -22,9 +23,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 
         private const string RoundTripDetail =
             "A baked literal does not print back to its own text.";
-
-        private const string TexelSizeDetail =
-            "A baked texel size does not match the texture. A generated shader shared between materials can cause this.";
 
         private const string BracketBakedDetail =
             "A baked property is also read by a live bracket with another value.";
@@ -72,6 +70,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             private readonly Dictionary<string, LockedTextureValue> textures =
                 new Dictionary<string, LockedTextureValue>();
 
+            private readonly Dictionary<string, bool> nonZeroAnimatedTags =
+                new Dictionary<string, bool>();
+
             internal FakeValues WithFloat(string name, float value)
             {
                 floats[name] = value;
@@ -93,6 +94,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             internal FakeValues WithTexture(string name, LockedTextureValue value)
             {
                 textures[name] = value;
+                return this;
+            }
+
+            internal FakeValues WithNonZeroAnimatedTag(string name, bool value)
+            {
+                nonZeroAnimatedTags[name] = value;
                 return this;
             }
 
@@ -164,6 +171,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             public bool TryGetTexture(string propertyName, out LockedTextureValue value)
             {
                 return textures.TryGetValue(propertyName, out value);
+            }
+
+            public bool HasNonZeroAnimatedTag(string propertyName)
+            {
+                return nonZeroAnimatedTags.TryGetValue(propertyName, out var value)
+                    && value;
             }
 
             internal FakeValues WithoutTexture(string name)
@@ -311,14 +324,16 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             LockedBlockKind kind,
             LockedBlockOutcome outcome,
             string conditionOrKeyword,
-            int line)
+            int line,
+            bool zeroAndZero = false)
         {
-            return new LockedBlockRecord(kind, outcome, conditionOrKeyword, line);
+            return new LockedBlockRecord(kind, outcome, conditionOrKeyword, zeroAndZero, line);
         }
 
         /// <summary>
         /// Builds one aligned record by hand (A4). Defaults stand for the
-        /// parts a fixture does not use.
+        /// parts a fixture does not use. The era defaults to the bundled
+        /// era.
         /// </summary>
         private static AlignedLockedSource Source(
             IReadOnlyDictionary<string, LockedPropertyState> states,
@@ -329,10 +344,11 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             IReadOnlyList<IReadOnlyList<string>> runs = null,
             IReadOnlyList<LockedBlockRecord> blocks = null,
             string suffix = null,
-            string surviving = null)
+            string surviving = null,
+            PoiyomiLockEra era = PoiyomiLockEra.Bundled9364)
         {
             return new AlignedLockedSource(
-                PoiyomiLockEra.Bundled9364,
+                era,
                 suffix,
                 states,
                 renamed ?? Names(),
@@ -448,7 +464,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             AssertConsistent(source, properties, locked, plan, "S_Tex", "S_Tex_S_ST");
         }
 
-        // --- Falsifier 8: baked value edited after lock ---
+        // --- Falsifier locked-source-alignment 8: baked value edited after lock ---
         // An implementation that copies the saved value instead of the
         // parsed literal writes one and fails the plan value assertion.
         // The guard runs the same fixture with the saved value zero. Both
@@ -609,12 +625,67 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         }
 
         /// <summary>
-        /// A baked texel size must equal the fact 5 print of the texture
-        /// facts on the clone. A mismatch refuses and names a shared
-        /// generated shader as a possible cause (A5.4, fact 14).
+        /// LA3: text on a continuation line inside a multiline display
+        /// string is string data. It cannot create a fake Gamma property
+        /// name, and the real Gamma color keeps the full value path. The
+        /// property's Gamma flag comes from the extracted name set, so
+        /// the value assertion exercises the whole propagation. The HDR
+        /// and Gamma flags agree, so the linear project inverts the
+        /// baked RGB and keeps the exact alpha (A5.4, fact 6). A lost
+        /// Gamma flag would leave the HDR color raw and fail this check.
         /// </summary>
         [Test]
-        public void BakedTexelSizeThatDiffersFromTheTextureRefusesAndNamesSharing()
+        public void MultilineDisplayTextCannotCreateGammaProperties()
+        {
+            var text = string.Join("\n", new[]
+            {
+                "Shader \"Custom/GammaScan\"",
+                "{",
+                "    Properties",
+                "    {",
+                "        _F (\"F line {",
+                "[Gamma] _Fake (F, Float) = 0",
+                "        tail\", Float) = 0",
+                "        [HDR][Gamma] _H (\"H\", Color) = (0.5, 0.25, 0.125, 0.75)",
+                "    }",
+                "}",
+                ""
+            });
+            var names = PoiyomiLockedSourceAlignment.GammaPropertyNames(text);
+            Assert.That(names, Is.EqualTo(new[] { "_H" }),
+                "Only the real declaration outside the string counts.");
+
+            var properties = new[]
+            {
+                Prop(
+                    "_H",
+                    ShaderPropertyType.Color,
+                    hdr: true,
+                    gamma: names.Contains("_H"))
+            };
+            var source = Source(
+                States(("_H", LockedPropertyState.Baked)),
+                baked: Names(("_H", "float4(0.5,0.25,0.125,0.75)")));
+            var locked = new FakeValues().WithProjectLinear(true);
+            var plan = BuiltPlan(source, properties, locked);
+
+            var expected = new Color(0.5f, 0.25f, 0.125f).gamma;
+            expected.a = 0.75f;
+            Assert.That(plan.ColorWrites["_H"], Is.EqualTo(expected),
+                "The agreeing HDR and Gamma flags invert the baked RGB in the linear project.");
+        }
+
+        /// <summary>
+        /// A baked texel size must be a self consistent vendor print.
+        /// Each reciprocal component must equal the print of one over
+        /// its matching size component. This literal round trips but
+        /// breaks that relation, so it refuses with the shape sentence
+        /// (TX1, falsifier 1). An implementation that keeps the equality
+        /// against the fresh texture print refuses with the old texel
+        /// sentence and fails here.
+        /// </summary>
+        [Test]
+        public void BakedTexelSizeWhoseReciprocalDisagreesRefuses()
         {
             var properties = new[] { Prop("_Tex", ShaderPropertyType.Texture) };
             var source = Source(
@@ -628,7 +699,141 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 
             var result = LockedSourceReproduction.Build(source, properties, locked);
 
-            AssertRefusal(result, TexelSizeDetail);
+            AssertRefusal(result, LiteralShapeDetail);
+        }
+
+        /// <summary>
+        /// A baked texel size that is a well formed vendor print passes
+        /// even when the texture on the values snapshot has another
+        /// size. The bake is history (TX1). An implementation that
+        /// keeps the equality against the fresh texture print refuses
+        /// here.
+        /// </summary>
+        [Test]
+        public void WellFormedStaleBakePassesOnDifferentTextureSize()
+        {
+            var properties = new[] { Prop("_Tex", ShaderPropertyType.Texture) };
+            var source = Source(
+                States(
+                    ("_Tex", LockedPropertyState.Unused),
+                    ("_Tex_TexelSize", LockedPropertyState.Baked)),
+                baked: Names(("_Tex_TexelSize", "float4(0.0009765625,0.0009765625,1024,1024)")));
+            var locked = new FakeValues().WithTexture(
+                "_Tex",
+                new LockedTextureValue("token-d", 512, 512, Vector2.one, Vector2.zero));
+
+            BuiltPlan(source, properties, locked);
+        }
+
+        /// <summary>
+        /// A baked texel size whose size components are not positive
+        /// integers is not a vendor print. It refuses with the shape
+        /// sentence (TX1, falsifier 2). An implementation that accepts
+        /// any literal that round trips passes this bake and fails
+        /// here.
+        /// </summary>
+        [Test]
+        public void ZeroOrNegativeBakeSizeRefuses()
+        {
+            var properties = new[] { Prop("_Tex", ShaderPropertyType.Texture) };
+            var source = Source(
+                States(
+                    ("_Tex", LockedPropertyState.Unused),
+                    ("_Tex_TexelSize", LockedPropertyState.Baked)),
+                baked: Names(("_Tex_TexelSize", "float4(1,1,0,0)")));
+            var locked = new FakeValues().WithTexture(
+                "_Tex",
+                new LockedTextureValue("token-e", 512, 512, Vector2.one, Vector2.zero));
+
+            var result = LockedSourceReproduction.Build(source, properties, locked);
+
+            AssertRefusal(result, LiteralShapeDetail);
+        }
+
+        /// <summary>
+        /// A baked texel size whose components do not print back to
+        /// their own text refuses with the round trip sentence (TX1,
+        /// falsifier 3). An implementation that keeps only the texture
+        /// equality or drops the round trip check for texel literals
+        /// fails here.
+        /// </summary>
+        [Test]
+        public void BakeThatDoesNotRoundTripRefusesWithTheRoundTripDetail()
+        {
+            var properties = new[] { Prop("_Tex", ShaderPropertyType.Texture) };
+            var source = Source(
+                States(
+                    ("_Tex", LockedPropertyState.Unused),
+                    ("_Tex_TexelSize", LockedPropertyState.Baked)),
+                baked: Names(("_Tex_TexelSize", "float4(0.0019531250,0.001953125,512,512)")));
+            var locked = new FakeValues().WithTexture(
+                "_Tex",
+                new LockedTextureValue("token-f", 512, 512, Vector2.one, Vector2.zero));
+
+            var result = LockedSourceReproduction.Build(source, properties, locked);
+
+            AssertRefusal(result, RoundTripDetail);
+        }
+
+        /// <summary>
+        /// Values with no texture on the slot and a well formed bake of
+        /// a 512 print pass (TX1, falsifier 4). An implementation that
+        /// keeps the texture print comparison expects the print of one,
+        /// one, one, one for no texture and refuses here.
+        /// </summary>
+        [Test]
+        public void NoTextureWithWellFormedBakePasses()
+        {
+            var properties = new[] { Prop("_Tex", ShaderPropertyType.Texture) };
+            var source = Source(
+                States(
+                    ("_Tex", LockedPropertyState.Unused),
+                    ("_Tex_TexelSize", LockedPropertyState.Baked)),
+                baked: Names(("_Tex_TexelSize", "float4(0.001953125,0.001953125,512,512)")));
+            var locked = new FakeValues();
+
+            BuiltPlan(source, properties, locked);
+        }
+
+        /// <summary>
+        /// Values with no texture on the slot and the unit bake pass.
+        /// The unit print is the print the old equality expects for no
+        /// texture, so this fixture guards the empty texture rule under
+        /// both implementations (TX1, falsifier 4 guard).
+        /// </summary>
+        [Test]
+        public void NoTextureWithUnitBakePasses()
+        {
+            var properties = new[] { Prop("_Tex", ShaderPropertyType.Texture) };
+            var source = Source(
+                States(
+                    ("_Tex", LockedPropertyState.Unused),
+                    ("_Tex_TexelSize", LockedPropertyState.Baked)),
+                baked: Names(("_Tex_TexelSize", "float4(1,1,1,1)")));
+            var locked = new FakeValues();
+
+            BuiltPlan(source, properties, locked);
+        }
+
+        /// <summary>
+        /// The installed era runs the same reciprocal rule (TX5). A
+        /// well formed bake of a 512 print with no texture on the slot
+        /// passes. An implementation that keeps the texture print
+        /// comparison refuses here.
+        /// </summary>
+        [Test]
+        public void InstalledEraReciprocalRuleHolds()
+        {
+            var properties = new[] { Prop("_Tex", ShaderPropertyType.Texture) };
+            var source = Source(
+                States(
+                    ("_Tex", LockedPropertyState.Unused),
+                    ("_Tex_TexelSize", LockedPropertyState.Baked)),
+                baked: Names(("_Tex_TexelSize", "float4(0.001953125,0.001953125,512,512)")),
+                era: PoiyomiLockEra.Thry2743);
+            var locked = new FakeValues();
+
+            BuiltPlan(source, properties, locked);
         }
 
         /// <summary>
@@ -656,7 +861,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 "The equal live value passes and the literal wins.");
         }
 
-        // --- Falsifier 9: enum-only property ---
+        // --- Falsifier locked-source-alignment 9: enum-only property ---
         // An implementation that writes no value for an unused property
         // misses the enum text and fails the plan value assertion. The
         // no-op guards prove the fixture reaches the path. The state is
@@ -805,7 +1010,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 "The missing texture write refuses the check.");
         }
 
-        // --- Falsifier 10: shared generated shader ---
+        // --- Falsifier locked-source-alignment 10: shared generated shader ---
         // An implementation that reads the keyword list from the
         // OriginalKeywords tag writes an empty list and fails. The tag of
         // the fixture is empty. The no-op guard is the non-empty define
@@ -853,7 +1058,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             AssertConsistent(source, properties, locked, plan);
         }
 
-        // --- Falsifier 22: keyword define consumed as the PROP define ---
+        // --- Falsifier locked-source-alignment 22: keyword define consumed as the PROP define ---
         // An implementation that reads the longest suffix takes the one
         // keyword define for the PROP define and drops the keyword. The
         // texture was empty at the lock and its texture keyword was
@@ -929,7 +1134,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 "The false condition refuses the check.");
         }
 
-        // --- Falsifier 21: unsaved declared operand reads zero ---
+        // --- Falsifier locked-source-alignment 21: unsaved declared operand reads zero ---
         // An implementation that reads a missing saved entry as zero
         // accepts a removed block that the finished clone does not hold.
         // The saved entry was zero at the lock and a later edit cleared
@@ -999,6 +1204,143 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 "The declared default holds the removed condition.");
         }
 
+        // --- Falsifier 3: an M2 record that marks the inner guard
+        // Removed. ---
+        // The lock removes the wrapper body, so the zero-and-zero rule
+        // of Y3 records the wrapper Removed with the guard
+        // NotEvaluated. An implementation that adopts the kept trial's
+        // nested records marks the inner guard Removed. A6.1 then
+        // demands the guard keyword on the clone. The keyword sits in
+        // no pragma line, so no run carries it, and the check refuses.
+        // The strict wrapper check of Y3 makes the nested records
+        // moot. The no-op guard is the marker assertions. They prove
+        // the wrapper record reaches the removed-ifex branch of the
+        // check.
+        [Test]
+        public void LightVolumeWrapperRecordPassesTheConsistencyCheck()
+        {
+            var properties = new[]
+            {
+                Prop("_LightingEnableLightVolumes", ShaderPropertyType.Float)
+            };
+            var source = Source(
+                States(("_LightingEnableLightVolumes", LockedPropertyState.Live)),
+                blocks: Blocks(
+                    Block(
+                        LockedBlockKind.Ifex,
+                        LockedBlockOutcome.Removed,
+                        "_LightingEnableLightVolumes==0 && " +
+                        "isNotAnimated(_LightingEnableLightVolumes)",
+                        60,
+                        zeroAndZero: true),
+                    Block(
+                        LockedBlockKind.Ifndef,
+                        LockedBlockOutcome.NotEvaluated,
+                        "VRC_LIGHT_VOLUMES_INCLUDED",
+                        61)));
+
+            Assert.That(source.Blocks[0].Kind, Is.EqualTo(LockedBlockKind.Ifex),
+                "The wrapper record is an ifex record.");
+            Assert.That(source.Blocks[0].Outcome,
+                Is.EqualTo(LockedBlockOutcome.Removed),
+                "The wrapper record is Removed.");
+            Assert.That(source.Blocks[0].ZeroAndZero, Is.True,
+                "The wrapper record carries the zero-and-zero marker.");
+            Assert.That(source.Blocks[1].Outcome,
+                Is.EqualTo(LockedBlockOutcome.NotEvaluated),
+                "The guard record is NotEvaluated.");
+            Assert.That(source.DefineRuns[0],
+                Does.Not.Contain("VRC_LIGHT_VOLUMES_INCLUDED"),
+                "The guard keyword sits in no pragma line.");
+
+            var reproduced = new FakeValues()
+                .WithFloat("_LightingEnableLightVolumes", 0f)
+                .WithNonZeroAnimatedTag("_LightingEnableLightVolumes", false);
+            Assert.That(reproduced.Keywords,
+                Does.Not.Contain("VRC_LIGHT_VOLUMES_INCLUDED"),
+                "The clone keywords never hold the guard keyword.");
+
+            var detail = LockedSourceReproduction.CheckConsistency(
+                source,
+                properties,
+                reproduced);
+
+            Assert.That(detail, Is.Null,
+                "The strict wrapper check holds and the guard checks nothing.");
+        }
+
+        // --- Falsifier 11: a zero-and-zero record that reuses the A6.2
+        // isNotAnimated bypass. ---
+        // The lock keeps the wrapper and removes the inner body, and
+        // the inner body holds an alpha-relevant line. The wrapper
+        // markers are comments, so both wrapper trials consume zero
+        // generated lines. The zero-and-zero rule of Y3 adopts the
+        // removed trial. An implementation that reuses the A6.2
+        // removal evidence rule counts the isNotAnimated clause true.
+        // Strict mode reads the real Animated tag. Both tags are one,
+        // so the clause is false and the check refuses. The no-op
+        // guard is the same pair with the tag read false. It passes
+        // the check, so the fixture reaches the condition check.
+        [Test]
+        public void KeptWrapperWithAnAnimatedTagRefusesUnderTheStrictCheck()
+        {
+            var properties = new[]
+            {
+                Prop("P", ShaderPropertyType.Float),
+                Prop("Q", ShaderPropertyType.Float)
+            };
+            var source = Source(
+                States(("P", LockedPropertyState.Live), ("Q", LockedPropertyState.Live)),
+                blocks: Blocks(
+                    Block(
+                        LockedBlockKind.Ifex,
+                        LockedBlockOutcome.Removed,
+                        "P==0 && isNotAnimated(P)",
+                        70,
+                        zeroAndZero: true),
+                    Block(
+                        LockedBlockKind.Ifex,
+                        LockedBlockOutcome.NotEvaluated,
+                        "Q==1",
+                        71)));
+
+            Assert.That(source.Blocks[0].Outcome,
+                Is.EqualTo(LockedBlockOutcome.Removed),
+                "The zero-and-zero rule adopts the removed trial.");
+            Assert.That(source.Blocks[0].ZeroAndZero, Is.True,
+                "The wrapper record carries the zero-and-zero marker.");
+
+            var tagged = new FakeValues()
+                .WithFloat("P", 0f)
+                .WithFloat("Q", 1f)
+                .WithNonZeroAnimatedTag("P", true)
+                .WithNonZeroAnimatedTag("Q", true);
+
+            var detail = LockedSourceReproduction.CheckConsistency(
+                source,
+                properties,
+                tagged);
+
+            Assert.That(detail, Is.EqualTo(ConditionDetail),
+                "The true Animated tag fails the strict check.");
+
+            // No-op guard: the same pair with the tag read false passes
+            // the check. The fixture reaches the condition check.
+            var untagged = new FakeValues()
+                .WithFloat("P", 0f)
+                .WithFloat("Q", 1f)
+                .WithNonZeroAnimatedTag("P", false)
+                .WithNonZeroAnimatedTag("Q", false);
+
+            var passing = LockedSourceReproduction.CheckConsistency(
+                source,
+                properties,
+                untagged);
+
+            Assert.That(passing, Is.Null,
+                "The false tag read holds the strict check.");
+        }
+
         /// <summary>
         /// A removed ifex block with a condition outside the accepted
         /// forms refuses (A6.2, fact 10).
@@ -1025,7 +1367,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 "The unsupported condition refuses the check.");
         }
 
-        // --- Falsifier 11: outline set to 2 ---
+        // --- Falsifier locked-source-alignment 11: outline set to 2 ---
         // An implementation that takes the compared value writes two and
         // fails the plan value assertion. An inequality fixes no value,
         // so the plan writes the declared default. The no-op guards prove
@@ -1057,6 +1399,43 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         }
 
         /// <summary>
+        /// An inequality fixes no compared value (A6.3, amendment of
+        /// 2026-10-30). When the declared default fails the removed
+        /// condition, the plan takes the live value of the locked
+        /// material, because that value holds every removed condition
+        /// that reads the operand.
+        /// </summary>
+        [Test]
+        public void UnusedOperandOfAnInequalityTakesTheLiveValueWhenTheDefaultFails()
+        {
+            var properties = new[]
+            {
+                Prop("_P", ShaderPropertyType.Float, defaultFloat: 5f)
+            };
+            var source = Source(
+                States(("_P", LockedPropertyState.Unused)),
+                blocks: Blocks(Block(
+                    LockedBlockKind.Ifex,
+                    LockedBlockOutcome.Removed,
+                    "_P!=5",
+                    24)));
+
+            Assert.That(properties[0].DefaultFloat, Is.EqualTo(5f),
+                "The declared default fails the removed condition.");
+            var locked = new FakeValues().WithFloat("_P", 1f);
+            Assert.That(
+                locked.TryGetFloat("_P", out var live) && live == 1f,
+                Is.True,
+                "The live value holds the removed condition.");
+
+            var plan = BuiltPlan(source, properties, locked);
+
+            Assert.That(plan.FloatWrites["_P"], Is.EqualTo(1f),
+                "The live value replaces the failing default.");
+            AssertConsistent(source, properties, locked, plan);
+        }
+
+        /// <summary>
         /// An equality fixes the value of an unused operand (A6.3). The
         /// declared default of the fixture differs, so the compared value
         /// wins.
@@ -1081,7 +1460,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             AssertConsistent(source, properties, locked, plan);
         }
 
-        // --- Falsifier 12: fixed value overrides enum text ---
+        // --- Falsifier locked-source-alignment 12: fixed value overrides enum text ---
         // An implementation that writes the fixed value of A6.3 without
         // comparing it to the recorded enum text hides the disagreement.
         // The guards prove the fixture reaches the path. The state is
@@ -1129,7 +1508,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             AssertConsistent(agreeingSource, properties, agreeingLocked, agreeingPlan);
         }
 
-        // --- Falsifier 13: fixed value overrides a live bracket ---
+        // --- Falsifier locked-source-alignment 13: fixed value overrides a live bracket ---
         // An implementation that writes the fixed value of A6.3 without
         // comparing it to the live bracket value changes what the
         // bracket renders. The guards prove the fixture reaches the
@@ -1264,6 +1643,354 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 "The override tag moves to the plan.");
             Assert.That(plan.VrcFallbackTag, Is.EqualTo("Fallback"),
                 "The fallback tag moves to the plan.");
+        }
+
+        /// <summary>Joins fixture lines with one newline.</summary>
+        private static string Join(IEnumerable<string> lines)
+        {
+            return string.Join("\n", lines);
+        }
+
+        /// <summary>
+        /// Builds one installed era pair whose program body holds a true
+        /// declaration and a typed local initializer read (LA4). The
+        /// generated program body is written by hand.
+        /// </summary>
+        private static (string Original, string Generated) InitializerPair(
+            string generatedLastProgramLine)
+        {
+            var original = Join(new[]
+            {
+                "Shader \"Custom/Small\"",
+                "{",
+                "    Properties",
+                "    {",
+                "        [ThryShaderOptimizerLockButton] _Lock (\"Lock\", Float) = 0",
+                "        _P (\"P\", Float) = 0.5",
+                "    }",
+                "    SubShader",
+                "    {",
+                "        Pass",
+                "        {",
+                "            CGPROGRAM",
+                "            #pragma vertex vert",
+                "            float _P;",
+                "            float c = _P;",
+                "            ENDCG",
+                "        }",
+                "    }",
+                "}"
+            });
+            var generated = Join(new[]
+            {
+                "Shader \"Hidden/Locked/Custom/Small/k1\"",
+                "{",
+                "    Properties",
+                "    {",
+                "        [ThryShaderOptimizerLockButton] _Lock (\"Lock\", Float) = 1",
+                "        _P (\"P\", Float) = 0.5",
+                "    }",
+                "    SubShader",
+                "    {",
+                "        Pass",
+                "        {",
+                "            CGPROGRAM",
+                " #define OPTIMIZER_ENABLED ",
+                "            #pragma vertex vert",
+                "            float _P;",
+                "            float c = " + generatedLastProgramLine + ";",
+                "            ENDCG",
+                "        }",
+                "    }",
+                "}"
+            });
+            return (original, generated);
+        }
+
+        /// <summary>
+        /// The installed era bake of a local initializer reads a scalar
+        /// that the plan writes back as one float (LA4). The alignment
+        /// facts and the planned value both come from the real aligner
+        /// and the real builder, not from a hand built record.
+        /// </summary>
+        [Test]
+        public void BakedInitializerLiteralPlansTheFloatWrite()
+        {
+            var properties = new[]
+            {
+                Prop("_Lock", ShaderPropertyType.Float),
+                Prop("_P", ShaderPropertyType.Float, 0.5f)
+            };
+            var (original, generated) = InitializerPair("0.5");
+            var aligned = PoiyomiLockedSourceAlignment.AlignForEra(
+                original, generated, properties, PoiyomiLockEra.Thry2743);
+            Assert.That(aligned.Succeeded, Is.True, aligned.RefusalDetail ?? "refused");
+            Assert.That(
+                aligned.Source.BakedLiterals["_P"], Is.EqualTo("0.5"),
+                "The initializer bake records the literal.");
+            var plan = BuiltPlan(aligned.Source, properties, new FakeValues());
+            Assert.That(plan.FloatWrites["_P"], Is.EqualTo(0.5f),
+                "The baked initializer plans the float write.");
+        }
+
+        /// <summary>
+        /// The kept exclusion block declaration format decides the
+        /// integer print of the first bake (LA4). The plan writes the
+        /// integer value (LA-F10).
+        /// </summary>
+        [Test]
+        public void WinningTrialFormatPlansIntegerWrite()
+        {
+            var properties = new[]
+            {
+                Prop("_Lock", ShaderPropertyType.Float),
+                Prop("_K", ShaderPropertyType.Float),
+                Prop("_P", ShaderPropertyType.Float, 0.5f)
+            };
+            var filler = new System.Text.StringBuilder();
+            for (var i = 1; i <= 12; i++)
+            {
+                filler.Append("                o.Uv = 0.").Append(i).Append(";\n");
+            }
+
+            var original = Join(new[]
+            {
+                "Shader \"Custom/Small\"",
+                "{",
+                "    Properties",
+                "    {",
+                "        [ThryShaderOptimizerLockButton] _Lock (\"Lock\", Float) = 0",
+                "        _K (\"K\", Float) = 0",
+                "        _P (\"P\", Float) = 0.5",
+                "    }",
+                "    SubShader",
+                "    {",
+                "        Pass",
+                "        {",
+                "            CGPROGRAM",
+                "            #pragma vertex vert",
+                "            //ifex _K==0",
+                "            int _P;",
+                "            o.Gloss = 1;",
+                "            //endex",
+                filler + "            o.Albedo = _P;",
+                "            ENDCG",
+                "        }",
+                "    }",
+                "}"
+            });
+            var generated = Join(new[]
+            {
+                "Shader \"Hidden/Locked/Custom/Small/k1\"",
+                "{",
+                "    Properties",
+                "    {",
+                "        [ThryShaderOptimizerLockButton] _Lock (\"Lock\", Float) = 1",
+                "        _K (\"K\", Float) = 0",
+                "        _P (\"P\", Float) = 0.5",
+                "    }",
+                "    SubShader",
+                "    {",
+                "        Pass",
+                "        {",
+                "            CGPROGRAM",
+                " #define OPTIMIZER_ENABLED ",
+                "            #pragma vertex vert",
+                "            int _P;",
+                "            o.Gloss = 1;",
+                filler + "            o.Albedo = 2;",
+                "            ENDCG",
+                "        }",
+                "    }",
+                "}"
+            });
+            var aligned = PoiyomiLockedSourceAlignment.AlignForEra(
+                original, generated, properties, PoiyomiLockEra.Thry2743);
+            Assert.That(aligned.Succeeded, Is.True, aligned.RefusalDetail ?? "refused");
+            Assert.That(
+                aligned.Source.BakedLiterals["_P"], Is.EqualTo("2"),
+                "The kept declaration sets the integer print.");
+            var plan = BuiltPlan(aligned.Source, properties, new FakeValues());
+            Assert.That(plan.FloatWrites["_P"], Is.EqualTo(2f),
+                "The kept declaration format plans the integer write.");
+        }
+
+        /// <summary>
+        /// A later surviving float declaration changes the print before
+        /// the first bake (LA4). The plan writes the decimal value.
+        /// </summary>
+        [Test]
+        public void LaterDeclarationPlansTheFirstBake()
+        {
+            var properties = new[]
+            {
+                Prop("_Lock", ShaderPropertyType.Float),
+                Prop("_P", ShaderPropertyType.Float, 0.5f)
+            };
+            var original = Join(new[]
+            {
+                "Shader \"Custom/Small\"",
+                "{",
+                "    Properties",
+                "    {",
+                "        [ThryShaderOptimizerLockButton] _Lock (\"Lock\", Float) = 0",
+                "        _P (\"P\", Float) = 0.5",
+                "    }",
+                "    SubShader",
+                "    {",
+                "        Pass",
+                "        {",
+                "            CGPROGRAM",
+                "            #pragma vertex vert",
+                "            int _P;",
+                "            ENDCG",
+                "        }",
+                "        Pass",
+                "        {",
+                "            CGPROGRAM",
+                "            #pragma vertex vert",
+                "            float _P;",
+                "            o.Albedo = _P;",
+                "            ENDCG",
+                "        }",
+                "    }",
+                "}"
+            });
+            var generated = Join(new[]
+            {
+                "Shader \"Hidden/Locked/Custom/Small/k1\"",
+                "{",
+                "    Properties",
+                "    {",
+                "        [ThryShaderOptimizerLockButton] _Lock (\"Lock\", Float) = 1",
+                "        _P (\"P\", Float) = 0.5",
+                "    }",
+                "    SubShader",
+                "    {",
+                "        Pass",
+                "        {",
+                "            CGPROGRAM",
+                " #define OPTIMIZER_ENABLED ",
+                "            #pragma vertex vert",
+                "            int _P;",
+                "            ENDCG",
+                "        }",
+                "        Pass",
+                "        {",
+                "            CGPROGRAM",
+                " #define OPTIMIZER_ENABLED ",
+                "            #pragma vertex vert",
+                "            float _P;",
+                "            o.Albedo = 0.5;",
+                "            ENDCG",
+                "        }",
+                "    }",
+                "}"
+            });
+            var aligned = PoiyomiLockedSourceAlignment.AlignForEra(
+                original, generated, properties, PoiyomiLockEra.Thry2743);
+            Assert.That(aligned.Succeeded, Is.True, aligned.RefusalDetail ?? "refused");
+            Assert.That(
+                aligned.Source.BakedLiterals["_P"], Is.EqualTo("0.5"),
+                "The later float declaration sets the decimal print.");
+            var plan = BuiltPlan(aligned.Source, properties, new FakeValues());
+            Assert.That(plan.FloatWrites["_P"], Is.EqualTo(0.5f),
+                "The later declaration plans the decimal write.");
+        }
+
+        // --- Falsifier LA-F11: an unconstrained changed scalar is not
+        // claimed as detected. ---
+        // A6 and the seventh fact are residual checks. The check reads
+        // the define runs and the recorded removed blocks. It does not
+        // compare a restored scalar with its literal. The fixture holds
+        // one baked scalar that no removed condition, bracket read, enum
+        // text, or define run reads. The plan applies, the view takes
+        // the planned value, and a later change of the same view stays
+        // consistent. This characterizes the check boundary. It is no
+        // request to strengthen the check.
+        [Test]
+        public void UnconstrainedBakedScalarChangeKeepsConsistency()
+        {
+            var properties = new[] { Prop("_P", ShaderPropertyType.Float) };
+            var source = Source(
+                States(("_P", LockedPropertyState.Baked)),
+                baked: Names(("_P", "0.75")));
+
+            // The no-op guard: the fixture constrains nothing. No block
+            // or run reads the scalar.
+            Assert.That(source.Blocks, Is.Empty,
+                "The fixture records no removed block.");
+            Assert.That(source.BracketReads.ContainsKey("_P"), Is.False,
+                "The fixture holds no bracket read of the scalar.");
+            Assert.That(source.EnumValues.ContainsKey("_P"), Is.False,
+                "The fixture holds no enum text for the scalar.");
+            foreach (var run in source.DefineRuns)
+            {
+                Assert.That(run, Does.Not.Contain("_P"),
+                    "No define run reads the scalar.");
+            }
+
+            var locked = new FakeValues();
+            var plan = BuiltPlan(source, properties, locked);
+
+            var view = locked.Apply(plan);
+            Assert.That(view.TryGetFloat("_P", out var applied), Is.True,
+                "The applied view holds the scalar.");
+            Assert.That(applied, Is.EqualTo(0.75f),
+                "The applied view takes the planned literal value.");
+
+            view.WithFloat("_P", 9f);
+            Assert.That(view.TryGetFloat("_P", out var changed), Is.True,
+                "The changed view still holds the scalar.");
+            Assert.That(changed, Is.EqualTo(9f),
+                "The changed value stays on the view.");
+
+            var detail = LockedSourceReproduction.CheckConsistency(
+                source,
+                properties,
+                view);
+
+            Assert.That(detail, Is.Null,
+                "The check does not compare the changed scalar with " +
+                "its literal.");
+        }
+
+        // --- Falsifier LA-F11: a false removed condition still refuses
+        // after the plan applies. ---
+        // The existing refusal test builds its reproduced view by hand.
+        // This case adds the requested transition. The plan applies, the
+        // view holds the condition at the lock value, and a later edit
+        // of the operand on the same view refuses with the fixed
+        // sentence.
+        [Test]
+        public void ChangedConditionOperandRefusesAfterTheAppliedPlan()
+        {
+            var properties = new[] { Prop("_X", ShaderPropertyType.Float) };
+            var source = Source(
+                States(("_X", LockedPropertyState.Live)),
+                blocks: Blocks(Block(
+                    LockedBlockKind.Ifex,
+                    LockedBlockOutcome.Removed,
+                    "_X==1",
+                    12)));
+            var locked = new FakeValues().WithFloat("_X", 1f);
+
+            var plan = BuiltPlan(source, properties, locked);
+            var view = locked.Apply(plan);
+            Assert.That(
+                LockedSourceReproduction.CheckConsistency(
+                    source, properties, view),
+                Is.Null,
+                "The applied plan holds the removed condition.");
+
+            view.WithFloat("_X", 0f);
+            var detail = LockedSourceReproduction.CheckConsistency(
+                source,
+                properties,
+                view);
+
+            Assert.That(detail, Is.EqualTo(ConditionDetail),
+                "The changed operand refuses the check.");
         }
     }
 }

@@ -180,10 +180,8 @@ namespace Alrauna.Amuse.Editor.Build
                 "when the shader is missing, when its source is not " +
                 "verified, when the recorded name does not match the " +
                 "shader file, or when locked materials on that shader " +
-                "are not supported. That includes the bundled 9.3 " +
-                "shader that Poiyomi 10.x packages ship. AMUSE cannot " +
-                "read a locked material, so it changed nothing on this " +
-                "renderer.",
+                "are not supported. AMUSE cannot read a locked " +
+                "material, so it changed nothing on this renderer.",
             ["amuse.renderer.LockedPoiyomiOriginalShaderUnattested:hint"] =
                 "Unlock the material, then run the build again. AMUSE " +
                 "converts the unlocked material when it supports its " +
@@ -427,6 +425,17 @@ namespace Alrauna.Amuse.Editor.Build
             ["amuse.summary.SeparatorSwitchOff:description"] =
                 "Some slots did not separate because a separator " +
                 "switch is off.",
+            // --- Untouchable census disclosure. The play record names
+            // every kept slot, but the record dies with the editor
+            // session. This entry is the part a later console
+            // comparison can still read. It exists so a build pair
+            // that differs only in silently kept slots leaves a trace.
+            ["amuse.summary.UntouchableCensus"] =
+                "AMUSE kept slots untouched.",
+            ["amuse.summary.UntouchableCensus:description"] =
+                "AMUSE kept {0} material slots with {1} triangles " +
+                "fully on their original materials. The inspector " +
+                "record names each slot.",
 
             // --- Proof sampling disclosure. One key per closed policy
             // value; {0} names the captured build target. The summary
@@ -722,11 +731,15 @@ namespace Alrauna.Amuse.Editor.Build
             ["amuse.slotSeparation.TransientUnlockRestoreMismatch:description"] =
                 "Material slot {0} of renderer '{2}' holds a locked " +
                 "material. AMUSE unlocked a copy of it for the build, but " +
-                "the copy did not pass verification. Reason: {1}. The " +
-                "slot keeps its original locked material.",
+                "the copy did not pass verification. The material is " +
+                "locked and its original shader is verified. The locked " +
+                "shader text did not match what AMUSE can reconstruct. " +
+                "Reason: {1}. The slot keeps its original locked material.",
             ["amuse.slotSeparation.TransientUnlockRestoreMismatch:hint"] =
                 "Check that the lock tool and the original shader are the " +
-                "installed versions the lock recorded.",
+                "installed versions the lock recorded. The original " +
+                "shader is verified, so the miss is in the locked shader " +
+                "text.",
             ["amuse.slotSeparation.TransientUnlockCloneRetained"] =
                 "AMUSE kept an unlocked copy for material slot {0} of " +
                 "renderer '{2}'.",

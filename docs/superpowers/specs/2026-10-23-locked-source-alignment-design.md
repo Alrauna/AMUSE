@@ -102,6 +102,12 @@ These facts come from a source read of the vendor packages and scans of the two 
    - Kept: the whole body aligns, nested blocks included.
    - Removed: the block is skipped. The `#else` body of a removed `#ifdef` block is walked like any kept body, nested blocks included. Then the next 8 surviving original lines after the block align.
 
+   Amendment 2026-10-30: item 7 is amended by Y2, Y3, and Y4 of
+   `docs/superpowers/specs/2026-10-25-bundled-locked-original-admission-design.md`
+   for the bundled 9.3 rows, and by LA11 of
+   `docs/superpowers/specs/2026-10-28-locked-source-transform-conformance-design.md`
+   for crossing control spans.
+
    The record states one of four outcomes per block:
    - `Kept`: only the kept hypothesis aligned.
    - `Removed`: only the removed hypothesis aligned.
@@ -121,6 +127,10 @@ These facts come from a source read of the vendor packages and scans of the two 
    - `Unused`: no use survives.
    Mixed program uses refuse.
 2. The suffix. Collect every surviving renamed artifact: generated Properties names that the original does not declare, generated program identifiers, and generated bracket names. For each artifact, collect every split into a declared original name, `_`, and a remainder. Intersect the remainders across all artifacts. The intersection must hold exactly one value `S`. No artifact at all means no rename. Otherwise refuse. The walk then refuses any artifact that the rename of the era with `S` does not produce.
+
+   Amendment 2026-10-30: item 2 is amended by Y5 and Y6 of
+   `docs/superpowers/specs/2026-10-25-bundled-locked-original-admission-design.md`
+   for digit-led suffix artifacts and the suffix head boundary.
 3. Bracket reads. ShaderLab `[P]` references are recorded separately as live reads of `P` or of its renamed name. A `Cull` or `ColorMask` bracket that became enum text records the enum value instead.
 4. The record also holds: the define run per program block, the outcome of each `//ifex` block with its condition text, the outcome of each `#ifdef` and `#ifndef` block with its keyword, the surviving original text (for occurrence tests), and the era.
 
@@ -135,6 +145,12 @@ These facts come from a source read of the vendor packages and scans of the two 
    - A color takes the parsed alpha exactly. Its RGB takes the inverse of the fact 6 conversion, chosen by the property flags and the project color space at alignment. The design assumes that space equals the space at lock. A change corrupts only color RGB. The proof does not read color RGB (fact 16), so this is output fidelity only.
    - A baked `_ST` sets texture scale and offset with the round-trip rule.
    - A baked `_TexelSize` must equal, as text, the fact 5 print of `(1/w, 1/h, w, h)` for the texture on `U`, or `(1,1,1,1)` for no texture. Otherwise refuse. The detail sentence names a shared generated shader as a possible cause (fact 14).
+
+   Amendment 2026-11-05: the texel item is amended by TX1 of
+   `docs/superpowers/specs/2026-11-05-texel-size-verification-refinement-design.md`.
+   The equality against the texture print becomes a print self consistency
+   check on the literal. The alignment side and the facts record stay
+   unchanged.
 5. Bracket reads of a `Baked` property: the live value of `L.P` must equal the parsed literal exactly. Otherwise refuse, because `L` reads two values.
 6. Enum text. A property with enum text and program state `Unused` takes the enum value. Enum text that differs from a `Baked` literal of the same property refuses. Enum text that differs from the live value of a surviving bracket read of the same property refuses.
 7. `Live`: `U.P` keeps the value of `L.P`. A program-`Unused` property with a surviving bracket read and no enum text also keeps the value of `L.P`.
@@ -149,7 +165,25 @@ Only removed blocks need checks. A kept block is compiled by both `L` and `U`.
 
 1. A `Removed` `#ifdef K` needs `K` absent from the keywords of `U`. A `Removed` `#ifndef K` needs `K` present.
 2. A `Removed` `//ifex` block needs its comparisons true on `U`. Its `isNotAnimated` clauses count as true, because the removal shows that the vendor saw them true. The evaluator ports the vendor grammar of fact 9: first top-level `&&` or `||` split, no precedence, a non-property non-number operand reads 0, texture operands compare false, `RenderQueue` reads the queue of `U`. A condition outside the forms of fact 10 refuses.
+
+   Amendment 2026-10-30: item 2 is amended for zero-and-zero records
+   by Y3 of
+   `docs/superpowers/specs/2026-10-25-bundled-locked-original-admission-design.md`.
 3. An `Unused` property that is a comparison operand of a removed block. Its value in `U` is not recorded in the text. An `==` comparison fixes the value. Any other comparison does not, so `U.P` must equal the declared default of the original, and the condition must be true at that value. Otherwise refuse.
+
+   Amendment 2026-10-30: item 3 is widened for the value choice. The
+   declared default stays the first choice. When the default fails a
+   removed condition that reads the operand, the live value of the
+   locked material becomes the second choice, and it applies when it
+   holds every removed condition that reads the operand. The rule is
+   sound because the property is program unused, so the removed
+   conditions are its only use, and A6.2 checks the same conditions on
+   `U`. A live value that fails the conditions keeps the default, and
+   the check of A6.2 refuses as before. The enum text and the bracket
+   read disagreement rules of A5.6 and A5.7 still apply to the chosen
+   value. Cause: real Thry 2.74.3 locks of the bundled 9.3 shader carry
+   operands whose declared default fails their own removed inequality,
+   while the live value holds it.
 4. `Unobservable` and `NotEvaluated` blocks get no check.
 
 ### A7. Trust boundary

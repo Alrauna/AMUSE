@@ -1215,6 +1215,47 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
+        public void UntouchableCensusNamesSlotAndTriangleCounts()
+        {
+            var root = new GameObject("AMUSE census fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+
+            try
+            {
+                var errors = ErrorReport.CaptureErrors(() =>
+                    AmuseReports.UntouchableCensus(root, 3, 100));
+
+                Assert.That(errors, Has.Count.EqualTo(1));
+                var message = errors[0].TheError.ToMessage();
+                Assert.That(message, Does.Contain(
+                    "kept 3 material slots with 100 triangles"));
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        public void UntouchableCensusStaysSilentWithoutKeptSlots()
+        {
+            var root = new GameObject("AMUSE silent census fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+
+            try
+            {
+                var errors = ErrorReport.CaptureErrors(() =>
+                    AmuseReports.UntouchableCensus(root, 0, 0));
+
+                Assert.That(errors, Is.Empty);
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
         public void LatestPlayRecord_StartsWithThePlayModePrefix()
         {
             var root = new GameObject("AMUSE play prefix fixture");

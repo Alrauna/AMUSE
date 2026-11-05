@@ -1,5 +1,6 @@
 using System.Linq;
 using NUnit.Framework;
+using UnityEditor;
 using UnityEngine;
 using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.Host;
@@ -110,8 +111,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         private const string LockedStandInShaderName =
             "Hidden/Locked/Alrauna/AmuseTests/LockedStandIn";
 
+        private const string TempFolder = "Assets/AmuseTests_LockedIdentity";
+
+        private const string BundledRowLockedStandInShaderName =
+            "Hidden/Locked/Alrauna/AmuseTests/BundledRowPrecheckStandIn";
+
         private readonly TestTransientScope _scope =
-            new TestTransientScope();
+            new TestTransientScope(TempFolder);
 
         [TearDown]
         public void DestroyOwnedObjects()
@@ -169,13 +175,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         private static PoiyomiAdmittedSource ReleaseMainRow()
         {
             return PoiyomiSourceAttestation.AdmittedSources().Single(
-                row => !row.IsTwoPass && row.LockedOriginalAdmitted);
+                row => row.ShaderName == ".poiyomi/Poiyomi Toon");
         }
 
         private static PoiyomiAdmittedSource BundledMainRow()
         {
             return PoiyomiSourceAttestation.AdmittedSources().Single(
-                row => !row.IsTwoPass && !row.LockedOriginalAdmitted);
+                row => row.ShaderName ==
+                    ".poiyomi/Old Versions/9.3/Poiyomi Toon");
         }
 
         [Test]
@@ -191,17 +198,19 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "admitted locked original");
         }
 
-        // --- Falsifier 7: a precondition that reuses the identity gate alone ---
-        // The bundled rows attest through the identity gate now, so this
-        // falsifier guards the row admission rule itself.
+        // --- Falsifier 7: a precondition that reuses the identity gate ---
+        // The bundled rows attest through the identity gate, so this
+        // falsifier guards the row admission rule itself. Since stage 7
+        // of the 2026-10-25 admission design, flipped on 2026-10-30,
+        // the row admission bit is true and the row attests.
         [Test]
-        public void BundledRowRefusesAsALockedOriginal()
+        public void BundledRowWithAMatchingTagAttestsTheLockedOriginal()
         {
             var row = BundledMainRow();
 
             // No-op guard: the bundled row evidence must pass the identity
-            // gate. Without this guard a broken identity gate would let the
-            // refusal assertion pass while proving nothing.
+            // gate. Without this guard a broken identity gate would let
+            // the attestation assertion pass while proving nothing.
             Assert.That(
                 PoiyomiSourceAttestation.TryVerifyPoiyomiIdentity(
                     EvidenceOf(row), out _),
@@ -212,9 +221,86 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(
                 LockedMaterialIdentity.AttestsLockedOriginal(
                     row.ShaderName, EvidenceOf(row)),
-                Is.False,
-                "a bundled row records no locked original admission, so " +
-                "it refuses as a locked original");
+                Is.True,
+                "the bundled rows admit locked originals since stage 7 " +
+                "of the 2026-10-25 bundled locked original admission " +
+                "design, flipped on 2026-10-30");
+        }
+
+        /// <summary>
+        /// Y12 of the 2026-10-25 bundled locked original admission
+        /// design, stage 6, rewritten for stage 7. The same bundled row
+        /// evidence as a live locked material passes the pre-check,
+        /// because the row admission bit is true since the stage 7
+        /// flag change of 2026-10-30.
+        /// </summary>
+        [Test]
+        public void BundledRowLockedMaterialPrecheckPassesAfterAdmission()
+        {
+            var material = NewBundledRowLockedMaterial();
+
+            Assert.That(
+                LockedMaterialIdentity.PreCheckRefusal(material),
+                Is.EqualTo(RendererAnalysisRefusal.None),
+                "the bundled rows admit locked originals since stage 7 " +
+                "of the 2026-10-25 bundled locked original admission " +
+                "design, flipped on 2026-10-30");
+        }
+
+        /// <summary>
+        /// The bundled row locked fixture material. The identity tags
+        /// carry the bundled row's name and GUID, so the recorded
+        /// original shader resolves by the pinned row GUID to the
+        /// installed bundled file. The material's own shader needs the
+        /// locked name prefix, and no in-memory shader can carry one,
+        /// so the fixture writes one scratch stand-in shader asset. The
+        /// scope deletes the folder with the asset and its meta after
+        /// the test.
+        /// </summary>
+        private Material NewBundledRowLockedMaterial()
+        {
+            var row = BundledMainRow();
+            var assetPath = AssetDatabase.GUIDToAssetPath(row.AssetGuid);
+            var bundledShader = string.IsNullOrEmpty(assetPath)
+                ? null
+                : AssetDatabase.LoadAssetAtPath<Shader>(assetPath);
+            if (bundledShader == null)
+            {
+                Assert.Ignore(
+                    "the bundled 9.3 shader asset does not resolve from " +
+                    "its pinned row GUID. Install the Poiyomi package to " +
+                    "run this pin");
+            }
+
+            var lockedShader =
+                Shader.Find(BundledRowLockedStandInShaderName);
+            if (lockedShader == null)
+            {
+                _scope.EnsureTempFolder();
+                lockedShader = TestShaderWriter.WriteStandInShader(
+                    TempFolder + "/bundled_row_precheck_stand_in.shader",
+                    BundledRowLockedStandInShaderName,
+                    "_ShaderOptimizerEnabled " +
+                    "(\"Shader Optimizer Enabled\", Float) = 0");
+            }
+
+            var material = _scope.Track(new Material(lockedShader));
+            material.SetFloat(
+                LockedMaterialIdentity.OptimizerEnabledPropertyName, 1f);
+            material.SetOverrideTag(
+                LockedMaterialIdentity.OriginalShaderTagName,
+                row.ShaderName);
+            material.SetOverrideTag(
+                LockedMaterialIdentity.OriginalShaderGuidTagName,
+                row.AssetGuid);
+
+            Assert.That(
+                LockedMaterialIdentity.RecognizedLockedIdentity(material),
+                Is.True,
+                "the fixture must carry the recognized locked identity, " +
+                "or the pin proves nothing");
+
+            return material;
         }
 
         // --- Falsifier 8: a precondition that ignores the recorded original name ---

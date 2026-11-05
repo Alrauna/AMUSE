@@ -32,12 +32,12 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         private const string LilToonTransparentConversionShader =
             "Hidden/Alrauna/AmuseTests/LilToonTransparentConversionTest";
         private const string PoiyomiModeProperty = "_Mode";
-        private const string MultiCutoutContainerShaderPath =
-            "Packages/com.alrauna.amuse/Tests/Editor/Semantics/LilToon/" +
-            "LilToonMultiCutoutTest.shader";
-        private const string MultiTransparentContainerShaderPath =
-            "Packages/com.alrauna.amuse/Tests/Editor/Semantics/LilToon/" +
-            "LilToonMultiTransparentTest.shader";
+        // The installed vendor Multi container, loaded by its pinned
+        // asset GUID. The values mirror the ground check pins measured
+        // from the installed meta files. A name lookup is not reliable,
+        // and the former stand-in shaders are gone.
+        private const string MultiContainerShaderGuid =
+            "9294844b15dca184d914a632279b24e1";
 
         private readonly TestTransientScope _scope =
             new TestTransientScope();
@@ -920,9 +920,9 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var transparentMaterial = NewMaterial(
                 LilToonTransparentConversionShader);
             var multiCutoutMaterial = MultiContainerMaterial(
-                MultiCutoutContainerShaderPath, 1f, "UNITY_UI_ALPHACLIP");
+                MultiContainerShaderGuid, 1f, "UNITY_UI_ALPHACLIP");
             var multiTransparentMaterial = MultiContainerMaterial(
-                MultiTransparentContainerShaderPath, 2f,
+                MultiContainerShaderGuid, 2f,
                 "UNITY_UI_CLIP_RECT");
             var poiyomiCutoutMaterial = NewMaterial(PoiyomiFixtureShader);
             poiyomiCutoutMaterial.SetFloat(PoiyomiModeProperty, 1f);
@@ -1057,20 +1057,25 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         /// <summary>
-        /// Creates one committed Multi container stand-in material at one
-        /// mode's vendor state. The stand-in loads by asset path, because
-        /// the fixture containers share the vendor-mimic shader name. The
-        /// mode and both gate scalars are set explicitly, so the fixture
-        /// never depends on stand-in defaults.
+        /// Creates one vendor Multi container material at one mode's
+        /// vendor state. The container loads by its pinned GUID, because
+        /// a name lookup matches any shader that carries the container
+        /// name. The mode and both gate scalars are set explicitly, so
+        /// the fixture never depends on shader defaults.
         /// </summary>
         private Material MultiContainerMaterial(
-            string shaderAssetPath,
+            string shaderGuid,
             float transparentMode,
             string modeKeyword)
         {
-            var shader =
-                AssetDatabase.LoadAssetAtPath<Shader>(shaderAssetPath);
-            Assert.That(shader, Is.Not.Null, shaderAssetPath);
+            var assetPath = AssetDatabase.GUIDToAssetPath(shaderGuid);
+            var shader = string.IsNullOrEmpty(assetPath)
+                ? null
+                : AssetDatabase.LoadAssetAtPath<Shader>(assetPath);
+            Assert.That(
+                shader, Is.Not.Null,
+                "the installed vendor Multi container must resolve by " +
+                "its pinned GUID");
             var material = new Material(shader);
             _scope.Track(material);
             material.SetFloat("_TransparentMode", transparentMode);

@@ -292,7 +292,7 @@ namespace Alrauna.Amuse.Editor.Build
             clone.name = locked.name;
             context.AssetSaver.SaveAsset(clone);
 
-            var outcome = restore(clone);
+            var outcome = restore(clone, locked);
             mismatchReason = RestoreMismatchReason(locked, clone, attests);
             if (outcome.Outcome ==
                     TransientUnlockRestoreOutcome.Succeeded &&

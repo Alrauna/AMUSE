@@ -264,15 +264,17 @@ namespace Alrauna.Amuse.Editor.Build
 
         /// <summary>
         /// The locked-original seam (K8.3, docs/superpowers/specs/
-        /// 2026-10-23-poiyomi-per-shader-attestation-design.md). It
-        /// carries both rules of the locked-original precondition. The
-        /// name rule: the tag must be present and must equal the resolved
-        /// shader name. The row rule: the matched admitted row must admit
-        /// locked originals. Reason: thryeditor 2.74 locks write a suffix
-        /// tag that reconstruction does not read, and the swap-in
-        /// restores only when the recorded name equals the restored
-        /// shader name. The precheck applies the swap-in's name rule, so
-        /// it cannot promise a recovery the swap-in refuses.
+        /// 2026-10-23-poiyomi-per-shader-attestation-design.md, amended
+        /// by Y13 of the 2026-10-25 bundled locked original admission
+        /// design). It carries both rules of the locked-original
+        /// precondition. The name rule: the tag must be present and must
+        /// equal the resolved shader name. The row rule: the matched
+        /// admitted row must admit locked originals. Reason: thryeditor
+        /// 2.74 locks write a suffix tag that reconstruction does not
+        /// read, and the swap-in restores only when the recorded name
+        /// equals the restored shader name. The precheck applies the
+        /// swap-in's name rule, so it cannot promise a recovery the
+        /// swap-in refuses.
         /// </summary>
         internal static bool AttestsLockedOriginal(
             string originalShaderTag,

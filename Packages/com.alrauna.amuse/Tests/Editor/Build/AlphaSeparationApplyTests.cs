@@ -3993,6 +3993,17 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             separation.Add(prepared);
             state.Separation = separation;
 
+            // Both folded candidates survive preparation: the folded pair
+            // on one slot counts all five of its triangles.
+            state.SeparationSurvivingCandidates =
+                new List<List<PreparedSlotSeparation>>
+                {
+                    new List<PreparedSlotSeparation>
+                    {
+                        candidates[0],
+                        candidates[1],
+                    },
+                };
             var write = new AlphaSeparationRendererWrite(
                 renderer,
                 null,
@@ -6387,7 +6398,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// the write actually changed reports its proven count.
         /// </summary>
         [Test]
-        public void ASelfMappedSurvivingSlotReportsZeroMovedTriangles()
+        public void ASelfMappedSurvivingSlotReportsItsProvenMovedTriangles()
         {
             var source = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
             var clone = Track(new Material(source.shader));
@@ -6506,15 +6517,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(
                 state.PlayModeRendererRows.Single(r => r.slotIndex == 1)
                     .movedTriangles,
-                Is.EqualTo(0),
-                "the write kept the self-mapped slot's material, so the " +
-                "slot moved nothing");
+                Is.EqualTo(2),
+                "the surviving self-mapped slot counts its proven " +
+                "triangles as moved, whatever the write holds");
             Assert.That(
                 state.PlayModeRendererRows.Single(r => r.slotIndex == 0)
                     .movedTriangles,
                 Is.EqualTo(2),
-                "the write changed the converting slot's material, so its " +
-                "proven triangles moved");
+                "the surviving converting slot counts its proven " +
+                "triangles as moved");
         }
 
         /// <summary>
@@ -6691,8 +6702,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(
                 state.PlayModeRendererRows.Single(r => r.slotIndex == 1)
                     .movedTriangles,
-                Is.EqualTo(0),
-                "the self-mapped slot moved nothing");
+                Is.EqualTo(2),
+                "the surviving self-mapped slot counts its proven " +
+                "triangles as moved, whatever the write holds");
             Assert.That(
                 state.PlayModeRendererRows.Single(r => r.slotIndex == 2)
                     .movedTriangles,
@@ -6700,9 +6712,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "the applied Split moved its opaque triangle to the " +
                 "appended submesh, so its proven count moves even " +
                 "though the write kept its material");
-            Assert.That(state.AppliedOpaqueTriangleCount, Is.EqualTo(3),
-                "the summary counts the converted slot's triangles and " +
-                "the Split's appended triangle, so the rows must agree");
+            Assert.That(state.AppliedOpaqueTriangleCount, Is.EqualTo(5),
+                "the summary counts every surviving candidate's " +
+                "proven ordinals: the converting slot, the self-mapped " +
+                "slot, and the Split's appended triangle, so the rows " +
+                "must agree");
         }
 
         /// <summary>
@@ -6780,13 +6794,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             state.SeparationSurvivingCandidates =
                 new List<List<PreparedSlotSeparation>>
                 {
+                    // Slot 1 was refused by preparation: only slot 0
+                    // survives, so slot 1's row reports the Untouchable
+                    // sentence with its full proven count.
                     new List<PreparedSlotSeparation>
                     {
                         candidates[0],
-                        candidates[1],
                     },
                 };
-
             var finalization = new AlphaSeparationFinalization(new[]
             {
                 new AlphaSeparationRendererWrite(
@@ -6822,6 +6837,313 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 if (avatarKey != "") PlayModeBuildStore.Clear(avatarKey);
                 scope.TearDown();
             }
+        }
+
+        /// <summary>
+        /// The capture reports the untouchable census. Two builds that
+        /// differ only in silently kept slots print the same refusal
+        /// set, so the console holds no trace of the difference. The
+        /// census entry counts the final play rows and names the kept
+        /// work. Design decision of the 2026-11-01 bimodality
+        /// investigation.
+        /// </summary>
+        [Test]
+        public void CaptureAndSavePlayModeBuildRecordReportsTheUntouchableCensus()
+        {
+            var source = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+            var clone = Track(new Material(source.shader));
+            var selfMapped = Track(PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial());
+            var rendererObj = Track(new GameObject(
+                "AMUSE census candidate renderer"));
+            var renderer = rendererObj.AddComponent<SkinnedMeshRenderer>();
+            var mesh = Track(AlphaSeparationTestLifecycle.SingleTriangleMesh());
+            renderer.sharedMesh = mesh;
+            renderer.sharedMaterials = new[] { source, selfMapped };
+
+            var convertingMapping = new Dictionary<Material, Material>
+            {
+                [source] = clone,
+            };
+            var selfMapping = new Dictionary<Material, Material>
+            {
+                [selfMapped] = selfMapped,
+            };
+            var plan = new MeshSeparationPlan(
+                null,
+                new[]
+                {
+                    new SubmeshSeparationPlan(
+                        0, 0,
+                        new[] { 0, 1 }, Array.Empty<int>(),
+                        SubmeshSeparationDisposition.WhollyOpaqueCandidate),
+                    new SubmeshSeparationPlan(
+                        1, 1,
+                        new[] { 0, 1 }, Array.Empty<int>(),
+                        SubmeshSeparationDisposition.WhollyOpaqueCandidate),
+                },
+                true, false, 4, 0);
+            var candidates = new[]
+            {
+                new PreparedSlotSeparation(
+                    plan.Submeshes[0], convertingMapping, false, false),
+                new PreparedSlotSeparation(
+                    plan.Submeshes[1], selfMapping, false, false),
+            };
+            var evidence = new CapturedAnimationEvidence(
+                new MaterialEvidenceRequest(
+                    false, false,
+                    Array.Empty<string>(),
+                    Array.Empty<string>(),
+                    Array.Empty<string>(),
+                    Array.Empty<string>(),
+                    Array.Empty<TexturePropertyEvidenceRequest>()),
+                Array.Empty<CapturedClipEvidence>(),
+                Array.Empty<Alrauna.Amuse.Editor.Semantics
+                    .CapturedAlphaMaterial>(),
+                new[] { 0 },
+                false);
+            const string rendererPath = "Avatar/CensusCandidateRenderer";
+            var prepared = new PreparedRendererSeparation(
+                new UnityRendererMutationTarget(renderer, mesh, 1),
+                rendererPath,
+                plan,
+                evidence,
+                candidates,
+                Array.Empty<BlockStateEntry>(),
+                Array.Empty<int>());
+            var state = new AmusePlatformFinishState();
+            var separation = new PreparedAlphaSeparation();
+            separation.Add(prepared);
+            state.Separation = separation;
+            state.SeparationSurvivingCandidates =
+                new List<List<PreparedSlotSeparation>>
+                {
+                    // Slot 1 was refused by preparation: only slot 0
+                    // survives. Its row stays Untouchable with the full
+                    // proven count, which is the census's input.
+                    new List<PreparedSlotSeparation>
+                    {
+                        candidates[0],
+                    },
+                };
+            var finalization = new AlphaSeparationFinalization(new[]
+            {
+                new AlphaSeparationRendererWrite(
+                    renderer,
+                    null,
+                    new[] { clone, selfMapped },
+                    Array.Empty<AlphaSeparationCurveEdit>()),
+            });
+            AlphaSeparationApply.ApplyFinalization(finalization, state);
+            state.AppliedFinalization = finalization;
+
+            var scope = new TestTransientScope("Assets/AmuseTests_Census");
+            var avatarKey = "";
+            try
+            {
+                scope.EnsureTempFolder();
+                var root = scope.CreateSavedSceneRoot("AMUSE census avatar");
+                scope.SaveOwnedScene();
+                var context = new BuildContext(root, null);
+                avatarKey = PlayModeBuildStore.ComputeAvatarKey(root.transform);
+
+                var errors = ErrorReport.CaptureErrors(() =>
+                    AlphaSeparationApply.CaptureAndSavePlayModeBuildRecord(
+                        context, state));
+
+                var census = errors.Where(error => error.TheError != null &&
+                    error.TheError.ToMessage().Contains(
+                        "material slots with")).ToList();
+                Assert.That(census, Has.Count.EqualTo(1),
+                    "the capture reports one untouchable census entry");
+                Assert.That(
+                    census.Single().TheError.ToMessage(),
+                    Does.Contain("kept 1 material slots with 2 triangles"),
+                    "the census counts the unapplied candidate row");
+            }
+            finally
+            {
+                if (avatarKey != "") PlayModeBuildStore.Clear(avatarKey);
+                scope.TearDown();
+            }
+        }
+
+        /// <summary>
+        /// A write whose every observable fact equals the live state is a
+        /// no-op: the material array holds the live material itself, the
+        /// mesh is null and no curve edit exists. Assigning it back counts
+        /// proven triangles as moved without moving anything, which is the
+        /// report defect the 2026-11-03 bimodality closure identified in
+        /// the scratch repro: the movable session's write carried the live
+        /// clone back to itself. The apply skips such a write entirely, so
+        /// the row reads kept in every session.
+        /// </summary>
+        [Test]
+        public void ApplyFinalizationSkipsANoOpWrite()
+        {
+            var liveClone = Track(PoiyomiFixtureTestBase
+                .CreateVerifiedOpaqueMaterial());
+            liveClone.name = "PlainClone";
+            var rendererObj = Track(new GameObject(
+                "AMUSE no-op write renderer"));
+            var renderer = rendererObj.AddComponent<SkinnedMeshRenderer>();
+            var mesh = Track(AlphaSeparationTestLifecycle.SingleTriangleMesh());
+            renderer.sharedMesh = mesh;
+            renderer.sharedMaterials = new[] { liveClone };
+
+            var identityMapping = new Dictionary<Material, Material>
+            {
+                [liveClone] = liveClone,
+            };
+            var plan = new MeshSeparationPlan(
+                null,
+                new[]
+                {
+                    new SubmeshSeparationPlan(
+                        0, 0,
+                        new[] { 0, 1 }, Array.Empty<int>(),
+                        SubmeshSeparationDisposition.WhollyOpaqueCandidate),
+                },
+                true, false, 2, 0);
+            var candidate = new PreparedSlotSeparation(
+                plan.Submeshes[0], identityMapping, false, false);
+            var prepared = new PreparedRendererSeparation(
+                new UnityRendererMutationTarget(renderer, mesh, 1),
+                "Avatar/NoOpWriteRenderer",
+                plan,
+                new CapturedAnimationEvidence(
+                    new MaterialEvidenceRequest(
+                        false, false,
+                        Array.Empty<string>(),
+                        Array.Empty<string>(),
+                        Array.Empty<string>(),
+                        Array.Empty<string>(),
+                        Array.Empty<TexturePropertyEvidenceRequest>()),
+                    Array.Empty<CapturedClipEvidence>(),
+                    Array.Empty<Alrauna.Amuse.Editor.Semantics
+                        .CapturedAlphaMaterial>(),
+                    new[] { 0 },
+                    false),
+                new[] { candidate },
+                Array.Empty<BlockStateEntry>(),
+                Array.Empty<int>());
+            var separation = new PreparedAlphaSeparation();
+            separation.Add(prepared);
+            var state = new AmusePlatformFinishState();
+            state.Separation = separation;
+            state.SeparationSurvivingCandidates =
+                new List<List<PreparedSlotSeparation>>
+                {
+                    new List<PreparedSlotSeparation> { candidate },
+                };
+
+            var write = new AlphaSeparationRendererWrite(
+                renderer,
+                null,
+                new[] { liveClone },
+                Array.Empty<AlphaSeparationCurveEdit>());
+            var finalization = new AlphaSeparationFinalization(
+                new[] { write });
+
+            AlphaSeparationApply.ApplyFinalization(finalization, state);
+
+            Assert.That(
+                state.AppliedOpaqueTriangleCount,
+                Is.EqualTo(0),
+                "a no-op write moves nothing, so it counts nothing");
+            Assert.That(
+                state.AppliedChangedMaterialSlots.Contains((renderer, 0)),
+                Is.False,
+                "a no-op write marks no slot changed, so the row " +
+                "reads kept");
+        }
+
+        /// <summary>
+        /// A slot that preparation refused stays out of the applied
+        /// opaque triangle count even when its live material is one of
+        /// the window's clones. The count follows the surviving plan,
+        /// so refused candidates can never inflate the moved total.
+        /// Regression guard for the 2026-11-01 adversarial review's
+        /// refused-slot overcount finding.
+        /// </summary>
+        [Test]
+        public void ApplyFinalizationExcludesRefusedSlotsFromTheMovedCount()
+        {
+            var live = Track(PoiyomiFixtureTestBase
+                .CreateVerifiedOpaqueMaterial());
+            live.name = "WindowClone";
+            var rendererObj = Track(new GameObject(
+                "AMUSE refused slot renderer"));
+            var renderer = rendererObj.AddComponent<SkinnedMeshRenderer>();
+            var mesh = Track(AlphaSeparationTestLifecycle.SingleTriangleMesh());
+            renderer.sharedMesh = mesh;
+            renderer.sharedMaterials = new[] { live };
+
+            var identityMapping = new Dictionary<Material, Material>
+            {
+                [live] = live,
+            };
+            var plan = new MeshSeparationPlan(
+                null,
+                new[]
+                {
+                    new SubmeshSeparationPlan(
+                        0, 0,
+                        new[] { 0, 1 }, Array.Empty<int>(),
+                        SubmeshSeparationDisposition.WhollyOpaqueCandidate),
+                },
+                true, false, 2, 0);
+            var candidate = new PreparedSlotSeparation(
+                plan.Submeshes[0], identityMapping, false, false);
+            var prepared = new PreparedRendererSeparation(
+                new UnityRendererMutationTarget(renderer, mesh, 1),
+                "Avatar/RefusedSlotRenderer",
+                plan,
+                new CapturedAnimationEvidence(
+                    new MaterialEvidenceRequest(
+                        false, false,
+                        Array.Empty<string>(),
+                        Array.Empty<string>(),
+                        Array.Empty<string>(),
+                        Array.Empty<string>(),
+                        Array.Empty<TexturePropertyEvidenceRequest>()),
+                    Array.Empty<CapturedClipEvidence>(),
+                    Array.Empty<Alrauna.Amuse.Editor.Semantics
+                        .CapturedAlphaMaterial>(),
+                    new[] { 0 },
+                    false),
+                new[] { candidate },
+                Array.Empty<BlockStateEntry>(),
+                Array.Empty<int>());
+            var separation = new PreparedAlphaSeparation();
+            separation.Add(prepared);
+            var state = new AmusePlatformFinishState();
+            state.Separation = separation;
+            // The candidate was refused: the surviving list is empty.
+            state.SeparationSurvivingCandidates =
+                new List<List<PreparedSlotSeparation>>
+                {
+                    new List<PreparedSlotSeparation>(),
+                };
+
+            var write = new AlphaSeparationRendererWrite(
+                renderer,
+                null,
+                new[] { live },
+                Array.Empty<AlphaSeparationCurveEdit>());
+            var finalization = new AlphaSeparationFinalization(
+                new[] { write });
+
+            AlphaSeparationApply.ApplyFinalization(finalization, state);
+
+            Assert.That(
+                state.AppliedOpaqueTriangleCount,
+                Is.EqualTo(0),
+                "a refused slot never enters the moved count");
+            Assert.That(
+                state.AppliedChangedMaterialSlots.Contains((renderer, 0)),
+                Is.False,
+                "a refused slot never enters the changed set");
         }
     }
 }

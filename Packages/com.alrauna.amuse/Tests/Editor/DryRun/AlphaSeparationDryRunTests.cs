@@ -1832,10 +1832,13 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 "does not recover, so the gate refuses it");
         }
 
-        // Characterization: the dry run must not promise a recovery the
-        // build refuses.
+        // Stage 7 of the 2026-10-25 bundled locked original admission
+        // design, flipped on 2026-10-30. The bundled row name is an
+        // admitted locked original name, so the name-tag arm defers.
+        // The pair is not mirrored here, because the fixture records no
+        // resolvable original, so the display-only arm keeps its answer.
         [Test]
-        public void LockedMaterialTaggedWithTheBundledShaderIsNotDeferred()
+        public void BundledTaggedLockedSlotDefersBeforeTheMirrorDecides()
         {
             var root = _scope.Track(
                 NewAvatarRoot("amuse-dry-run-gate-locked-bundled"));
@@ -1852,9 +1855,39 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             Assert.That(
                 AlphaSeparationDryRun.IsSlotDeferred(
                     renderer, 0, slotResult, slotEvidence),
+                Is.True,
+                "a bundled original name is an admitted locked " +
+                "original name since the stage 7 flag change, so the " +
+                "name-tag arm defers the slot");
+        }
+
+        // The mirror half of the same stage 7 rule. A pair the mirror
+        // refuses must not defer, also when the tag names the bundled
+        // row. The scene is the locked-mirror gate scene with the
+        // bundled tag and one generated line the vendor never writes.
+        [Test]
+        public void BundledTaggedLockedSlotWhoseMirrorRefusesIsNotDeferred()
+        {
+            LockedSourceFixture.DeleteFolder();
+            AssetDatabase.Refresh();
+            LockedSourceAlignmentMemo.Clear();
+            var pair = NewLockedGatePair("gate7_bundled", fixture =>
+                fixture.WithGeneratedLine(
+                    "shader_master_label",
+                    "        shader_master_label " +
+                    "(\"Another Label\", Float) = 0"));
+            pair.Locked.SetOverrideTag(
+                LockedMaterialIdentity.OriginalShaderTagName,
+                ".poiyomi/Old Versions/9.3/Poiyomi Toon");
+
+            var notes = new List<NoteKind>();
+            Assert.That(
+                GateAnswer(pair.Renderer, notes),
                 Is.False,
-                "a bundled original name has no admitted locked " +
-                "original row, so the gate does not defer the slot");
+                "a bundled tagged pair that does not align must not " +
+                "defer");
+            Assert.That(notes,
+                Does.Contain(NoteKind.LockedMaterialNotReproducible));
         }
 
         // --- Locked mirror gate (A8.5) ---------------------------------------

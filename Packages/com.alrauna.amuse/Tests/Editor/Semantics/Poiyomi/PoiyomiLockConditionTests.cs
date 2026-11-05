@@ -6,10 +6,11 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 {
     /// <summary>
     /// The lock condition evaluator ports the vendor condition grammar of
-    /// spec fact 9 over the accepted forms of spec fact 10. A removed block
-    /// must stay removed on the unlocked material, so isNotAnimated counts
-    /// as true here (A6.2). Every fixture uses synthetic property names and
-    /// holds no vendor text.
+    /// spec fact 9 over the accepted forms of spec fact 10. A removed
+    /// block must stay removed on the unlocked material, so isNotAnimated
+    /// counts as true in removal evidence mode (A6.2). Strict mode reads
+    /// the real Animated tag (Y3). Every fixture uses synthetic property
+    /// names and holds no vendor text.
     /// </summary>
     public sealed class PoiyomiLockConditionTests
     {
@@ -22,6 +23,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             private readonly Dictionary<string, float> numbers =
                 new Dictionary<string, float>();
             private readonly HashSet<string> textures = new HashSet<string>();
+            private readonly HashSet<string> animatedTags =
+                new HashSet<string>();
 
             internal SyntheticValues WithNumber(string name, float value)
             {
@@ -32,6 +35,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             internal SyntheticValues WithTexture(string name)
             {
                 textures.Add(name);
+                return this;
+            }
+
+            internal SyntheticValues WithNonZeroAnimatedTag(string name)
+            {
+                animatedTags.Add(name);
                 return this;
             }
 
@@ -51,6 +60,11 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             public bool IsTexture(string propertyName)
             {
                 return textures.Contains(propertyName);
+            }
+
+            public bool HasNonZeroAnimatedTag(string propertyName)
+            {
+                return animatedTags.Contains(propertyName);
             }
         }
 
@@ -111,6 +125,86 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             var outcome = Evaluate("_A==0 && isNotAnimated(_A)", values);
             Assert.That(outcome, Is.EqualTo(PoiyomiLockConditionOutcome.True),
                 "Both the comparison and the isNotAnimated clause hold.");
+        }
+
+        /// <summary>
+        /// Strict mode reads the real Animated tag of the operand (Y3).
+        /// The comparison holds at zero and the tag is one, so the
+        /// clause fails and the whole condition is False. Removal
+        /// evidence mode answers True for the same text. Falsifies an
+        /// evaluator that keeps the removal evidence answer in strict
+        /// mode.
+        /// </summary>
+        [Test]
+        public void StrictModeReadsTheRealAnimatedTag()
+        {
+            var values = new SyntheticValues()
+                .WithNumber("P", 0f)
+                .WithNonZeroAnimatedTag("P");
+            Assert.That(values.HasNonZeroAnimatedTag("P"), Is.True,
+                "The fixture reads the Animated tag as true.");
+
+            var lenient = Evaluate(
+                "P==0 && isNotAnimated(P)",
+                values,
+                PoiyomiLockConditionMode.RemovalEvidence);
+            Assert.That(lenient, Is.EqualTo(PoiyomiLockConditionOutcome.True),
+                "Removal evidence keeps the clause true.");
+
+            var strict = Evaluate(
+                "P==0 && isNotAnimated(P)",
+                values,
+                PoiyomiLockConditionMode.Strict);
+            Assert.That(strict, Is.EqualTo(PoiyomiLockConditionOutcome.False),
+                "The true tag makes the clause false in strict mode.");
+        }
+
+        /// <summary>
+        /// Removal evidence mode keeps the rule as of 2026-10-25 (Y3).
+        /// The clause answers True and never reads the tag, so the
+        /// condition holds even at a true tag. This test passes on its
+        /// first possible run. The record keeps it as characterization,
+        /// not as RED.
+        /// </summary>
+        [Test]
+        public void LenientModeKeepsTheRemovalEvidenceRule()
+        {
+            var values = new SyntheticValues()
+                .WithNumber("P", 0f)
+                .WithNonZeroAnimatedTag("P");
+
+            var outcome = Evaluate(
+                "P==0 && isNotAnimated(P)",
+                values,
+                PoiyomiLockConditionMode.RemovalEvidence);
+            Assert.That(outcome, Is.EqualTo(PoiyomiLockConditionOutcome.True),
+                "Removal evidence keeps the clause true without the tag.");
+        }
+
+        /// <summary>
+        /// Strict mode reads the Animated tag of one bare identifier. An
+        /// operand that is not one bare identifier sits outside the
+        /// accepted forms, so strict mode answers Unsupported. Removal
+        /// evidence mode never reads the operand and keeps the clause
+        /// true (A6.2). Characterization. This test passed on its first
+        /// run on 2026-10-27. It pins the existing answers.
+        /// </summary>
+        [Test]
+        public void StrictModeRefusesAMalformedIsNotAnimatedOperand()
+        {
+            var lenient = Evaluate(
+                "isNotAnimated(0)",
+                new SyntheticValues(),
+                PoiyomiLockConditionMode.RemovalEvidence);
+            Assert.That(lenient, Is.EqualTo(PoiyomiLockConditionOutcome.True),
+                "Removal evidence keeps the clause true without the tag.");
+
+            var strict = Evaluate(
+                "isNotAnimated(0)",
+                new SyntheticValues(),
+                PoiyomiLockConditionMode.Strict);
+            Assert.That(strict, Is.EqualTo(PoiyomiLockConditionOutcome.Unsupported),
+                "The operand is no bare identifier, so strict mode refuses it.");
         }
 
         /// <summary>
@@ -285,9 +379,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 
         private static PoiyomiLockConditionOutcome Evaluate(
             string conditionText,
-            IPoiyomiLockConditionValues values)
+            IPoiyomiLockConditionValues values,
+            PoiyomiLockConditionMode mode = PoiyomiLockConditionMode.RemovalEvidence)
         {
-            return PoiyomiLockCondition.Evaluate(conditionText, values);
+            return PoiyomiLockCondition.Evaluate(conditionText, values, mode);
         }
     }
 }

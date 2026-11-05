@@ -18,7 +18,9 @@ namespace Alrauna.Amuse.Editor.Build
     /// The order follows A5.2 and A8.1: the recorded identity resolves
     /// the original shader, the generated shader must compile, both texts
     /// are read through the one shared reader, the aligner runs through
-    /// the session memo, every value of the locked clone is read through
+    /// the session memo, the texture identity of the clone and the
+    /// locked original must agree through the rename mapping, every
+    /// value of the locked clone is read through
     /// the generated-shader view while the clone still has the generated
     /// shader, the reproduction map builds the plan, the shader swaps,
     /// the plan is written, the lock flag clears, and the consistency
@@ -57,15 +59,28 @@ namespace Alrauna.Amuse.Editor.Build
             "The generated locked shader file is not readable.";
 
         /// <summary>
+        /// The fixed refusal sentence of the texture identity fact
+        /// (TX3). The sentence names no property, no texture, and no
+        /// path. The tests read this constant, so the pinned text lives
+        /// in one place.
+        /// </summary>
+        internal const string TextureIdentityDetail =
+            "A texture of the rebuilt material is not the texture of " +
+            "the locked material.";
+
+        /// <summary>
         /// Reconstructs the unlocked material on <paramref name="clone"/>
-        /// in memory. The method resolves and loads the recorded original
-        /// shader asset and reads the two shader files and nothing else
-        /// external: it writes no file, mutates no asset, and triggers no
-        /// refresh, so the next build of the same input starts from the
-        /// same on-disk state.
+        /// in memory. <paramref name="lockedOriginal"/> is the locked
+        /// material the clone was instantiated from. The method resolves
+        /// and loads the recorded original shader asset and reads the two
+        /// shader files and nothing else external: it writes no file,
+        /// mutates no asset, and triggers no refresh, so the next build
+        /// of the same input starts from the same on-disk state. The
+        /// locked original is read only.
         /// </summary>
         internal static TransientUnlockRestoreResult TryApply(
             Material clone,
+            Material lockedOriginal,
             Func<Shader, bool> originalShaderAttested)
         {
             // The recorded identity is the only link back to the original
@@ -150,6 +165,20 @@ namespace Alrauna.Amuse.Editor.Build
             // generated shader, so the renamed saved names stay
             // reachable (A5.2).
             var lockedView = new UnityLockedMaterialValues(clone);
+
+            // The locked original snapshot rides beside the clone
+            // snapshot (TX3). Both snapshots are taken before the plan
+            // builds, so the identity fact reads one lock state.
+            var originalView =
+                new UnityLockedMaterialValues(lockedOriginal);
+            var identityRefusal = TextureIdentityRefusal(
+                aligned.Source, properties, lockedView, originalView);
+            if (identityRefusal != null)
+            {
+                return TransientUnlockRestoreResult.Refused(
+                    identityRefusal);
+            }
+
             var reproduction = LockedSourceReproduction.Build(
                 aligned.Source, properties, lockedView);
             if (!reproduction.Succeeded)
@@ -185,6 +214,64 @@ namespace Alrauna.Amuse.Editor.Build
             }
 
             return TransientUnlockRestoreResult.Succeeded();
+        }
+
+        /// <summary>
+        /// Compares the texture identity of the clone and the locked
+        /// original (TX3). The walk uses the typed property table. A
+        /// renamed property is read under its renamed name on both
+        /// sides. The first mismatch refuses with the fixed identity
+        /// sentence. The method returns null on success.
+        /// </summary>
+        private static string TextureIdentityRefusal(
+            AlignedLockedSource source,
+            IReadOnlyList<LockedSourceProperty> properties,
+            ILockedMaterialValues cloneView,
+            ILockedMaterialValues originalView)
+        {
+            foreach (var property in properties)
+            {
+                if (property.Type != ShaderPropertyType.Texture)
+                {
+                    continue;
+                }
+
+                var readName = property.Name;
+                if (source.States.TryGetValue(property.Name, out var state)
+                    && state == LockedPropertyState.Renamed
+                    && source.RenamedNames.TryGetValue(
+                        property.Name, out var renamedName))
+                {
+                    readName = renamedName;
+                }
+
+                var cloneToken =
+                    cloneView.TryGetTexture(readName, out var cloneTexture)
+                        ? cloneTexture.IdentityToken
+                        : null;
+                var originalToken = originalView.TryGetTexture(
+                        readName, out var originalTexture)
+                    ? originalTexture.IdentityToken
+                    : null;
+
+                // An absent token on both sides is agreement. Most
+                // slots of the table carry no texture on either side,
+                // and the build treats that as equal on purpose.
+                if (cloneToken == null && originalToken == null)
+                {
+                    continue;
+                }
+
+                if (!string.Equals(
+                        cloneToken,
+                        originalToken,
+                        StringComparison.Ordinal))
+                {
+                    return TextureIdentityDetail;
+                }
+            }
+
+            return null;
         }
 
         /// <summary>

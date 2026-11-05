@@ -54,10 +54,15 @@ namespace Alrauna.Amuse.Editor.Build
 
     /// <summary>
     /// Restores one locked clone to its unlocked form in memory through
-    /// <see cref="LockedMaterialReconstruction"/>. Implementations must
-    /// never mutate the locked original. A Failed result carries the
-    /// refusal sentence of the broken step (A8.2).
+    /// <see cref="LockedMaterialReconstruction"/>. The delegate carries
+    /// the clone and the locked original the clone was instantiated
+    /// from, so the reconstruction can compare the texture identity of
+    /// both. Implementations must never mutate the locked original.
+    /// A Failed result carries the refusal sentence of the broken step
+    /// (A8.2).
     /// </summary>
     internal delegate TransientUnlockRestoreResult
-        TransientUnlockRestoreDelegate(Material lockedClone);
+        TransientUnlockRestoreDelegate(
+            Material lockedClone,
+            Material lockedOriginal);
 }

@@ -90,6 +90,11 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         private const string OptimizerMissingDetail =
             "A program block misses the optimizer define.";
 
+        // The fixed malformed Properties sentence (LA3). The alignment
+        // refusal and the Gamma invariant share it.
+        private const string MalformedPropertiesDetail =
+            "The Properties text is not well formed.";
+
         // The base lookahead window after a block in surviving original
         // lines (A3.7). The window grows by itself on a tie.
         private const int LookaheadWindow = 8;
@@ -114,6 +119,19 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             "Common.hlsl"
         };
 
+        // The installed optimizer never removes a guard whose keyword
+        // sits in this exception set (LA2). The set mirrors the installed
+        // exception table and must not grow by name likeness.
+        private static readonly HashSet<string> InstalledGuardExceptions =
+            new HashSet<string>(StringComparer.Ordinal)
+        {
+            "UNITY_SINGLE_PASS_STEREO",
+            "FORWARD_BASE_PASS",
+            "FORWARD_ADD_PASS",
+            "POINT",
+            "SPOT"
+        };
+
         private static readonly string[] CullEnumTexts = { "Off", "Front", "Back" };
 
         private static readonly (string Text, int Value)[] ColorMaskLetters =
@@ -126,9 +144,12 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
         /// <summary>
         /// Lists the property names whose Properties line carries the
-        /// Gamma attribute before the name. Unity 2022.3 has no Gamma
-        /// member in ShaderPropertyFlags, so the original text is the
-        /// only place the flag exists at align time (A3.1).
+        /// Gamma attribute before the name. The installed editor also
+        /// exposes a Gamma member on ShaderPropertyFlags, but flag
+        /// existence alone does not prove complete metadata behavior.
+        /// The original text scan stays the required source at align
+        /// time (LA3). A malformed original lexical state throws the
+        /// fixed invariant exception.
         /// </summary>
         internal static IReadOnlyCollection<string> GammaPropertyNames(string originalText)
         {
@@ -137,39 +158,18 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 throw new ArgumentNullException(nameof(originalText));
             }
 
-            var names = new List<string>();
-            var raw = originalText.Split(new[] { '\r', '\n' });
-            var inBlock = false;
-            var depth = 0;
-            foreach (var line in raw)
+            var scan = ScanProperties(SplitLines(originalText));
+            if (!scan.Valid)
             {
-                if (!inBlock)
-                {
-                    if (FirstToken(line.Trim()) == "Properties")
-                    {
-                        inBlock = true;
-                        depth = CountChar(line, '{') - CountChar(line, '}');
-                    }
+                throw new InvalidOperationException(MalformedPropertiesDetail);
+            }
 
-                    continue;
-                }
-
-                var depthBefore = depth;
-                depth += CountChar(line, '{') - CountChar(line, '}');
-                var gammaIndex = line.IndexOf("[Gamma]", StringComparison.Ordinal);
-                if (depthBefore > 0 && gammaIndex >= 0 && TryPropertiesName(line, out var name, out var nameStart))
+            var names = new List<string>();
+            foreach (var declaration in scan.Declarations)
+            {
+                if (declaration.Gamma && !names.Contains(declaration.Name))
                 {
-                    // The attribute must sit before the name, so a display
-                    // string that only mentions the token does not count.
-                    if (gammaIndex < nameStart && !names.Contains(name))
-                    {
-                        names.Add(name);
-                    }
-                }
-
-                if (depth <= 0 && depthBefore > 0)
-                {
-                    inBlock = false;
+                    names.Add(declaration.Name);
                 }
             }
 
@@ -271,12 +271,53 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             IReadOnlyList<LockedSourceProperty> properties,
             PoiyomiLockEra era)
         {
-            var state = new WalkState(originalText, SplitLines(originalText), SplitLines(generatedText), properties, era);
+            var originalLines = SplitLines(originalText);
+            var generatedLines = SplitLines(generatedText);
+            // The shared scan runs before the structural prechecks: a
+            // malformed input refuses with the malformed sentence, not
+            // with a structural sentence (LA3).
+            var originalScan = ScanProperties(originalLines);
+            if (!originalScan.Valid)
+            {
+                throw new RefusalException(
+                    MalformedPropertiesDetail,
+                    RefusalLine(originalScan));
+            }
+
+            var generatedScan = ScanProperties(generatedLines);
+            if (!generatedScan.Valid)
+            {
+                // A generated-side failure maps to the related original
+                // Properties opening line, never to a generated position
+                // (LA3).
+                throw new RefusalException(
+                    MalformedPropertiesDetail,
+                    RefusalLine(originalScan));
+            }
+
+            var state = new WalkState(
+                originalText,
+                originalLines,
+                generatedLines,
+                properties,
+                era,
+                new HashSet<int>(originalScan.WindowIndices),
+                new HashSet<int>(generatedScan.WindowIndices));
             RunPreChecks(state);
             state.Suffix = FindSuffix(state);
             WalkLines(state);
             FinishWalk(state);
             return BuildSource(state);
+        }
+
+        /// <summary>
+        /// The refusal line of one scan result: the Properties opening
+        /// line where available, else the line of the failing open
+        /// state.
+        /// </summary>
+        private static int RefusalLine(PropertiesScan scan)
+        {
+            return scan.OpeningLine > 0 ? scan.OpeningLine : scan.FailureLine;
         }
 
         private static List<LineRef> SplitLines(string text)
@@ -412,8 +453,12 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
                 // A name the original already holds as a whole token is no
                 // rename artifact. A substring check would wrongly drop a
-                // suffix form that only rides inside a longer name.
-                if (ContainsToken(state.OriginalText, candidate))
+                // suffix form that only rides inside a longer name. A run
+                // that starts with a digit is a baked literal print. It can
+                // never carry a rename, because every renamed form starts
+                // with a letter or an underscore (Y5 of the bundled locked
+                // original admission design).
+                if (ContainsToken(state.OriginalText, candidate) || char.IsDigit(candidate[0]))
                 {
                     return;
                 }
@@ -424,7 +469,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 }
             }
 
-            var propertiesLines = new HashSet<int>(PropertiesLineIndices(state.GeneratedLines));
+            var propertiesLines = state.GeneratedPropertiesLineSet;
             var inProgram = false;
             for (var i = 0; i < state.GeneratedLines.Count; i++)
             {
@@ -482,40 +527,47 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
         private static HashSet<string> SuffixCandidates(WalkState state, string artifact)
         {
-            // A4.2 splits every artifact at a declared original name. The
-            // longest declared name that occurs in the artifact decides
-            // the split point, so one artifact yields one candidate set.
-            var longest = 0;
-            foreach (var name in state.Declared.Keys)
+            // A4.2 splits every artifact at a declared original name. Y6
+            // of the bundled locked original admission design narrows the
+            // split set. One artifact yields candidates only from the
+            // earliest position where a declared original name ends and
+            // an underscore follows. At that position the longest
+            // qualifying name decides the split point, so nested names
+            // give one split. Later positions give nothing. The
+            // underscore kills a prefix extension such as a declared name
+            // inside a longer token. A wrong suffix fails at the walk and
+            // never gives a false positive.
+            for (var start = 0; start < artifact.Length; start++)
             {
-                if (name.Length > longest && artifact.IndexOf(name, StringComparison.Ordinal) >= 0)
+                string longest = null;
+                foreach (var name in state.Declared.Keys)
                 {
-                    longest = name.Length;
+                    if (artifact.IndexOf(name, start, StringComparison.Ordinal) != start)
+                    {
+                        continue;
+                    }
+
+                    var end = start + name.Length;
+                    if (end >= artifact.Length || artifact[end] != '_')
+                    {
+                        continue;
+                    }
+
+                    if (longest == null || name.Length > longest.Length)
+                    {
+                        longest = name;
+                    }
+                }
+
+                if (longest != null)
+                {
+                    var set = new HashSet<string>(StringComparer.Ordinal);
+                    AddTailStripped(set, artifact.Substring(start + longest.Length));
+                    return set;
                 }
             }
 
-            var set = new HashSet<string>(StringComparer.Ordinal);
-            if (longest == 0)
-            {
-                return set;
-            }
-
-            foreach (var name in state.Declared.Keys)
-            {
-                if (name.Length != longest)
-                {
-                    continue;
-                }
-
-                var from = 0;
-                while ((from = artifact.IndexOf(name, from, StringComparison.Ordinal)) >= 0)
-                {
-                    AddTailStripped(set, artifact.Substring(from + name.Length));
-                    from += name.Length;
-                }
-            }
-
-            return set;
+            return new HashSet<string>(StringComparer.Ordinal);
         }
 
         private static void AddTailStripped(HashSet<string> set, string rest)
@@ -705,7 +757,22 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     return;
                 }
 
-                MatchProgramLine(state, edited, line.Number);
+                if (state.Era == PoiyomiLockEra.Thry2743)
+                {
+                    // LA4 amends the edit order of A3.3 for the
+                    // installed era: the vendor tokenizes and bakes
+                    // before it deletes the markers, so the matcher
+                    // takes the renamed line before the deletion. The
+                    // historical eras keep the deleted order.
+                    MatchInstalledProgramLine(
+                        state,
+                        RenameLineWithNames(state, line.Text, null),
+                        line.Number);
+                }
+                else
+                {
+                    MatchProgramLine(state, edited, line.Number);
+                }
             }
             else if (state.PropertiesLineSet.Contains(origIndex))
             {
@@ -790,18 +857,67 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         }
 
         /// <summary>
+        /// Tracks the in-comment state of one forward line scan. A line
+        /// inside a block comment, the opener line, and the closer line
+        /// are comment lines. The caller skips them before any directive
+        /// match. This mirrors the block comment drop of the walk
+        /// (fact 2) and carries the Y4 decision of the bundled locked
+        /// original admission design.
+        /// </summary>
+        private struct BlockCommentTracker
+        {
+            private bool _inComment;
+
+            internal bool ConsumedByComment(string trimmed)
+            {
+                if (_inComment)
+                {
+                    if (trimmed.EndsWith("*/", StringComparison.Ordinal))
+                    {
+                        _inComment = false;
+                    }
+
+                    return true;
+                }
+
+                if (trimmed.StartsWith("/*", StringComparison.Ordinal))
+                {
+                    if (!trimmed.EndsWith("*/", StringComparison.Ordinal))
+                    {
+                        _inComment = true;
+                    }
+
+                    return true;
+                }
+
+                return false;
+            }
+        }
+
+        /// <summary>
         /// Finds the extent of one block. Nested directives deepen the
         /// count. An elif line is never special, so it stays part of the
-        /// body before an else (fact 11).
+        /// body before an else (fact 11). A block comment span drops
+        /// first (Y4), so a commented directive shaped line never
+        /// deepens the count.
         /// </summary>
         private static BlockExtent FindBlockExtent(WalkState state, int startIndex, LockedBlockKind kind)
         {
+            // One tracker serves both branches. The ifex branch always
+            // returns or throws, so the in-comment state never carries
+            // over (Y4).
+            var tracker = new BlockCommentTracker();
             if (kind == LockedBlockKind.Ifex)
             {
                 var depth = 1;
                 for (var i = startIndex + 1; i < state.OriginalLines.Count; i++)
                 {
                     var trimmed = state.OriginalLines[i].Text.Trim();
+                    if (tracker.ConsumedByComment(trimmed))
+                    {
+                        continue;
+                    }
+
                     if (IsIfexStart(trimmed))
                     {
                         depth++;
@@ -825,7 +941,13 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             var elseIndex = -1;
             for (var i = startIndex + 1; i < state.OriginalLines.Count; i++)
             {
-                var first = FirstToken(state.OriginalLines[i].Text.Trim());
+                var trimmed = state.OriginalLines[i].Text.Trim();
+                if (tracker.ConsumedByComment(trimmed))
+                {
+                    continue;
+                }
+
+                var first = FirstToken(trimmed);
                 if (first == "#ifdef" || first == "#ifndef" || first == "#if")
                 {
                     ifDepth++;
@@ -871,6 +993,262 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         }
 
         /// <summary>
+        /// Builds the conservative ordinal map of potential shader
+        /// feature harvests (LA2). Every original line is scanned in
+        /// order, including lines inside comments and excluded blocks.
+        /// The scan deliberately overestimates the harvest. The vendor
+        /// pragma prefix is recognized first, the local prefix is
+        /// removed before the non local one, and the remaining text is
+        /// split on the space character with each token trimmed. The
+        /// earliest line index per nonempty token is the only stored
+        /// fact. The map is immutable after the build, so every trial
+        /// clone shares it without a copy.
+        /// </summary>
+        private static Dictionary<string, int> BuildPotentialPragmaIndex(IReadOnlyList<LineRef> lines)
+        {
+            var index = new Dictionary<string, int>(StringComparer.Ordinal);
+            for (var i = 0; i < lines.Count; i++)
+            {
+                var trimmed = lines[i].Text.TrimStart();
+                if (!trimmed.StartsWith("#pragma shader_feature", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                // The vendor replaces every prefix occurrence in the
+                // line, the local one first, so a keyword glued to a
+                // second prefix still emerges (LA2).
+                var rest = trimmed
+                    .Replace("#pragma shader_feature_local", string.Empty)
+                    .Replace("#pragma shader_feature", string.Empty);
+                rest = rest.TrimStart();
+                foreach (var token in rest.Split(' '))
+                {
+                    var keyword = token.Trim();
+                    if (keyword.Length == 0)
+                    {
+                        continue;
+                    }
+
+                    if (!index.ContainsKey(keyword))
+                    {
+                        index[keyword] = i;
+                    }
+                }
+            }
+
+            return index;
+        }
+
+        /// <summary>
+        /// Proves include closure for the whole input (LA2). Every vendor
+        /// recognized include line counts, including unreachable lines.
+        /// The literal quoted operand is compared without case folding,
+        /// and the proved non inlining set is exactly UnityCG.cginc and
+        /// AutoLight.cginc. An input without includes satisfies closure.
+        /// Any other operand or a malformed include disables the guard
+        /// retention proof for the whole input.
+        /// </summary>
+        private static bool HasProvedNonInliningIncludes(IReadOnlyList<LineRef> lines)
+        {
+            for (var i = 0; i < lines.Count; i++)
+            {
+                var trimmed = lines[i].Text.Trim();
+                if (!trimmed.StartsWith("#include", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var open = trimmed.IndexOf('"');
+                if (open < 0)
+                {
+                    return false;
+                }
+
+                var close = trimmed.IndexOf('"', open + 1);
+                if (close < 0)
+                {
+                    return false;
+                }
+
+                var operand = trimmed.Substring(open + 1, close - open - 1);
+                if (operand != "UnityCG.cginc" && operand != "AutoLight.cginc")
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// Decides the guard retention proof for one recognized simple
+        /// guard (LA2). Only the installed era carries the proof, and an
+        /// unproved include disables it for the whole input even for an
+        /// exempt keyword. An exempt keyword retains its frame.
+        /// Otherwise the frame is retained when the prefix map holds no
+        /// harvest of the keyword at an index strictly before the guard.
+        /// </summary>
+        private static bool MustRetainGuard(WalkState state, int originalIndex, string vendorKeyword)
+        {
+            if (state.Era != PoiyomiLockEra.Thry2743 || !state.GuardRetentionProved)
+            {
+                return false;
+            }
+
+            if (InstalledGuardExceptions.Contains(vendorKeyword))
+            {
+                return true;
+            }
+
+            return !state.PotentialPragmaIndex.TryGetValue(vendorKeyword, out var earliest)
+                || earliest >= originalIndex;
+        }
+
+        /// <summary>
+        /// Extracts the vendor keyword of a recognized simple guard. The
+        /// text after the directive is trimmed, then the first space
+        /// delimited token is taken. A tab joined comment stays part of
+        /// the token text. An empty remainder yields null, so a bare
+        /// directive keeps the ordinary treatment (LA2).
+        /// </summary>
+        private static string VendorGuardKeyword(string trimmedDirective, LockedBlockKind kind)
+        {
+            var rest = trimmedDirective.Substring(kind == LockedBlockKind.Ifdef ? 6 : 7).Trim();
+            if (rest.Length == 0)
+            {
+                return null;
+            }
+
+            var space = rest.IndexOf(' ');
+            return space < 0 ? rest : rest.Substring(0, space);
+        }
+
+        /// <summary>
+        /// Walks one kept frame hypothesis from its start line to its end
+        /// delimiter (A3.7). The speculative kept trial and the forced
+        /// retained walk of LA2 share this traversal, so both use the
+        /// same nesting rules. The growth boundary of the trial bounds
+        /// every nested lookahead at this block. Proved retention owns
+        /// the whole frame, so its body lookahead stops at the body end
+        /// and only the else body judges to the frame end. The
+        /// speculative traversal keeps the frame end as one boundary,
+        /// which is its observed legacy contract.
+        /// </summary>
+        private static void WalkKeptFrame(
+            WalkState trial,
+            LockedBlockKind kind,
+            BlockExtent extent,
+            int startIndex,
+            bool provedRetention)
+        {
+            trial.GrowthBoundary = provedRetention ? extent.BodyEnd : extent.EndIndex;
+            if (kind != LockedBlockKind.Ifex)
+            {
+                WalkOrdinaryLine(trial, startIndex);
+            }
+
+            if (extent.BodyEnd > extent.BodyStart)
+            {
+                WalkRange(trial, extent.BodyStart, extent.BodyEnd);
+            }
+
+            if (kind != LockedBlockKind.Ifex)
+            {
+                // LA11 of docs/superpowers/specs/2026-10-28-locked-source-transform-conformance-design.md
+                // makes the installed era own a frame delimiter by
+                // stream order when a wrapper that opened inside the
+                // frame is still open at that delimiter. Such a wrapper
+                // can end after the else or close line, and its walk
+                // then consumes that line. A second walk of the same
+                // line would compare it with a later generated line.
+                // The cursor never moves backward. A close that the
+                // cursor passed without a generated line comparison
+                // leaves the frame without a close, so the trial
+                // refuses. A cursor that passed a delimiter through a
+                // tie lookahead, with no crossing wrapper, keeps the
+                // saved steps, because no approved rule widens that case.
+                var installed = trial.Era == PoiyomiLockEra.Thry2743;
+                if (extent.ElseIndex >= 0)
+                {
+                    if (provedRetention)
+                    {
+                        trial.GrowthBoundary = extent.EndIndex;
+                    }
+
+                    if (installed
+                        && trial.OriginalIndex > extent.ElseIndex
+                        && WrapperCrossesDelimiter(trial, startIndex, extent.ElseIndex))
+                    {
+                        if (trial.OriginalIndex < extent.EndIndex)
+                        {
+                            WalkRange(trial, trial.OriginalIndex, extent.EndIndex);
+                        }
+                    }
+                    else
+                    {
+                        WalkOrdinaryLine(trial, extent.ElseIndex);
+                        if (extent.EndIndex > extent.ElseIndex + 1)
+                        {
+                            WalkRange(trial, extent.ElseIndex + 1, extent.EndIndex);
+                        }
+                    }
+                }
+
+                if (installed
+                    && trial.OriginalIndex > extent.EndIndex
+                    && WrapperCrossesDelimiter(trial, startIndex, extent.EndIndex))
+                {
+                    if (trial.LastConsumedOriginalNumber < trial.OriginalLines[extent.EndIndex].Number)
+                    {
+                        throw new RefusalException(BlockAlignmentDetail, trial.OriginalLines[startIndex].Number);
+                    }
+                }
+                else
+                {
+                    WalkOrdinaryLine(trial, extent.EndIndex);
+                }
+            }
+
+            if (trial.OriginalIndex < extent.EndIndex + 1)
+            {
+                trial.OriginalIndex = extent.EndIndex + 1;
+            }
+        }
+
+        /// <summary>
+        /// Tells whether a wrapper that opened after the frame start is
+        /// still open at the delimiter line (LA11). The scan counts
+        /// wrapper markers alone, skips block comment spans like the
+        /// extent finder, and runs only when the cursor already passed
+        /// the delimiter.
+        /// </summary>
+        private static bool WrapperCrossesDelimiter(WalkState state, int frameStartIndex, int delimiterIndex)
+        {
+            var tracker = new BlockCommentTracker();
+            var depth = 0;
+            for (var i = frameStartIndex + 1; i < delimiterIndex; i++)
+            {
+                var trimmed = state.OriginalLines[i].Text.Trim();
+                if (tracker.ConsumedByComment(trimmed))
+                {
+                    continue;
+                }
+
+                if (IsIfexStart(trimmed))
+                {
+                    depth++;
+                }
+                else if (IsEndex(trimmed) && depth > 0)
+                {
+                    depth--;
+                }
+            }
+
+            return depth > 0;
+        }
+
+        /// <summary>
         /// Decides one block by two hypotheses (A3.7). The kept hypothesis
         /// walks the directive line, the body, and the endif line. The
         /// removed hypothesis skips the block and walks only the else body
@@ -886,45 +1264,61 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             var enclosingLookahead = state.LookaheadRemaining;
             var inheritedBoundary = state.GrowthBoundary;
 
+            // LA2 of docs/superpowers/specs/2026-10-28-locked-source-transform-conformance-design.md
+            // proves a recognized simple guard of the installed era non
+            // removable from the conservative prefix map or the installed
+            // exception set. The forced walk then keeps the frame with no
+            // removed trial and no tie lookahead, and a failure propagates
+            // without a retry as removed. Both historical eras keep their
+            // speculative resolver, and the installed era records carry
+            // the extracted vendor keyword.
+            string vendorKeyword = null;
+            if (state.Era == PoiyomiLockEra.Thry2743
+                && (kind == LockedBlockKind.Ifdef || kind == LockedBlockKind.Ifndef))
+            {
+                vendorKeyword = VendorGuardKeyword(startLine.Text.Trim(), kind);
+            }
+
+            var recordKeyword = vendorKeyword ?? conditionOrKeyword;
+
             // A trial must walk its whole body. The enclosing window count
             // returns after the adoption. The trials bound every nested
             // lookahead at this block, because the survival of the lines
             // past the block is the enclosing decision, not this one.
             state.LookaheadRemaining = -1;
+
+            if (vendorKeyword != null && MustRetainGuard(state, startIndex, vendorKeyword))
+            {
+                // Proved retention has no rival trial, so the owned state
+                // walks directly. The record position is captured before
+                // the walk, because resolved nested blocks append their
+                // records behind it. A failure propagates with the parent
+                // window and boundary restored and never retries the
+                // frame as removed.
+                var retainedRecordStart = state.Blocks.Count;
+                try
+                {
+                    WalkKeptFrame(state, kind, extent, startIndex, provedRetention: true);
+                }
+                finally
+                {
+                    state.LookaheadRemaining = enclosingLookahead;
+                    state.GrowthBoundary = inheritedBoundary;
+                }
+
+                state.Blocks.Insert(
+                    retainedRecordStart,
+                    new LockedBlockRecord(kind, LockedBlockOutcome.Kept, recordKeyword, false, startLine.Number));
+
+                return;
+            }
+
             WalkState keptResult = null;
             try
             {
                 var kept = state.Clone();
-                kept.GrowthBoundary = extent.EndIndex;
-                if (kind != LockedBlockKind.Ifex)
-                {
-                    WalkOrdinaryLine(kept, startIndex);
-                }
-
-                if (extent.BodyEnd > extent.BodyStart)
-                {
-                    WalkRange(kept, extent.BodyStart, extent.BodyEnd);
-                }
-
-                if (kind != LockedBlockKind.Ifex)
-                {
-                    if (extent.ElseIndex >= 0)
-                    {
-                        WalkOrdinaryLine(kept, extent.ElseIndex);
-                        if (extent.EndIndex > extent.ElseIndex + 1)
-                        {
-                            WalkRange(kept, extent.ElseIndex + 1, extent.EndIndex);
-                        }
-                    }
-
-                    WalkOrdinaryLine(kept, extent.EndIndex);
-                }
-
+                WalkKeptFrame(kept, kind, extent, startIndex, provedRetention: false);
                 keptResult = kept;
-                if (keptResult.OriginalIndex < extent.EndIndex + 1)
-                {
-                    keptResult.OriginalIndex = extent.EndIndex + 1;
-                }
             }
             catch (RefusalException refusal)
             {
@@ -982,7 +1376,28 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             var bodySurviving = BodyHasSurvivingLine(state, extent.BodyStart, extent.BodyEnd);
             var winner = candidates[0].State;
             var decidedByLookahead = false;
-            if (candidates.Count == 2 && bodySurviving)
+            var zeroAndZero = false;
+            var tie = candidates.Count == 2 && bodySurviving;
+            // Y3 of the bundled locked original admission design. Both
+            // trials consumed zero generated lines across the block, so
+            // the generated text is identical under both outcomes. Only
+            // an //ifex wrapper can hold this shape, because a kept ifdef
+            // or ifndef trial always consumes its directive line. The
+            // check sits before the lookahead, so no candidate walks
+            // past the wrapper and no later tie throws through it (Y2
+            // case e note).
+            var bothZero = tie
+                && keptResult.GenIndex == state.GenIndex
+                && removedResult.GenIndex == state.GenIndex;
+            if (bothZero)
+            {
+                // The text cannot pick an outcome, so Y3 adopts the
+                // removed trial. The adopted trial already holds the
+                // NotEvaluated records of the nested blocks.
+                zeroAndZero = true;
+                winner = removedResult;
+            }
+            else if (tie)
             {
                 decidedByLookahead = true;
                 while (true)
@@ -1052,6 +1467,35 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
                     if (allAtEnd)
                     {
+                        // Y2 of the bundled locked original admission
+                        // design classifies the tie at this point, where
+                        // both candidates stayed alive to the boundary
+                        // and the code refused as undecided before that
+                        // design as of 2026-10-25. The consumed count of
+                        // a trial is its generated index delta from the
+                        // block start to the growth boundary. A
+                        // both-nonzero tie keeps the refusal (Y4). A
+                        // both-zero tie never reaches this point,
+                        // because Y3 adopts it before the lookahead
+                        // runs. Exactly one trial at zero runs the
+                        // catch-up probe (Y2).
+                        var keptConsumed = keptResult.GenIndex - state.GenIndex;
+                        var removedConsumed = removedResult.GenIndex - state.GenIndex;
+                        if ((keptConsumed == 0) != (removedConsumed == 0))
+                        {
+                            var zeroState = keptConsumed == 0 ? keptResult : removedResult;
+                            var rivalState = keptConsumed == 0 ? removedResult : keptResult;
+                            if (ProbeCatchUp(zeroState, rivalState.GenIndex)
+                                == CatchUpProbeOutcome.Died)
+                            {
+                                // The zero trial died on a line it cannot
+                                // match, so the generated text forces the
+                                // rival outcome (Y2).
+                                winner = rivalState;
+                                break;
+                            }
+                        }
+
                         state.LookaheadRemaining = enclosingLookahead;
                         throw new RefusalException(BlockTieDetail, startLine.Number, true);
                     }
@@ -1062,6 +1506,12 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             if (candidates.Count == 2 && !bodySurviving)
             {
                 outcome = LockedBlockOutcome.Unobservable;
+            }
+            else if (zeroAndZero)
+            {
+                // Y3 adopts the removed trial, so the record reads
+                // Removed and carries the marker.
+                outcome = LockedBlockOutcome.Removed;
             }
             else if (!decidedByLookahead)
             {
@@ -1077,7 +1527,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             // lands at the position of the block start, so the nested
             // records of the adopted winner follow it (A3.7, A4.4).
             var recordStart = state.Blocks.Count;
-            winner.Blocks.Insert(recordStart, new LockedBlockRecord(kind, outcome, conditionOrKeyword, startLine.Number));
+            winner.Blocks.Insert(recordStart, new LockedBlockRecord(kind, outcome, recordKeyword, zeroAndZero, startLine.Number));
             state.AdoptFrom(winner);
             state.LookaheadRemaining = enclosingLookahead;
             state.GrowthBoundary = inheritedBoundary;
@@ -1088,40 +1538,70 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         }
 
         /// <summary>
+        /// Walks the zero trial of a tie forward until it dies, catches up
+        /// with the rival trial, or reaches the end of the original file
+        /// (Y2). The zero trial must reproduce the generated lines that
+        /// the rival trial already consumed. The probe bypasses the
+        /// lookahead window counter and the growth boundary, because Y2
+        /// decides past both. The end of the original file is the only
+        /// cap, and it is an evidence bound, never a budget (Y10). A
+        /// nested undecided refusal propagates as undecided (Y2).
+        /// </summary>
+        private static CatchUpProbeOutcome ProbeCatchUp(WalkState zeroState, int rivalGeneratedIndex)
+        {
+            zeroState.GrowthBoundary = -1;
+            zeroState.LookaheadRemaining = -1;
+            var cap = zeroState.OriginalLines.Count;
+            while (zeroState.GenIndex < rivalGeneratedIndex
+                && zeroState.OriginalIndex < cap)
+            {
+                try
+                {
+                    WalkRange(zeroState, zeroState.OriginalIndex, zeroState.OriginalIndex + 1);
+                }
+                catch (RefusalException refusal)
+                {
+                    if (refusal.Undecided)
+                    {
+                        throw;
+                    }
+
+                    return CatchUpProbeOutcome.Died;
+                }
+
+                if (zeroState.GenIndex >= rivalGeneratedIndex)
+                {
+                    return CatchUpProbeOutcome.CaughtUp;
+                }
+            }
+
+            return zeroState.GenIndex >= rivalGeneratedIndex
+                ? CatchUpProbeOutcome.CaughtUp
+                : CatchUpProbeOutcome.ReachedFileEnd;
+        }
+
+        /// <summary>
         /// Records every nested block start inside a skipped removed body.
         /// A block inside a removed block is never evaluated (fact 9), so
         /// the record only marks it NotEvaluated (A3.7).
         /// </summary>
         private static void RecordSkippedBlocks(WalkState state, int bodyStart, int bodyEnd)
         {
-            var inBlockComment = false;
+            var tracker = new BlockCommentTracker();
             for (var i = bodyStart; i < bodyEnd; i++)
             {
                 var trimmed = state.OriginalLines[i].Text.Trim();
-                if (inBlockComment)
+                if (tracker.ConsumedByComment(trimmed))
                 {
-                    if (trimmed.EndsWith("*/", StringComparison.Ordinal))
-                    {
-                        inBlockComment = false;
-                    }
-
-                    continue;
-                }
-
-                if (trimmed.StartsWith("/*", StringComparison.Ordinal))
-                {
-                    if (!trimmed.EndsWith("*/", StringComparison.Ordinal))
-                    {
-                        inBlockComment = true;
-                    }
-
                     continue;
                 }
 
                 if (TryBlockStart(trimmed, out var kind, out var text))
                 {
+                    // A skipped nested block is not the wrapper record,
+                    // so it never carries the marker (Y3).
                     state.Blocks.Add(new LockedBlockRecord(
-                        kind, LockedBlockOutcome.NotEvaluated, text, state.OriginalLines[i].Number));
+                        kind, LockedBlockOutcome.NotEvaluated, text, false, state.OriginalLines[i].Number));
                 }
             }
         }
@@ -1133,28 +1613,13 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// </summary>
         private static bool BodyHasSurvivingLine(WalkState state, int bodyStart, int bodyEnd)
         {
-            var inBlockComment = false;
+            var tracker = new BlockCommentTracker();
             for (var i = bodyStart; i < bodyEnd; i++)
             {
                 var text = state.OriginalLines[i].Text;
                 var trimmed = text.Trim();
-                if (inBlockComment)
+                if (tracker.ConsumedByComment(trimmed))
                 {
-                    if (trimmed.EndsWith("*/", StringComparison.Ordinal))
-                    {
-                        inBlockComment = false;
-                    }
-
-                    continue;
-                }
-
-                if (trimmed.StartsWith("/*", StringComparison.Ordinal))
-                {
-                    if (!trimmed.EndsWith("*/", StringComparison.Ordinal))
-                    {
-                        inBlockComment = true;
-                    }
-
                     continue;
                 }
 
@@ -1667,6 +2132,880 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
         }
 
+        // --- LA4: the installed era occurrence rule -------------------
+
+        // The vendor token split set of ReplaceShaderValues. The
+        // installed era tokenizes the trimmed line with exactly these
+        // characters and no empty entries.
+        private static readonly char[] InstalledTokenSeparators =
+        {
+            ' ', '\t', '(', ')', '[', ']', '+', '-', '*', '/', '.', ',', ';', '=', '!'
+        };
+
+        // The vendor separator set around a property occurrence. A
+        // missing neighbor reads as a space.
+        private static readonly HashSet<char> InstalledSeparators = new HashSet<char>
+        {
+            ' ', '\t', '\r', '\n', ';', ',', '.', '(', ')', '[', ']', '{', '}',
+            '>', '<', '=', '!', '&', '|', '^', '+', '-', '*', '/', '#'
+        };
+
+        // The vendor recognized declaration types. Only one of these
+        // directly before the property token exempts a declaration
+        // occurrence and records the print format.
+        private static readonly HashSet<string> InstalledDeclarationTypes =
+            new HashSet<string>
+            {
+                "int", "float", "float2", "float3", "float4",
+                "half", "half2", "half3", "half4",
+                "fixed", "fixed2", "fixed3", "fixed4"
+            };
+
+        // The shared empty read only view for the installed era walk
+        // states. No caller of the installed era reads the historical
+        // first declaration scan (LA4). Nothing mutates the set.
+        private static readonly HashSet<string> EmptyDeclaredInts =
+            new HashSet<string>(StringComparer.Ordinal);
+
+        // The shared empty declaration format map for the historical
+        // era walk states. Only the installed era reads and writes the
+        // map (LA4), so the historical states share this instance and
+        // no clone copies it. Nothing mutates the shared instance.
+        private static readonly Dictionary<string, string> EmptyDeclarationTypes =
+            new Dictionary<string, string>(StringComparer.Ordinal);
+
+        /// <summary>
+        /// The touched facts of one installed era program line (LA4).
+        /// The inference fills the per property uses, the literal texts
+        /// with their full printed spans, the rename decision touches,
+        /// and the ordered declaration format changes. Nothing here
+        /// touches the walk state, so a failed replay leaks nothing.
+        /// </summary>
+        private sealed class ProgramLineProposal
+        {
+            internal readonly Dictionary<string, MatchKind> Uses =
+                new Dictionary<string, MatchKind>(StringComparer.Ordinal);
+
+            internal readonly Dictionary<string, string> Literals =
+                new Dictionary<string, string>(StringComparer.Ordinal);
+
+            internal readonly Dictionary<string, string> LiteralPrints =
+                new Dictionary<string, string>(StringComparer.Ordinal);
+
+            internal readonly List<string> RenamedTouches = new List<string>();
+
+            internal readonly List<string> NotRenamedTouches = new List<string>();
+
+            internal readonly List<KeyValuePair<string, string>> DeclarationTypes =
+                new List<KeyValuePair<string, string>>();
+        }
+
+        /// <summary>
+        /// Matches one installed era program line with the vendor
+        /// occurrence rule (LA4). The line arrives renamed and before
+        /// the hint deletion. The vendor token array is built once and
+        /// shared by the inference and the replay. The inference
+        /// proposes only the facts of this line, the replay rebuilds
+        /// the vendor edits from those facts alone, and both must agree
+        /// on the generated text before any fact or format state
+        /// commits.
+        /// </summary>
+        private static void MatchInstalledProgramLine(
+            WalkState state,
+            string renamedPreHintLine,
+            int originalNumber)
+        {
+            if (state.GenIndex >= state.GeneratedLines.Count)
+            {
+                // A generated text that ends before the emulation needs
+                // it refuses. It never crashes the walk.
+                throw new RefusalException(LineMismatchDetail, originalNumber);
+            }
+
+            var generated = state.GeneratedLines[state.GenIndex].Text;
+            var tokens = renamedPreHintLine.TrimStart().Split(
+                InstalledTokenSeparators, StringSplitOptions.RemoveEmptyEntries);
+            var hasCandidate = false;
+            foreach (var token in tokens)
+            {
+                if (state.Declared.ContainsKey(token) || state.DerivedOf.ContainsKey(token))
+                {
+                    hasCandidate = true;
+                    break;
+                }
+            }
+
+            if (!hasCandidate)
+            {
+                // No constant token takes part, so the vendor edits
+                // nothing before the hint deletion (LA4).
+                var untouched = renamedPreHintLine
+                    .Replace("UNITY_BRANCH", string.Empty)
+                    .Replace("[branch]", string.Empty);
+                if (!string.Equals(untouched, generated, StringComparison.Ordinal))
+                {
+                    throw new RefusalException(LineMismatchDetail, originalNumber);
+                }
+
+                return;
+            }
+
+            var proposal = new ProgramLineProposal();
+            var predicted = InferInstalledProgramLine(
+                state, renamedPreHintLine, tokens, generated, proposal, originalNumber);
+            predicted = predicted
+                .Replace("UNITY_BRANCH", string.Empty)
+                .Replace("[branch]", string.Empty);
+            if (!string.Equals(predicted, generated, StringComparison.Ordinal)
+                || !ReplayInstalledProgramLine(
+                    renamedPreHintLine, generated, state, proposal, tokens))
+            {
+                throw new RefusalException(LineMismatchDetail, originalNumber);
+            }
+
+            CommitInstalledProposal(state, proposal, originalNumber);
+        }
+
+        /// <summary>
+        /// True when the text from one position holds only whitespace
+        /// up to a semicolon (LA4). The vendor trims the rest of the
+        /// line and checks the semicolon, so any whitespace run counts
+        /// and this check allocates nothing.
+        /// </summary>
+        private static bool RestIsSemicolon(string text, int start)
+        {
+            var i = start;
+            while (i < text.Length && char.IsWhiteSpace(text[i]))
+            {
+                i++;
+            }
+
+            return i < text.Length && text[i] == ';';
+        }
+
+        /// <summary>
+        /// True when one physical occurrence of a declared texture name
+        /// is the declarator of its sampler declaration (LA4 sampler
+        /// amendment). The vendor holds no constant for a texture name,
+        /// so the declarator is no constant occurrence. The reviewed
+        /// grammar reads forward from the line start: optional storage
+        /// prefixes, then one sampler type word of the existing fact 4
+        /// set, then the declared identifier at this occurrence, and
+        /// the trimmed rest of the line starts with the semicolon. The
+        /// decision never reads the token array, so a repeated token
+        /// visit re-finds the same declarator and never turns a later
+        /// read into a declarator.
+        /// </summary>
+        private static bool IsTextureSamplerDeclaration(
+            WalkState state,
+            string text,
+            int occurrence,
+            string name)
+        {
+            if (occurrence == 0 || !state.IsTexture(name))
+            {
+                return false;
+            }
+
+            if (!RestIsSemicolon(text, occurrence + name.Length))
+            {
+                return false;
+            }
+
+            var position = 0;
+            while (position < text.Length
+                && (text[position] == ' ' || text[position] == '\t'))
+            {
+                position++;
+            }
+
+            while (true)
+            {
+                var tokenStart = position;
+                while (position < text.Length && IsWordChar(text[position]))
+                {
+                    position++;
+                }
+
+                if (position == tokenStart)
+                {
+                    // The line holds no further word, so no declarator
+                    // grammar fits.
+                    return false;
+                }
+
+                for (var i = 0; i < SamplerDeclarationKeywords.Length; i++)
+                {
+                    if (WindowEquals(text, tokenStart, position, SamplerDeclarationKeywords[i]))
+                    {
+                        while (position < text.Length
+                            && (text[position] == ' ' || text[position] == '\t'))
+                        {
+                            position++;
+                        }
+
+                        // The declared identifier must begin at this
+                        // occurrence, so a later read of the same name
+                        // on the line stays a use.
+                        return position == occurrence;
+                    }
+                }
+
+                if (WindowEquals(text, tokenStart, position, "uniform")
+                    || WindowEquals(text, tokenStart, position, "static")
+                    || WindowEquals(text, tokenStart, position, "const"))
+                {
+                    while (position < text.Length
+                        && (text[position] == ' ' || text[position] == '\t'))
+                    {
+                        position++;
+                    }
+
+                    continue;
+                }
+
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// True when the text window holds exactly one keyword string.
+        /// The compare reads the existing strings in place and never
+        /// builds a new one.
+        /// </summary>
+        private static bool WindowEquals(string text, int start, int end, string keyword)
+        {
+            return end - start == keyword.Length && MatchesAt(text, start, keyword);
+        }
+
+        /// <summary>
+        /// Maps every pre hint position to its position after the hint
+        /// deletion, because the generated text is the deleted form
+        /// while the occurrence work stays on the pre hint line (LA4).
+        /// The vendor deletes both marker substrings left to right and
+        /// keeps one boundary per deleted span. Bound: the scan reads
+        /// the pre hint text once, so it does not compose a second
+        /// marker that only the first deletion exposes. A following
+        /// occurrence then maps past preserved marker text, and the
+        /// exact sequential replay refuses such a line conservatively.
+        /// </summary>
+        private static List<int> BuildHintMap(string work)
+        {
+            // shortcut: The map does not compose a second hint exposed
+            // by the first deletion. Use sequential position maps if an
+            // attested source needs that form.
+            var map = new List<int>(work.Length + 1);
+            var consumed = 0;
+            var produced = 0;
+            while (consumed < work.Length)
+            {
+                if (consumed + 12 <= work.Length
+                    && string.CompareOrdinal(work, consumed, "UNITY_BRANCH", 0, 12) == 0)
+                {
+                    for (var i = 0; i < 12; i++)
+                    {
+                        map.Add(produced);
+                    }
+
+                    consumed += 12;
+                    continue;
+                }
+
+                if (consumed + 8 <= work.Length
+                    && string.CompareOrdinal(work, consumed, "[branch]", 0, 8) == 0)
+                {
+                    for (var i = 0; i < 8; i++)
+                    {
+                        map.Add(produced);
+                    }
+
+                    consumed += 8;
+                    continue;
+                }
+
+                map.Add(produced);
+                produced++;
+                consumed++;
+            }
+
+            map.Add(produced);
+            return map;
+        }
+
+        /// <summary>
+        /// Walks the vendor occurrence loop over one mutable copy of
+        /// the renamed pre hint line and reads the proposed facts from
+        /// the generated text (LA4). Every eligible occurrence must
+        /// read as the identifier or as the literal of its property; a
+        /// skipped or exempt occurrence must read as the identifier.
+        /// Literal reads splice their printed text into the work line,
+        /// so the predicted text compares exactly after the hint
+        /// deletion. The position map follows the hint deletion, so a
+        /// separated hint before an occurrence reads the right
+        /// generated cursor. Rename touches apply to the whole line at
+        /// the end, because the vendor renames before the occurrence
+        /// pass.
+        /// </summary>
+        private static string InferInstalledProgramLine(
+            WalkState state,
+            string renamedPreHintLine,
+            string[] tokens,
+            string generated,
+            ProgramLineProposal proposal,
+            int originalNumber)
+        {
+            var work = renamedPreHintLine;
+            var map = BuildHintMap(work);
+            for (var t = 0; t < tokens.Length; t++)
+            {
+                var name = tokens[t];
+                if (!state.Declared.ContainsKey(name) && !state.DerivedOf.ContainsKey(name))
+                {
+                    continue;
+                }
+
+                var declarationFound = false;
+                var lastIndex = 0;
+                int index;
+                while ((index = work.IndexOf(name, lastIndex, StringComparison.Ordinal)) != -1)
+                {
+                    lastIndex = index + 1;
+                    var left = index > 0 ? work[index - 1] : ' ';
+                    var right = index + name.Length < work.Length
+                        ? work[index + name.Length]
+                        : ' ';
+                    if (!InstalledSeparators.Contains(left)
+                        || !InstalledSeparators.Contains(right))
+                    {
+                        continue;
+                    }
+
+                    // The recognized inline comment shape keeps its
+                    // identifier spelling and records no use (LA4).
+                    if (left == '*' && right == '*' && index >= 2 && work[index - 2] == '/')
+                    {
+                        RequireIdentifierAt(
+                            state, map, generated, index, name, proposal, originalNumber);
+                        continue;
+                    }
+
+                    // The sampler declarator of a declared texture is no
+                    // constant occurrence (LA4 sampler amendment). The
+                    // vendor holds no constant for the texture name, so
+                    // the line keeps the identifier and records no use
+                    // and no declaration format entry. The check reads
+                    // the physical text, so a repeated token visit
+                    // re-finds the declarator and a later read stays a
+                    // use.
+                    if (IsTextureSamplerDeclaration(state, work, index, name))
+                    {
+                        RequireIdentifierAt(
+                            state, map, generated, index, name, proposal, originalNumber);
+                        continue;
+                    }
+
+                    // At most the occurrence that a recognized type
+                    // directly before the token and a following
+                    // semicolon allow stays a declaration, once per
+                    // token visit (LA4). A later visit of a repeated
+                    // token replaces the exempt occurrence in vendor
+                    // order, so the final text may hold the literal
+                    // here. The inference falls back to the tentative
+                    // literal and keeps the format observation, and
+                    // the exact replay of the original token visits
+                    // rejects any replacement that no revisit
+                    // justifies.
+                    if (!declarationFound
+                        && t > 0
+                        && InstalledDeclarationTypes.Contains(tokens[t - 1])
+                        && RestIsSemicolon(work, index + name.Length))
+                    {
+                        proposal.DeclarationTypes.Add(new KeyValuePair<string, string>(
+                            name, tokens[t - 1]));
+                        declarationFound = true;
+                        if (!TryIdentifierSpellingAt(
+                                state, generated, map[index], name, proposal, out _))
+                        {
+                            MatchInstalledUseAt(
+                                state,
+                                work,
+                                map,
+                                generated,
+                                index,
+                                name,
+                                proposal,
+                                originalNumber,
+                                out work);
+                        }
+
+                        continue;
+                    }
+
+                    MatchInstalledUseAt(
+                        state,
+                        work,
+                        map,
+                        generated,
+                        index,
+                        name,
+                        proposal,
+                        originalNumber,
+                        out work);
+                }
+            }
+
+            if (proposal.RenamedTouches.Count > 0)
+            {
+                work = RenameLineWithNames(state, work, proposal.RenamedTouches);
+            }
+
+            return work;
+        }
+
+        /// <summary>
+        /// Verifies that the generated text holds the identifier
+        /// spelling of the property at one skipped or exempt occurrence
+        /// and records the rename decision touch without a use (LA4).
+        /// </summary>
+        private static void RequireIdentifierAt(
+            WalkState state,
+            List<int> map,
+            string generated,
+            int index,
+            string name,
+            ProgramLineProposal proposal,
+            int originalNumber)
+        {
+            string spelling;
+            if (!TryIdentifierSpellingAt(
+                    state, generated, map[index], name, proposal, out spelling))
+            {
+                throw new RefusalException(LineMismatchDetail, originalNumber);
+            }
+        }
+
+        /// <summary>
+        /// Matches one eligible occurrence as the identifier or as the
+        /// baked literal of its property and splices the read text into
+        /// the work line (LA4). The proposal records the use; a second
+        /// kind or a second literal for one property refuses with the
+        /// named sentences. Nothing commits to the walk state here.
+        /// </summary>
+        private static void MatchInstalledUseAt(
+            WalkState state,
+            string work,
+            List<int> map,
+            string generated,
+            int index,
+            string name,
+            ProgramLineProposal proposal,
+            int originalNumber,
+            out string result)
+        {
+            MatchKind known;
+            proposal.Uses.TryGetValue(name, out known);
+
+            string spelling;
+            if (TryIdentifierSpellingAt(state, generated, map[index], name, proposal, out spelling))
+            {
+                if (known == MatchKind.Literal)
+                {
+                    // The vendor replaces every eligible occurrence of
+                    // a baked property and keeps every occurrence of a
+                    // live one, so one kind beside the other is no
+                    // vendor output (LA4).
+                    throw new RefusalException(MixedUsesDetail, originalNumber);
+                }
+
+                proposal.Uses[name] = MatchKind.Identifier;
+                result = work;
+                return;
+            }
+
+
+            var shape = LiteralShapeOf(state, name);
+            if (state.Era == PoiyomiLockEra.Thry2743
+                && (shape == LiteralShape.ScalarFloat || shape == LiteralShape.F0))
+            {
+                // LA4: the scalar print format follows the last
+                // observed declaration, and a declaration earlier on
+                // this line already counts for its later occurrences.
+                shape = LayerLineDeclarations(shape, name, proposal);
+            }
+
+            var position = map[index];
+            if (shape != LiteralShape.None
+                && TryReadLiteral(state, generated, ref position, name, shape, out var literal))
+            {
+                if (known == MatchKind.Identifier)
+                {
+                    throw new RefusalException(MixedUsesDetail, originalNumber);
+                }
+
+                var start = map[index];
+                // The full printed span is the replay splice text. The
+                // recorded literal stays the round trip text of the
+                // fact (LA4).
+                var text = generated.Substring(start, position - start);
+                if (known == MatchKind.Literal)
+                {
+                    if (proposal.Literals[name] != literal)
+                    {
+                        throw new RefusalException(TwoLiteralsDetail, originalNumber);
+                    }
+
+                    if (proposal.LiteralPrints[name] != text)
+                    {
+                        throw new RefusalException(LineMismatchDetail, originalNumber);
+                    }
+                }
+                else
+                {
+                    proposal.Uses[name] = MatchKind.Literal;
+                    proposal.Literals[name] = literal;
+                    proposal.LiteralPrints[name] = text;
+                    if (!state.DerivedOf.ContainsKey(name))
+                    {
+                        // A baked property never carries the rename.
+                        AddTouch(proposal.NotRenamedTouches, name);
+                    }
+                }
+
+                result = SpliceWork(work, index, name.Length, text, map, start);
+                return;
+            }
+            else if (known == MatchKind.Literal)
+            {
+                // LA4 amendment: a later occurrence of the same baked
+                // property can sit behind an unprocessed occurrence of
+                // another property whose token the vendor visits later.
+                // The generated position then names that other literal,
+                // so the read cannot trust the map. The vendor replaces
+                // every eligible occurrence of a baked property with the
+                // one recorded print, so the fallback splices the
+                // recorded print and the exact replay of this line
+                // verifies the whole prediction. A wrong print refuses
+                // there, so the fallback stays fail closed.
+                result = SpliceWork(
+                    work,
+                    index,
+                    name.Length,
+                    proposal.LiteralPrints[name],
+                    map,
+                    index);
+                return;
+            }
+
+            if (known == MatchKind.Identifier)
+            {
+                // LA4 amendment: a later occurrence of the same live
+                // property can sit behind an unprocessed literal of a
+                // property whose token the vendor visits later. The
+                // position map then points inside shifted text, so the
+                // identifier read and the literal read both fail. The
+                // mixed use refusal stays first, because a genuine
+                // literal read still names the conflict. The vendor
+                // keeps every occurrence of a live property, so the
+                // fallback keeps the spelling and the exact replay of
+                // this line verifies the whole prediction. A wrong keep
+                // refuses there, so the fallback stays fail closed.
+                result = work;
+                return;
+            }
+
+            throw new RefusalException(LineMismatchDetail, originalNumber);
+        }
+
+        /// <summary>
+        /// Layers the tentative declarations of the same line over one
+        /// base scalar shape (LA4). The base shape already read the
+        /// committed declaration format state, so only the proposal
+        /// entries layer here. The last observed declaration of the
+        /// line wins, which keeps the vendor visit order of one line.
+        /// </summary>
+        private static LiteralShape LayerLineDeclarations(
+            LiteralShape baseShape,
+            string name,
+            ProgramLineProposal proposal)
+        {
+            var declaredType = baseShape == LiteralShape.F0 ? "int" : null;
+            for (var d = 0; d < proposal.DeclarationTypes.Count; d++)
+            {
+                if (proposal.DeclarationTypes[d].Key == name)
+                {
+                    declaredType = proposal.DeclarationTypes[d].Value;
+                }
+            }
+
+            return declaredType == "int" ? LiteralShape.F0 : LiteralShape.ScalarFloat;
+        }
+
+        /// <summary>
+        /// Tries the identifier spellings of one property occurrence
+        /// under the live and renamed rules (LA4). The suffixed form
+        /// decides the rename and the plain form decides against it.
+        /// The derived texture name carries the rename of its texture
+        /// before the tail.
+        /// </summary>
+        private static bool TryIdentifierSpellingAt(
+            WalkState state,
+            string generated,
+            int position,
+            string name,
+            ProgramLineProposal proposal,
+            out string spelling)
+        {
+            spelling = null;
+            string texture;
+            if (state.DerivedOf.TryGetValue(name, out texture))
+            {
+                if (state.Suffix != null && !IsRenameDecided(state, proposal, texture))
+                {
+                    var renamedDerived = texture + state.Suffix + name.Substring(texture.Length);
+                    if (MatchesAt(generated, position, renamedDerived))
+                    {
+                        spelling = renamedDerived;
+                        AddTouch(proposal.RenamedTouches, texture);
+                        return true;
+                    }
+                }
+
+                if (MatchesAt(generated, position, name))
+                {
+                    spelling = name;
+                    AddTouch(proposal.NotRenamedTouches, texture);
+                    return true;
+                }
+
+                return false;
+            }
+
+            if (state.Suffix != null && !IsRenameDecided(state, proposal, name))
+            {
+                var renamed = name + state.Suffix;
+                if (MatchesAt(generated, position, renamed))
+                {
+                    spelling = renamed;
+                    AddTouch(proposal.RenamedTouches, name);
+                    return true;
+                }
+            }
+
+            if (MatchesAt(generated, position, name))
+            {
+                spelling = name;
+                AddTouch(proposal.NotRenamedTouches, name);
+                return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// True when the rename decision of the property already stands
+        /// in the walk state or in the tentative touches of this line
+        /// (LA4). An undecided property still tries both spellings.
+        /// </summary>
+        private static bool IsRenameDecided(
+            WalkState state,
+            ProgramLineProposal proposal,
+            string property)
+        {
+            if (proposal.RenamedTouches.Contains(property)
+                || proposal.NotRenamedTouches.Contains(property))
+            {
+                return true;
+            }
+
+            return state.RenamedDecided.ContainsKey(property);
+        }
+
+        private static void AddTouch(List<string> touches, string property)
+        {
+            if (!touches.Contains(property))
+            {
+                touches.Add(property);
+            }
+        }
+
+        /// <summary>
+        /// Replaces one work span with the printed text and rebuilds the
+        /// work to generated position map behind the span (LA4). The
+        /// map keeps one entry per work character plus the end
+        /// boundary, so the carried boundary of the old span end stays
+        /// the single boundary behind the inserted text.
+        /// </summary>
+        private static string SpliceWork(
+            string work,
+            int index,
+            int length,
+            string text,
+            List<int> map,
+            int generatedStart)
+        {
+            var builder = new StringBuilder(work.Length - length + text.Length);
+            builder.Append(work, 0, index);
+            builder.Append(text);
+            builder.Append(work, index + length, work.Length - index - length);
+            var shifted = new List<int>(map.Count + text.Length - length);
+            for (var i = 0; i < index; i++)
+            {
+                shifted.Add(map[i]);
+            }
+
+            for (var i = 0; i < text.Length; i++)
+            {
+                shifted.Add(generatedStart + i);
+            }
+
+            for (var i = index + length; i < map.Count; i++)
+            {
+                shifted.Add(map[i] + text.Length - length);
+            }
+
+            map.Clear();
+            map.AddRange(shifted);
+            return builder.ToString();
+        }
+
+        /// <summary>
+        /// Replays the vendor occurrence edits from the proposal facts
+        /// alone on a fresh mutable copy of the renamed pre hint line
+        /// and requires the exact generated text after the hint
+        /// deletion (LA4). The replay shares the one vendor token array
+        /// of the line. It reads no generated position for its
+        /// decisions; a proposal that disagrees with the vendor loop,
+        /// an unexplained declaration exemption, or a leftover
+        /// declaration change fails here.
+        /// </summary>
+        private static bool ReplayInstalledProgramLine(
+            string renamedPreHintLine,
+            string generatedLine,
+            WalkState state,
+            ProgramLineProposal proposal,
+            string[] tokens)
+        {
+            var work = proposal.RenamedTouches.Count == 0
+                ? renamedPreHintLine
+                : RenameLineWithNames(state, renamedPreHintLine, proposal.RenamedTouches);
+            var declarationIndex = 0;
+            for (var t = 0; t < tokens.Length; t++)
+            {
+                var name = tokens[t];
+                if (!state.Declared.ContainsKey(name) && !state.DerivedOf.ContainsKey(name))
+                {
+                    continue;
+                }
+
+                var declarationFound = false;
+                var lastIndex = 0;
+                int index;
+                while ((index = work.IndexOf(name, lastIndex, StringComparison.Ordinal)) != -1)
+                {
+                    lastIndex = index + 1;
+                    var left = index > 0 ? work[index - 1] : ' ';
+                    var right = index + name.Length < work.Length
+                        ? work[index + name.Length]
+                        : ' ';
+                    if (!InstalledSeparators.Contains(left)
+                        || !InstalledSeparators.Contains(right))
+                    {
+                        continue;
+                    }
+
+                    if (left == '*' && right == '*' && index >= 2 && work[index - 2] == '/')
+                    {
+                        continue;
+                    }
+
+                    // The same occurrence decision as the inference
+                    // (LA4 sampler amendment). The declarator keeps its
+                    // identifier, and the final exact compare verifies
+                    // the untouched spelling before any fact commits.
+                    if (IsTextureSamplerDeclaration(state, work, index, name))
+                    {
+                        continue;
+                    }
+
+                    if (!declarationFound
+                        && t > 0
+                        && InstalledDeclarationTypes.Contains(tokens[t - 1])
+                        && RestIsSemicolon(work, index + name.Length))
+                    {
+                        if (declarationIndex >= proposal.DeclarationTypes.Count
+                            || proposal.DeclarationTypes[declarationIndex].Key != name
+                            || proposal.DeclarationTypes[declarationIndex].Value != tokens[t - 1])
+                        {
+                            return false;
+                        }
+
+                        declarationIndex++;
+                        declarationFound = true;
+                        continue;
+                    }
+
+                    MatchKind kind;
+                    if (proposal.Uses.TryGetValue(name, out kind) && kind == MatchKind.Literal)
+                    {
+                        work = work.Substring(0, index)
+                            + proposal.LiteralPrints[name]
+                            + work.Substring(index + name.Length);
+                    }
+                }
+            }
+
+            if (declarationIndex != proposal.DeclarationTypes.Count)
+            {
+                return false;
+            }
+
+            work = work
+                .Replace("UNITY_BRANCH", string.Empty)
+                .Replace("[branch]", string.Empty);
+            return string.Equals(work, generatedLine, StringComparison.Ordinal);
+        }
+
+        /// <summary>
+        /// Commits the proposal after the exact replay succeeded (LA4).
+        /// The rename touches land first, the uses go through the
+        /// shared use recording with its conflict refusals, and the
+        /// declaration format changes land last. The whole line walks
+        /// on a trial clone, so the map adoption stays with the block
+        /// decision.
+        /// </summary>
+        private static void CommitInstalledProposal(
+            WalkState state,
+            ProgramLineProposal proposal,
+            int originalNumber)
+        {
+            foreach (var touch in proposal.NotRenamedTouches)
+            {
+                if (!state.RenamedDecided.ContainsKey(touch))
+                {
+                    state.RenamedDecided[touch] = false;
+                }
+            }
+
+            foreach (var touch in proposal.RenamedTouches)
+            {
+                state.DecideRenamed(touch);
+            }
+
+            foreach (var use in proposal.Uses)
+            {
+                state.MarkUse(
+                    use.Key,
+                    use.Value,
+                    use.Value == MatchKind.Literal ? proposal.Literals[use.Key] : null,
+                    originalNumber);
+            }
+
+            foreach (var declaration in proposal.DeclarationTypes)
+            {
+                state.LastDeclarationTypes[declaration.Key] = declaration.Value;
+            }
+        }
+
         private static bool MatchSegments(
             WalkState state,
             string gen,
@@ -1807,10 +3146,35 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 return LiteralShape.None;
             }
 
+            if (state.Era == PoiyomiLockEra.Thry2743)
+            {
+                // LA4: the installed era prints from the walked
+                // declaration format state, so the vector shapes win
+                // first and a surviving int declaration sets the F0
+                // form from the point the vendor observes it. A
+                // declaration inside a removed region never reaches
+                // this map.
+                if (property.Type == ShaderPropertyType.Color
+                    || property.Type == ShaderPropertyType.Vector)
+                {
+                    return LiteralShape.Float4;
+                }
+
+                string declaredType;
+                if (state.LastDeclarationTypes.TryGetValue(name, out declaredType)
+                    && declaredType == "int")
+                {
+                    return LiteralShape.F0;
+                }
+
+                return LiteralShape.ScalarFloat;
+            }
+
             if (state.IntDeclared.Contains(name))
             {
                 // A property whose first program declaration is int
-                // prints with the F0 form (fact 5).
+                // prints with the F0 form (fact 5). The historical
+                // eras keep the broad first declaration scan.
                 return LiteralShape.F0;
             }
 
@@ -2005,6 +3369,31 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     {
                         i++;
                         digits++;
+                    }
+                }
+
+                // Fact 5 prints every component with the parameterless
+                // invariant format, so a small value carries an exponent
+                // tail. Y5 of the bundled locked original admission design
+                // reads that form.
+                if (i < text.Length && (text[i] == 'e' || text[i] == 'E'))
+                {
+                    var exp = i + 1;
+                    if (exp < text.Length && (text[exp] == '+' || text[exp] == '-'))
+                    {
+                        exp++;
+                    }
+
+                    var expDigits = 0;
+                    while (exp < text.Length && char.IsDigit(text[exp]) && expDigits < 3)
+                    {
+                        exp++;
+                        expDigits++;
+                    }
+
+                    if (expDigits > 0)
+                    {
+                        i = exp;
                     }
                 }
 
@@ -2232,9 +3621,15 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
             for (var i = 0; i < left.Count; i++)
             {
+                // The zero-and-zero marker of a record picks the strict
+                // mode of the reproduction (A6.2). Two eras that disagree
+                // on the marker do not agree on the facts, so the pair
+                // refuses (A2.2 of the 2026-10-24 locked source alignment
+                // spec).
                 if (left[i].Kind != right[i].Kind
                     || left[i].Outcome != right[i].Outcome
                     || left[i].OriginalLine != right[i].OriginalLine
+                    || left[i].ZeroAndZero != right[i].ZeroAndZero
                     || !string.Equals(left[i].ConditionOrKeyword, right[i].ConditionOrKeyword, StringComparison.Ordinal))
                 {
                     return false;
@@ -2330,39 +3725,242 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             return true;
         }
 
-        private static List<int> PropertiesLineIndices(IReadOnlyList<LineRef> lines)
+        private sealed class PropertiesScan
         {
-            var result = new List<int>();
-            var inBlock = false;
+            internal PropertiesScan(
+                bool valid,
+                int openingLine,
+                int failureLine,
+                List<int> windowIndices,
+                List<PropertiesDeclaration> declarations)
+            {
+                Valid = valid;
+                OpeningLine = openingLine;
+                FailureLine = failureLine;
+                WindowIndices = windowIndices;
+                Declarations = declarations;
+            }
+
+            internal bool Valid { get; }
+
+            /// <summary>The 1-based Properties opening line, or 0.</summary>
+            internal int OpeningLine { get; }
+
+            /// <summary>The 1-based line of the failing open state.</summary>
+            internal int FailureLine { get; }
+
+            internal List<int> WindowIndices { get; }
+
+            internal List<PropertiesDeclaration> Declarations { get; }
+        }
+
+        /// <summary>
+        /// One lexed declaration location inside the Properties window.
+        /// The name keeps the original spelling for rename matching
+        /// (LA3). Gamma marks a code context Gamma attribute before the
+        /// name on the same line.
+        /// </summary>
+        private readonly struct PropertiesDeclaration
+        {
+            internal PropertiesDeclaration(int index, string name, int nameStart, bool gamma)
+            {
+                Index = index;
+                Name = name;
+                NameStart = nameStart;
+                Gamma = gamma;
+            }
+
+            internal int Index { get; }
+
+            internal string Name { get; }
+
+            internal int NameStart { get; }
+
+            internal bool Gamma { get; }
+        }
+
+        /// <summary>
+        /// Runs one lexer over every line and returns the shared
+        /// Properties scan (LA3). The quoted-string state and the
+        /// block-comment state carry across physical lines. The line
+        /// comment state ends at each newline. A backslash escapes the
+        /// next character on the same line. A terminal backslash does
+        /// not escape the first character of the next line, and the
+        /// string stays open across the newline. The keyword and the
+        /// structural opening brace are recognized only outside strings
+        /// and comments, on the same line or on separate lines. The
+        /// window closes only on the structural brace that returns the
+        /// depth to zero, and the scan never reopens a closed window.
+        /// Gamma attributes are read only outside strings and comments
+        /// on actual declaration lines. An open string, comment, or
+        /// block at the end of the input is malformed.
+        /// </summary>
+        private static PropertiesScan ScanProperties(IReadOnlyList<LineRef> lines)
+        {
+            var window = new List<int>();
+            var declarations = new List<PropertiesDeclaration>();
+            var inBlockComment = false;
+            var inString = false;
+            // 0 before the keyword, 1 after the keyword, 2 inside the
+            // block, 3 after the structural close.
+            var phase = 0;
             var depth = 0;
+            var openingLine = 0;
+            var stringLine = 0;
+            var commentLine = 0;
             for (var i = 0; i < lines.Count; i++)
             {
                 var text = lines[i].Text;
-                if (!inBlock)
+                var startsInCode = !inString && !inBlockComment;
+                if (phase == 0 && startsInCode && FirstToken(text) == "Properties")
                 {
-                    if (FirstToken(text.Trim()) == "Properties")
-                    {
-                        inBlock = true;
-                        depth = CountChar(text, '{') - CountChar(text, '}');
-                    }
-
-                    continue;
+                    phase = 1;
+                    openingLine = lines[i].Number;
                 }
 
                 var depthBefore = depth;
-                depth += CountChar(text, '{') - CountChar(text, '}');
-                if (depthBefore > 0)
+                string declarationName = null;
+                var declarationStart = -1;
+                var hasDeclaration = phase == 2 && startsInCode
+                    && TryPropertiesName(text, out declarationName, out declarationStart);
+                var gammaIndex = -1;
+                var j = 0;
+                while (j < text.Length)
                 {
-                    result.Add(i);
+                    if (inBlockComment)
+                    {
+                        if (text[j] == '*' && j + 1 < text.Length && text[j + 1] == '/')
+                        {
+                            inBlockComment = false;
+                            j += 2;
+                            continue;
+                        }
+
+                        j++;
+                        continue;
+                    }
+
+                    var current = text[j];
+                    if (inString)
+                    {
+                        if (current == '\\')
+                        {
+                            // The escape reaches only the next character
+                            // on the same line. A terminal backslash
+                            // stays string data (LA3).
+                            j += 2;
+                            continue;
+                        }
+
+                        if (current == '"')
+                        {
+                            inString = false;
+                        }
+
+                        j++;
+                        continue;
+                    }
+
+                    if (current == '"')
+                    {
+                        inString = true;
+                        stringLine = lines[i].Number;
+                        j++;
+                        continue;
+                    }
+
+                    if (current == '/' && j + 1 < text.Length && text[j + 1] == '/')
+                    {
+                        // The line comment ends at the newline, so the
+                        // rest of the line is data for no rule.
+                        break;
+                    }
+
+                    if (current == '/' && j + 1 < text.Length && text[j + 1] == '*')
+                    {
+                        inBlockComment = true;
+                        commentLine = lines[i].Number;
+                        j += 2;
+                        continue;
+                    }
+
+                    if (phase == 2 && gammaIndex < 0 && current == '['
+                        && j + 7 <= text.Length
+                        && string.CompareOrdinal(text, j, "[Gamma]", 0, 7) == 0)
+                    {
+                        gammaIndex = j;
+                    }
+
+                    if (current == '{')
+                    {
+                        if (phase == 1)
+                        {
+                            phase = 2;
+                            depth = depthBefore + 1;
+                        }
+                        else if (phase == 2)
+                        {
+                            depth++;
+                        }
+                    }
+                    else if (current == '}' && phase == 2)
+                    {
+                        depth--;
+                        if (depth == 0)
+                        {
+                            phase = 3;
+                        }
+                    }
+
+                    j++;
                 }
 
-                if (depth <= 0 && depthBefore > 0)
+                if (depthBefore > 0)
                 {
-                    inBlock = false;
+                    window.Add(i);
+                }
+
+                if (hasDeclaration)
+                {
+                    // The attribute must sit before the name, so a
+                    // display string that only mentions the token does
+                    // not count.
+                    declarations.Add(new PropertiesDeclaration(
+                        i,
+                        declarationName,
+                        declarationStart,
+                        gammaIndex >= 0 && gammaIndex < declarationStart));
+                }
+
+                if (phase == 3)
+                {
+                    break;
                 }
             }
 
-            return result;
+            var malformed = phase == 1 || phase == 2 || inString || inBlockComment;
+            if (!malformed)
+            {
+                return new PropertiesScan(true, openingLine, 0, window, declarations);
+            }
+
+            int failureLine;
+            if (phase == 1 || phase == 2)
+            {
+                failureLine = openingLine > 0
+                    ? openingLine
+                    : lines.Count > 0 ? lines[lines.Count - 1].Number : 0;
+            }
+            else if (inString)
+            {
+                failureLine = stringLine;
+            }
+            else
+            {
+                failureLine = commentLine;
+            }
+
+            return new PropertiesScan(false, openingLine, failureLine, window, declarations);
         }
 
         private static void CollectIdentifiers(string line, ICollection<string> into)
@@ -2370,7 +3968,11 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             var i = 0;
             while (i < line.Length)
             {
-                if (char.IsLetter(line[i]) || line[i] == '_')
+                // Y5 of the bundled locked original admission design: a run
+                // starts at any word character, so a collected form is the
+                // full maximal run. A digit-led literal stays one form. The
+                // artifact filter drops it, so it never refuses a pair.
+                if (IsWordChar(line[i]))
                 {
                     var start = i;
                     while (i < line.Length && (char.IsLetterOrDigit(line[i]) || line[i] == '_'))
@@ -2564,23 +4166,30 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             return text.Substring(start, end - start);
         }
 
-        private static int CountChar(string text, char c)
-        {
-            var count = 0;
-            foreach (var current in text)
-            {
-                if (current == c)
-                {
-                    count++;
-                }
-            }
-
-            return count;
-        }
-
         // The declaration type keywords of fact 4. The closed list keeps
         // declaration lines out of the bake holes.
         private static readonly HashSet<string> TypeKeywords = BuildTypeKeywords();
+
+        // The sampler entries of that one type keyword set (LA4 sampler
+        // amendment). The field follows TypeKeywords, so the shared set
+        // is already built when this array fills. The predicate compares
+        // the text against these strings with no per call allocation.
+        private static readonly string[] SamplerDeclarationKeywords =
+            BuildSamplerDeclarationKeywords();
+
+        private static string[] BuildSamplerDeclarationKeywords()
+        {
+            var found = new List<string>();
+            foreach (var keyword in TypeKeywords)
+            {
+                if (keyword.StartsWith("sampler", StringComparison.Ordinal))
+                {
+                    found.Add(keyword);
+                }
+            }
+
+            return found.ToArray();
+        }
 
         private static HashSet<string> BuildTypeKeywords()
         {
@@ -2619,6 +4228,15 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             ScalarFloat,
             F0,
             Float4
+        }
+
+        // The end states of the tie catch-up probe (Y2 of the bundled
+        // locked original admission design).
+        private enum CatchUpProbeOutcome
+        {
+            Died,
+            CaughtUp,
+            ReachedFileEnd
         }
 
         private readonly struct LineRef
@@ -2724,7 +4342,9 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 IReadOnlyList<LineRef> originalLines,
                 IReadOnlyList<LineRef> generatedLines,
                 IReadOnlyList<LockedSourceProperty> properties,
-                PoiyomiLockEra era)
+                PoiyomiLockEra era,
+                HashSet<int> originalPropertiesLines,
+                HashSet<int> generatedPropertiesLines)
             {
                 OriginalText = originalText;
                 OriginalLines = originalLines;
@@ -2744,7 +4364,18 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     }
                 }
 
-                IntDeclared = FindIntDeclared(originalLines, Declared);
+                // LA4: the broad first declaration scan serves the two
+                // historical eras only. The installed era prints from
+                // the walked declaration format state, so it shares one
+                // empty set and never runs the scan. The format map
+                // itself is an installed era container, so the
+                // historical states share one empty instance.
+                IntDeclared = era == PoiyomiLockEra.Thry2743
+                    ? EmptyDeclaredInts
+                    : FindIntDeclared(originalLines, Declared);
+                declarationTypes = era == PoiyomiLockEra.Thry2743
+                    ? new Dictionary<string, string>(StringComparer.Ordinal)
+                    : EmptyDeclarationTypes;
                 renamedDecided = new Dictionary<string, bool>(StringComparer.Ordinal);
                 renamedNames = new Dictionary<string, string>(StringComparer.Ordinal);
                 matchKinds = new Dictionary<string, MatchKind>(StringComparer.Ordinal);
@@ -2754,7 +4385,23 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 defineRuns = new List<List<string>>();
                 survivingLines = new List<string>();
                 blocks = new List<LockedBlockRecord>();
-                PropertiesLineSet = new HashSet<int>(PropertiesLineIndices(originalLines));
+                PropertiesLineSet = originalPropertiesLines;
+                GeneratedPropertiesLineSet = generatedPropertiesLines;
+                if (era == PoiyomiLockEra.Thry2743)
+                {
+                    // LA2 builds the guard proof inputs once per installed
+                    // era input. Closure comes first, because an unproved
+                    // input never reads the map. The results are
+                    // immutable, so every trial clone shares them without
+                    // a copy. The historical eras run no scan and keep no
+                    // map.
+                    GuardRetentionProved = HasProvedNonInliningIncludes(originalLines);
+                    if (GuardRetentionProved)
+                    {
+                        PotentialPragmaIndex = BuildPotentialPragmaIndex(originalLines);
+                    }
+                }
+
                 LookaheadRemaining = -1;
                 GrowthBoundary = -1;
             }
@@ -2777,8 +4424,44 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
             internal HashSet<string> IntDeclared { get; }
 
+            /// <summary>
+            /// The last observed declaration type per property of the
+            /// installed era walk (LA4). The vendor keeps one per
+            /// constant and prints from it, so the map follows the
+            /// surviving walked declarations and every block trial
+            /// clone owns a copy. The historical eras never read it.
+            /// </summary>
+            internal Dictionary<string, string> LastDeclarationTypes
+            {
+                get { return declarationTypes; }
+            }
+
             /// <summary>The indices of the Properties block lines.</summary>
             internal HashSet<int> PropertiesLineSet { get; }
+
+            /// <summary>
+            /// The indices of the generated Properties block lines. Both
+            /// sets come from one shared scan per side (LA3).
+            /// </summary>
+            internal HashSet<int> GeneratedPropertiesLineSet { get; }
+
+            /// <summary>
+            /// The earliest original line index per potential shader
+            /// feature keyword. Built once for an installed era input
+            /// with proved include closure and shared by every clone.
+            /// Null for the historical eras and for an unproved input,
+            /// which never read it (LA2).
+            /// </summary>
+            internal Dictionary<string, int> PotentialPragmaIndex { get; }
+
+            /// <summary>
+            /// True when every include of the input is a proved non
+            /// inlining operand. False disables the guard retention proof
+            /// for the whole input, even for an exempt keyword (LA2).
+            /// </summary>
+            internal bool GuardRetentionProved { get; }
+
+            private Dictionary<string, string> declarationTypes;
 
             private Dictionary<string, bool> renamedDecided;
 
@@ -2902,6 +4585,14 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             internal WalkState Clone()
             {
                 var copy = (WalkState)MemberwiseClone();
+                // LA4: the shared empty map of the historical eras
+                // needs no copy, because only the installed era path
+                // writes the map. An installed trial clone takes its
+                // own copy, so the block adoption keeps trial facts
+                // separate.
+                copy.declarationTypes = ReferenceEquals(declarationTypes, EmptyDeclarationTypes)
+                    ? EmptyDeclarationTypes
+                    : new Dictionary<string, string>(declarationTypes, StringComparer.Ordinal);
                 copy.renamedDecided = new Dictionary<string, bool>(renamedDecided, StringComparer.Ordinal);
                 copy.renamedNames = new Dictionary<string, string>(renamedNames, StringComparer.Ordinal);
                 copy.matchKinds = new Dictionary<string, MatchKind>(matchKinds, StringComparer.Ordinal);
@@ -2925,6 +4616,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             /// </summary>
             internal void AdoptFrom(WalkState winner)
             {
+                declarationTypes = winner.declarationTypes;
                 renamedDecided = winner.renamedDecided;
                 renamedNames = winner.renamedNames;
                 matchKinds = winner.matchKinds;

@@ -80,5 +80,12 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
         /// <summary>True when the project renders in linear color space.</summary>
         bool ProjectIsLinear { get; }
+
+        /// <summary>
+        /// True when the material carries an Animated override tag for
+        /// the name and the tag text parses as an int other than 0
+        /// (Y3). The strict check of a zero-and-zero record reads it.
+        /// </summary>
+        bool HasNonZeroAnimatedTag(string propertyName);
     }
 }

@@ -119,18 +119,25 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 TwoPassCanonicalShaderGuid,
                 ReleaseTwoPassNormalizedSourceHash,
                 true),
+            // The bundled 9.3 rows (Y13, stage 7 of the 2026-10-25
+            // bundled locked original admission design, flipped on
+            // 2026-10-30; K8.1 of the 2026-10-23 per-shader
+            // attestation design as amended). The rows admit locked
+            // originals under the same reconstruction contract as the
+            // release rows. The primary support path is the bundled
+            // 9.3 shader inside the Poiyomi 10 package.
             new PoiyomiAdmittedSource(
                 ".poiyomi/Old Versions/9.3/Poiyomi Toon",
                 false,
                 CanonicalShaderGuid,
                 BundledMainNormalizedSourceHash,
-                false),
+                true),
             new PoiyomiAdmittedSource(
                 ".poiyomi/Old Versions/9.3/Poiyomi Toon Two Pass",
                 true,
                 TwoPassCanonicalShaderGuid,
                 BundledTwoPassNormalizedSourceHash,
-                false),
+                true),
         };
 
         // A read-only view. A caller cannot cast it back to the array and
@@ -201,8 +208,10 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         // 2026-10-23-poiyomi-per-shader-attestation-design.md). A tag
         // passes only when a row with this name admits locked originals.
         // The dry run reads the rows through this seam, so its accepted
-        // set cannot drift from the locked-original rule. As of
-        // 2026-10-23 the accepted set stays the two 9.3.64 release names.
+        // set cannot drift from the locked-original rule. As of the
+        // stage 7 flag change of 2026-10-30 the accepted set covers all
+        // four admitted rows, named by the 2026-10-25 bundled locked
+        // original admission design.
         internal static bool IsLockedOriginalAdmittedName(string shaderName)
         {
             for (var i = 0; i < AdmittedSourceRows.Length; i++)

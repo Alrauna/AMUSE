@@ -532,11 +532,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             // The scripted restore: the real reconstruction first, then
             // the break. The reported outcome stays success.
-            TransientUnlockTestKnobs.RestoreOverride = clone =>
+            TransientUnlockTestKnobs.RestoreOverride = (clone, lockedOriginal) =>
             {
                 var production =
                     TransientUnlockAvailability.CreateProductionRestore();
-                var result = production(clone);
+                var result = production(clone, lockedOriginal);
                 if (result.Outcome ==
                     TransientUnlockRestoreOutcome.Failed)
                 {

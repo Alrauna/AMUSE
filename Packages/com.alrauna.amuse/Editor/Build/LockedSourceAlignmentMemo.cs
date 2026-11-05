@@ -120,8 +120,12 @@ namespace Alrauna.Amuse.Editor.Build
         /// <summary>
         /// The original property table that the aligner reads (A3.1):
         /// names, types, float defaults, and the HDR flag from the shader's
-        /// own property walk. The Gamma flag exists only in the original
-        /// text, so it comes from the aligner's attribute walk.
+        /// own property walk. The Gamma flag comes from the aligner's
+        /// original text walk. The installed editor also exposes a Gamma
+        /// member on ShaderPropertyFlags, but flag existence alone does
+        /// not prove complete metadata behavior, so the text stays the
+        /// source (LA3). A malformed original lexical state throws the
+        /// invariant exception out of this method.
         /// </summary>
         internal static IReadOnlyList<LockedSourceProperty> PropertiesOf(
             Shader original,
