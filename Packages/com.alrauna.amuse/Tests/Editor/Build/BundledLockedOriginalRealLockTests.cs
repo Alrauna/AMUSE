@@ -1023,7 +1023,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 timingClone = UnityEngine.Object.Instantiate(material);
                 timingClone.name = material.name;
                 var restored = LockedMaterialReconstruction.TryApply(
-                    timingClone, _ => true);
+                    timingClone, material, _ => true);
                 restoreWatch.Stop();
                 restoreMs = restoreWatch.Elapsed.TotalMilliseconds;
                 Assert.That(

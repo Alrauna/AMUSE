@@ -54,7 +54,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 TransientUnlockAvailability.CreateProductionRestore();
             Assert.That(restore, Is.Not.Null);
 
-            var result = restore(clone);
+            // The fixture has no separate locked copy, so the same
+            // material stands for the clone and its locked original.
+            var result = restore(clone, clone);
 
             Assert.That(result.Outcome,
                 Is.EqualTo(TransientUnlockRestoreOutcome.Succeeded));

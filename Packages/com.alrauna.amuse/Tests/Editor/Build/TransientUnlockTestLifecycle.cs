@@ -40,10 +40,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         internal static Func<Material, bool> OriginalAttestation;
 
         /// <summary>A restore delegate a test injects over the production
-        /// restore, for cases that must script the restore outcome. Null
+        /// restore, for cases that must script the restore outcome. The
+        /// delegate carries the clone and the locked original. Null
         /// runs the production reconstruction.</summary>
-        internal static Func<Material, TransientUnlockRestoreResult>
-            RestoreOverride;
+        internal static Func<Material, Material,
+            TransientUnlockRestoreResult> RestoreOverride;
 
         /// <summary>False runs the swap-in pass; true skips it, for close
         /// tests that arm their pairs through the swap-in and then need a
@@ -203,7 +204,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 if (TransientUnlockTestKnobs.RestoreOverride != null)
                 {
                     var injected = TransientUnlockTestKnobs.RestoreOverride;
-                    restore = clone => injected(clone);
+                    restore = (clone, lockedOriginal) =>
+                        injected(clone, lockedOriginal);
                 }
                 else
                 {

@@ -75,10 +75,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         private static TransientUnlockRestoreResult Apply(
-            Material locked, bool attests)
+            Material clone, Material lockedOriginal, bool attests)
         {
             return LockedMaterialReconstruction.TryApply(
-                locked, _ => attests);
+                clone, lockedOriginal, _ => attests);
         }
 
         private static void AssertRefusal(
@@ -193,7 +193,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "fixture guard: the edited renamed value must be " +
                 "readable on the locked material");
 
-            var result = Apply(locked, true);
+            var result = Apply(locked, locked, true);
 
             Assert.That(result.Outcome,
                 Is.EqualTo(TransientUnlockRestoreOutcome.Succeeded),
@@ -228,7 +228,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             locked.SetTextureScale(renamedTexture, new Vector2(2f, 3f));
             locked.SetTextureOffset(renamedTexture, new Vector2(0.25f, 0.5f));
 
-            var result = Apply(locked, true);
+            var result = Apply(locked, locked, true);
 
             Assert.That(result.Outcome,
                 Is.EqualTo(TransientUnlockRestoreOutcome.Succeeded),
@@ -262,7 +262,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             locked.SetColor(renamedColor, edited);
             var expected = locked.GetColor(renamedColor);
 
-            var result = Apply(locked, true);
+            var result = Apply(locked, locked, true);
 
             Assert.That(result.Outcome,
                 Is.EqualTo(TransientUnlockRestoreOutcome.Succeeded),
@@ -297,7 +297,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             locked.SetFloat("_AlphaForceOpaque", 0f);
 
-            var result = Apply(locked, true);
+            var result = Apply(locked, locked, true);
 
             Assert.That(result.Outcome,
                 Is.EqualTo(TransientUnlockRestoreOutcome.Succeeded),
@@ -331,7 +331,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var mask = Track(new Texture2D(4, 4));
             locked.SetTexture("_AlphaMask", mask);
 
-            var result = Apply(locked, true);
+            var result = Apply(locked, locked, true);
 
             AssertRefusal(result, PropDefineDetail, UnresolvableGuid);
             Assert.That(locked.shader, Is.SameAs(fixture.Partner),
@@ -340,6 +340,62 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     LockedMaterialIdentity.OptimizerEnabledPropertyName),
                 Is.EqualTo(1f),
                 "a refused reconstruction must not clear the lock flag");
+        }
+
+        // --- Falsifier 6 of the 2026-11-05 texel design (TX3): an
+        // implementation that carries no texture identity fact restores
+        // a clone whose texture differs from the locked texture. The
+        // clone carries a foreign texture on the plain slot. The
+        // identity check must refuse before the plan builds. The named
+        // wrong implementation is the code without the fact.
+        [Test]
+        public void CloneTextureIdentityThatDiffersRefuses()
+        {
+            var fixture = new LockedSourceFixture();
+            var locked = Track(fixture.Locked("IdentityCape"));
+            AssertGuard(fixture, locked);
+
+            var lockedOriginal =
+                Track(fixture.Locked("IdentityCapeSource"));
+            var lockedTexture = Track(new Texture2D(4, 4));
+            var foreignTexture = Track(new Texture2D(8, 8));
+            lockedOriginal.SetTexture("_MainTex", lockedTexture);
+            locked.SetTexture("_MainTex", foreignTexture);
+
+            var result = Apply(locked, lockedOriginal, true);
+
+            AssertRefusal(
+                result,
+                LockedMaterialReconstruction.TextureIdentityDetail,
+                UnresolvableGuid);
+        }
+
+        // --- The rename proof of the identity fact: the foreign texture
+        // sits on a renamed slot. A comparison that reads the plain name
+        // finds no texture on either side and would restore. The aligned
+        // rename mapping must carry the read to the renamed name on both
+        // sides.
+        [Test]
+        public void RenamedSlotTextureIdentityThatDiffersRefuses()
+        {
+            var fixture = new LockedSourceFixture();
+            fixture.WithRename("XCape");
+            var locked = Track(fixture.Locked("RenamedIdentityCape"));
+            AssertGuard(fixture, locked);
+
+            var lockedOriginal =
+                Track(fixture.Locked("RenamedIdentityCapeSource"));
+            var lockedTexture = Track(new Texture2D(4, 4));
+            var foreignTexture = Track(new Texture2D(8, 8));
+            lockedOriginal.SetTexture("_MainTex_XCape", lockedTexture);
+            locked.SetTexture("_MainTex_XCape", foreignTexture);
+
+            var result = Apply(locked, lockedOriginal, true);
+
+            AssertRefusal(
+                result,
+                LockedMaterialReconstruction.TextureIdentityDetail,
+                UnresolvableGuid);
         }
 
         // --- Falsifier 6: an implementation that tolerates a generated
@@ -355,7 +411,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "(\"Another Label\", Float) = 0");
             var locked = Track(fixture.Locked("LabelCape"));
 
-            var result = Apply(locked, true);
+            var result = Apply(locked, locked, true);
 
             AssertRefusal(
                 result,
@@ -380,7 +436,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "fixture guard: the partner must carry the compile " +
                 "error");
 
-            var result = Apply(locked, true);
+            var result = Apply(locked, locked, true);
 
             AssertRefusal(result, CompileErrorDetail, UnresolvableGuid);
             Assert.That(locked.shader, Is.SameAs(fixture.Partner),
@@ -398,7 +454,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             locked.SetOverrideTag("RenderType", "Transparent");
             locked.SetOverrideTag("VRCFallback", "Unlit");
 
-            var result = Apply(locked, true);
+            var result = Apply(locked, locked, true);
 
             Assert.That(result.Outcome,
                 Is.EqualTo(TransientUnlockRestoreOutcome.Succeeded),
@@ -421,7 +477,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var fixture = new LockedSourceFixture();
             var locked = Track(fixture.Locked("Named Cape"));
 
-            var result = Apply(locked, true);
+            var result = Apply(locked, locked, true);
 
             Assert.That(result.Outcome,
                 Is.EqualTo(TransientUnlockRestoreOutcome.Succeeded),
@@ -436,7 +492,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var fixture = new LockedSourceFixture("relock");
             var locked = Track(fixture.Locked("RelockCape"));
 
-            var first = Apply(locked, true);
+            var first = Apply(locked, locked, true);
             Assert.That(first.Outcome,
                 Is.EqualTo(TransientUnlockRestoreOutcome.Succeeded),
                 first.Detail ?? "the first reconstruction refused");
@@ -464,7 +520,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             locked.SetFloat(
                 LockedMaterialIdentity.OptimizerEnabledPropertyName, 1f);
 
-            var second = Apply(locked, true);
+            var second = Apply(locked, locked, true);
             Assert.That(second.Outcome,
                 Is.EqualTo(TransientUnlockRestoreOutcome.Succeeded),
                 second.Detail ?? "the relock reconstruction refused");
@@ -484,7 +540,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             locked.SetOverrideTag(
                 LockedMaterialIdentity.OriginalShaderTagName, null);
 
-            var result = Apply(locked, true);
+            var result = Apply(locked, locked, true);
 
             AssertRefusal(result, NameTagMissingDetail, UnresolvableGuid);
         }
@@ -499,7 +555,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             locked.SetOverrideTag(
                 LockedMaterialIdentity.OriginalShaderGuidTagName, null);
 
-            var result = Apply(locked, true);
+            var result = Apply(locked, locked, true);
 
             AssertRefusal(result, GuidTagMissingDetail, UnresolvableGuid);
         }
@@ -516,7 +572,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 LockedMaterialIdentity.OriginalShaderGuidTagName,
                 UnresolvableGuid);
 
-            var result = Apply(locked, true);
+            var result = Apply(locked, locked, true);
 
             AssertRefusal(
                 result, GuidUnresolvableDetail, UnresolvableGuid);
@@ -530,7 +586,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var fixture = new LockedSourceFixture();
             var locked = Track(fixture.Locked("UnattestedCape"));
 
-            var result = Apply(locked, false);
+            var result = Apply(locked, locked, false);
 
             AssertRefusal(
                 result, AttestationFailedDetail, UnresolvableGuid);
@@ -549,7 +605,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var locked = Track(fixture.Locked("FlaglessCape"));
             AssertGuard(fixture, locked);
 
-            var result = Apply(locked, true);
+            var result = Apply(locked, locked, true);
 
             AssertRefusal(
                 result, FlagPropertyMissingDetail, UnresolvableGuid);
@@ -594,6 +650,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             var result = LockedMaterialReconstruction.TryApply(
                 clone,
+                locked,
                 shader => shader == fixture.Original);
 
             Assert.That(result.Outcome,

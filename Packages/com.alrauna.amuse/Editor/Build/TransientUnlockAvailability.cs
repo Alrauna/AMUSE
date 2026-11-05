@@ -37,8 +37,9 @@ namespace Alrauna.Amuse.Editor.Build
         /// </summary>
         internal static TransientUnlockRestoreDelegate CreateProductionRestore()
         {
-            return clone => LockedMaterialReconstruction.TryApply(
-                clone, _ => true);
+            return (clone, lockedOriginal) =>
+                LockedMaterialReconstruction.TryApply(
+                    clone, lockedOriginal, _ => true);
         }
 
         /// <summary>
