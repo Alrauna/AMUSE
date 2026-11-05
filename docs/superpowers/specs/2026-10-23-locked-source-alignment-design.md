@@ -145,6 +145,12 @@ These facts come from a source read of the vendor packages and scans of the two 
    - A color takes the parsed alpha exactly. Its RGB takes the inverse of the fact 6 conversion, chosen by the property flags and the project color space at alignment. The design assumes that space equals the space at lock. A change corrupts only color RGB. The proof does not read color RGB (fact 16), so this is output fidelity only.
    - A baked `_ST` sets texture scale and offset with the round-trip rule.
    - A baked `_TexelSize` must equal, as text, the fact 5 print of `(1/w, 1/h, w, h)` for the texture on `U`, or `(1,1,1,1)` for no texture. Otherwise refuse. The detail sentence names a shared generated shader as a possible cause (fact 14).
+
+   Amendment 2026-11-05: the texel item is amended by TX1 of
+   `docs/superpowers/specs/2026-11-05-texel-size-verification-refinement-design.md`.
+   The equality against the texture print becomes a print self consistency
+   check on the literal. The alignment side and the facts record stay
+   unchanged.
 5. Bracket reads of a `Baked` property: the live value of `L.P` must equal the parsed literal exactly. Otherwise refuse, because `L` reads two values.
 6. Enum text. A property with enum text and program state `Unused` takes the enum value. Enum text that differs from a `Baked` literal of the same property refuses. Enum text that differs from the live value of a surviving bracket read of the same property refuses.
 7. `Live`: `U.P` keeps the value of `L.P`. A program-`Unused` property with a surviving bracket read and no enum text also keeps the value of `L.P`.
