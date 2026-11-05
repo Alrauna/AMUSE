@@ -155,10 +155,18 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                 Is.EqualTo(1f));
         }
 
+        /// <summary>
+        /// Replaces FreshTransparentStandIn_IsConvertible (stage 3, V11).
+        /// The same fresh-defaults admission over a material on the
+        /// GUID-loaded installed transparent shader, so the gates answer
+        /// on the vendor defaults themselves.
+        /// </summary>
         [Test]
-        public void FreshTransparentStandIn_IsConvertible()
+        public void FreshTransparentStandIn_IsConvertibleWithRealLilToon()
         {
-            AssertConvertible(EvaluateFor(NewTransparentFixtureMaterial()));
+            var material = Track(new Material(
+                LoadInstalledTransparentShader()));
+            AssertConvertible(EvaluateFor(material));
         }
 
         // --- gates 3-11: the merged cutout rules, unchanged (row 17) ------
@@ -492,6 +500,29 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                     evidence, queue, renderType),
                 LilToonOpaqueConversionRefusal
                     .ClipThresholdDiscardsOpaqueAlpha);
+        }
+
+        /// <summary>
+        /// Loads the installed lilToon transparent shader by its
+        /// production GUID pin. The GUID load is the only reliable
+        /// resolve, because a name lookup can answer with a stand-in or
+        /// a foreign shader that shares the vendor name.
+        /// </summary>
+        private static Shader LoadInstalledTransparentShader()
+        {
+            var path = UnityEditor.AssetDatabase.GUIDToAssetPath(
+                LilToonSourceAttestation.TransparentShaderGuid);
+            Assert.That(
+                path, Is.Not.Empty,
+                "fixture precondition: the installed lilToon transparent " +
+                "shader must resolve by its pinned GUID");
+            var shader = UnityEditor.AssetDatabase
+                .LoadAssetAtPath<Shader>(path);
+            Assert.That(
+                shader, Is.Not.Null,
+                "fixture precondition: the installed lilToon transparent " +
+                "shader must load");
+            return shader;
         }
     }
 }

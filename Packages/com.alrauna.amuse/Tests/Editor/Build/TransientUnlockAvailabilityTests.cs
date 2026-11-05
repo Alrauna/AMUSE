@@ -19,7 +19,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         [SetUp]
         public void SetUp()
         {
-            Thry.ThryEditor.ShaderOptimizer.Reset();
             LockedSourceFixture.DeleteFolder();
             TransientUnlockTestLifecycle.OpenFixtureScene();
         }
@@ -30,7 +29,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             _scope.TearDown();
             TransientUnlockTestLifecycle.DiscardFixtureScene();
             LockedSourceFixture.DeleteFolder();
-            Thry.ThryEditor.ShaderOptimizer.Reset();
         }
 
         /// <summary>

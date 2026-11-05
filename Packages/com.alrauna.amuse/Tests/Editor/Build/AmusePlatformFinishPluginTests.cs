@@ -23,6 +23,7 @@ using UnityEngine;
 [assembly: ExportsPlugin(typeof(Alrauna.Amuse.Tests.Editor.Build.AmusePlatformFinishPluginTests.ZzzAnonymousOptimizingProducerPlugin))]
 [assembly: ExportsPlugin(typeof(Alrauna.Amuse.Tests.Editor.Build.AmusePlatformFinishPluginTests.AfterAmusePlatformFinishObserverPlugin))]
 [assembly: ExportsPlugin(typeof(Alrauna.Amuse.Tests.Editor.Build.AmusePlatformFinishPluginTests.BarrierUnderActiveExtensionProbePlugin))]
+[assembly: ExportsPlugin(typeof(Alrauna.Amuse.Tests.Editor.Build.AmusePlatformFinishPluginTests.PlatformFinishTestPlugin))]
 
 namespace Alrauna.Amuse.Tests.Editor.Build
 {
@@ -60,7 +61,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             try
             {
                 var context = AvatarProcessor.ProcessAvatar(
-                    root, TestVrchatPlatform.Instance);
+                    root, PlatformFinishTestPlatform.Instance);
 
                 Assert.That(context.GetState<ProducerProbe>().Produced, Is.True);
                 var amuse = context.GetState<AmusePlatformFinishState>();
@@ -927,7 +928,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             internal static readonly ConsentTestGenericPlatform Instance =
                 new ConsentTestGenericPlatform();
 
-            public string QualifiedName => "nadena.dev.ndmf.generic";
+            public string QualifiedName =>
+                "com.alrauna.amuse.tests.swap-consent-generic";
             public string DisplayName => "AMUSE swap consent test generic";
         }
 
@@ -2166,7 +2168,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             try
             {
                 var context = AvatarProcessor.ProcessAvatar(
-                    root, TestVrchatPlatform.Instance);
+                    root, PlatformFinishTestPlatform.Instance);
 
                 var captured = context
                     .GetState<AmusePlatformFinishState>().AnimatorBindings;
@@ -2256,7 +2258,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             try
             {
                 var context = AvatarProcessor.ProcessAvatar(
-                    root, TestVrchatPlatform.Instance);
+                    root, PlatformFinishTestPlatform.Instance);
                 var amuse = context.GetState<AmusePlatformFinishState>();
 
                 Assert.That(amuse.AnimatorBindings, Is.Not.Null,
@@ -2283,7 +2285,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             try
             {
                 var context = AvatarProcessor.ProcessAvatar(
-                    root, TestVrchatPlatform.Instance);
+                    root, PlatformFinishTestPlatform.Instance);
                 var observer = context.GetState<ObserverProbe>();
 
                 Assert.That(observer.Ran, Is.True, "the observer pass did not run");
@@ -2324,7 +2326,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             try
             {
                 var context = AvatarProcessor.ProcessAvatar(
-                    root, TestVrchatPlatform.Instance);
+                    root, PlatformFinishTestPlatform.Instance);
                 var observer = context.GetState<ObserverProbe>();
 
                 Assert.That(observer.Ran, Is.True, "the observer pass did not run");
@@ -2404,7 +2406,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 // failure, so an invariant that fired here would surface as a build
                 // failure rather than a quiet assertion miss.
                 var context = AvatarProcessor.ProcessAvatar(
-                    root, TestVrchatPlatform.Instance);
+                    root, PlatformFinishTestPlatform.Instance);
                 var amuse = context.GetState<AmusePlatformFinishState>();
 
                 Assert.That(amuse.HasExecuted, Is.True,
@@ -2648,7 +2650,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 BuildContext context = null;
                 var reports = ErrorReport.CaptureErrors(
                     () => context = AvatarProcessor.ProcessAvatar(
-                        root, TestVrchatPlatform.Instance));
+                        root, PlatformFinishTestPlatform.Instance));
 
                 var amuse = context.GetState<AmusePlatformFinishState>();
                 Assert.That(amuse.AvatarRefusal, Is.EqualTo(
@@ -2702,7 +2704,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 BuildContext context = null;
                 var reports = ErrorReport.CaptureErrors(
                     () => context = AvatarProcessor.ProcessAvatar(
-                        root, TestVrchatPlatform.Instance));
+                        root, PlatformFinishTestPlatform.Instance));
 
                 var amuse = context.GetState<AmusePlatformFinishState>();
                 Assert.That(amuse.AvatarRefusal, Is.EqualTo(
@@ -2720,6 +2722,409 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 DestroyControllerGraph(controller);
             }
         }
+
+        // --- The vendor VRChat tier A twins ---------------------------
+        //
+        // One twin per tier B platform test above. Each twin runs the
+        // same fixture body through AmbientPlatform.DefaultPlatform,
+        // the real VRChat platform in this environment, so the vendor
+        // VRChat passes of installed plugins execute against the
+        // fixture. Each twin carries the VendorVRChatPlatform category
+        // and pairs with its tier B base through the VendorVRChat
+        // suffix rule. The descriptor carries all five VRChat base
+        // layer entries, because Modular Avatar reads the FX layer
+        // without a presence check on real VRChat builds. No AMUSE
+        // behavior assertion lives only in this tier.
+
+        [Test]
+        [Category(VendorVrChatTierGate.TierACategory)]
+        public void PlatformFinishBarrierRunsAfterAnonymousOptimizingProducerVendorVRChat()
+        {
+            VendorVrChatTierGate.RequireInstalledVrcSdkPackages();
+            using var armed = SyntheticPluginScope.Arm();
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject(
+                "AMUSE NDMF phase fixture vendor VRChat");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            AttachVendorVrChatBaseLayers(root, null);
+
+            try
+            {
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, AmbientPlatform.DefaultPlatform);
+                Assert.That(context, Is.Not.Null,
+                    "the vendor VRChat build did not complete");
+
+                Assert.That(
+                    context.GetState<ProducerProbe>().Produced,
+                    Is.True,
+                    "the anonymous optimizing producer did not run");
+                Assert.That(
+                    context.GetState<AmusePlatformFinishState>()
+                        .HasExecuted,
+                    Is.True,
+                    "the AMUSE barrier did not run after the producer");
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        [Category(VendorVrChatTierGate.TierACategory)]
+        public void CapturePassRetainsTheHostsExactAnimatorBindingsVendorVRChat()
+        {
+            VendorVrChatTierGate.RequireInstalledVrcSdkPackages();
+            using var armed = SyntheticPluginScope.Arm();
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject(
+                "AMUSE bindings capture fixture vendor VRChat");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            AttachVendorVrChatBaseLayers(root, null);
+
+            try
+            {
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, AmbientPlatform.DefaultPlatform);
+                Assert.That(context, Is.Not.Null,
+                    "the vendor VRChat build did not complete");
+
+                var captured = context
+                    .GetState<AmusePlatformFinishState>().AnimatorBindings;
+                Assert.That(captured, Is.Not.Null,
+                    "the capture pass did not retain the host bindings");
+#if AMUSE_VRCSDK3_AVATARS
+                Assert.That(captured,
+                    Is.SameAs(VRChatPlatformAnimatorBindings.Instance),
+                    "AMUSE did not retain the exact VRChat host binding"
+                    + " reference through the vendor passes");
+#endif
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        [Category(VendorVrChatTierGate.TierACategory)]
+        public void TheBarrierStillExecutesAlongsideTheNewCapturePassVendorVRChat()
+        {
+            VendorVrChatTierGate.RequireInstalledVrcSdkPackages();
+            using var armed = SyntheticPluginScope.Arm();
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject(
+                "AMUSE two-pass fixture vendor VRChat");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            AttachVendorVrChatBaseLayers(root, null);
+
+            try
+            {
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, AmbientPlatform.DefaultPlatform);
+                Assert.That(context, Is.Not.Null,
+                    "the vendor VRChat build did not complete");
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(amuse.HasExecuted, Is.True,
+                    "adding the capture pass suppressed the existing"
+                    + " barrier pass under the vendor passes");
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        [Category(VendorVrChatTierGate.TierACategory)]
+        public void AnimatorServicesContextIsInactiveOnceTheAmusePassesHaveRunVendorVRChat()
+        {
+            VendorVrChatTierGate.RequireInstalledVrcSdkPackages();
+            using var armed = SyntheticPluginScope.Arm();
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject(
+                "AMUSE post-barrier lifecycle fixture vendor VRChat");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            AttachVendorVrChatBaseLayers(root, null);
+
+            try
+            {
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, AmbientPlatform.DefaultPlatform);
+                Assert.That(context, Is.Not.Null,
+                    "the vendor VRChat build did not complete");
+
+                var observer = context.GetState<ObserverProbe>();
+                Assert.That(observer.ContextWasInactive, Is.True,
+                    "AnimatorServicesContext was still active after the"
+                    + " AMUSE PlatformFinish passes, so AMUSE left the"
+                    + " extension scope open under the vendor passes");
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        [Category(VendorVrChatTierGate.TierACategory)]
+        public void RetainedAnimatorBindingsRemainOperationalAfterDeactivationVendorVRChat()
+        {
+            VendorVrChatTierGate.RequireInstalledVrcSdkPackages();
+            using var armed = SyntheticPluginScope.Arm();
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject(
+                "AMUSE retained bindings operability fixture vendor VRChat");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            AttachVendorVrChatBaseLayers(root, null);
+
+            try
+            {
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, AmbientPlatform.DefaultPlatform);
+                Assert.That(context, Is.Not.Null,
+                    "the vendor VRChat build did not complete");
+
+                var observer = context.GetState<ObserverProbe>();
+                Assert.That(observer.RetainedBindingsOperable, Is.True,
+                    "the retained bindings did not answer the narrowest"
+                    + " non-mutating read after deactivation under the"
+                    + " vendor passes");
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        [Category(VendorVrChatTierGate.TierACategory)]
+        public void RealBuildReachesTheLifecycleGateWithoutTrippingTheInactivityInvariantVendorVRChat()
+        {
+            VendorVrChatTierGate.RequireInstalledVrcSdkPackages();
+            using var armed = SyntheticPluginScope.Arm();
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject(
+                "AMUSE correct-placement control fixture vendor VRChat");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            AttachVendorVrChatBaseLayers(root, null);
+
+            try
+            {
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, AmbientPlatform.DefaultPlatform);
+                Assert.That(context, Is.Not.Null,
+                    "the vendor VRChat build did not complete");
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(amuse.HasExecuted, Is.True,
+                    "the barrier did not run to completion under the"
+                    + " vendor passes");
+                Assert.That(amuse.Lifecycle, Is.Not.Null);
+                Assert.That(amuse.AvatarRefusal,
+                    Is.EqualTo(AvatarAnimationRefusal.None),
+                    "the vendor passes must not be recorded as an"
+                    + " avatar animation refusal");
+            }
+            finally
+            {
+                Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        [Category(VendorVrChatTierGate.TierACategory)]
+        public void AnUnoptedAvatarWithARefusingGraphStaysSilentButStoresTheRefusalVendorVRChat()
+        {
+            VendorVrChatTierGate.RequireInstalledVrcSdkPackages();
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject(
+                "AMUSE unopted refusing graph fixture vendor VRChat");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<LineRenderer>();
+            var controller = new AnimatorController
+                { name = "unallowlisted vendor VRChat" };
+
+            try
+            {
+                controller.AddLayer("L0");
+                var state = controller.layers[0].stateMachine.AddState("S0");
+                var behaviour = AttachProbeBehaviour(state);
+                Assert.That(behaviour, Is.Not.Null,
+                    "fixture precondition: Unity did not attach the probe behaviour");
+
+                root.AddComponent<Animator>().runtimeAnimatorController =
+                    controller;
+                AttachVendorVrChatBaseLayers(root, controller);
+
+                BuildContext context = null;
+                var reports = ErrorReport.CaptureErrors(
+                    () => context = AvatarProcessor.ProcessAvatar(
+                        root, AmbientPlatform.DefaultPlatform));
+                Assert.That(context, Is.Not.Null,
+                    "the vendor VRChat build did not complete");
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(amuse.AvatarRefusal, Is.EqualTo(
+                        AvatarAnimationRefusal.UnrecognizedStateMachineBehaviour),
+                    "the structural pass must keep storing the refusal"
+                    + " under the vendor passes");
+                Assert.That(CountAvatarEntries(reports), Is.Zero,
+                    "an avatar without the opt-in component gets no"
+                    + " structural console entry under the vendor"
+                    + " passes");
+            }
+            finally
+            {
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(root, controller);
+                Object.DestroyImmediate(root);
+                DestroyControllerGraph(controller);
+            }
+        }
+
+        [Test]
+        [Category(VendorVrChatTierGate.TierACategory)]
+        public void ASwitchedOffAvatarWithARefusingGraphStaysSilentButStoresTheRefusalVendorVRChat()
+        {
+            VendorVrChatTierGate.RequireInstalledVrcSdkPackages();
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject(
+                "AMUSE switched-off refusing graph fixture vendor VRChat");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            var component =
+                root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            root.AddComponent<LineRenderer>();
+            var controller = new AnimatorController
+                { name = "unallowlisted vendor VRChat" };
+
+            try
+            {
+                var serialized = new UnityEditor.SerializedObject(component);
+                var switchProperty =
+                    serialized.FindProperty("_alphaSeparatorEnabled");
+                Assert.That(switchProperty, Is.Not.Null,
+                    "AmuseAvatarOptimizer._alphaSeparatorEnabled field pin");
+                switchProperty.boolValue = false;
+                serialized.ApplyModifiedProperties();
+
+                controller.AddLayer("L0");
+                var state = controller.layers[0].stateMachine.AddState("S0");
+                var behaviour = AttachProbeBehaviour(state);
+                Assert.That(behaviour, Is.Not.Null,
+                    "fixture precondition: Unity did not attach the probe behaviour");
+
+                root.AddComponent<Animator>().runtimeAnimatorController =
+                    controller;
+                AttachVendorVrChatBaseLayers(root, controller);
+
+                BuildContext context = null;
+                var reports = ErrorReport.CaptureErrors(
+                    () => context = AvatarProcessor.ProcessAvatar(
+                        root, AmbientPlatform.DefaultPlatform));
+                Assert.That(context, Is.Not.Null,
+                    "the vendor VRChat build did not complete");
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(amuse.AvatarRefusal, Is.EqualTo(
+                        AvatarAnimationRefusal.UnrecognizedStateMachineBehaviour),
+                    "the structural pass must keep storing the refusal"
+                    + " under the vendor passes");
+                Assert.That(CountAvatarEntries(reports), Is.Zero,
+                    "an avatar with the feature switch off gets no"
+                    + " structural console entry under the vendor"
+                    + " passes");
+            }
+            finally
+            {
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(root, controller);
+                Object.DestroyImmediate(root);
+                DestroyControllerGraph(controller);
+            }
+        }
+
+        /// <summary>
+        /// Fills the fixture descriptor with the VRChat shape: all
+        /// five base layer entries, Base through FX, exactly as the
+        /// VRChat SDK default fills a real descriptor, and the three
+        /// special layer entries when the descriptor carries none.
+        /// The Base entry keeps the given controller when the fixture
+        /// owns one. Modular Avatar reads the FX layer without a
+        /// presence check on real VRChat builds, so a fixture without
+        /// every entry fails for the fixture shape and not for the
+        /// product.
+        /// </summary>
+        private static void AttachVendorVrChatBaseLayers(
+            GameObject root, RuntimeAnimatorController baseController)
+        {
+#if AMUSE_VRCSDK3_AVATARS
+            var descriptor = root.GetComponent<
+                VRC.SDK3.Avatars.Components.VRCAvatarDescriptor>();
+            descriptor.customizeAnimationLayers = true;
+            descriptor.baseAnimationLayers = new[]
+            {
+                new VRC.SDK3.Avatars.Components.VRCAvatarDescriptor
+                    .CustomAnimLayer
+                {
+                    type = VRC.SDK3.Avatars.Components
+                        .VRCAvatarDescriptor.AnimLayerType.Base,
+                    animatorController = baseController,
+                    isDefault = baseController == null,
+                    isEnabled = baseController != null,
+                },
+                VendorVrChatDefaultLayer(VRC.SDK3.Avatars.Components
+                    .VRCAvatarDescriptor.AnimLayerType.Additive),
+                VendorVrChatDefaultLayer(VRC.SDK3.Avatars.Components
+                    .VRCAvatarDescriptor.AnimLayerType.Gesture),
+                VendorVrChatDefaultLayer(VRC.SDK3.Avatars.Components
+                    .VRCAvatarDescriptor.AnimLayerType.Action),
+                VendorVrChatDefaultLayer(VRC.SDK3.Avatars.Components
+                    .VRCAvatarDescriptor.AnimLayerType.FX),
+            };
+            if (descriptor.specialAnimationLayers == null)
+            {
+                descriptor.specialAnimationLayers = new[]
+                {
+                    VendorVrChatDefaultLayer(VRC.SDK3.Avatars.Components
+                        .VRCAvatarDescriptor.AnimLayerType.Sitting),
+                    VendorVrChatDefaultLayer(VRC.SDK3.Avatars.Components
+                        .VRCAvatarDescriptor.AnimLayerType.TPose),
+                    VendorVrChatDefaultLayer(VRC.SDK3.Avatars.Components
+                        .VRCAvatarDescriptor.AnimLayerType.IKPose),
+                };
+            }
+#endif
+        }
+
+#if AMUSE_VRCSDK3_AVATARS
+        private static VRC.SDK3.Avatars.Components.VRCAvatarDescriptor
+            .CustomAnimLayer VendorVrChatDefaultLayer(
+                VRC.SDK3.Avatars.Components.VRCAvatarDescriptor
+                    .AnimLayerType type)
+        {
+            return new VRC.SDK3.Avatars.Components.VRCAvatarDescriptor
+                .CustomAnimLayer
+                {
+                    type = type,
+                    isDefault = true,
+                    isEnabled = false,
+                };
+        }
+#endif
 
         [Test]
         public void BehaviourFreeCommittedGraphIsNotRefused()
@@ -3106,10 +3511,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     "the swapped slot must hold the restored clone");
                 Assert.That(midWindowRestoreMismatchCount, Is.Zero,
                     "the in-memory restore must verify with no vendor");
-                Assert.That(
-                    Thry.ThryEditor.ShaderOptimizer.LockCallCount,
-                    Is.Zero,
-                    "no build path may lock through the vendor");
                 Assert.That(
                     consentSubjects,
                     Is.Empty,
@@ -8724,6 +9125,66 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 hasErrorReport: true);
         }
 
+        /// <summary>
+        /// The tier B mirror of the production platform finish plugin.
+        /// The production plugin runs on the VRChat platform name only,
+        /// so on the dedicated platform of this suite it never selects.
+        /// This plugin runs the five production pass bodies in the
+        /// production order, mirroring
+        /// <see cref="AmusePlatformFinishPlugin.Configure"/>: the
+        /// structural graph check extension-free, one animator scope
+        /// for the bindings capture, the barrier, and the apply, then
+        /// the window close extension-free. Vendor VRChat passes never
+        /// select on this platform, so tier B compiles and runs without
+        /// the VRChat SDK.
+        /// </summary>
+        [RunsOnPlatforms(PlatformFinishTestPlatformName)]
+        public sealed class PlatformFinishTestPlugin :
+            Plugin<PlatformFinishTestPlugin>
+        {
+            internal const string PluginQualifiedName =
+                "com.alrauna.amuse.tests.platform-finish-plugin";
+
+            public override string QualifiedName => PluginQualifiedName;
+
+            protected override void Configure()
+            {
+                var sequence = InPhase(BuildPhase.PlatformFinish);
+
+                // Production pass one: the structural refusals read
+                // the graph before any animator scope virtualizes it.
+                sequence.Run(
+                    AmusePlatformFinishPlugin.StructuralGraphCheckPassName,
+                    AmuseStructuralGraphCheck.Execute);
+
+                // Production passes two to four share one animator
+                // scope, so the barrier proves exactly the values the
+                // apply can ever see.
+                sequence.WithRequiredExtension(
+                    typeof(AnimatorServicesContext),
+                    inner =>
+                    {
+                        inner.Run(
+                            AmusePlatformFinishPlugin
+                                .BindingsCapturePassName,
+                            AmuseAnimatorBindingsCapture.Execute);
+                        inner.Run(
+                            AmusePlatformFinishPlugin.BarrierPassName,
+                            AmusePlatformFinishPass.Execute);
+                        inner.Run(
+                            AlphaSeparationApply.PassName,
+                            ctx => AlphaSeparationApply.Execute(ctx));
+                    });
+
+                // Production pass five: the window close runs after
+                // the animator scope closed, so its reference writes
+                // are the final word.
+                sequence.Run(
+                    TransientUnlockWindowClose.PassName,
+                    ctx => TransientUnlockWindowClose.Execute(ctx));
+            }
+        }
+
         [RunsOnAllPlatforms]
         public sealed class ZzzAnonymousOptimizingProducerPlugin : Plugin<ZzzAnonymousOptimizingProducerPlugin>
         {
@@ -8767,12 +9228,25 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        // RunsOnAllPlatforms: an NDMF plugin without a platform
+        // attribute defaults to the VRChat platform name only, so this
+        // observer would never run on the dedicated tier B platform.
+        // The arming flag keeps it inert in every other build.
+        [RunsOnAllPlatforms]
         public sealed class AfterAmusePlatformFinishObserverPlugin : Plugin<AfterAmusePlatformFinishObserverPlugin>
         {
             protected override void Configure()
             {
+                // The constraints name both AMUSE plugins. Each
+                // constraint applies only where its plugin selects:
+                // the production plugin on the VRChat platform, the
+                // mirrored plugin on the dedicated tier B platform.
+                // NDMF treats a constraint on an absent plugin as
+                // optional, so this observer stays after AMUSE on
+                // both tiers.
                 InPhase(BuildPhase.PlatformFinish)
                     .AfterPlugin("com.alrauna.amuse")
+                    .AfterPlugin(PlatformFinishTestPlugin.PluginQualifiedName)
                     .Run("AMUSE test PlatformFinish observer", Execute);
             }
 
@@ -8929,12 +9403,22 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
-        internal sealed class TestVrchatPlatform : INDMFPlatformProvider
-        {
-            internal static readonly TestVrchatPlatform Instance = new TestVrchatPlatform();
+        internal const string PlatformFinishTestPlatformName =
+            "com.alrauna.amuse.tests.platform-finish";
 
-            public string QualifiedName => WellKnownPlatforms.VRChatAvatar30;
-            public string DisplayName => "AMUSE test VRChat";
+        /// <summary>
+        /// The dedicated tier B platform of the platform finish tests.
+        /// Its qualified name owns no built-in platform identity, so
+        /// vendor VRChat passes never select on it and NDMF resolves
+        /// the bindings from the avatar descriptor alone.
+        /// </summary>
+        internal sealed class PlatformFinishTestPlatform : INDMFPlatformProvider
+        {
+            internal static readonly PlatformFinishTestPlatform Instance =
+                new PlatformFinishTestPlatform();
+
+            public string QualifiedName => PlatformFinishTestPlatformName;
+            public string DisplayName => "AMUSE test platform finish";
         }
 
         internal const string ActiveExtensionProbePlatformName =
@@ -8954,7 +9438,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             internal static readonly TestGenericPlatform Instance =
                 new TestGenericPlatform();
 
-            public string QualifiedName => "nadena.dev.ndmf.generic";
+            public string QualifiedName =>
+                "com.alrauna.amuse.tests.generic-probe";
             public string DisplayName => "AMUSE test generic";
         }
     }

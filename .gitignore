@@ -73,8 +73,9 @@ Desktop.ini
 # Agent execution scratch (plans, ledgers, review packages)
 .superpowers/
 
-# Vendor packages installed for local testing only. Never commit them.
-# Packages/.gitignore already ignores them. These cover Assets-side residue.
+# Vendor packages are a permanent part of this dev environment. The test
+# suites run against the installed vendor set of Packages/vpm-manifest.json.
+# Never commit them. Packages/.gitignore already ignores them. These cover Assets-side residue.
 Assets/_PoiyomiShaders*
 Assets/*LockedShader*
 Assets/.Thry*

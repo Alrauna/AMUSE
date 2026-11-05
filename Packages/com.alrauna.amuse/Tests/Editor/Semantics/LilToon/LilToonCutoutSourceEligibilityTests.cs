@@ -253,15 +253,17 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         /// <summary>
-        /// RED against the Task 3 Step 1 refuse-all scaffold: the scaffold
-        /// answers <c>ConversionPropertyNotFinite</c> for every schema-complete
-        /// input, so this fails behaviorally until Step 3 implements the
-        /// gates.
+        /// Replaces CanonicalDefaultStandIn_IsConvertible (stage 3, V11,
+        /// fix round 1). The same fresh-defaults admission over a
+        /// material on the GUID-loaded installed cutout shader, so the
+        /// gates answer on the vendor defaults themselves.
         /// </summary>
         [Test]
-        public void CanonicalDefaultStandIn_IsConvertible()
+        public void CanonicalDefaultStandIn_IsConvertibleWithRealLilToon()
         {
-            AssertConvertible(EvaluateFor(ConversionEligibleStandIn()));
+            var material = Track(new Material(
+                LoadInstalledCutoutShader()));
+            AssertConvertible(EvaluateFor(material));
         }
 
         [Test]
@@ -523,5 +525,29 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
 
             AssertConvertible(EvaluateFor(material));
         }
+
+        /// <summary>
+        /// Loads the installed lilToon cutout shader by its production
+        /// GUID pin. The GUID load is the only reliable resolve, because
+        /// a name lookup can answer with a stand-in or a foreign shader
+        /// that shares the vendor name.
+        /// </summary>
+        private static Shader LoadInstalledCutoutShader()
+        {
+            var path = UnityEditor.AssetDatabase.GUIDToAssetPath(
+                LilToonSourceAttestation.CutoutShaderGuid);
+            Assert.That(
+                path, Is.Not.Empty,
+                "fixture precondition: the installed lilToon cutout " +
+                "shader must resolve by its pinned GUID");
+            var shader = UnityEditor.AssetDatabase
+                .LoadAssetAtPath<Shader>(path);
+            Assert.That(
+                shader, Is.Not.Null,
+                "fixture precondition: the installed lilToon cutout " +
+                "shader must load");
+            return shader;
+        }
+
     }
 }

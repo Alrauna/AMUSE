@@ -218,9 +218,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// Adds the committed animation fixture: a real synthetic clip on
         /// a real controller state, carried by the root Animator and, when
         /// the SDK is present, by the descriptor layer NDMF's bindings
-        /// actually read. An empty controller or an untouched default SDK
-        /// layer is exactly the fixture shape that made earlier runs
-        /// diverge, so the fixture controls both.
+        /// actually read. The descriptor lists all five base layer
+        /// entries, Base through FX, exactly as the VRChat SDK default
+        /// fills a real descriptor. Base carries the fixture controller.
+        /// The other four carry the SDK-default empty layer. A descriptor
+        /// without an FX entry fails the build inside Modular Avatar,
+        /// which reads that entry without a presence check.
         /// </summary>
         protected void AttachAnimationFixture(
             GameObject root, string assetSuffix,
@@ -252,27 +255,31 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 VRC.SDK3.Avatars.Components.VRCAvatarDescriptor>();
             if (descriptor == null) return;
             descriptor.customizeAnimationLayers = true;
-            var baseLayer =
+            // A real descriptor lists every base layer entry. NDMF fills
+            // its controller map only from the listed layers, and Modular
+            // Avatar reads the FX entry without a presence check, so a
+            // Base-only list fails the build for the fixture shape. The
+            // four non-Base entries carry the SDK-default empty layer.
+            descriptor.baseAnimationLayers = new[]
+            {
                 new VRC.SDK3.Avatars.Components.VRCAvatarDescriptor
                     .CustomAnimLayer
-            {
-                type = VRC.SDK3.Avatars.Components.VRCAvatarDescriptor
-                    .AnimLayerType.Base,
-                animatorController = controller,
-                isDefault = false,
-                isEnabled = true,
+                {
+                    type = VRC.SDK3.Avatars.Components.VRCAvatarDescriptor
+                        .AnimLayerType.Base,
+                    animatorController = controller,
+                    isDefault = false,
+                    isEnabled = true,
+                },
+                SdkDefaultLayer(VRC.SDK3.Avatars.Components
+                    .VRCAvatarDescriptor.AnimLayerType.Additive),
+                SdkDefaultLayer(VRC.SDK3.Avatars.Components
+                    .VRCAvatarDescriptor.AnimLayerType.Gesture),
+                SdkDefaultLayer(VRC.SDK3.Avatars.Components
+                    .VRCAvatarDescriptor.AnimLayerType.Action),
+                SdkDefaultLayer(VRC.SDK3.Avatars.Components
+                    .VRCAvatarDescriptor.AnimLayerType.FX),
             };
-            var layers = descriptor.baseAnimationLayers;
-            if (layers == null || layers.Length == 0)
-            {
-                layers = new[] { baseLayer };
-            }
-            else
-            {
-                layers[0] = baseLayer;
-            }
-
-            descriptor.baseAnimationLayers = layers;
             // A fresh descriptor carries null layer arrays (verified on
             // this SDK build). NDMF's commit path tolerates a null array
             // when virtualizing but dereferences it when committing, so
@@ -423,6 +430,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             return renderer;
         }
 
+#if AMUSE_VRCSDK3_AVATARS
         private static VRC.SDK3.Avatars.Components.VRCAvatarDescriptor
             .CustomAnimLayer FallbackLayer(
             VRC.SDK3.Avatars.Components.VRCAvatarDescriptor.AnimLayerType type)
@@ -435,6 +443,26 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 isEnabled = true,
             };
         }
+
+        /// <summary>
+        /// The SDK-default empty base layer entry a real descriptor
+        /// carries on every non-Base layer: no controller, marked
+        /// default, and not enabled. The vendor tier A twins of the
+        /// platform finish suite fill the same shape.
+        /// </summary>
+        private static VRC.SDK3.Avatars.Components.VRCAvatarDescriptor
+            .CustomAnimLayer SdkDefaultLayer(
+            VRC.SDK3.Avatars.Components.VRCAvatarDescriptor.AnimLayerType type)
+        {
+            return new VRC.SDK3.Avatars.Components.VRCAvatarDescriptor
+                .CustomAnimLayer
+            {
+                type = type,
+                isDefault = true,
+                isEnabled = false,
+            };
+        }
+#endif
 
         private static Vector2[] BandUv(Band band)
         {
@@ -594,6 +622,24 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         // --- the soundness oracle -------------------------------------------
 
         /// <summary>
+        /// The tier A texture arm of the oracle. The default keeps the
+        /// strict instance identity for every existing suite. A suite
+        /// that builds through the SDK dispatcher may override it to
+        /// accept a vendor saved copy of the source texture: accepted
+        /// only when the decoded pixels of both textures equal exactly.
+        /// Any pixel difference refuses with both identities named in
+        /// the refusal text.
+        /// </summary>
+        protected virtual bool TryAcceptVendorSavedTextureCopy(
+            Texture2D sourceTexture,
+            Texture2D sampledTexture,
+            out string refusal)
+        {
+            refusal = "";
+            return false;
+        }
+
+        /// <summary>
         /// The soundness oracle. Every authored triangle must appear in
         /// the built avatar exactly once, matched as an unordered
         /// avatar-root-space position triple on the fixed rounding grid,
@@ -616,7 +662,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "the fixture must complete the real build; the NDMF"
                 + " error report names the failing pass in the editor"
                 + " console; builtRenderers="
-                + DescribeBuiltRenderers(root));
+                + DescribeBuiltRenderers(root)
+                + DescribeVendorFailures(context));
 
             var state = context.GetState<AmusePlatformFinishState>();
             Assert.That(state, Is.Not.Null);
@@ -743,22 +790,39 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             // conversions from different source textures
                             // under one canonical, rendering other
                             // materials' faces with the wrong pixels.
-                            var outputTextureId = material.HasProperty(
+                            var sampledTexture = material.HasProperty(
                                 "_MainTex")
-                                && material.GetTexture("_MainTex") != null
                                 ? material.GetTexture("_MainTex")
-                                    .GetInstanceID()
+                                : null;
+                            var outputTextureId = sampledTexture != null
+                                ? sampledTexture.GetInstanceID()
                                 : 0;
+                            var vendorCopyAccepted = false;
+                            var vendorCopyRefusal = "";
+                            if (outputTextureId != match.SourceMainTexId
+                                && sampledTexture is Texture2D sampled2D
+                                && EditorUtility.InstanceIDToObject(
+                                    match.SourceMainTexId)
+                                        is Texture2D sourceTexture2D)
+                            {
+                                vendorCopyAccepted =
+                                    TryAcceptVendorSavedTextureCopy(
+                                        sourceTexture2D, sampled2D,
+                                        out vendorCopyRefusal);
+                            }
+
                             Assert.That(
-                                outputTextureId,
-                                Is.EqualTo(match.SourceMainTexId),
+                                outputTextureId == match.SourceMainTexId
+                                || vendorCopyAccepted,
+                                Is.True,
                                 "converted triangle " + key + " renders"
                                 + " with a canonical material sampling a"
                                 + " different texture than its source:"
                                 + " expected tex="
                                 + match.SourceMainTexId
                                 + " got tex=" + outputTextureId
-                                + " (slot material " + slotName + ")");
+                                + " (slot material " + slotName + ")"
+                                + vendorCopyRefusal);
                         }
                     }
                 }
@@ -816,6 +880,39 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             return parts.Count == 0
                 ? "none"
                 : string.Join("; ", parts);
+        }
+
+        /// <summary>
+        /// Names the failing pass and its plugin for every error the
+        /// NDMF error report recorded at error severity, so a vendor
+        /// failure reads as a vendor failure in the test message. The
+        /// string is empty when the build recorded none.
+        /// </summary>
+        private static string DescribeVendorFailures(
+            nadena.dev.ndmf.BuildContext context)
+        {
+            var failures = context.ErrorReport.Errors
+                .Where(error => error.TheError != null
+                    && error.TheError.Severity
+                        >= nadena.dev.ndmf.ErrorSeverity.Error)
+                .Select(DescribeVendorFailure)
+                .ToList();
+            if (failures.Count == 0)
+            {
+                return string.Empty;
+            }
+
+            return " failingPasses=[" + string.Join(", ", failures) + "]";
+        }
+
+        private static string DescribeVendorFailure(
+            nadena.dev.ndmf.ErrorContext error)
+        {
+            var pass = error.PassName ?? "<unnamed pass>";
+            var plugin = error.Plugin != null
+                ? error.Plugin.DisplayName
+                : "<unknown plugin>";
+            return pass + " of " + plugin;
         }
 
         internal static string DescribeSnapshot(

@@ -306,10 +306,6 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             try
             {
                 ObjectRegistry.RegisterReplacedObject(originSource, clone);
-                AaoAtlasTextureAttestation.Versions.ResetForTests();
-                AaoAtlasTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
-                    _ => "1.9.17";
-
                 var captured = UnityMaterialEvidenceCapture.Capture(
                     new[]
                     {
@@ -327,7 +323,6 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             finally
             {
                 registryGuard.Dispose();
-                AaoAtlasTextureAttestation.Versions.ResetForTests();
                 UnityEngine.Object.DestroyImmediate(atlas);
                 UnityEngine.Object.DestroyImmediate(clone);
             }
@@ -351,10 +346,6 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             clone.SetFloat("_Cutoff", 0.75f);
             try
             {
-                AaoAtlasTextureAttestation.Versions.ResetForTests();
-                AaoAtlasTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
-                    _ => "1.9.17";
-
                 var captured = UnityMaterialEvidenceCapture.Capture(
                     new[]
                     {
@@ -378,7 +369,6 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             }
             finally
             {
-                AaoAtlasTextureAttestation.Versions.ResetForTests();
                 UnityEngine.Object.DestroyImmediate(atlas);
             }
         }

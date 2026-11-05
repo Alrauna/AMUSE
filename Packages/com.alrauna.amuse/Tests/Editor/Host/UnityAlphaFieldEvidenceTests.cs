@@ -2203,9 +2203,6 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             try
             {
                 ObjectRegistry.RegisterReplacedObject(originSource, clone);
-                AaoAtlasTextureAttestation.Versions.ResetForTests();
-                AaoAtlasTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
-                    _ => "1.9.17";
                 var colors = new Color32[16 * 16];
                 for (var i = 0; i < colors.Length; i++)
                 {
@@ -2233,7 +2230,6 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             {
                 UnityEngine.Object.DestroyImmediate(atlas);
                 UnityEngine.Object.DestroyImmediate(clone);
-                AaoAtlasTextureAttestation.Versions.ResetForTests();
                 registryGuard.Dispose();
                 DeleteTempFolder();
             }
@@ -2246,10 +2242,6 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             atlas.name = "MainTex (AAO UV Packed)";
             try
             {
-                AaoAtlasTextureAttestation.Versions.ResetForTests();
-                AaoAtlasTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
-                    _ => "1.9.17";
-
                 var captured = UnityAlphaFieldEvidence.TryCapture(
                     atlas, TextureChannel.Alpha, 1f, AlphaPolicyBounds.Inert,
                     out _, out _, out var refusal);
@@ -2262,7 +2254,6 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             finally
             {
                 UnityEngine.Object.DestroyImmediate(atlas);
-                AaoAtlasTextureAttestation.Versions.ResetForTests();
             }
         }
 
@@ -2285,9 +2276,6 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 var serialized = new SerializedObject(atlas);
                 serialized.FindProperty("m_StreamingMipmaps").boolValue = true;
                 serialized.ApplyModifiedPropertiesWithoutUndo();
-                AaoAtlasTextureAttestation.Versions.ResetForTests();
-                AaoAtlasTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
-                    _ => "1.9.17";
                 var colors = new Color32[16 * 16];
                 for (var i = 0; i < colors.Length; i++)
                 {
@@ -2312,7 +2300,6 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             {
                 UnityEngine.Object.DestroyImmediate(atlas);
                 UnityEngine.Object.DestroyImmediate(clone);
-                AaoAtlasTextureAttestation.Versions.ResetForTests();
                 registryGuard.Dispose();
                 DeleteTempFolder();
             }
@@ -2337,10 +2324,6 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 ObjectRegistry.RegisterReplacedObject(originSource, clone);
                 EditorUtility.CompressTexture(
                     atlas, TextureFormat.BC5, TextureCompressionQuality.Normal);
-                AaoAtlasTextureAttestation.Versions.ResetForTests();
-                AaoAtlasTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
-                    _ => "1.9.17";
-
                 var captured = UnityAlphaFieldEvidence.TryCapture(
                     atlas, TextureChannel.Alpha, 1f, AlphaPolicyBounds.Inert,
                     out _, out _, out var refusal,
@@ -2355,7 +2338,6 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             {
                 UnityEngine.Object.DestroyImmediate(atlas);
                 UnityEngine.Object.DestroyImmediate(clone);
-                AaoAtlasTextureAttestation.Versions.ResetForTests();
                 registryGuard.Dispose();
                 DeleteTempFolder();
             }

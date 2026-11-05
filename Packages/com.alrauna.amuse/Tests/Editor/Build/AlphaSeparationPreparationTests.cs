@@ -72,11 +72,17 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Is.True);
         }
 
+        /// <summary>
+        /// Replaces CandidateRendererProducesARetainedRecord (stage 4,
+        /// V12). The same retained-record assertions over a material on
+        /// the GUID-loaded bundled 9.3 shader, driven through the
+        /// production barrier with no seams.
+        /// </summary>
         [Test]
-        public void CandidateRendererProducesARetainedRecord()
+        public void CandidateRendererProducesARetainedRecordWithRealPoiyomi()
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
-            var root = new GameObject("AMUSE prepared candidate");
+            var root = new GameObject("AMUSE prepared candidate real");
             FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
@@ -86,10 +92,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             try
             {
-                material = PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial();
+                material = NewRealPoiyomiOpaqueMaterial();
                 var renderer = AddSingleTriangleRenderer(root, material, out mesh);
 
-                amuse = RunBarrier(root);
+                amuse = RunProductionBarrier(root);
 
                 Assert.That(
                     amuse.SemanticallyRefusedRendererCount, Is.Zero,
@@ -130,15 +136,16 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
-        /// Preparation creates transient clones and mappings but must never
-        /// touch the build avatar: the renderer keeps its exact material
-        /// array and its source mesh until the apply pass.
+        /// Replaces PreparationDoesNotMutateTheBuildAvatar (stage 4,
+        /// V12). The same non-mutation contract over a material on the
+        /// GUID-loaded bundled 9.3 shader, driven through the production
+        /// barrier with no seams.
         /// </summary>
         [Test]
-        public void PreparationDoesNotMutateTheBuildAvatar()
+        public void PreparationDoesNotMutateTheBuildAvatarWithRealPoiyomi()
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
-            var root = new GameObject("AMUSE prepared without mutation");
+            var root = new GameObject("AMUSE prepared without mutation real");
             FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
@@ -148,11 +155,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             try
             {
-                material = PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial();
+                material = NewRealPoiyomiOpaqueMaterial();
                 var renderer = AddSingleTriangleRenderer(root, material, out mesh);
                 var originalMaterials = renderer.sharedMaterials;
 
-                amuse = RunBarrier(root);
+                amuse = RunProductionBarrier(root);
 
                 Assert.That(amuse.Separation, Is.Not.Null,
                     "fixture precondition: nothing was prepared, so the " +
@@ -181,11 +188,17 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        /// <summary>
+        /// Replaces RendererWithoutAnOpaqueCandidateRetainsNothing
+        /// (stage 4, V12). The same no-candidate outcome over a
+        /// transparent material on the GUID-loaded bundled 9.3 shader,
+        /// driven through the production barrier with no seams.
+        /// </summary>
         [Test]
-        public void RendererWithoutAnOpaqueCandidateRetainsNothing()
+        public void RendererWithoutAnOpaqueCandidateRetainsNothingWithRealPoiyomi()
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
-            var root = new GameObject("AMUSE no candidate");
+            var root = new GameObject("AMUSE no candidate real");
             FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
@@ -194,10 +207,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             try
             {
-                material = PoiyomiFixtureTestBase.CreateVerifiedTransparentMaterial();
+                material = NewRealPoiyomiTransparentMaterial();
                 AddSingleTriangleRenderer(root, material, out mesh);
 
-                var amuse = RunBarrier(root);
+                var amuse = RunProductionBarrier(root);
 
                 Assert.That(
                     amuse.SemanticallyRefusedRendererCount, Is.Zero,
@@ -1820,10 +1833,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         // --- Defect A regression: avatar-wide deduplication ------------------
 
         [Test]
-        public void SharedSourceMaterialReusesOneAvatarWideClone()
+        public void SharedSourceMaterialReusesOneAvatarWideCloneWithRealPoiyomi()
         {
+            // Replaces SharedSourceMaterialReusesOneAvatarWideClone
+            // (stage 4, V12). The same one-clone dedup over a material on
+            // the GUID-loaded bundled 9.3 shader, driven through the
+            // production barrier with no seams.
             using var assets = new OverrideTemporaryDirectoryScope(null);
-            var root = new GameObject("AMUSE shared source dedup");
+            var root = new GameObject("AMUSE shared source dedup real");
             FixtureAvatarIdentity.AttachVrcDescriptor(root);
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
@@ -1833,10 +1850,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             try
             {
-                material = PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial();
+                material = NewRealPoiyomiOpaqueMaterial();
                 AddTwoTriangleRenderer(root, material, material, out mesh);
 
-                amuse = RunBarrier(root);
+                amuse = RunProductionBarrier(root);
 
                 Assert.That(
                     amuse.SemanticallyRefusedRendererCount, Is.Zero,
@@ -2926,20 +2943,23 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
-        /// End-to-end cutout conversion: a convertible cutout fixture
-        /// material at fresh defaults — its main texture a fully-opaque
-        /// mipmap chain — driven through the barrier with the family-aware
-        /// lilToon seams and the Poiyomi conversion seam default. The cutout
-        /// family must convert the way Poiyomi does: the slot prepares and
-        /// the prepared record carries the source-to-opaque mapping, instead
-        /// of being refused as an unsupported family.
+        /// Replaces CutoutFixtureSlotPreparesAndCarriesTheOpaqueMapping
+        /// (stage 3, V11). End-to-end cutout conversion: a material on
+        /// the GUID-loaded installed cutout shader at fresh vendor
+        /// defaults — its main texture a fully-opaque mipmap chain —
+        /// driven through the barrier with the production delegates and
+        /// no seams. The cutout family must convert the way Poiyomi
+        /// does: the slot prepares and the prepared record carries the
+        /// source-to-opaque mapping, instead of being refused as an
+        /// unsupported family.
         /// </summary>
         [Test]
-        public void CutoutFixtureSlotPreparesAndCarriesTheOpaqueMapping()
+        public void
+            CutoutFixtureSlotPreparesAndCarriesTheOpaqueMappingWithRealLilToon()
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
-            var root = new GameObject("AMUSE cutout conversion candidate");
-            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            var root = new GameObject(
+                "AMUSE cutout conversion candidate real");
             root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
             FixtureProofScope.PinAllSizes(root);
             Material material = null;
@@ -2950,16 +2970,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             try
             {
                 fixtures.BaseSetUp();
-                material = LilToonFixtureTestBase.CreateCutoutConversionMaterial();
+                material = new Material(LoadInstalledLilToonShader(
+                    LilToonSourceAttestation.CutoutShaderGuid,
+                    "lilToon cutout shader"));
                 material.SetTexture(
                     "_MainTex",
-                    fixtures.ImportFullyOpaqueMipmap("cutout_conversion"));
+                    fixtures.ImportFullyOpaqueMipmap(
+                        "cutout_conversion_real"));
                 var renderer =
                     AddSingleTriangleRenderer(root, material, out mesh);
                 // The cutout proof is texture-backed, so the candidate
-                // triangle needs a UV0 domain; the Poiyomi fixtures' constant
-                // alpha never exercised one. Any in-bounds domain works over
-                // a fully-opaque chain.
+                // triangle needs a UV0 domain. Any in-bounds domain works
+                // over a fully-opaque chain.
                 mesh.uv = new[]
                 {
                     new Vector2(0.25f, 0.25f),
@@ -2967,14 +2989,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     new Vector2(0.25f, 0.75f),
                 };
 
-                amuse = RunBarrier(
-                    root,
-                    selectRequest: VerifiedLilToonTestSeams
-                        .SelectVerifiedFixtureRequest,
-                    capturer: VerifiedLilToonTestSeams
-                        .CaptureVerifiedFixtureMaterials,
-                    resolveSemantics: VerifiedLilToonTestSeams
-                        .VerifiedAlphaOnly);
+                amuse = RunProductionBarrier(root);
 
                 Assert.That(
                     amuse.SemanticallyRefusedRendererCount, Is.Zero,
@@ -6194,13 +6209,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
-        /// Row 18 — the prepared-clone contract for a transparent stand-in
-        /// source, through the real capture and preparation path.
+        /// Replaces TransparentFixtureSlotPreparesAndCarriesTheOpaqueClone
+        /// Contract (stage 3, V11). Row 18 — the prepared-clone contract
+        /// for a transparent source, through the real capture and
+        /// preparation path. The source is a material on the GUID-loaded
+        /// installed transparent shader and the barrier runs the
+        /// production delegates with no seams, so the clone target is
+        /// the installed main shader the production wrapper attests.
         /// <para>
-        /// (a) A transparent fixture slot over a fully-opaque mip chain
-        /// converts to one clone carrying the attested opaque stand-in
-        /// target shader, all 18 canonical recipe values read back, queue
-        /// 2000, <c>RenderType=Opaque</c>, no non-canonical fact, while the
+        /// (a) A transparent slot over a fully-opaque mip chain converts
+        /// to one clone carrying the attested target shader, all 18
+        /// canonical recipe values read back, queue 2000,
+        /// <c>RenderType=Opaque</c>, no non-canonical fact, while the
         /// source material keeps every observed fact.
         /// </para>
         /// <para>
@@ -6209,22 +6229,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// failure, never a refusal — before any clone exists, and no
         /// material leaks.
         /// </para>
-        /// <para>
-        /// The third throw checkpoint (a read-back disagreement after
-        /// <c>DestroyImmediate</c>) is a defensive invariant against Unity
-        /// breaking its own material write contract: the material property
-        /// bag is name-keyed and round-trips every <c>SetFloat</c>
-        /// regardless of how the target shader declares the property
-        /// (verified empirically against Float/2D/Vector declarations), and
-        /// the queue and tag writes round-trip likewise, so no deterministic
-        /// public synthetic shader can drive that checkpoint to fire. The
-        /// checkpoint's detector is exercised positively by the read-backs
-        /// below and its policy (throw, not refusal) by (b). Recorded as a
-        /// plan defect for the implementation report.
-        /// </para>
         /// </summary>
         [Test]
-        public void TransparentFixtureSlotPreparesAndCarriesTheOpaqueCloneContract()
+        public void
+            TransparentFixtureSlotPreparesAndCarriesTheOpaqueCloneContractWithRealLilToon()
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var fixtures = new LilToonTransparentConversionFixtures();
@@ -6234,8 +6242,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
                 // (a) The end-to-end prepared-clone contract.
                 var root = new GameObject(
-                    "AMUSE transparent clone contract");
-                FixtureAvatarIdentity.AttachVrcDescriptor(root);
+                    "AMUSE transparent clone contract real");
                 root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
                 FixtureProofScope.PinAllSizes(root);
                 Material material = null;
@@ -6243,13 +6250,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 AmusePlatformFinishState amuse = null;
                 try
                 {
-                    material =
-                        LilToonFixtureTestBase
-                            .CreateTransparentConversionMaterial();
+                    material = new Material(LoadInstalledLilToonShader(
+                        LilToonSourceAttestation.TransparentShaderGuid,
+                        "lilToon transparent shader"));
                     material.SetTexture(
                         "_MainTex",
                         fixtures.ImportFullyOpaqueMipmap(
-                            "transparent_clone_contract"));
+                            "transparent_clone_contract_real"));
                     var renderer = AddSingleTriangleRenderer(
                         root, material, out mesh);
                     mesh.uv = new[]
@@ -6262,15 +6269,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     var sourceDigest =
                         TransparentSourceDigest(material);
 
-                    amuse = RunBarrier(
-                        root,
-                        selectRequest: VerifiedLilToonTestSeams
-                            .SelectVerifiedFixtureRequest,
-                        capturer: VerifiedLilToonTestSeams
-                            .CaptureVerifiedFixtureMaterials,
-                        resolveSemantics: VerifiedLilToonTestSeams
-                            .VerifiedAlphaOnly,
-                        lilToonConversion: VerifiedFamilyConversion);
+                    amuse = RunProductionBarrier(root);
 
                     Assert.That(
                         amuse.AvatarRefusal,
@@ -6314,7 +6313,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         opaque, Is.SameAs(amuse.Separation.CreatedClones[0]),
                         "the mapped opaque result must be the one created " +
                         "clone");
-                    AssertPreparedCloneCarriesTheCanonicalOpaqueTarget(
+                    AssertPreparedCloneCarriesTheInstalledOpaqueTarget(
                         opaque);
                     Assert.That(
                         TransparentSourceDigest(material),
@@ -8377,12 +8376,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
         /// <summary>
         /// Reads back the whole prepared-clone contract on a generated
-        /// transparent-source clone: the attested opaque stand-in target,
-        /// the eighteen canonical recipe scalars, queue 2000,
+        /// transparent-source clone over the installed assets: the
+        /// GUID-loaded main shader the production wrapper attests as the
+        /// target, the eighteen canonical recipe scalars, queue 2000,
         /// <c>RenderType=Opaque</c>, and no non-canonical fact anywhere.
         /// </summary>
-        private static void AssertPreparedCloneCarriesTheCanonicalOpaqueTarget(
-            Material clone)
+        private static void
+            AssertPreparedCloneCarriesTheInstalledOpaqueTarget(
+                Material clone)
         {
             foreach (var (property, value) in
                          LilToonOpaqueTarget.CanonicalOpaqueProperties)
@@ -8409,9 +8410,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "every canonical fact must read back on the clone");
             Assert.That(
                 clone.shader,
-                Is.SameAs(Shader.Find(LilToonFixtureTestBase.OpaqueConversionShaderName)),
-                "the clone must carry the attested opaque stand-in " +
-                "target");
+                Is.SameAs(LoadInstalledLilToonShader(
+                    LilToonSourceAttestation.SupportedShaderGuid,
+                    "lilToon main shader")),
+                "the clone must carry the installed main shader the " +
+                "production wrapper attests as the target");
         }
 
         /// <summary>
@@ -8956,9 +8959,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
-        /// Avatar-wide deduplication of one cutout source across two
-        /// renderers, in both renderer orders: exactly one clone exists and
-        /// every prepared slot maps to it by reference.
+        /// Replaces CutoutSharedSourceReusesOneAvatarWideClone (stage 3,
+        /// V11). The same avatar-wide deduplication over one installed
+        /// cutout source across two renderers, in both renderer orders,
+        /// through the production barrier with no seams: exactly one
+        /// clone exists and every prepared slot maps to it by reference.
         /// <para>
         /// Falsifies a per-renderer (or per-slot) conversion cache that
         /// prepares one clone per renderer, and an ordering-dependent
@@ -8967,7 +8972,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// </para>
         /// </summary>
         [Test]
-        public void CutoutSharedSourceReusesOneAvatarWideClone()
+        public void CutoutSharedSourceReusesOneAvatarWideCloneWithRealLilToon()
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var fixtures = new LilToonCutoutConversionFixtures();
@@ -8978,7 +8983,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             string secondChild)
             {
                 var root = new GameObject(rootName);
-                FixtureAvatarIdentity.AttachVrcDescriptor(root);
                 root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
                 FixtureProofScope.PinAllSizes(root);
                 Material material = null;
@@ -8987,11 +8991,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 AmusePlatformFinishState amuse = null;
                 try
                 {
-                    material = LilToonFixtureTestBase.CreateCutoutConversionMaterial();
+                    material = new Material(LoadInstalledLilToonShader(
+                        LilToonSourceAttestation.CutoutShaderGuid,
+                        "lilToon cutout shader"));
                     material.SetTexture(
                         "_MainTex",
                         fixtures.ImportFullyOpaqueMipmap(
-                            "cutout_dedup_" + firstChild));
+                            "cutout_dedup_real_" + firstChild));
                     AddNamedChildRenderer(
                         root, firstChild, material, out meshFirst);
                     AddNamedChildRenderer(
@@ -8999,7 +9005,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     FillInBoundsUvs(meshFirst);
                     FillInBoundsUvs(meshSecond);
 
-                    amuse = RunBarrier(root);
+                    amuse = RunProductionBarrier(root);
 
                     Assert.That(amuse.AvatarRefusal,
                         Is.EqualTo(AvatarAnimationRefusal.None));
@@ -9042,12 +9048,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 {
                     AlphaSeparationTestLifecycle.DestroyGenerated(amuse);
                     if (meshFirst != null)
+                    {
                         UnityEngine.Object.DestroyImmediate(meshFirst);
+                    }
                     if (meshSecond != null)
+                    {
                         UnityEngine.Object.DestroyImmediate(meshSecond);
+                    }
                     UnityEngine.Object.DestroyImmediate(root);
                     if (material != null)
+                    {
                         UnityEngine.Object.DestroyImmediate(material);
+                    }
                 }
             }
 
@@ -9055,9 +9067,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 fixtures.BaseSetUp();
                 RunVariant(
-                    "AMUSE cutout dedup forward", "first", "second");
+                    "AMUSE cutout dedup real forward", "first", "second");
                 RunVariant(
-                    "AMUSE cutout dedup reversed", "second", "first");
+                    "AMUSE cutout dedup real reversed", "second", "first");
             }
             finally
             {
@@ -12571,11 +12583,126 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
-        /// The marker-stub override: the public project installs no VRChat
-        /// SDK, so no real proxy clip can exist and the live marker route is
-        /// unreachable. This stub reports the armed clip names as special
-        /// motions, exactly as the apply suite's stub does, so a fixture can
-        /// exercise the barrier-side marker refusal.
+        /// Loads an installed lilToon shader by its production GUID pin.
+        /// The GUID load is the only reliable resolve, because a name
+        /// lookup can answer with a committed stand-in or a foreign
+        /// shader that shares the vendor name.
+        /// </summary>
+        private static Shader LoadInstalledLilToonShader(
+            string assetGuid,
+            string shaderLabel)
+        {
+            var path = AssetDatabase.GUIDToAssetPath(assetGuid);
+            Assert.That(
+                path, Is.Not.Empty,
+                "fixture precondition: the installed " + shaderLabel +
+                " asset must resolve by its pinned GUID");
+            var shader = AssetDatabase.LoadAssetAtPath<Shader>(path);
+            Assert.That(
+                shader, Is.Not.Null,
+                "fixture precondition: the installed " + shaderLabel +
+                " asset must load");
+            return shader;
+        }
+
+        /// <summary>
+        /// Loads the installed bundled Poiyomi 9.3 shader by its
+        /// production GUID pin. The GUID load is the only reliable
+        /// resolve, because the release name resolves the Poiyomi 10.x
+        /// root shader on this install, not the bundled asset.
+        /// </summary>
+        private static Shader LoadInstalledPoiyomiShader()
+        {
+            var path = AssetDatabase.GUIDToAssetPath(
+                PoiyomiSourceAttestation.CanonicalShaderGuid);
+            Assert.That(
+                path, Is.Not.Empty,
+                "fixture precondition: the installed bundled Poiyomi " +
+                "Toon shader asset must resolve by its pinned GUID");
+            var shader = AssetDatabase.LoadAssetAtPath<Shader>(path);
+            Assert.That(
+                shader, Is.Not.Null,
+                "fixture precondition: the installed bundled Poiyomi " +
+                "Toon shader asset must load");
+            return shader;
+        }
+
+        /// <summary>
+        /// A material on the GUID-loaded bundled 9.3 shader at the same
+        /// convertible state the retired stand-in fixture carried: the
+        /// vendor force-opaque flag at one over the Fade preset render
+        /// state. Every written fact is a vendor property a fresh
+        /// installed material can carry. The caller owns destruction.
+        /// </summary>
+        private static Material NewRealPoiyomiOpaqueMaterial()
+        {
+            var material = new Material(LoadInstalledPoiyomiShader());
+            material.SetFloat("_AlphaForceOpaque", 1f);
+            PoiyomiFixtureTestBase.ApplyConvertibleRenderState(material);
+            return material;
+        }
+
+        /// <summary>
+        /// A material on the GUID-loaded bundled 9.3 shader at the same
+        /// transparent state the retired stand-in fixture carried:
+        /// force-opaque off, the alpha mask mode off, a half-alpha white
+        /// color, over the Fade preset render state. The caller owns
+        /// destruction.
+        /// </summary>
+        private static Material NewRealPoiyomiTransparentMaterial()
+        {
+            var material = new Material(LoadInstalledPoiyomiShader());
+            material.SetFloat("_AlphaForceOpaque", 0f);
+            material.SetFloat("_MainAlphaMaskMode", 0f);
+            material.SetColor("_Color", new Color(1f, 1f, 1f, 0.5f));
+            PoiyomiFixtureTestBase.ApplyConvertibleRenderState(material);
+            return material;
+        }
+
+        /// <summary>
+        /// Drives the same bindings-capture and barrier passes through
+        /// the production entry with no seam delegates: the production
+        /// family selection, the production closed capture with real
+        /// source attestation, the production alpha resolution, and the
+        /// production conversion steps. The recording presenter fails
+        /// on any consent subject, because a build over installed
+        /// lilToon 2.4.1 materials must raise none.
+        /// </summary>
+        private static AmusePlatformFinishState RunProductionBarrier(
+            GameObject root)
+        {
+            // The same one-build entry and descriptor rule as the seam
+            // route above.
+            FixtureAvatarIdentity.RequireVrcDescriptorSupport();
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            var context = AvatarProcessor.ProcessAvatar(
+                root, PreparationTestPlatform.Instance);
+            context.GetState<AmusePlatformFinishState>().AnimatorBindings =
+                GenericPlatformAnimatorBindings.Instance;
+            AmuseStructuralGraphCheck.Execute(context);
+
+            AmusePlatformFinishPass.Execute(
+                context,
+                SupportedFacts(),
+                consentPresenter: subjects =>
+                {
+                    Assert.That(
+                        subjects, Is.Empty,
+                        "a barrier over installed lilToon materials must " +
+                        "raise no consent subjects. A subject names what " +
+                        "the installed attestation refused");
+                    return true;
+                });
+
+            return context.GetState<AmusePlatformFinishState>();
+        }
+
+        /// <summary>
+        /// The marker-stub override: when a test arms special clip names,
+        /// the barrier is handed a stub host bindings that reports those
+        /// clips as special motions. The marker stub gives the suite exact
+        /// control over which clips count as special motions. The live
+        /// marker route is exercised by the survival audit of stage 1b.
         /// </summary>
         private sealed class MarkerStubBindings : IPlatformAnimatorBindings
         {
@@ -13069,7 +13196,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             internal static readonly PreparationTestPlatform Instance =
                 new PreparationTestPlatform();
 
-            public string QualifiedName => "nadena.dev.ndmf.generic";
+            public string QualifiedName =>
+                "com.alrauna.amuse.tests.alpha-separation-preparation";
             public string DisplayName => "AMUSE alpha separation preparation";
         }
     }

@@ -8,13 +8,13 @@ The avatar root carries the `AmuseAvatarOptimizer` component. Presets Safe, Norm
 
 A second package, `Packages/com.alrauna.amuse.research`, holds read-only research tooling (Census collection and calibration). It must never ship in the product or the VPM listing.
 
-Public fixtures must be minimal, deterministic, redistributable, and legally publishable. Private avatars, vendor assets, consent and identity data, and raw Census observations may not be public.
+Public fixtures must be minimal, deterministic, redistributable, and legally publishable. The dev project installs vendor packages, but the repository never commits them. Private avatars, vendor source and assets, consent and identity data, and raw Census observations may not be public.
 
 ## Architecture & Data Flow
 
 One NDMF plugin, `AmusePlatformFinishPlugin` (`Packages/com.alrauna.amuse/Editor/Build/AmusePlatformFinishPlugin.cs`), registers five passes in `BuildPhase.PlatformFinish`:
 
-1. `AmuseStructuralGraphCheck` runs extension-free on real authored clips before animator virtualization, stores the enumerated controller graph and its structural refusal in state, and reports nothing itself.
+1. `AmuseStructuralGraphCheck` runs extension-free before the animator virtualization scope opens. It reads the committed controller graph. Its event scan resolves authored clip originals through the NDMF object registry, so an event that a plugin clone dropped still refuses the build. This read is decision V3 of the 2026-10-25 vendor-integrated tests design. The pass stores the enumerated graph and its structural refusal in state, and reports nothing itself.
 2. `AmuseAnimatorBindingsCapture` retains `IPlatformAnimatorBindings` from the active `AnimatorServicesContext` into build state before the extension deactivates.
 3. `AmusePlatformFinishPass` runs extension-free, so NDMF commits the animator graph first. It gates on `HostLifecycleCapability.Evaluate` (versions, platform, build path, build services). Per renderer it captures closed animation and material evidence, resolves per-slot runtime states, classifies triangle alpha exactly, plans mesh separation, and retains `PreparedAlphaSeparation`.
 4. `AlphaSeparationApply` revalidates every candidate against live state, finalizes, sweeps unreferenced AMUSE-owned clones, and performs the single mutation: animation curves, then `sharedMesh`, then `sharedMaterials`.
@@ -116,7 +116,7 @@ vpm resolve project .                             # restores Packages/nadena.dev
 - Dev environment: Unity 2022.3.22f1 (`ProjectSettings/ProjectVersion.txt`). The package declares `unity: "2022.3"`.
 - Compilation happens inside Unity. There is no dotnet build, no Node, no Bun. `dotnet` appears only as the VPM CLI prerequisite.
 - Generated `*.csproj` and `*.sln` files are gitignored. Never commit or hand-edit them.
-- `Packages/nadena.dev.ndmf/` is intentionally untracked. A fresh clone restores it with `vpm resolve project .`. A new embedded package needs a whitelist line in `Packages/.gitignore`.
+- `Packages/nadena.dev.ndmf/` and every other vendor package directory are intentionally untracked. `Packages/vpm-manifest.json` pins their exact versions. A fresh clone restores them with `vpm resolve project .` after their VPM repositories are registered. A new embedded package needs a whitelist line in `Packages/.gitignore`.
 - Unity MCP is development and observability tooling, never a product dependency or correctness oracle. Before any MCP write or broad operation: enumerate reachable instances read-only, inspect `Application.dataPath`, and require an exact match to this project root. Stop instead of guessing.
 
 ## Testing & QA
@@ -124,7 +124,7 @@ vpm resolve project .                             # restores Packages/nadena.dev
 - NUnit through Unity Test Framework, EditMode only. Two test assemblies: `Alrauna.Amuse.Tests.Editor` (product) and `Alrauna.Amuse.Research.Tests.Editor` (research).
 - One test class per production type, named `<Type>Tests`. Characterization suites use `<Subject>CharacterizationTests`. Test folders mirror production folders. Method names are behavior sentences, for example `WhollyOpaqueSlotReplacesOnlyItsMaterial` or `SchemaVersionThreeRefusesAsUnknown`.
 - Assertions use the NUnit constraint model: `Assert.That(actual, Is.EqualTo(expected))`.
-- Vendor shaders are never installed in this repository. Tests run on schema-only stand-in shaders under `Hidden/Alrauna/AmuseTests/*` through the verified seams in `Tests/Editor/Build/`.
+- The dev project installs the vendor packages that VRChat avatar projects use, as pinned in `Packages/vpm-manifest.json`: lilToon, Poiyomi Toon with the Thry editor, Modular Avatar, VRCFury, AAO, d4rkAvatarOptimizer, LTCGI, and Red Sim Light Volumes. New and reworked tests use the real installed package wherever the pinned environment supplies the real source, so that a test double cannot drift from vendor behavior. A synthetic double stays for an independent outcome oracle, for an input that no vendor produces, for a falsifier that needs exact control that vendor output cannot give, and for a source that the pinned environment cannot supply. Tests reference installed vendor assemblies, shaders, and materials. They never copy vendor source or vendor assets into the repository. Stand-in shaders under `Hidden/Alrauna/AmuseTests/*` and verified seams in `Tests/Editor/Build/` that imitate an attestable vendor surface are migration targets. Refusal-shape stand-ins stay. See `docs/superpowers/investigations/2026-10-25-vendor-integrated-test-rework-investigation.md`.
 - `Tests/Editor/ReferenceFixtures/` holds public synthetic JSON-driven texture and mesh fixtures with independent outcome oracles: `ProvenOpaque`, `MustRemainTransparent`, `Unknown`. Determinism is tested, not assumed.
 - RED/GREEN: a behavior change needs a failing test observed first, for a named plausible wrong implementation, then a minimal fix. Never weaken a valid test. An assertion that passes on first run is recorded as characterization, never dressed up as RED.
 - Falsifiers are numbered adversarial cases, marked `--- Falsifier N: ... ---`, that a plausible wrong implementation must fail. They carry no-op guards so later changes cannot silence them.

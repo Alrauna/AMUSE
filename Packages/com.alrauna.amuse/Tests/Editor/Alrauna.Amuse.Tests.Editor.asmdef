@@ -18,7 +18,8 @@
         "VRCSDK3A.dll",
         "VRCSDK3A-Editor.dll",
         "VRCSDKBase.dll",
-        "VRCSDKBase-Editor.dll"
+        "VRCSDKBase-Editor.dll",
+        "System.Collections.Immutable.dll"
     ],
     "autoReferenced": false,
     "defineConstraints": [],

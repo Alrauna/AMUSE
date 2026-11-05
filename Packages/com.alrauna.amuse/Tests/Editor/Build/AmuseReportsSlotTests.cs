@@ -1025,7 +1025,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             internal static readonly FoldReportPlatform Instance =
                 new FoldReportPlatform();
 
-            public string QualifiedName => "nadena.dev.ndmf.generic";
+            public string QualifiedName =>
+                "com.alrauna.amuse.tests.slot-report-fold";
             public string DisplayName => "AMUSE slot report fold fixtures";
         }
 

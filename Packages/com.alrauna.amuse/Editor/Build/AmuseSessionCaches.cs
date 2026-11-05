@@ -23,7 +23,7 @@ namespace Alrauna.Amuse.Editor.Build
     internal static class AmuseSessionCaches
     {
         /// <summary>
-        /// Clears the eight session caches in their fixed order.
+        /// Clears the seven session caches in their fixed order.
         /// </summary>
         internal static void Clear()
         {
@@ -31,7 +31,6 @@ namespace Alrauna.Amuse.Editor.Build
             UnityAlphaFieldEvidence.ClearCache();
             ReplacementTextureIdentity.ClearSession();
             ReplacementTextureAttestation.Versions.ClearVersionCacheForSession();
-            AaoAtlasTextureAttestation.Versions.ClearVersionCacheForSession();
             Semantics.LilToon.LilToonSourceAttestation.ClearGatherMemo();
             Semantics.Poiyomi.PoiyomiSourceAttestation.ClearSourceHashMemo();
             LockedSourceAlignmentMemo.Clear();

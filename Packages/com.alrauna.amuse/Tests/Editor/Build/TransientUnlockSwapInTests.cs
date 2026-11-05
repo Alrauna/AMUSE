@@ -801,7 +801,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// refuse. The named wrong implementation collects every binding
         /// of every clip that touches the renderer path, so the other
         /// renderer's curve refuses this locked material beyond the
-        /// designed A10.4 cost.
+        /// designed A10.4 cost. The vendor integrated build plants a
+        /// live property block on the path C renderer inside the build,
+        /// so the refusal on that path names the property block cause.
+        /// The writer is the animator rebind of the vendor animator
+        /// commit. See
+        /// docs/superpowers/investigations/2026-10-25-vendor-property-block-writer-diagnosis.md.
         /// </summary>
         [Test]
         public void ABindingOnAnotherRendererPathDoesNotRefuseThisLockedMaterial()
@@ -876,17 +881,42 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             // Guard: the same binding on the locked material's own path
             // must refuse, so the fixture reaches the gate with a real
-            // curve.
+            // curve. The vendor animator commit plants a live block on
+            // that renderer inside the build, and the block cause wins
+            // over the animation mismatch (A9). The writer diagnosis of
+            // 2026-10-25 names the writer.
+            Assert.That(
+                state.SlotRefusalCount(
+                    AlphaSeparationSlotRefusal
+                        .LockedMaterialPropertyBlock),
+                Is.EqualTo(1),
+                "fixture guard: the planted block must refuse the " +
+                "locked material on its own path");
             Assert.That(
                 state.SlotRefusalCount(
                     AlphaSeparationSlotRefusal
                         .LockedMaterialAnimationMismatch),
-                Is.EqualTo(1),
-                "fixture guard: the binding on the locked material's " +
-                "own path must refuse");
+                Is.EqualTo(0),
+                "the block cause wins, so the mismatch never records");
             Assert.That(rendererC.sharedMaterials[0],
                 Is.EqualTo(refused),
                 "the refused slot keeps its original locked material");
+
+            // The planted state the refusal read: the build applied the
+            // curve's time zero value on this renderer as a property
+            // block.
+            Assert.That(
+                rendererC.HasPropertyBlock(),
+                Is.True,
+                "the vendor animator commit must plant the block the " +
+                "refusal read");
+            var planted = new MaterialPropertyBlock();
+            rendererC.GetPropertyBlock(planted);
+            Assert.That(
+                planted.GetFloat("_AlphaForceOpaque_S"),
+                Is.EqualTo(1f),
+                "the planted block carries the curve's time zero value " +
+                "under the renamed alpha name");
 
             // The subject: the locked material on the untouched path
             // swaps in, because the clip's other path is not its

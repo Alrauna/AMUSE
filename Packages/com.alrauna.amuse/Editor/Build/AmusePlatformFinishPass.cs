@@ -259,12 +259,13 @@ namespace Alrauna.Amuse.Editor.Build
                     "permission with no retained animator bindings.");
             }
 
-            // The structural pass enumerated the real graph before
-            // virtualization and stored it; this pass reads that stored
-            // result so the checks that need real clips keep their
-            // pre-virtualization view. Direct callers that bypass the pass
-            // list get the enumeration inline: at that point the graph is
-            // still real, so the view is equally pre-virtualization.
+            // The structural pass enumerated the committed graph and
+            // stored it; this pass reads that stored result, and the
+            // event facts it relies on resolve authored originals
+            // through the NDMF object registry (V3, owner decision of
+            // 2026-10-25). Direct callers that bypass the pass list
+            // get the enumeration inline: at that point the graph is
+            // still the same committed view.
             if (state.StructuralGraph == null)
             {
                 AmuseStructuralGraphCheck.Execute(context);

@@ -438,7 +438,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             internal static readonly ConsentTestPlatform Instance =
                 new ConsentTestPlatform();
 
-            public string QualifiedName => "nadena.dev.ndmf.generic";
+            public string QualifiedName =>
+                "com.alrauna.amuse.tests.version-consent";
             public string DisplayName => "AMUSE consent test generic";
         }
     }

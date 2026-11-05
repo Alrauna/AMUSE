@@ -99,7 +99,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             AssetDatabase.CreateFolder("Assets", "AmuseTests_AaoMerge");
             quadrantTexture = Track(ImportQuadrantAlphaTexture());
             var shader = Shader.Find(LilToonTransparentShaderName);
-            Assume.That(shader, Is.Not.Null, "lilToon not installed");
+            if (shader == null)
+            {
+                Assert.Ignore(
+                    "lilToon not installed. Install the jp.lilxyzw.liltoon"
+                    + " package 2.4.1 to run this test.");
+            }
             var material = Track(NewTransparentMaterial(shader, quadrantTexture));
 
             var selected = UnityMaterialSemantics
@@ -152,7 +157,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             AssetDatabase.CreateFolder("Assets", "AmuseTests_AaoMerge");
             quadrantTexture = Track(ImportQuadrantAlphaTexture());
             var shader = Shader.Find(LilToonTransparentShaderName);
-            Assume.That(shader, Is.Not.Null, "lilToon not installed");
+            if (shader == null)
+            {
+                Assert.Ignore(
+                    "lilToon not installed. Install the jp.lilxyzw.liltoon"
+                    + " package 2.4.1 to run this test.");
+            }
 
             var root = new GameObject("AMUSE evidence probe root");
             Track(root);
@@ -693,6 +703,107 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// V10 item 4 ground check. One real ambient build with Optimize
+        /// Texture enabled must produce the real Avatar Optimizer atlas,
+        /// and that atlas must enter the admission. The observation pass
+        /// after the optimizer probes the atlas on its slot while the
+        /// build still runs, before NDMF persists build objects. The
+        /// atlas name must carry one of the two pinned markers, the
+        /// admission must accept the atlas over its corroborated slot
+        /// material, and the generated capture route must serve the
+        /// atlas. Owner decision Q8 of 2026-10-25 removed the
+        /// admitted-version conjunct, so the installed vendor version no
+        /// longer refuses the real atlas.
+        /// </summary>
+        [Test]
+        public void RealAaoAtlasIsAdmittedThroughTheGeneratedRoute()
+        {
+            RequireIntegrationEnvironment(
+                out var traceAndOptimizeType,
+                out var transparentShader,
+                out _);
+            AssetDatabase.CreateFolder("Assets", "AmuseTests_AaoMerge");
+
+            var root = new GameObject("AMUSE real atlas admission");
+            try
+            {
+                FixtureAvatarIdentity.AttachVrcDescriptor(root);
+                root.AddComponent<AmuseAvatarOptimizer>();
+                var traceAndOptimize =
+                    root.AddComponent(traceAndOptimizeType);
+                ConfigureTraceAndOptimize(
+                    traceAndOptimize, mergeSkinnedMesh: true,
+                    optimizeTexture: true);
+                AttachAnimationFixture(root, "ground-atlas");
+                var texture = Track(ImportBandedAlphaTexture(
+                    "banded_ground_atlas", 512));
+                var material = NewTransparentMaterial(
+                    transparentShader, texture);
+                AssetDatabase.CreateAsset(
+                    material, TempFolder + "/ground-atlas-source.mat");
+
+                CreateSkinnedRenderer(
+                    root, "AMUSE ground atlas renderer",
+                    "AMUSE ground atlas mesh",
+                    new[] { material },
+                    new[] { Band.Transparent, Band.Partial, Band.Opaque },
+                    new[] { 0, 0, 0 },
+                    firstTriangleIndex: 0);
+
+                OptimizerMergeObservation.Reset();
+                OptimizerMergeObservation.Enabled = true;
+                try
+                {
+                    var context = AvatarProcessor.ProcessAvatar(
+                        root, AmbientPlatform.DefaultPlatform);
+                    Assert.That(context.Successful, Is.True,
+                        "fixture precondition: the ambient build must" +
+                        " complete");
+
+                    Assert.That(
+                        OptimizerMergeObservation.Atlases,
+                        Has.Count.EqualTo(1),
+                        "Optimize Texture must pack the fixture texture" +
+                        " into one atlas at the post-optimizer boundary");
+                    var atlas = OptimizerMergeObservation.Atlases[0];
+                    var nameCarriesMarker =
+                        atlas.Name.EndsWith(
+                            AaoAtlasTextureAttestation.AtlasNameSuffix,
+                            StringComparison.Ordinal) ||
+                        atlas.Name.StartsWith(
+                            AaoAtlasTextureAttestation.MonotoneNamePrefix,
+                            StringComparison.Ordinal);
+                    Assert.That(
+                        nameCarriesMarker, Is.True,
+                        "the atlas name must carry one of the two pinned" +
+                        " Avatar Optimizer markers. The observed name" +
+                        " was: " + atlas.Name);
+                    Assert.That(
+                        atlas.HasAssetPath, Is.False,
+                        "the real atlas stays a live in-memory texture" +
+                        " while the build runs");
+                    Assert.That(
+                        atlas.Admitted, Is.True,
+                        "the real atlas of the installed Avatar Optimizer" +
+                        " must pass the shape and corroboration conjuncts" +
+                        " over its registered slot material");
+                    Assert.That(
+                        atlas.ServedByGeneratedRoute, Is.True,
+                        "the generated capture route must serve the real" +
+                        " atlas");
+                }
+                finally
+                {
+                    OptimizerMergeObservation.Reset();
+                }
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
         /// The component-information contract observed on the real
         /// boundary: after Avatar Optimizer's passes and again after
         /// AMUSE's own sequence, the AMUSE component must still be on
@@ -990,9 +1101,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     VRC.SDK3.Avatars.Components.VRCAvatarDescriptor>();
                 if (descriptor != null)
                 {
+                    // The fixture materialized the VRChat-shaped base
+                    // layer set. Only the Base entry takes this test's
+                    // swap controller. The other four entries stay, so
+                    // the Modular Avatar FX read finds its entry and the
+                    // build completes.
                     descriptor.customizeAnimationLayers = true;
-                    descriptor.baseAnimationLayers = new[]
-                    {
+                    var layers = descriptor.baseAnimationLayers;
+                    Assert.That(layers?.Length, Is.EqualTo(5),
+                        "the fixture must materialize the five base layer"
+                        + " entries before this test swaps the Base"
+                        + " controller");
+                    layers[0] =
                         new VRC.SDK3.Avatars.Components.VRCAvatarDescriptor
                             .CustomAnimLayer
                         {
@@ -1001,8 +1121,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             animatorController = controller,
                             isDefault = false,
                             isEnabled = true,
-                        },
-                    };
+                        };
                 }
 #endif
 

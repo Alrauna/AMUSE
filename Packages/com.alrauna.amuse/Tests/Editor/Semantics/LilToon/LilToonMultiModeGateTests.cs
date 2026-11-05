@@ -6,7 +6,7 @@ using NUnit.Framework;
 using UnityEngine;
 using Alrauna.Amuse.Tests.Editor.Shared;
 
-namespace Alrauna.Tests.Editor.Semantics.LilToon
+namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
 {
     /// <summary>
     /// Falsifier fixtures for the Multi mode-consistency gate. Every input

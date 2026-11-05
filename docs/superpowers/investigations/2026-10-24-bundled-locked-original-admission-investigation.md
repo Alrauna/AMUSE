@@ -27,7 +27,7 @@ Four slices ran in parallel on 2026-10-24. All slices were read-only.
 
 The live probe called `PoiyomiLockedSourceAlignment.Align` through reflection. It read shader text and shader property tables. It wrote no asset and no material. It did not run a build.
 
-## 3. What decides admission today
+## 3. What decides admission as of 2026-10-24
 
 `[SOURCE]` Two rules decide whether a locked Poiyomi material can open the unlock window.
 

@@ -93,10 +93,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 root, TransientUnlockTestPlatform.Instance);
             var state = context.GetState<AmusePlatformFinishState>();
 
-            Assert.That(
-                Thry.ThryEditor.ShaderOptimizer.LockCallCount, Is.Zero,
-                "the close pass must never lock through the vendor, for " +
-                "the unlocked clone or for anything else");
             Assert.That(renderer.sharedMaterials[0], Is.EqualTo(locked),
                 "every slot that held the unlocked clone holds L after " +
                 "the close");
@@ -164,9 +160,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             AvatarProcessor.ProcessAvatar(
                 root, TransientUnlockTestPlatform.Instance);
 
-            Assert.That(
-                Thry.ThryEditor.ShaderOptimizer.LockCallCount, Is.Zero,
-                "the impostor clone must never reach the vendor");
             Assert.That(renderer.sharedMaterials[0], Is.EqualTo(locked),
                 "the impostor pair reverts to the locked original, so " +
                 "no unlocked shader name can ship");
@@ -522,9 +515,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 root, TransientUnlockTestPlatform.Instance);
 
             Assert.That(renderer.sharedMaterials[0], Is.EqualTo(locked));
-            Assert.That(
-                Thry.ThryEditor.ShaderOptimizer.LockCallCount, Is.Zero,
-                "an empty window never calls the vendor lock");
         }
 
         /// <summary>

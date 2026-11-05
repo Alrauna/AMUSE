@@ -71,7 +71,7 @@ Both frontends consume **all five** `UnityTextureEvidence` facts.
 | **C — shader-family / build knowledge** | Pinned GUIDs, package names/versions, digest constants, canonicalization region rules, the `LIL_FEATURE_*` symbol set, the lilToon shader taxonomy | **Not extracted.** |
 | **D — shader-specific interpretation** | Every equation, every gate list, sampler-ownership rules, UV rules, the tone-correction identity proof, emission blend-mode algebra, the `LIL_RENDER` alpha derivation | **Kept wholly separate.** |
 | **E — attestation** | Poiyomi's single-asset hash conjunction, lilToon's include tree + canonicalization + digests + live define scans | The two models share **only** the normalized-hash rule. Attestation has no common shape across two shaders. |
-| **F — test infrastructure** | Two fixture bases, two stand-in ShaderLab fixtures, texture-import helpers, diagnostic assertion helpers | Duplicated deliberately. The stand-in-fixture pattern is confirmed twice and is the standing convention. |
+| **F — test infrastructure** | Two fixture bases, retained synthetic ShaderLab fixtures with named purposes, real installed vendor materials for the admitted happy paths, texture-import helpers, diagnostic assertion helpers | Duplicated deliberately. The 2026-10-26 real-material cutover moved every admitted happy path onto a real installed vendor material through the production attestation. A synthetic ShaderLab fixture stays only with a stated reason: exact keyword control, a refusal shape no vendor ships, or a retained matrix that needs the test seam route. The real-material cutover ledger records every retirement, twin, and retention. |
 | **G — repeated pressure** | See below | Documented, not implemented. |
 
 `UnityTextureEvidence`'s reflection guard is the best piece of architectural test
@@ -194,7 +194,7 @@ absorbed by a return of `Unknown`.
 | `ComputeNormalizedSourceHash` | a third consumer, or extraction of the whole attestation-primitive cluster at once |
 | Result / diagnostic / output types | a shared diagnostic framework is justified by **consumers**, not producers. There are none |
 | Gate lists and every equation | never — categories C and D |
-| Fixture bases and stand-in shaders | never, but the *assertion helpers* should be reconciled so each adapter gets both the `IsSupportedMaterial` check and the diagnostic-count check |
+| Fixture bases and synthetic fixtures | never, but the *assertion helpers* should be reconciled so each adapter gets both the `IsSupportedMaterial` check and the diagnostic-count check. Since the 2026-10-26 real-material cutover, the admitted happy paths run real installed vendor materials, and a synthetic fixture stays only with a stated retention reason |
 | Sampled `[0,1]` range proof | a second frontend needs the identical contract |
 | Attestation models | never — two shaders produced two irreconcilable shapes |
 
@@ -240,8 +240,15 @@ toon-shader coincidence.
 diagnostic code set, and fixture shader. Copying the byte-identical helpers a third
 time is correct. Extracting them *at that point* is also correct.
 
-**Write the fixture shader to the consumed contract exactly.** Across the two
-stand-in fixtures, the measurement shows: every one of lilToon's 44 fixture
+**Ground every admitted happy path on a real installed vendor material.** Load the
+shader by its pinned GUID, never by name, and drive the production attestation with
+no seams. This is the standing rule since the 2026-10-26 real-material cutover, and
+the real-material cutover ledger records each retirement, twin, and retention. A
+synthetic ShaderLab fixture stays only for a named purpose: exact keyword control, a
+refusal shape no vendor ships, or a retained matrix that needs the test seam route.
+
+**When a synthetic fixture is still the right tool, write it to the consumed
+contract exactly.** The cutover measurement shows: every one of lilToon's 44 fixture
 properties is named in production, while 5 of Poiyomi's 94 are not (`_Mode`,
 `_Cutoff`, `_SrcBlend`, `_DstBlend`, `_AlphaMask`). Neither approach is wrong. The
 extra Poiyomi properties make an irrelevant-state leak testable at all, and the

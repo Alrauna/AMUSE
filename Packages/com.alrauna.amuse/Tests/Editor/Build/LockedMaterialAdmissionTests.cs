@@ -15,8 +15,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
     /// </summary>
     public sealed class LockedMaterialAdmissionTests
     {
-        // --- Falsifier 12: a decision that reads only the plain property
-        // states misses a binding on a renamed name ---
+        // --- Falsifier locked-source-alignment 12: a decision that reads
+        // only the plain property states misses a binding on a renamed
+        // name ---
 
         /// <summary>
         /// A float binding on a renamed name refuses, because the locked
@@ -46,8 +47,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "a float binding on a renamed name must refuse");
         }
 
-        // --- Falsifier 13: a decision that trusts the saved value of a
-        // baked property admits a binding on its plain name ---
+        // --- Falsifier locked-source-alignment 13: a decision that trusts
+        // the saved value of a baked property admits a binding on its
+        // plain name ---
 
         /// <summary>
         /// A float binding on the plain name of a baked property
@@ -75,8 +77,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "a float binding on a baked plain name must refuse");
         }
 
-        // --- Falsifier 14: a decision that reads only float curves
-        // misses an object reference curve on a renamed texture ---
+        // --- Falsifier locked-source-alignment 14: a decision that reads
+        // only float curves misses an object reference curve on a renamed
+        // texture ---
 
         /// <summary>
         /// An object reference binding on the plain name of a renamed
@@ -201,6 +204,36 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     .LockedMaterialPropertyBlock),
                 "the property block must win over the animation " +
                 "mismatch");
+        }
+
+        // --- Falsifier 12: a reorder of the locked-slot checks admits
+        // a blocked locked slot with a clean binding set ---
+
+        /// <summary>
+        /// A blocked locked slot refuses with the property block cause
+        /// with no binding input at all, so the block check cannot move
+        /// behind the binding check (A9).
+        /// </summary>
+        [Test]
+        public void DecideRefusesABlockedLockedSlotWithCleanBindings()
+        {
+            var source = Source(
+                States(("_B", LockedPropertyState.Baked)));
+
+            Assert.That(
+                LockedMaterialAdmission.Decide(
+                    source, false, Array.Empty<string>()),
+                Is.EqualTo(AlphaSeparationSlotRefusal.None),
+                "fixture guard: the same source without the block " +
+                "must admit");
+
+            Assert.That(
+                LockedMaterialAdmission.Decide(
+                    source, true, Array.Empty<string>()),
+                Is.EqualTo(AlphaSeparationSlotRefusal
+                    .LockedMaterialPropertyBlock),
+                "a blocked locked slot with a clean binding set must " +
+                "refuse");
         }
 
         [Test]

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using Alrauna.Amuse.Editor.Semantics;
 using nadena.dev.ndmf.animator;
 using UnityEditor;
 using UnityEditor.Animations;
@@ -88,6 +89,11 @@ namespace Alrauna.Amuse.Editor.Host
         private static readonly CommittedControllerGraphResult MalformedLayer =
             Refused(AvatarAnimationRefusal.MalformedControllerLayer);
 
+        // V3 (owner decision of 2026-10-25). The deepest chain of
+        // distinct originals the provenance walk resolves before it
+        // refuses the clip as unbounded.
+        private const int ProvenanceDepthCap = 8;
+
         internal static CommittedControllerGraphResult Enumerate(
             GameObject avatarRoot,
             IPlatformAnimatorBindings bindings)
@@ -151,6 +157,16 @@ namespace Alrauna.Amuse.Editor.Host
                     // can be committed by identity instead of cloned. Host special-
                     // motion state is diagnostic and never authorizes an event.
                     //
+                    // V3 (owner decision of 2026-10-25) carries the scan past
+                    // the committed clip: a plugin clone drops an authored
+                    // event, so the authored fact survives only in registry
+                    // provenance. Each clip is also resolved through the NDMF
+                    // object registry to every distinct original, and an
+                    // original that carries an event refuses the same way. A
+                    // chain the depth cap cannot bound refuses the same way,
+                    // because this refusal records only that AMUSE cannot
+                    // bound whether or how an event can execute.
+                    //
                     // Which named cause an avatar carrying several independent unsafe
                     // conditions reports is defined by this enumeration order alone
                     // and is not contractual; only the refusal itself is. Each cause
@@ -158,6 +174,8 @@ namespace Alrauna.Amuse.Editor.Host
                     foreach (var clip in committedLayer.Clips)
                     {
                         if (clip.events.Length > 0) return AnimationEventRefusal;
+                        if (RegisteredOriginalCarriesEvents(clip))
+                            return AnimationEventRefusal;
                     }
 
                     result.Add(committedLayer);
@@ -166,6 +184,40 @@ namespace Alrauna.Amuse.Editor.Host
 
             return new CommittedControllerGraphResult(
                 AvatarAnimationRefusal.None, result);
+        }
+
+        // V3 (owner decision of 2026-10-25): an authored animation event
+        // survives a plugin clone only as registry provenance, because
+        // NDMF's ordinary VirtualClip clone copies curves and drops
+        // events. The walk resolves the committed clip through the NDMF
+        // object registry to every distinct original it can reach. The
+        // lookup stays read-only, because a creating lookup would
+        // fabricate registry entries and block later commit
+        // registrations. The walk goes to a fixpoint with a visited set,
+        // and a chain the depth cap cannot bound answers true: this
+        // refusal records only that AMUSE cannot bound whether or how an
+        // event can execute.
+        private static bool RegisteredOriginalCarriesEvents(AnimationClip clip)
+        {
+            var visited = new HashSet<UnityEngine.Object>(
+                ReferenceEqualityComparer<UnityEngine.Object>.Instance);
+            visited.Add(clip);
+
+            var current = (UnityEngine.Object)clip;
+            for (var hops = 0; hops < ProvenanceDepthCap; hops++)
+            {
+                var original = RegisteredSourceIdentity.Resolve(current);
+                if (original == null || !visited.Add(original)) return false;
+                if (original is AnimationClip originalClip &&
+                    originalClip.events.Length > 0)
+                {
+                    return true;
+                }
+
+                current = original;
+            }
+
+            return true;
         }
 
         private static bool TryAddController(

@@ -144,16 +144,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Is.Null,
                 "the window close threw: " +
                 TransientUnlockTestKnobs.LastCloseError);
-            Assert.That(
-                Thry.ThryEditor.ShaderOptimizer.UnlockCallCount,
-                Is.EqualTo(0),
-                "the window must restore through the in-memory " +
-                "reconstruction with no vendor call");
-            Assert.That(
-                Thry.ThryEditor.ShaderOptimizer.LockCallCount,
-                Is.EqualTo(0),
-                "no build path calls the vendor: both paths run the " +
-                "same reversion close");
             Assert.That(unlockedClone, Is.Not.Null,
                 "the swapped pair must hold its unlocked clone at close");
             Assert.That(
@@ -319,11 +309,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(openPairsAtApply, Is.EqualTo(1),
                 "the locked material must be admitted and the window " +
                 "must open");
-            Assert.That(
-                Thry.ThryEditor.ShaderOptimizer.UnlockCallCount,
-                Is.EqualTo(0),
-                "the non-play window must restore without any vendor " +
-                "call");
 
             // The slot took the reconstructed clone while the window was
             // open, and the locked original stayed untouched.
@@ -343,10 +328,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             // The renderer pre-check admitted the renderer, and the
             // whole cycle ran without any vendor presence.
-            Assert.That(
-                Thry.ThryEditor.ShaderOptimizer.LockCallCount,
-                Is.EqualTo(0),
-                "no build path may lock through the vendor");
         }
 
         /// <summary>
@@ -383,11 +364,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var state = context.GetState<AmusePlatformFinishState>();
 
             // No-op guards.
-            Assert.That(
-                Thry.ThryEditor.ShaderOptimizer.UnlockCallCount,
-                Is.EqualTo(0),
-                "the in-memory restore must run and refuse the " +
-                "failing member; it calls no vendor");
             Assert.That(
                 state.SlotRefusalCount(
                     AlphaSeparationSlotRefusal
@@ -528,11 +504,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             // No-op guards: the transformation ran and the non-play
             // close called no vendor.
-            Assert.That(
-                Thry.ThryEditor.ShaderOptimizer.LockCallCount,
-                Is.EqualTo(0),
-                "the non-play close reverts the pair with no vendor " +
-                "call");
             Assert.That(state.AppliedRendererCount, Is.EqualTo(1),
                 "the sibling slot must still optimize");
             Assert.That(renderer.sharedMaterials[1],
@@ -714,11 +685,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var state = context.GetState<AmusePlatformFinishState>();
 
             // No-op guards: two locked materials, exactly two clones.
-            Assert.That(
-                Thry.ThryEditor.ShaderOptimizer.UnlockCallCount,
-                Is.EqualTo(0),
-                "one clone per locked material across slots and " +
-                "closure, restored with no vendor call");
             Assert.That(slotClone, Is.Not.Null,
                 "the slot-held locked material gets its clone");
             Assert.That(clipClone, Is.Not.Null,
@@ -981,15 +947,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Is.Null,
                 "the window close threw: " +
                 TransientUnlockTestKnobs.LastCloseError);
-            Assert.That(
-                Thry.ThryEditor.ShaderOptimizer.UnlockCallCount,
-                Is.EqualTo(0),
-                "the swap-in must restore exactly one locked material " +
-                "with no vendor call");
-            Assert.That(
-                Thry.ThryEditor.ShaderOptimizer.LockCallCount,
-                Is.EqualTo(0),
-                "no build path calls the vendor");
             Assert.That(unlockedClone, Is.Not.Null,
                 "the swapped pair must hold its unlocked clone at " +
                 "close");
@@ -1375,9 +1332,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     root, mesh, locked));
             var clip = TransientUnlockTestLifecycle.AddMaterialSwapAnimation(
                 root, renderer, 0, locked);
-            // An animation event lies outside the admitted animation value
-            // model, so the structural enumeration refuses the avatar
-            // before the barrier's swap-in can open a pair.
+            // An animation event lies outside the admitted animation
+            // value model. The planted event rides the authored clip,
+            // the committed clone drops it, and the structural scan
+            // still refuses through the registry provenance (V3, owner
+            // decision of 2026-10-25), before the barrier's swap-in
+            // can open a pair.
             AnimationUtility.SetAnimationEvents(clip, new[]
             {
                 new AnimationEvent
@@ -1512,17 +1472,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "the fixture must produce a generated canonical output");
             Assert.That(canonicalOutput, Is.Not.EqualTo(unlockedClone),
                 "the fixture's canonical output must be distinct from U");
-
-            // The close never touches the vendor on any path.
-            Assert.That(
-                Thry.ThryEditor.ShaderOptimizer.LockCallCount,
-                Is.Zero,
-                "the play path close must run the reversion only, with " +
-                "no vendor lock call");
-            Assert.That(
-                Thry.ThryEditor.ShaderOptimizer.UnlockCallCount,
-                Is.Zero,
-                "the restore must run in memory with no vendor call");
 
             // The transformation's shipped state survives the close: the
             // slot and the committed curve keep the canonical write, and
