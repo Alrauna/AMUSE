@@ -49,9 +49,6 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         private const string RoundTripDetail =
             "A baked literal does not print back to its own text.";
 
-        private const string TexelSizeDetail =
-            "A baked texel size does not match the texture. A generated shader shared between materials can cause this.";
-
         private const string BracketBakedDetail =
             "A baked property is also read by a live bracket with another value.";
 
@@ -271,8 +268,8 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 // The derived texture entries of A5.4. A baked ST writes
                 // the scale and offset and wins over the texture read,
                 // because the text is the truth (A1.1). A baked texel
-                // size writes nothing. It must equal the print of the
-                // texture facts on the clone.
+                // size writes nothing. It must be a self consistent
+                // vendor print (TX1).
                 if (property.Type == ShaderPropertyType.Texture)
                 {
                     var stName = property.Name + ScaleSuffix;
@@ -293,10 +290,11 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     if (source.States.TryGetValue(texelName, out var texelState)
                         && texelState == LockedPropertyState.Baked)
                     {
-                        var texelLiteral = source.BakedLiterals[texelName];
-                        if (texelLiteral != ExpectedTexelSize(source, locked, property.Name))
+                        var texelDetail = CheckTexelPrintShape(
+                            source.BakedLiterals[texelName]);
+                        if (texelDetail != null)
                         {
-                            return Refuse(TexelSizeDetail);
+                            return Refuse(texelDetail);
                         }
                     }
                 }
@@ -758,32 +756,48 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         }
 
         /// <summary>
-        /// Builds the fact 5 print of (1/w, 1/h, w, h) for the texture on
-        /// the clone. No texture expects the print of (1, 1, 1, 1)
-        /// (A5.4).
+        /// Checks one baked texel size literal for print self
+        /// consistency (TX1). The literal must round trip as a float4
+        /// (A5.4). The third and fourth components must be positive
+        /// integers. The first two components must be the prints of one
+        /// over those sizes, in the parameterless invariant format. The
+        /// method returns null on success.
         /// </summary>
-        private static string ExpectedTexelSize(
-            AlignedLockedSource source,
-            ILockedMaterialValues values,
-            string name)
+        private static string CheckTexelPrintShape(string literal)
         {
-            if (!TryTextureOnU(source, values, name, out var texture)
-                || texture.IdentityToken == null)
+            var roundTripDetail = RoundTripFloat4(literal, out _);
+            if (roundTripDetail != null)
             {
-                return Float4Head + "1,1,1,1" + Float4Tail;
+                return roundTripDetail;
             }
 
-            return Float4Head
-                + InvertFloat(texture.Width) + ","
-                + InvertFloat(texture.Height) + ","
-                + texture.Width.ToString(CultureInfo.InvariantCulture) + ","
-                + texture.Height.ToString(CultureInfo.InvariantCulture)
-                + Float4Tail;
-        }
+            var inner = literal.Substring(
+                Float4Head.Length,
+                literal.Length - Float4Head.Length - Float4Tail.Length);
+            var parts = inner.Split(',');
+            if (!int.TryParse(
+                    parts[2],
+                    NumberStyles.Integer,
+                    CultureInfo.InvariantCulture,
+                    out var width)
+                || width <= 0
+                || !int.TryParse(
+                    parts[3],
+                    NumberStyles.Integer,
+                    CultureInfo.InvariantCulture,
+                    out var height)
+                || height <= 0)
+            {
+                return LiteralShapeDetail;
+            }
 
-        private static string InvertFloat(int size)
-        {
-            return (1f / size).ToString(CultureInfo.InvariantCulture);
+            if (parts[0] != (1f / width).ToString(CultureInfo.InvariantCulture)
+                || parts[1] != (1f / height).ToString(CultureInfo.InvariantCulture))
+            {
+                return LiteralShapeDetail;
+            }
+
+            return null;
         }
 
         /// <summary>
