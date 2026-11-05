@@ -24,9 +24,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         private const string RoundTripDetail =
             "A baked literal does not print back to its own text.";
 
-        private const string TexelSizeDetail =
-            "A baked texel size does not match the texture. A generated shader shared between materials can cause this.";
-
         private const string BracketBakedDetail =
             "A baked property is also read by a live bracket with another value.";
 
@@ -335,7 +332,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 
         /// <summary>
         /// Builds one aligned record by hand (A4). Defaults stand for the
-        /// parts a fixture does not use.
+        /// parts a fixture does not use. The era defaults to the bundled
+        /// era.
         /// </summary>
         private static AlignedLockedSource Source(
             IReadOnlyDictionary<string, LockedPropertyState> states,
@@ -346,10 +344,11 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             IReadOnlyList<IReadOnlyList<string>> runs = null,
             IReadOnlyList<LockedBlockRecord> blocks = null,
             string suffix = null,
-            string surviving = null)
+            string surviving = null,
+            PoiyomiLockEra era = PoiyomiLockEra.Bundled9364)
         {
             return new AlignedLockedSource(
-                PoiyomiLockEra.Bundled9364,
+                era,
                 suffix,
                 states,
                 renamed ?? Names(),
@@ -677,12 +676,16 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         }
 
         /// <summary>
-        /// A baked texel size must equal the fact 5 print of the texture
-        /// facts on the clone. A mismatch refuses and names a shared
-        /// generated shader as a possible cause (A5.4, fact 14).
+        /// A baked texel size must be a self consistent vendor print.
+        /// Each reciprocal component must equal the print of one over
+        /// its matching size component. This literal round trips but
+        /// breaks that relation, so it refuses with the shape sentence
+        /// (TX1, falsifier 1). An implementation that keeps the equality
+        /// against the fresh texture print refuses with the old texel
+        /// sentence and fails here.
         /// </summary>
         [Test]
-        public void BakedTexelSizeThatDiffersFromTheTextureRefusesAndNamesSharing()
+        public void BakedTexelSizeWhoseReciprocalDisagreesRefuses()
         {
             var properties = new[] { Prop("_Tex", ShaderPropertyType.Texture) };
             var source = Source(
@@ -696,7 +699,141 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 
             var result = LockedSourceReproduction.Build(source, properties, locked);
 
-            AssertRefusal(result, TexelSizeDetail);
+            AssertRefusal(result, LiteralShapeDetail);
+        }
+
+        /// <summary>
+        /// A baked texel size that is a well formed vendor print passes
+        /// even when the texture on the values snapshot has another
+        /// size. The bake is history (TX1). An implementation that
+        /// keeps the equality against the fresh texture print refuses
+        /// here.
+        /// </summary>
+        [Test]
+        public void WellFormedStaleBakePassesOnDifferentTextureSize()
+        {
+            var properties = new[] { Prop("_Tex", ShaderPropertyType.Texture) };
+            var source = Source(
+                States(
+                    ("_Tex", LockedPropertyState.Unused),
+                    ("_Tex_TexelSize", LockedPropertyState.Baked)),
+                baked: Names(("_Tex_TexelSize", "float4(0.0009765625,0.0009765625,1024,1024)")));
+            var locked = new FakeValues().WithTexture(
+                "_Tex",
+                new LockedTextureValue("token-d", 512, 512, Vector2.one, Vector2.zero));
+
+            BuiltPlan(source, properties, locked);
+        }
+
+        /// <summary>
+        /// A baked texel size whose size components are not positive
+        /// integers is not a vendor print. It refuses with the shape
+        /// sentence (TX1, falsifier 2). An implementation that accepts
+        /// any literal that round trips passes this bake and fails
+        /// here.
+        /// </summary>
+        [Test]
+        public void ZeroOrNegativeBakeSizeRefuses()
+        {
+            var properties = new[] { Prop("_Tex", ShaderPropertyType.Texture) };
+            var source = Source(
+                States(
+                    ("_Tex", LockedPropertyState.Unused),
+                    ("_Tex_TexelSize", LockedPropertyState.Baked)),
+                baked: Names(("_Tex_TexelSize", "float4(1,1,0,0)")));
+            var locked = new FakeValues().WithTexture(
+                "_Tex",
+                new LockedTextureValue("token-e", 512, 512, Vector2.one, Vector2.zero));
+
+            var result = LockedSourceReproduction.Build(source, properties, locked);
+
+            AssertRefusal(result, LiteralShapeDetail);
+        }
+
+        /// <summary>
+        /// A baked texel size whose components do not print back to
+        /// their own text refuses with the round trip sentence (TX1,
+        /// falsifier 3). An implementation that keeps only the texture
+        /// equality or drops the round trip check for texel literals
+        /// fails here.
+        /// </summary>
+        [Test]
+        public void BakeThatDoesNotRoundTripRefusesWithTheRoundTripDetail()
+        {
+            var properties = new[] { Prop("_Tex", ShaderPropertyType.Texture) };
+            var source = Source(
+                States(
+                    ("_Tex", LockedPropertyState.Unused),
+                    ("_Tex_TexelSize", LockedPropertyState.Baked)),
+                baked: Names(("_Tex_TexelSize", "float4(0.0019531250,0.001953125,512,512)")));
+            var locked = new FakeValues().WithTexture(
+                "_Tex",
+                new LockedTextureValue("token-f", 512, 512, Vector2.one, Vector2.zero));
+
+            var result = LockedSourceReproduction.Build(source, properties, locked);
+
+            AssertRefusal(result, RoundTripDetail);
+        }
+
+        /// <summary>
+        /// Values with no texture on the slot and a well formed bake of
+        /// a 512 print pass (TX1, falsifier 4). An implementation that
+        /// keeps the texture print comparison expects the print of one,
+        /// one, one, one for no texture and refuses here.
+        /// </summary>
+        [Test]
+        public void NoTextureWithWellFormedBakePasses()
+        {
+            var properties = new[] { Prop("_Tex", ShaderPropertyType.Texture) };
+            var source = Source(
+                States(
+                    ("_Tex", LockedPropertyState.Unused),
+                    ("_Tex_TexelSize", LockedPropertyState.Baked)),
+                baked: Names(("_Tex_TexelSize", "float4(0.001953125,0.001953125,512,512)")));
+            var locked = new FakeValues();
+
+            BuiltPlan(source, properties, locked);
+        }
+
+        /// <summary>
+        /// Values with no texture on the slot and the unit bake pass.
+        /// The unit print is the print the old equality expects for no
+        /// texture, so this fixture guards the empty texture rule under
+        /// both implementations (TX1, falsifier 4 guard).
+        /// </summary>
+        [Test]
+        public void NoTextureWithUnitBakePasses()
+        {
+            var properties = new[] { Prop("_Tex", ShaderPropertyType.Texture) };
+            var source = Source(
+                States(
+                    ("_Tex", LockedPropertyState.Unused),
+                    ("_Tex_TexelSize", LockedPropertyState.Baked)),
+                baked: Names(("_Tex_TexelSize", "float4(1,1,1,1)")));
+            var locked = new FakeValues();
+
+            BuiltPlan(source, properties, locked);
+        }
+
+        /// <summary>
+        /// The installed era runs the same reciprocal rule (TX5). A
+        /// well formed bake of a 512 print with no texture on the slot
+        /// passes. An implementation that keeps the texture print
+        /// comparison refuses here.
+        /// </summary>
+        [Test]
+        public void InstalledEraReciprocalRuleHolds()
+        {
+            var properties = new[] { Prop("_Tex", ShaderPropertyType.Texture) };
+            var source = Source(
+                States(
+                    ("_Tex", LockedPropertyState.Unused),
+                    ("_Tex_TexelSize", LockedPropertyState.Baked)),
+                baked: Names(("_Tex_TexelSize", "float4(0.001953125,0.001953125,512,512)")),
+                era: PoiyomiLockEra.Thry2743);
+            var locked = new FakeValues();
+
+            BuiltPlan(source, properties, locked);
         }
 
         /// <summary>
