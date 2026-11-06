@@ -225,18 +225,19 @@ namespace Alrauna.Amuse.Editor.Build
         internal List<List<PreparedSlotSeparation>> SeparationSurvivingCandidates { get; set; }
 
         /// <summary>
-        /// The material slots the applied writes actually changed, keyed by
-        /// renderer and slot index. Apply derives this set from the same
-        /// comparison that counts the applied opaque triangles: a slot is
-        /// changed when the write's material differs from what the renderer
-        /// held. A surviving slot whose already-opaque material maps to
-        /// itself never enters the set, because its write kept the slot's
-        /// material. A surviving Split never enters it either: the
-        /// finalization keeps the Split's source material and moves its
-        /// opaque triangles to the appended submesh. The play-mode record
-        /// keys its moved-triangle rows on this set plus surviving Split
-        /// dispositions. Live transient host capability, deliberately
-        /// outside the evidence graph.
+        /// The material slots the applied writes mark, keyed by renderer
+        /// and slot index. Apply marks every surviving candidate slot of
+        /// each write it applies, and the summary count sums the proven
+        /// ordinals of every surviving candidate. A slot is not excluded
+        /// because its mapping sends the material to itself: a surviving
+        /// self-mapped slot is marked and its proven triangles report as
+        /// moved. The 2026-11-01 bimodality investigation and its
+        /// 2026-11-02 amendment set this rule, because material instance
+        /// inequality undercounted window clone slots and overcounted
+        /// refused slots. A no-op write is skipped before any marking, so
+        /// none of its slots enters the set. The play-mode record keys its
+        /// moved-triangle rows on this set. Live transient host
+        /// capability, deliberately outside the evidence graph.
         /// </summary>
         internal HashSet<(Renderer renderer, int slot)>
             AppliedChangedMaterialSlots { get; } =

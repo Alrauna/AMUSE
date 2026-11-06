@@ -6393,9 +6393,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
         /// <summary>
         /// A surviving slot whose already-opaque material maps to itself
-        /// keeps its material in the applied write. The record must report
-        /// zero moved triangles for that slot. Only a slot whose material
-        /// the write actually changed reports its proven count.
+        /// reports its proven triangles as moved, whatever the write
+        /// holds. The count follows the surviving plan, so the marking
+        /// covers this slot too. The 2026-11-01 bimodality investigation
+        /// and its 2026-11-02 amendment set this rule.
         /// </summary>
         [Test]
         public void ASelfMappedSurvivingSlotReportsItsProvenMovedTriangles()
