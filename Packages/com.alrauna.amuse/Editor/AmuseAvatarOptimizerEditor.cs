@@ -623,7 +623,7 @@ namespace Alrauna.Amuse.Editor
                 "whether a split is big enough to pay for. This " +
                 "setting decides whether a material is opaque " +
                 "enough to skip the split. The value 0 never " +
-                "flattens a material. It is the default.");
+                "flattens a material. It is the Safe preset value.");
 
         private static readonly GUIContent TextureClampRowContent =
             new GUIContent(
