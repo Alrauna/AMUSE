@@ -27,7 +27,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         internal const string VrcBasePackage = "com.vrchat.base";
 
         /// <summary>The locked version of both VRChat SDK packages.</summary>
-        internal const string LockedSdkVersion = "3.10.5";
+        internal const string LockedSdkVersion = "3.10.6";
 
         /// <summary>
         /// The installed package id source. The default reads the Unity

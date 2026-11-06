@@ -111,7 +111,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             if (daoType == null)
             {
                 Assert.Ignore(
-                    "the d4rkpl4y3r.d4rkavataroptimizer package 4.6.0 is"
+                    "the d4rkpl4y3r.d4rkavataroptimizer package 4.7.1 is"
                     + " not installed in this project; install it to run"
                     + " them.");
             }

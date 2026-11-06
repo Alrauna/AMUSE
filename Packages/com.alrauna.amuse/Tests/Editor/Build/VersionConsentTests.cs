@@ -122,16 +122,35 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(result.ConsentSubjects[0], Does.Contain("2.1.0"));
         }
 
+        /// <summary>
+        /// Owner decision 2026-11-06: the SDK consent ceiling is 3.11.0,
+        /// so the installed 3.10.6 stream and every newer 3.10 patch run
+        /// without a consent subject.
+        /// </summary>
         [Test]
-        public void SdkAboveAttestedMaxRequiresConsent()
+        public void SdkBelowConsentCeilingRunsSilent()
         {
             var result = HostLifecycleCapability.Evaluate(
                 SupportedFacts(
                     vrchatSdkBaseVersion: "3.10.6",
                     vrchatSdkAvatarsVersion: "3.10.6"));
 
+            Assert.That(result.ConsentRequired, Is.False);
+            Assert.That(result.ConsentSubjects, Is.Empty);
+        }
+
+        [Test]
+        public void SdkAtConsentCeilingRequiresConsent()
+        {
+            var result = HostLifecycleCapability.Evaluate(
+                SupportedFacts(
+                    vrchatSdkBaseVersion: "3.11.0",
+                    vrchatSdkAvatarsVersion: "3.11.0"));
+
             Assert.That(result.ConsentRequired, Is.True);
             Assert.That(result.ConsentSubjects.Count, Is.EqualTo(2));
+            Assert.That(
+                result.ConsentSubjects[0], Does.Contain("3.11.0"));
         }
 
         [Test]

@@ -100,13 +100,25 @@ namespace Alrauna.Amuse.Editor.Build
 
         /// <summary>
         /// The highest re-attested versions (D8 consent layer). The task-6
-        /// re-attestation verified NDMF 1.14.8 and SDK 3.10.5; the last
-        /// Unity characterization ran on patch 22. Each per-release
-        /// re-attestation moves these forward and retires consent subjects.
+        /// re-attestation verified NDMF 1.14.8. The last Unity
+        /// characterization ran on patch 22. Each per-release
+        /// re-attestation moves these forward and retires consent
+        /// subjects. The SDK row retired on 2026-11-06. Owner decision:
+        /// SDK consent uses the fixed ceiling 3.11.0 instead of a
+        /// verified maximum, so this list no longer tracks the SDK.
         /// </summary>
         private const int AttestedUnityPatchMax = 22;
         private static readonly int[] AttestedNdmfMax = { 1, 14, 8 };
-        private static readonly int[] AttestedVrchatSdkMax = { 3, 10, 5 };
+
+        /// <summary>
+        /// Owner decision 2026-11-06: every SDK release below 3.11.0 runs
+        /// without a consent subject, so minor and patch updates inside
+        /// the 3.10 stream stay silent. The subject returns at 3.11.0 and
+        /// newer. The declared 3.10.4 floor and the 4.0.0 range bound
+        /// keep their shared handling, so range refusals and the range
+        /// consent subjects never change.
+        /// </summary>
+        private static readonly int[] VrchatSdkConsentFloor = { 3, 11, 0 };
 
         private const string SupportedPlatform = "nadena.dev.ndmf.vrchat.avatar3";
 
@@ -516,9 +528,21 @@ namespace Alrauna.Amuse.Editor.Build
 
         private static string SdkConsentSubject(string version)
         {
+            if (!TryParsePackageVersion(version, out var components))
+            {
+                return null;
+            }
+
+            if (CompareComponents(components, VrchatSdkConsentFloor) >= 0 &&
+                CompareComponents(components, VrchatSdkUpperBound) < 0)
+            {
+                return "VRChat SDK " + version + " is at or above the " +
+                    "consent ceiling 3.11.0. Its behavior is unverified.";
+            }
+
             return PackageConsentSubject(
                 version, VrchatSdkFloor, VrchatSdkUpperBound,
-                AttestedVrchatSdkMax, "VRChat SDK");
+                VrchatSdkConsentFloor, "VRChat SDK");
         }
 
         /// <summary>
