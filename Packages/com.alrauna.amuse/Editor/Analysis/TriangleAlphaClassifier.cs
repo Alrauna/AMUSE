@@ -11,25 +11,26 @@ namespace Alrauna.Amuse.Editor.Analysis
     {
         internal const int MaxSupportRegions = 65536;
 
-        // The per-candidate pre-filter translates the triangle so the
-        // candidate support box sits on the square from -1 to 1. The
-        // translation is exact in rationals. The conversion to doubles
-        // then costs a few rounding steps of half an ulp. At magnitude
-        // 256 that is about 1e-13 per coordinate. Inside the separating
-        // axis test the edge vectors, the normals, and the dot products
-        // stay at or below magnitude 2 to the power 19. Each rounding
-        // step there costs about 1e-10. A short stack of such steps
-        // stays below the 1e-9 separation margin in EdgeSeparates. So a
-        // support box that touches the triangle is never reported as
-        // separated. Above this bound the rounding noise can exceed the
-        // margin, so the caller skips the pre-filter and lets the exact
-        // intersection test decide.
-        //
-        // The repeat-scale walks reuse this pre-filter core unmodified, but
-        // they call it directly on unwrapped boxes, so this bound never
-        // caps their magnitudes. Below the bound a separated verdict is
-        // trustworthy. Past it a false separation loses a witness, and the
-        // no-witness arm of every classify path returns ProvenOpaque.
+        // The clamp walks translate the triangle per candidate so the
+        // support box sits on the square from -1 to 1, and the gate at
+        // this constant bounds every translated coordinate. The repeat
+        // walks consult the pre-filter only on hulls of exactly three
+        // vertices. Such a hull comes from float-decoded UVs, whose
+        // texel coordinates are dyadic rationals with an odd core of at
+        // most 36 bits, so the conversion to doubles loses no bits. The
+        // MaxSupportRegions window budget caps every separating-axis
+        // product near twice 65536, so the whole rounding stack stays
+        // near 1e-10, one order under the 1e-9 separation margin in
+        // EdgeSeparates, and a support box that touches the triangle is
+        // never reported as separated. Mapped walks never consult the
+        // pre-filter on transformed coordinates: a nonzero envelope
+        // expands the hull past three vertices, and the walk requires
+        // exactly three. The pre-filter is sound on every reachable
+        // input. This closes the open question recorded by D3 of the
+        // 2026-10-15 deferred minors design. The two stand-down guards
+        // in TriangleAlphaClassifierTests pin the contract: the
+        // falsifier flips the witness if a later change weakens the
+        // margin, removes the budget cap, or bypasses the gate.
         private const double PreFilterSafeCoordinateBound = 256;
 
         /// <summary>

@@ -288,6 +288,113 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 Is.EqualTo(TriangleAlphaOutcome.Unknown));
         }
 
+        // --- Falsifier 1: the repeat walk that trusts the pre-filter past its bound ---
+        [Test]
+        public void RepeatWalkBeyondPreFilterBoundStillAnswersMustRemainTransparent()
+        {
+            var texture = StandDownRepeatTexture();
+            var triangle = StandDownTriangle();
+            var repeat = new TextureSampling(TextureFilterMode.Bilinear, TextureWrapMode.Repeat);
+
+            // No-op guards. The witness texel must be non-opaque, and the exact
+            // intersection test must reach it. A degenerate fixture could
+            // otherwise answer MustRemainTransparent through an empty window or
+            // a fully opaque texture, so a later change could silence this case
+            // without ever touching the walk it falsifies.
+            Assert.That(
+                texture.GetAlpha(WitnessTexelX, WitnessTexelY),
+                Is.Not.EqualTo(byte.MaxValue));
+            AssertStandDownExactOverlap(texture, triangle);
+
+            // Every texel coordinate the walk feeds the pre-filter sits far
+            // past the proven bound of 256. The witness is exactly reachable,
+            // so only a walk that drops it can answer anything else.
+            Assert.That(
+                TriangleAlphaClassifier.Classify(triangle, texture, repeat, AlphaUvEnvelope.Zero, 0),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        [Test]
+        public void ClampWalkAtSameMagnitudesKeepsItsVerdictAcrossTheStandDown()
+        {
+            var texture = StandDownRepeatTexture();
+            var triangle = StandDownTriangle();
+            var clamp = new TextureSampling(TextureFilterMode.Bilinear, TextureWrapMode.Clamp);
+
+            // The clamp walks translate every candidate and already stand down
+            // past the bound, so the exact test decides at these magnitudes
+            // before and after the repeat stand-down. The verdict must not move.
+            Assert.That(
+                TriangleAlphaClassifier.Classify(triangle, texture, clamp, AlphaUvEnvelope.Zero, 0),
+                Is.EqualTo(TriangleAlphaOutcome.MustRemainTransparent));
+        }
+
+        // Repeat stand-down fixture. The texture is a 4093-class width with one
+        // non-opaque texel at (2224, 4002). The triangle carries unwrapped
+        // texel coordinates from about 2223.4 to 4503, every one of them past
+        // the proven coordinate bound of 256. Its lowest edge crosses the
+        // bilinear support of the witness texel at the exact distance of about
+        // 4.3e-8 texels, a nonzero exact rational inside the error stack the
+        // bound comment names, so the exact intersection test still reaches
+        // the texel.
+        private const int StandDownTextureWidth = 4093;
+        private const int StandDownTextureHeight = 4093;
+        private const int WitnessTexelX = 2224;
+        private const int WitnessTexelY = 4002;
+
+        private static AlphaTextureData StandDownRepeatTexture()
+        {
+            var alpha = new byte[StandDownTextureWidth * StandDownTextureHeight];
+            Array.Fill(alpha, byte.MaxValue);
+            alpha[WitnessTexelY * StandDownTextureWidth + WitnessTexelX] = 0;
+            return new AlphaTextureData(StandDownTextureWidth, StandDownTextureHeight, alpha);
+        }
+
+        private static TriangleAlphaInput StandDownTriangle()
+        {
+            return TriangleAlphaInput.WithUv0(
+                Vector3.zero,
+                Vector3.right,
+                Vector3.up,
+                new Vector2(0.543226242f, 0.978133202f),
+                new Vector2(1.10017097f, 0.984117806f),
+                new Vector2(0.811977744f, 0.981674254f));
+        }
+
+        private static void AssertStandDownExactOverlap(
+            AlphaTextureData texture,
+            TriangleAlphaInput triangle)
+        {
+            var domain = ExactUvGeometry.NormalizeRepeat(
+                ExactUvGeometry.CreateTextureScaledDomain(
+                    triangle, texture.Width, texture.Height, AlphaUvEnvelope.Zero),
+                texture.Width,
+                texture.Height);
+            var intervalX = StandDownBilinearFootprintInterval(domain.TexelScale, WitnessTexelX);
+            var intervalY = StandDownBilinearFootprintInterval(domain.TexelScale, WitnessTexelY);
+
+            Assert.That(
+                ExactUvGeometry.Intersects(domain, intervalX, intervalY),
+                Is.True);
+        }
+
+        // Mirrors the walk's own repeat footprint: the closed interval from one
+        // half texel below the texel center to three half texels above it.
+        private static ExactInterval StandDownBilinearFootprintInterval(
+            BigInteger texelScale,
+            int index)
+        {
+            var halfTexel = texelScale / 2;
+            var center = new BigInteger(index) * texelScale;
+            return new ExactInterval(
+                true,
+                new ExactRational(center - halfTexel),
+                false,
+                true,
+                new ExactRational(center + 3 * halfTexel),
+                false);
+        }
+
         [Test]
         public void PreFilterRejectsSeparatedTexelSupportBox()
         {
