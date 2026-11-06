@@ -90,3 +90,24 @@ The probe joined fact blocks to outcomes by material instance number, never by o
 ### Verdict
 
 Every compared slot agrees on identity. No slot stayed scene unknown. No refused reconstruction stayed unjoined. The refusal sentence count equals the marked refusal count. The gate passes. The refusing build snapshot carries the same texture identity that the locked material carries.
+
+## Locked cycle recovery measurement
+
+Section date: 2026-11-05. This section records the recovery check after the texel shape rule and the texture identity fact landed in the product package. The scratch project ran the changed package. The check verifies the recovery expectation from the Result section. It names no private material or asset. Slot roles and measured counts only.
+
+### What was measured
+
+The scratch refreshed against the changed package and recompiled. Reflection confirmed the removed equality members are gone and both new refusal details are live in the compiled product assembly. The lock state report listed 43 scene materials. 30 carry locked shader variants, 13 are not optimizer materials, and none are unlocked. The scratch state stayed locked from the earlier gate run.
+
+One locked build cycle ran through the existing driver entry with the cycle count set to one. The driver appended 88 slot rows for one build to the same witness file. The cycle read its full build, exit, and capture without a hand accepted dialog.
+
+### Counts
+
+- Locked cycle moved triangle total: 193172. This equals the unlocked baseline of 193172 from the Result section, and it exceeds the earlier locked total of 180445 by exactly the measured 12727 gap.
+- The two hair product material slots of the commercial hair asset on the merged skinned mesh renderer both converted. One moved 4984 triangles and the other moved 7743 triangles. Their combined 12727 triangles equal the whole measured gap, and each slot moved every triangle it holds.
+- Cycle rows with the exact texel refusal sentence: 0. No other new refusal sentence appeared on the two slots. Both rows print the full conversion disposition.
+- Other locked slot rows on unrelated renderers kept their earlier dispositions. Their refusal kinds are unchanged by this amendment.
+
+### Verdict
+
+Observed 2026-11-05. The recovery expectation from the Result section held. A locked build converts both hair product material slots and reads the unlocked baseline total. The measured coverage loss of 12727 triangles is closed. The stop condition did not trigger. The amendment recovers the measured coverage with no new refusal.
