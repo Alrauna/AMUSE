@@ -735,27 +735,6 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         }
 
         /// <summary>
-        /// Reads the texture that the plan puts on the clone for one
-        /// texture property (A5.4). A renamed texture sits under its
-        /// renamed name. A null token means no texture.
-        /// </summary>
-        private static bool TryTextureOnU(
-            AlignedLockedSource source,
-            ILockedMaterialValues values,
-            string name,
-            out LockedTextureValue texture)
-        {
-            if (source.States.TryGetValue(name, out var state)
-                && state == LockedPropertyState.Renamed
-                && source.RenamedNames.TryGetValue(name, out var renamedName))
-            {
-                return values.TryGetTexture(renamedName, out texture);
-            }
-
-            return values.TryGetTexture(name, out texture);
-        }
-
-        /// <summary>
         /// Checks one baked texel size literal for print self
         /// consistency (TX1). The literal must round trip as a float4
         /// (A5.4). The third and fourth components must be positive
