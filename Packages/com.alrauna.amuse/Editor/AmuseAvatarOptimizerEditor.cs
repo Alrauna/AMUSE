@@ -248,6 +248,7 @@ namespace Alrauna.Amuse.Editor
 
                     _dryRun?.Cancel();
                     DryRunCache.Clear();
+                    AmuseSessionCaches.Clear();
                     _dryRun = null;
                     _dryRunCompletedLatched = false;
                 }

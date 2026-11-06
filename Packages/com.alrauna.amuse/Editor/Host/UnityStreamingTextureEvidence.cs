@@ -122,6 +122,24 @@ namespace Alrauna.Amuse.Editor.Host
                     AlphaPolicyBounds bounds, bool diskFallbackAllowed),
                 AlphaMipChain> Cache = new();
 
+        /// <summary>
+        /// Clears the streaming evidence cache. The session reset calls
+        /// this, so a second build in the same editor session never
+        /// serves a chain captured before that reset.
+        /// </summary>
+        internal static void ClearCache()
+        {
+            Cache.Clear();
+        }
+
+        /// <summary>
+        /// Reports whether the streaming cache holds no chains. The
+        /// session reset tests probe it, so a reset that skips this
+        /// cache fails its own assertion instead of passing on stale
+        /// leftover evidence.
+        /// </summary>
+        internal static bool CacheIsEmpty => Cache.Count == 0;
+
         internal static bool TryCapture(
             Texture2D source,
             TextureChannel channel,
