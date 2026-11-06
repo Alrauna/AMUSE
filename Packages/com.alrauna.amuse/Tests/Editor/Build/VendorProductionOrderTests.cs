@@ -50,7 +50,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             "nadena.dev.modular-avatar";
         private const string ModularAvatarLockedVersion = "1.18.7";
         private const string VrcFuryPackageId = "com.vrcfury.vrcfury";
-        private const string VrcFuryLockedVersion = "1.1434.0";
+        private const string VrcFuryLockedVersion = "1.1442.0";
 
         private const string MergeAnimatorTypeName =
             "nadena.dev.modular_avatar.core.ModularAvatarMergeAnimator,"
