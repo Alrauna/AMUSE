@@ -130,12 +130,34 @@ namespace Alrauna.Amuse.Editor.Host
             out AlphaMipChain chain,
             bool allowDiskFallback = true)
         {
+            return TryCapture(
+                source, channel, cutoffThreshold, bounds,
+                out chain, allowDiskFallback, out _);
+        }
+
+        /// <summary>
+        /// The capture with its named refusal. Every refusal below names a
+        /// reason family: the route's own fail-closed gates refuse with
+        /// UnavailableCapture, and the crunched decode refusals in the
+        /// clone arm override with UnsupportedFormat, so a false answer
+        /// always explains itself.
+        /// </summary>
+        internal static bool TryCapture(
+            Texture2D source,
+            TextureChannel channel,
+            float cutoffThreshold,
+            AlphaPolicyBounds bounds,
+            out AlphaMipChain chain,
+            bool allowDiskFallback,
+            out TextureCaptureRefusalReason refusal)
+        {
             if (source == null)
             {
                 throw new ArgumentNullException(nameof(source));
             }
 
             chain = null;
+            refusal = TextureCaptureRefusalReason.UnavailableCapture;
 
             var path = AssetDatabase.GetAssetPath(source);
             if (string.IsNullOrEmpty(path))
@@ -166,8 +188,14 @@ namespace Alrauna.Amuse.Editor.Host
             }
 
             // Try direct uncompressed disk source reading first to bypass
-            // Unity downsampling and BC7/DXT loss.
-            if (SourceImageAlphaReader.TryReadSourceAlphaChain(
+            // Unity downsampling and BC7/DXT loss. The route may trust
+            // the authoring bytes only when the imported representation
+            // stores the same texel bytes: a compressed or packed import
+            // can quantize a texel across the material cutoff while the
+            // authoring byte stays on the other side, so those formats
+            // skip this arm and ride the clone route below.
+            if (SourceImageAlphaReader.AdmitsImportedFormat(source.format) &&
+                SourceImageAlphaReader.TryReadSourceAlphaChain(
                     source, channel, cutoffThreshold, bounds, out chain))
             {
                 // The red field contract runs at fill, once per unique
@@ -242,6 +270,19 @@ namespace Alrauna.Amuse.Editor.Host
                     return false;
                 }
 
+                // A crunched clone has no CPU decode on this platform:
+                // GetPixels refuses crunched textures with an exception.
+                // Crunched is compressed, so the import already left the
+                // direct route at the format gate, and this refusal keeps
+                // the capture fail closed instead of answering from the
+                // authoring bytes.
+                if (clone.format == TextureFormat.DXT1Crunched ||
+                    clone.format == TextureFormat.DXT5Crunched)
+                {
+                    refusal = TextureCaptureRefusalReason.UnsupportedFormat;
+                    return false;
+                }
+
                 if (clone.mipmapCount != source.mipmapCount ||
                     clone.width != source.width ||
                     clone.height != source.height)
@@ -268,7 +309,26 @@ namespace Alrauna.Amuse.Editor.Host
                     // order AlphaTextureData takes. A float alpha reaches 1f
                     // exactly when the decoded byte is 255, which is the same
                     // test the GPU predicate's 'alpha == 1.0' performs.
-                    var pixels = clone.GetPixels(mip);
+                    // GetPixels is the one call in this arm the platform
+                    // may refuse: a crunched clone decodes through no CPU
+                    // path here, and the platform answers with this
+                    // exception. The catch is scoped to this single call
+                    // because the exception names a platform decode
+                    // limitation, not an AMUSE invariant failure, and a
+                    // wider catch would fold real defects into a format
+                    // refusal.
+                    Color[] pixels;
+                    try
+                    {
+                        pixels = clone.GetPixels(mip);
+                    }
+                    catch (ArgumentException)
+                    {
+                        refusal =
+                            TextureCaptureRefusalReason.UnsupportedFormat;
+                        return false;
+                    }
+
                     if (pixels.Length != width * height)
                     {
                         return false;

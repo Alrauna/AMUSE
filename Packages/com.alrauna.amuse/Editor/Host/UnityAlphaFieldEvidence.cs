@@ -268,9 +268,10 @@ namespace Alrauna.Amuse.Editor.Host
                 {
                     if (!UnityStreamingTextureEvidence.TryCapture(
                             texture2D, channel, cutoffThreshold, bounds,
-                            out chain, allowDiskFallback))
+                            out chain, allowDiskFallback,
+                            out var streamingRefusal))
                     {
-                        refusal = TextureCaptureRefusalReason.UnavailableCapture;
+                        refusal = streamingRefusal;
                         source = default;
                         chain = null;
                         return false;

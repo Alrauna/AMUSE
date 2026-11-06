@@ -526,14 +526,14 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(field.GetAlpha(4, 0), Is.EqualTo(0));
         }
 
-        // A crunched streaming texture captures on the streaming route now
-        // that the format is admitted. The fixture's png source decodes
-        // through the source-image arm, which is the route's first choice;
-        // the clone arm's CPU decode primitive for crunched data is
-        // characterized separately by CrunchedCpuDecodeMatchesTheGpuRoute
-        // OnSubmaximumQuadrants above.
+        // Crunched is compressed, so the format gate sends the import away
+        // from the source-image route: the route cannot answer for a texel
+        // representation it never sees. The CPU clone decode cannot decode
+        // crunched textures either, so the capture must fail closed with a
+        // named refusal instead of answering from the authoring bytes or
+        // throwing from the decode.
         [Test]
-        public void StreamingCrunchedTextureCapturesThroughTheSourceImageRoute()
+        public void StreamingCrunchedTextureRefusesCaptureWithUnsupportedFormat()
         {
             var texture = ImportStreamingMipmapped(
                 "streaming_crunch", UniformPixels(8, 8, 255), 8, 8,
@@ -541,9 +541,20 @@ namespace Alrauna.Amuse.Tests.Editor.Host
 
             Assert.That(texture.format, Is.EqualTo(TextureFormat.DXT5Crunched));
             Assert.That(texture.streamingMipmaps, Is.True);
-            Assert.That(TryChain(texture, out var chain), Is.True);
+            var captured = UnityAlphaFieldEvidence.TryCapture(
+                texture, TextureChannel.Alpha, 1.0f, AlphaPolicyBounds.Inert,
+                out _, out var chain, out var refusal);
             Assert.That(
-                chain[0].GetAlpha(0, 0), Is.EqualTo(255));
+                captured, Is.False,
+                "a crunched streaming import must refuse fail closed");
+            Assert.That(
+                refusal,
+                Is.EqualTo(TextureCaptureRefusalReason.UnsupportedFormat),
+                "a crunched streaming import must refuse with the " +
+                "unsupported-format family");
+            Assert.That(
+                chain, Is.Null,
+                "a refused capture must return no evidence");
         }
 
         // Measured: GetPixels32 rounds a half-precision alpha of 0.999 up to 255.
