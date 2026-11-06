@@ -29,8 +29,10 @@ namespace Alrauna.Amuse.Editor.Analysis
         // input. This closes the open question recorded by D3 of the
         // 2026-10-15 deferred minors design. The two stand-down guards
         // in TriangleAlphaClassifierTests pin the contract: the
-        // falsifier flips the witness if a later change weakens the
-        // margin, removes the budget cap, or bypasses the gate.
+        // falsifier flips its witness into a loud ProvenOpaque failure
+        // if a later change makes the coordinate conversion or the axis
+        // test lossy past this bound, for example float32 intermediates,
+        // or corrupts the texel scale or repeat normalization.
         private const double PreFilterSafeCoordinateBound = 256;
 
         /// <summary>
