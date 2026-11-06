@@ -1176,5 +1176,118 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.That(clone2 == null, Is.True, "subsequent pair must complete reversion and destroy clone");
             Assert.That(window.PairFor(locked2), Is.Null, "successful pair must be removed from window");
         }
+
+        /// <summary>
+        /// The abort sweep composes the two proven cleanup halves for a
+        /// build that throws while the unlock window is open. On a
+        /// prepared state that holds one open pair with a live clone and
+        /// a separation record with clones and no survivors, the sweep
+        /// reverts the pair to the locked original, destroys the pair
+        /// clone, and destroys every unreferenced separation clone, both
+        /// the material clone and the mesh clone. This pins the new
+        /// composition itself, so its first run is expected green.
+        /// </summary>
+        [Test]
+        public void RunAbortSweepRevertsOpenPairAndSweepsSeparationClones()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(
+                TransientUnlockTestLifecycle.TempFolder);
+
+            var root = Track(FixtureAvatarIdentity.CreateOptedRoot(
+                "AMUSE abort sweep fixture"));
+            var locked = Track(TransientUnlockTestLifecycle.LockedMaterial(
+                "SweepLocked"));
+            var pairClone = Track(Object.Instantiate(locked));
+            pairClone.name = locked.name + "_AmuseUnlockedClone";
+
+            var mesh = Track(TransientUnlockTestLifecycle.OneSlotMesh());
+            var renderer = TransientUnlockTestLifecycle.AddRenderer(
+                root, mesh, pairClone);
+
+            var context = new BuildContext(
+                root, TransientUnlockTestLifecycle.TempFolder);
+            var finishState = context.GetState<AmusePlatformFinishState>();
+            finishState.Lifecycle = HostLifecycleCapability.Evaluate(
+                TransientUnlockTestLifecycle.SupportedFacts());
+            finishState.AnimatorBindings =
+                GenericPlatformAnimatorBindings.Instance;
+
+            // The sweep half: one prepared renderer whose clones have no
+            // surviving candidates, so the sweep destroys both clones.
+            // The construction follows the direct prepared-record
+            // pattern of the apply tests.
+            var opaqueClone = Track(Object.Instantiate(locked));
+            var meshClone = Track(Object.Instantiate(mesh));
+            var mapping = new Dictionary<Material, Material>
+            {
+                [locked] = opaqueClone,
+            };
+            var plan = new Alrauna.Amuse.Editor.Analysis.MeshSeparationPlan(
+                null,
+                new[]
+                {
+                    new Alrauna.Amuse.Editor.Analysis.SubmeshSeparationPlan(
+                        0, 0,
+                        new[] { 0, 1 }, new int[0],
+                        Alrauna.Amuse.Editor.Analysis
+                            .SubmeshSeparationDisposition
+                            .WhollyOpaqueCandidate),
+                },
+                true, false, 5, 0);
+            var candidates = new[]
+            {
+                new PreparedSlotSeparation(
+                    plan.Submeshes[0], mapping, false, false),
+            };
+            var evidence = new CapturedAnimationEvidence(
+                new MaterialEvidenceRequest(
+                    false, false,
+                    new string[0],
+                    new string[0],
+                    new string[0],
+                    new string[0],
+                    new TexturePropertyEvidenceRequest[0]),
+                new CapturedClipEvidence[0],
+                new Alrauna.Amuse.Editor.Semantics.CapturedAlphaMaterial[0],
+                new[] { 0 },
+                false);
+            var prepared = new PreparedRendererSeparation(
+                new UnityRendererMutationTarget(renderer, mesh, 1),
+                string.Empty,
+                plan,
+                evidence,
+                candidates,
+                new BlockStateEntry[0],
+                new int[0])
+            {
+                MeshClone = meshClone,
+            };
+            var separation = new PreparedAlphaSeparation();
+            separation.Add(prepared);
+            separation.RegisterOpaque(locked, opaqueClone);
+            finishState.Separation = separation;
+
+            var window = context.GetState<TransientUnlockWindowState>();
+            var pair = window.OpenPair(locked);
+            pair.UnlockedClone = pairClone;
+            pair.AddSlot(renderer, 0);
+
+            TransientUnlockWindowClose.RunAbortSweep(context);
+
+            Assert.That(renderer.sharedMaterials[0], Is.EqualTo(locked),
+                "the abort sweep reverts every open pair to the " +
+                "locked original");
+            Assert.That(pairClone == null, Is.True,
+                "the abort sweep destroys the reverted pair clone " +
+                "through the close half");
+            Assert.That(opaqueClone == null, Is.True,
+                "the abort sweep destroys the unreferenced separation " +
+                "material clone through the sweep half");
+            Assert.That(meshClone == null, Is.True,
+                "the abort sweep destroys the unreferenced separation " +
+                "mesh clone through the sweep half");
+            Assert.That(window.PairFor(locked), Is.Null,
+                "a swept pair leaves the window");
+        }
     }
 }

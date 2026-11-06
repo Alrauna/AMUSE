@@ -149,6 +149,52 @@ namespace Alrauna.Amuse.Editor.Build
         }
 
         /// <summary>
+        /// The best-effort abort sweep for a build that threw after the
+        /// transient swap-in opened pairs. It composes two already
+        /// proven paths and re-implements nothing: the window close
+        /// <see cref="Execute(BuildContext)"/> reverts every open pair,
+        /// and
+        /// <see cref="AlphaSeparationApply.SweepUnreferencedClones"/>
+        /// destroys every unreferenced AMUSE-owned separation clone
+        /// through per-renderer empty survivor lists. Every failure
+        /// inside either half is logged through
+        /// <see cref="Debug.LogException"/> and swallowed, so the
+        /// original exception of the caller propagates untouched and is
+        /// never masked. The close itself can throw on a lifecycle
+        /// guard, which is why each half carries its own catch. A
+        /// null separation state fails inside the sweep half's own
+        /// catch instead. An exception thrown inside the swap-in itself
+        /// never reaches this helper, because both callers wrap only
+        /// the regions after the swap-in call.
+        /// </summary>
+        internal static void RunAbortSweep(BuildContext context)
+        {
+            try
+            {
+                Execute(context);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogException(ex);
+            }
+
+            try
+            {
+                var separation = context.GetState<AmusePlatformFinishState>()
+                    .Separation;
+                AlphaSeparationApply.SweepUnreferencedClones(
+                    separation,
+                    separation.Renderers
+                        .Select(_ => new List<PreparedSlotSeparation>())
+                        .ToList());
+            }
+            catch (Exception ex)
+            {
+                Debug.LogException(ex);
+            }
+        }
+
+        /// <summary>
         /// Destroys the pair's unlocked clone, but only after the caller
         /// inverted every reference: the committed graph was enumerated,
         /// so no rewritten curve can name a destroyed material. A curve

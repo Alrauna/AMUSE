@@ -71,7 +71,19 @@ namespace Alrauna.Amuse.Editor.Build
                     // recorded on the build state: the window close re-asserts
                     // these recorded slot writes after the animator rebind,
                     // whose stale t=0 application would otherwise win.
-                    ApplyFinalization(finalization, state);
+                    try
+                    {
+                        ApplyFinalization(finalization, state);
+                    }
+                    catch
+                    {
+                        // The sweep is best effort. A failure inside the
+                        // sweep is logged and swallowed, so it never
+                        // masks the apply defect that triggered it.
+                        TransientUnlockWindowClose.RunAbortSweep(context);
+                        throw;
+                    }
+
                     state.AppliedFinalization = finalization;
                 }
             }

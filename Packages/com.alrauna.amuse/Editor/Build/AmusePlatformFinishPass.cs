@@ -386,190 +386,219 @@ namespace Alrauna.Amuse.Editor.Build
                 TransientUnlockAvailability.CreateProductionRestore(),
                 lockedOriginalAttestation);
 
-            // From here the run is reported, so the apply pass may
-            // summarize it with applied counts.
-            state.ReachedRendererAnalysis = true;
-
-            // While the window is open, the capture reads the world
-            // through the swapped view: the stored committed graph was
-            // enumerated before the swap-in and still carries every
-            // observed locked original, while the slot arrays and the
-            // live clips hold the clones. Folding the substitution into
-            // the observed values keeps one admitted material per
-            // binding, which is exactly what the apply pass validates
-            // against.
-            var window = context.GetState<TransientUnlockWindowState>();
-            Func<Material, Material> swappedView = window.OpenPairs.Count
-                > 0
-                ? window.SwappedView
-                : null;
-
-            var optimizer = context.AvatarRootObject
-                .GetComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
-            var maxMipLevel = RuntimeStateResolution.ProofMipCapFrom(
-                optimizer?.PreserveTransparencyMaxMipLevel ?? -1);
-            var minTextureSize = RuntimeStateResolution.MinTextureSizeFrom(
-                optimizer?.PreserveTransparencyMinTextureSize ?? -1);
-            var minimumOpaqueCoveragePercent =
-                RuntimeStateResolution.MinimumCoverageFrom(
-                    optimizer?.MinimumOpaqueCoveragePercent ?? 0);
-            var minimumOpaqueCoverageToPreservePercent =
-                RuntimeStateResolution.MinimumPreserveCoverageFrom(
-                    optimizer?.MinimumOpaqueCoverageToPreservePercent ?? 0);
-            var cutoutMaxMipLevel = RuntimeStateResolution.ProofMipCapFrom(
-                optimizer?.CutoutPreserveTransparencyMaxMipLevel ?? -1);
-            var cutoutMinTextureSize = RuntimeStateResolution.MinTextureSizeFrom(
-                optimizer?.CutoutPreserveTransparencyMinTextureSize ?? -1);
-            var cutoutMinimumCoverage =
-                RuntimeStateResolution.MinimumCoverageFrom(
-                    optimizer?.CutoutMinimumOpaqueCoveragePercent ?? 0);
-            var cutoutPreserveCoverage =
-                RuntimeStateResolution.MinimumPreserveCoverageFrom(
-                    optimizer?.CutoutMinimumOpaqueCoverageToPreservePercent ?? 0);
-            var opaqueAlphaPercent = OpaquePercentFrom(optimizer);
-            var polygonClampPercent = PolygonClampPercentFrom(optimizer);
-            var densityCapPercent =
-                DensityCapFromCoveragePercent(optimizer);
-            var alphaPolicyBounds =
-                AlphaPolicyBounds.From(opaqueAlphaPercent, polygonClampPercent);
-            // The disclosure marker follows the spec's exact rule: the
-            // summary names the policy only when a setting left its inert
-            // default. The density alone never marks a build.
-            state.AlphaPolicyActive =
-                opaqueAlphaPercent < 100 || polygonClampPercent > 0;
-            var ignoreOutOfRangeSlots =
-                optimizer == null || optimizer.IgnoreOutOfRangeMaterialSlots;
-            var allowDepthTestChange =
-                optimizer == null || optimizer.AllowDepthTestChange;
-            var cutoutSeparatorEnabled =
-                optimizer == null || optimizer.CutoutSeparatorEnabled;
-            var transparentSeparatorEnabled =
-                optimizer == null || optimizer.TransparentSeparatorEnabled;
-            // The separator switch facts ride the same barrier capture.
-            // A switch off at the capture means its slot family never
-            // separated. The apply pass reports the fact beside the
-            // reach flag.
-            state.CutoutSeparatorOff = !cutoutSeparatorEnabled;
-            state.TransparentSeparatorOff = !transparentSeparatorEnabled;
-
-            // The proof policy is a build-wide fact. Capture the active
-            // target and the selected policy exactly once, before any
-            // renderer analysis, from the build avatar's own optimizer
-            // component - never from inspector state or a static
-            // mutable. A target with no policy keeps the conservative
-            // output value and names the fact before the analysis runs;
-            // no acceptance applies to such a build.
-            var samplingTarget = AmusePlatformFinishPlugin.ActiveBuildTarget();
-            state.SamplingTarget = samplingTarget;
-            state.HasSamplingPolicy = PlatformAlphaSamplingPolicy.TrySelect(
-                samplingTarget,
-                optimizer != null &&
-                    optimizer.AcceptDesktopAnisotropyDifferences,
-                optimizer != null &&
-                    optimizer.AcceptMobileAnisotropyDifferences,
-                out var samplingPolicy);
-            state.SamplingPolicy = samplingPolicy;
-            if (!state.HasSamplingPolicy)
+            // Everything from here to the end of the pass runs while
+            // the unlock window is open. If any statement in this
+            // region throws, this catch first reverts the open pairs
+            // and sweeps the separation clones, then rethrows the
+            // original exception. The swap-in call above stays
+            // outside this block, because an exception during the
+            // swap-in is the design's recorded residual.
+            try
             {
-                AmuseReports.UnsupportedSamplingTarget(
-                    context.AvatarRootObject, samplingTarget);
-                if (lifecycle.BuildPath == AmuseBuildPath.ApplyOnPlay)
+                // From here the run is reported, so the apply pass may
+                // summarize it with applied counts.
+                state.ReachedRendererAnalysis = true;
+
+                // While the window is open, the capture reads the world
+                // through the swapped view: the stored committed graph was
+                // enumerated before the swap-in and still carries every
+                // observed locked original, while the slot arrays and the
+                // live clips hold the clones. Folding the substitution into
+                // the observed values keeps one admitted material per
+                // binding, which is exactly what the apply pass validates
+                // against.
+                var window = context.GetState<TransientUnlockWindowState>();
+                Func<Material, Material> swappedView = window.OpenPairs.Count
+                    > 0
+                    ? window.SwappedView
+                    : null;
+
+                var optimizer = context.AvatarRootObject
+                    .GetComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                var maxMipLevel = RuntimeStateResolution.ProofMipCapFrom(
+                    optimizer?.PreserveTransparencyMaxMipLevel ?? -1);
+                var minTextureSize = RuntimeStateResolution.MinTextureSizeFrom(
+                    optimizer?.PreserveTransparencyMinTextureSize ?? -1);
+                var minimumOpaqueCoveragePercent =
+                    RuntimeStateResolution.MinimumCoverageFrom(
+                        optimizer?.MinimumOpaqueCoveragePercent ?? 0);
+                var minimumOpaqueCoverageToPreservePercent =
+                    RuntimeStateResolution.MinimumPreserveCoverageFrom(
+                        optimizer?.MinimumOpaqueCoverageToPreservePercent ?? 0);
+                var cutoutMaxMipLevel = RuntimeStateResolution.ProofMipCapFrom(
+                    optimizer?.CutoutPreserveTransparencyMaxMipLevel ?? -1);
+                var cutoutMinTextureSize = RuntimeStateResolution.MinTextureSizeFrom(
+                    optimizer?.CutoutPreserveTransparencyMinTextureSize ?? -1);
+                var cutoutMinimumCoverage =
+                    RuntimeStateResolution.MinimumCoverageFrom(
+                        optimizer?.CutoutMinimumOpaqueCoveragePercent ?? 0);
+                var cutoutPreserveCoverage =
+                    RuntimeStateResolution.MinimumPreserveCoverageFrom(
+                        optimizer?.CutoutMinimumOpaqueCoverageToPreservePercent ?? 0);
+                var opaqueAlphaPercent = OpaquePercentFrom(optimizer);
+                var polygonClampPercent = PolygonClampPercentFrom(optimizer);
+                var densityCapPercent =
+                    DensityCapFromCoveragePercent(optimizer);
+                var alphaPolicyBounds =
+                    AlphaPolicyBounds.From(opaqueAlphaPercent, polygonClampPercent);
+                // The disclosure marker follows the spec's exact rule: the
+                // summary names the policy only when a setting left its inert
+                // default. The density alone never marks a build.
+                state.AlphaPolicyActive =
+                    opaqueAlphaPercent < 100 || polygonClampPercent > 0;
+                var ignoreOutOfRangeSlots =
+                    optimizer == null || optimizer.IgnoreOutOfRangeMaterialSlots;
+                var allowDepthTestChange =
+                    optimizer == null || optimizer.AllowDepthTestChange;
+                var cutoutSeparatorEnabled =
+                    optimizer == null || optimizer.CutoutSeparatorEnabled;
+                var transparentSeparatorEnabled =
+                    optimizer == null || optimizer.TransparentSeparatorEnabled;
+                // The separator switch facts ride the same barrier capture.
+                // A switch off at the capture means its slot family never
+                // separated. The apply pass reports the fact beside the
+                // reach flag.
+                state.CutoutSeparatorOff = !cutoutSeparatorEnabled;
+                state.TransparentSeparatorOff = !transparentSeparatorEnabled;
+
+                // The proof policy is a build-wide fact. Capture the active
+                // target and the selected policy exactly once, before any
+                // renderer analysis, from the build avatar's own optimizer
+                // component - never from inspector state or a static
+                // mutable. A target with no policy keeps the conservative
+                // output value and names the fact before the analysis runs;
+                // no acceptance applies to such a build.
+                var samplingTarget = AmusePlatformFinishPlugin.ActiveBuildTarget();
+                state.SamplingTarget = samplingTarget;
+                state.HasSamplingPolicy = PlatformAlphaSamplingPolicy.TrySelect(
+                    samplingTarget,
+                    optimizer != null &&
+                        optimizer.AcceptDesktopAnisotropyDifferences,
+                    optimizer != null &&
+                        optimizer.AcceptMobileAnisotropyDifferences,
+                    out var samplingPolicy);
+                state.SamplingPolicy = samplingPolicy;
+                if (!state.HasSamplingPolicy)
+                {
+                    AmuseReports.UnsupportedSamplingTarget(
+                        context.AvatarRootObject, samplingTarget);
+                    if (lifecycle.BuildPath == AmuseBuildPath.ApplyOnPlay)
+                    {
+                        state.PlayModeAvatarRows.Add(new SerializedTransformationRow
+                        {
+                            kind = MaterialTransformationRowKind.Banner,
+                            sentence = "The active build target supports no sampling policy. A build on this target applies nothing. This view shows no results for it."
+                        });
+                    }
+                }
+
+                if (samplingTarget != BuildTarget.StandaloneWindows64 && lifecycle.BuildPath == AmuseBuildPath.ApplyOnPlay)
                 {
                     state.PlayModeAvatarRows.Add(new SerializedTransformationRow
                     {
                         kind = MaterialTransformationRowKind.Banner,
-                        sentence = "The active build target supports no sampling policy. A build on this target applies nothing. This view shows no results for it."
+                        sentence = "The active build target is not Windows. Texture proof needs the Windows import. This view can prove fewer triangles than a Windows build."
                     });
                 }
-            }
 
-            if (samplingTarget != BuildTarget.StandaloneWindows64 && lifecycle.BuildPath == AmuseBuildPath.ApplyOnPlay)
-            {
-                state.PlayModeAvatarRows.Add(new SerializedTransformationRow
+                foreach (var renderer in context.AvatarRootObject
+                             .GetComponentsInChildren<Renderer>(true))
                 {
-                    kind = MaterialTransformationRowKind.Banner,
-                    sentence = "The active build target is not Windows. Texture proof needs the Windows import. This view can prove fewer triangles than a Windows build."
-                });
-            }
+                    var rendererPath = AnimationUtility.CalculateTransformPath(
+                        renderer.transform, context.AvatarRootObject.transform);
+                    var rendererTypeName = renderer.GetType().FullName;
 
-            foreach (var renderer in context.AvatarRootObject
-                         .GetComponentsInChildren<Renderer>(true))
-            {
-                var rendererPath = AnimationUtility.CalculateTransformPath(
-                    renderer.transform, context.AvatarRootObject.transform);
-                var rendererTypeName = renderer.GetType().FullName;
-
-                var refusal = UnityRendererAlphaAnalysis.HostStructuralRefusalFor(
-                    renderer,
-                    out var structuralMeshSubMeshCount,
-                    out var structuralMaterialSlotCount);
-                if (refusal != RendererAnalysisRefusal.None)
-                {
-                    state.RecordRendererRefusal(refusal);
-                    AmuseReports.RendererRefusal(
+                    var refusal = UnityRendererAlphaAnalysis.HostStructuralRefusalFor(
                         renderer,
-                        refusal,
-                        structuralMeshSubMeshCount,
-                        structuralMaterialSlotCount);
-                    if (lifecycle.BuildPath == AmuseBuildPath.ApplyOnPlay)
+                        out var structuralMeshSubMeshCount,
+                        out var structuralMaterialSlotCount);
+                    if (refusal != RendererAnalysisRefusal.None)
                     {
-                        RecordPlayModeRendererRefusal(
-                            state, renderer, rendererPath, rendererTypeName,
-                            refusal, structuralMeshSubMeshCount, structuralMaterialSlotCount, null);
+                        state.RecordRendererRefusal(refusal);
+                        AmuseReports.RendererRefusal(
+                            renderer,
+                            refusal,
+                            structuralMeshSubMeshCount,
+                            structuralMaterialSlotCount);
+                        if (lifecycle.BuildPath == AmuseBuildPath.ApplyOnPlay)
+                        {
+                            RecordPlayModeRendererRefusal(
+                                state, renderer, rendererPath, rendererTypeName,
+                                refusal, structuralMeshSubMeshCount, structuralMaterialSlotCount, null);
+                        }
+                        continue;
                     }
-                    continue;
-                }
 
-                // The live build-copy materials behind the captured admitted
-                // set, index-aligned with evidence.AdmittedMaterials. Held as a
-                // local transient host capability, never inside the evidence.
-                IReadOnlyList<Material> admittedLiveMaterials;
-                ClosedAlphaMaterialCapturer effectiveCapturer = null;
-                if (transferShaders)
-                {
-                    var granted = shaderTransfer.GrantedShaderNames;
-                    effectiveCapturer = (
-                        IReadOnlyList<Material> materials,
-                        IReadOnlyList<CapturedAlphaMaterialFamily> families,
-                        MaterialEvidenceRequest request,
-                        AlphaPolicyBounds bounds,
-                        int cutoutRawMipCap,
-                        int exactRawMipCap,
-                        out ClosedAlphaCaptureOutcome transferred) =>
-                        UnityMaterialSemantics
-                            .TryCaptureClosedAlphaMaterialsTransferred(
-                                materials,
-                                families,
-                                request,
-                                bounds,
-                                granted,
-                                out transferred,
+                    // The live build-copy materials behind the captured admitted
+                    // set, index-aligned with evidence.AdmittedMaterials. Held as a
+                    // local transient host capability, never inside the evidence.
+                    IReadOnlyList<Material> admittedLiveMaterials;
+                    ClosedAlphaMaterialCapturer effectiveCapturer = null;
+                    if (transferShaders)
+                    {
+                        var granted = shaderTransfer.GrantedShaderNames;
+                        effectiveCapturer = (
+                            IReadOnlyList<Material> materials,
+                            IReadOnlyList<CapturedAlphaMaterialFamily> families,
+                            MaterialEvidenceRequest request,
+                            AlphaPolicyBounds bounds,
+                            int cutoutRawMipCap,
+                            int exactRawMipCap,
+                            out ClosedAlphaCaptureOutcome transferred) =>
+                            UnityMaterialSemantics
+                                .TryCaptureClosedAlphaMaterialsTransferred(
+                                    materials,
+                                    families,
+                                    request,
+                                    bounds,
+                                    granted,
+                                    out transferred,
+                                    RegisteredSourceIdentity.Resolve,
+                                    cutoutRawMipCap,
+                                    exactRawMipCap,
+                                    // The build's effective capturer is the
+                                    // one site the approval admission rides
+                                    // (D3). Every other capturer stays strict.
+                                    admitApprovedVersions: true);
+                    }
+
+                    var hasIndex = TryGetAnimationIndex(
+                        context, out var animationIndex);
+                    CapturedAnimationEvidence evidence;
+                    if (hasIndex)
+                    {
+                        evidence = UnityAnimationEvidenceCapture
+                            .CaptureWithAnimationIndex(
+                                rendererPath,
+                                renderer.sharedMaterials,
+                                graph,
+                                state.AnimatorBindings,
+                                animationIndex,
+                                alphaPolicyBounds,
+                                out admittedLiveMaterials,
+                                selectRequest,
+                                CaptureThroughEffectiveMaterials(
+                                    renderer, capturer ?? effectiveCapturer,
+                                    cutoutMaxMipLevel, maxMipLevel),
+                                ignoreOutOfRangeSlots,
+                                rendererTypeName,
+                                LockedMaterialIdentity.PreCheckRefusal,
+                                swappedView,
                                 RegisteredSourceIdentity.Resolve,
-                                cutoutRawMipCap,
-                                exactRawMipCap,
-                                // The build's effective capturer is the
-                                // one site the approval admission rides
-                                // (D3). Every other capturer stays strict.
-                                admitApprovedVersions: true);
-                }
-
-                var hasIndex = TryGetAnimationIndex(
-                    context, out var animationIndex);
-                CapturedAnimationEvidence evidence;
-                if (hasIndex)
-                {
-                    evidence = UnityAnimationEvidenceCapture
-                        .CaptureWithAnimationIndex(
+                                cutoutRawMipCap: cutoutMaxMipLevel,
+                                exactRawMipCap: maxMipLevel);
+                    }
+                    else if (selectRequest == null)
+                    {
+                        evidence = UnityAnimationEvidenceCapture.Capture(
                             rendererPath,
                             renderer.sharedMaterials,
                             graph,
                             state.AnimatorBindings,
-                            animationIndex,
                             alphaPolicyBounds,
                             out admittedLiveMaterials,
-                            selectRequest,
                             CaptureThroughEffectiveMaterials(
-                                renderer, capturer ?? effectiveCapturer,
+                                renderer, effectiveCapturer,
                                 cutoutMaxMipLevel, maxMipLevel),
                             ignoreOutOfRangeSlots,
                             rendererTypeName,
@@ -578,354 +607,343 @@ namespace Alrauna.Amuse.Editor.Build
                             RegisteredSourceIdentity.Resolve,
                             cutoutRawMipCap: cutoutMaxMipLevel,
                             exactRawMipCap: maxMipLevel);
-                }
-                else if (selectRequest == null)
-                {
-                    evidence = UnityAnimationEvidenceCapture.Capture(
-                        rendererPath,
-                        renderer.sharedMaterials,
-                        graph,
-                        state.AnimatorBindings,
-                        alphaPolicyBounds,
-                        out admittedLiveMaterials,
-                        CaptureThroughEffectiveMaterials(
-                            renderer, effectiveCapturer,
-                            cutoutMaxMipLevel, maxMipLevel),
-                        ignoreOutOfRangeSlots,
-                        rendererTypeName,
-                        LockedMaterialIdentity.PreCheckRefusal,
-                        swappedView,
-                        RegisteredSourceIdentity.Resolve,
-                        cutoutRawMipCap: cutoutMaxMipLevel,
-                        exactRawMipCap: maxMipLevel);
-                }
-                else
-                {
-                    evidence = UnityAnimationEvidenceCapture
-                        .CaptureGraphThroughSeams(
-                            rendererPath,
-                            renderer.sharedMaterials,
-                            null,
-                            graph,
-                            state.AnimatorBindings,
-                            alphaPolicyBounds,
-                            selectRequest,
-                            CaptureThroughEffectiveMaterials(
-                                renderer, capturer,
-                                cutoutMaxMipLevel, maxMipLevel),
-                            out admittedLiveMaterials,
-                            ignoreOutOfRangeSlots,
-                            rendererTypeName,
-                            LockedMaterialIdentity.PreCheckRefusal,
-                            swappedView,
-                            RegisteredSourceIdentity.Resolve,
-                            cutoutRawMipCap: cutoutMaxMipLevel,
-                            exactRawMipCap: maxMipLevel);
-                }
-                var effectiveResolver = resolveSemantics
-                    ?? (transferShaders
-                        ? (CapturedAlphaMaterialSemanticsResolver)
-                            UnityMaterialSemantics.AnalyzeAlphaMaterialTransferred
-                        : null);
-                var blockState =
-                    EffectiveMaterialMaterialization.CaptureBlockState(renderer);
-                var alphaFields = UnityRendererAlphaAnalysis.GatherAlphaFields(
-                    evidence.AdmittedMaterials, maxMipLevel,
-                    cutoutMaxMipLevel, minTextureSize, cutoutMinTextureSize);
-                var resolved = RuntimeStateResolution.ResolveRuntimeStates(
-                    rendererPath, evidence, samplingPolicy,
-                    alphaFields,
-                    UnityAnimationEvidenceCapture.TextureScaleOffsetSuffix,
-                    UnityRendererAlphaAnalysis.StructuralRefusal,
-                    UnityAnimationEvidenceCapture.ProofRelevantResolver,
-                    UnityAnimationEvidenceCapture.UnrecognizedObjectBinding,
-                    UnityAnimationEvidenceCapture.MaterialSlotBindingParser,
-                    effectiveResolver, maxMipLevel,
-                    minTextureSize, densityCapPercent, blockState,
-                    rendererTypeName: rendererTypeName);
-                refusal = resolved.Refusal;
-                // Every refused slot reports its own exact reason, even
-                // when the renderer as a whole continues or the first
-                // refusal names the renderer: one line per slot, no
-                // aggregation, so a manual test can read the full list.
-                // The slot entry folds the slot's texture capture facts,
-                // so one refused slot is one console entry. The slots and
-                // the slot results ride on one resolved result, so slot i
-                // of one is slot i of the other, and a divergence is an
-                // invariant defect.
-                for (var slotIndex = 0;
-                     slotIndex < resolved.SlotResults.Length;
-                     slotIndex++)
-                {
-                    if (resolved.SlotResults[slotIndex].IsResolved)
-                    {
-                        continue;
                     }
-
-                    var closureWay =
-                        resolved.SlotResults[slotIndex].ClosureWay;
-                    AmuseReports.SlotAnalysisRefusal(
-                        renderer,
-                        slotIndex,
-                        resolved.SlotResults[slotIndex].Refusal,
-                        renderer.gameObject.name,
-                        resolved.SlotResults[slotIndex].Offender,
-                        resolved.SlotResults[slotIndex].UnknownReason,
-                        resolved.Slots[slotIndex].CaptureRefusals,
-                        closureWay ==
-                            MaterialDependencyClosureFailure.None
-                            ? null
-                            : AmuseReports.ClosureFailureSentence(
-                                closureWay));
-                }
-
-                // An out-of-range closure failure names a slot the renderer
-                // does not have, so it has no slot result. It still reports
-                // its own entry: the template takes an arbitrary slot index,
-                // and the apply pass reads the same record when a split
-                // could append a slot onto that index.
-                foreach (var record in evidence.SlotClosureFailures)
-                {
-                    if (record.SlotIndex < resolved.SlotResults.Length)
+                    else
                     {
-                        continue;
+                        evidence = UnityAnimationEvidenceCapture
+                            .CaptureGraphThroughSeams(
+                                rendererPath,
+                                renderer.sharedMaterials,
+                                null,
+                                graph,
+                                state.AnimatorBindings,
+                                alphaPolicyBounds,
+                                selectRequest,
+                                CaptureThroughEffectiveMaterials(
+                                    renderer, capturer,
+                                    cutoutMaxMipLevel, maxMipLevel),
+                                out admittedLiveMaterials,
+                                ignoreOutOfRangeSlots,
+                                rendererTypeName,
+                                LockedMaterialIdentity.PreCheckRefusal,
+                                swappedView,
+                                RegisteredSourceIdentity.Resolve,
+                                cutoutRawMipCap: cutoutMaxMipLevel,
+                                exactRawMipCap: maxMipLevel);
                     }
-
-                    AmuseReports.SlotAnalysisRefusal(
-                        renderer,
-                        record.SlotIndex,
-                        RendererAnalysisRefusal
-                            .MaterialDependencyClosureFailed,
-                        renderer.gameObject.name,
-                        closureWaySentence:
-                        AmuseReports.ClosureFailureSentence(
-                            record.Failure));
-                }
-
-                // A resolved slot can still carry refused material resolutions. The
-                // slot stays resolved and the triangles classify Unknown; this entry
-                // names the lost proof reason. Diagnostic only: no census record.
-                if (resolved.Refusal == RendererAnalysisRefusal.None)
-                {
+                    var effectiveResolver = resolveSemantics
+                        ?? (transferShaders
+                            ? (CapturedAlphaMaterialSemanticsResolver)
+                                UnityMaterialSemantics.AnalyzeAlphaMaterialTransferred
+                            : null);
+                    var blockState =
+                        EffectiveMaterialMaterialization.CaptureBlockState(renderer);
+                    var alphaFields = UnityRendererAlphaAnalysis.GatherAlphaFields(
+                        evidence.AdmittedMaterials, maxMipLevel,
+                        cutoutMaxMipLevel, minTextureSize, cutoutMinTextureSize);
+                    var resolved = RuntimeStateResolution.ResolveRuntimeStates(
+                        rendererPath, evidence, samplingPolicy,
+                        alphaFields,
+                        UnityAnimationEvidenceCapture.TextureScaleOffsetSuffix,
+                        UnityRendererAlphaAnalysis.StructuralRefusal,
+                        UnityAnimationEvidenceCapture.ProofRelevantResolver,
+                        UnityAnimationEvidenceCapture.UnrecognizedObjectBinding,
+                        UnityAnimationEvidenceCapture.MaterialSlotBindingParser,
+                        effectiveResolver, maxMipLevel,
+                        minTextureSize, densityCapPercent, blockState,
+                        rendererTypeName: rendererTypeName);
+                    refusal = resolved.Refusal;
+                    // Every refused slot reports its own exact reason, even
+                    // when the renderer as a whole continues or the first
+                    // refusal names the renderer: one line per slot, no
+                    // aggregation, so a manual test can read the full list.
+                    // The slot entry folds the slot's texture capture facts,
+                    // so one refused slot is one console entry. The slots and
+                    // the slot results ride on one resolved result, so slot i
+                    // of one is slot i of the other, and a divergence is an
+                    // invariant defect.
                     for (var slotIndex = 0;
                          slotIndex < resolved.SlotResults.Length;
                          slotIndex++)
                     {
-                        var slotResult = resolved.SlotResults[slotIndex];
-                        if (!slotResult.IsResolved)
+                        if (resolved.SlotResults[slotIndex].IsResolved)
                         {
-                            continue; // refused slots report through the fold loop above.
+                            continue;
                         }
-                        for (var i = 0;
-                             i < slotResult.MaterialResolutions.Count;
-                             i++)
-                        {
-                            var resolution = slotResult.MaterialResolutions[i];
-                            if (resolution.IsResolved)
-                            {
-                                continue;
-                            }
-                            var offender = evidence.AdmittedMaterials[
-                                resolved.Slots[slotIndex]
-                                    .AdmittedMaterialIndices[i]];
-                            AmuseReports.SlotResolutionRefused(
-                                renderer, slotIndex, renderer.gameObject.name,
-                                offender, resolution.Failure);
-                        }
-                    }
-                }
 
-                var opaqueCandidateTriangleCount = 0;
-                var extractionMeshSubMeshCount = -1;
-                var extractionMaterialSlotCount = -1;
-                if (refusal == RendererAnalysisRefusal.None)
-                {
-                    var extraction = UnityRendererAlphaAnalysis.CaptureGeometry(
-                        renderer, resolved.CurrentMaterials);
-                    refusal = extraction.Refusal;
-                    extractionMeshSubMeshCount = extraction.MeshSubMeshCount;
-                    extractionMaterialSlotCount = extraction.MaterialSlotCount;
-                    if (refusal == RendererAnalysisRefusal.None)
+                        var closureWay =
+                            resolved.SlotResults[slotIndex].ClosureWay;
+                        AmuseReports.SlotAnalysisRefusal(
+                            renderer,
+                            slotIndex,
+                            resolved.SlotResults[slotIndex].Refusal,
+                            renderer.gameObject.name,
+                            resolved.SlotResults[slotIndex].Offender,
+                            resolved.SlotResults[slotIndex].UnknownReason,
+                            resolved.Slots[slotIndex].CaptureRefusals,
+                            closureWay ==
+                                MaterialDependencyClosureFailure.None
+                                ? null
+                                : AmuseReports.ClosureFailureSentence(
+                                    closureWay));
+                    }
+
+                    // An out-of-range closure failure names a slot the renderer
+                    // does not have, so it has no slot result. It still reports
+                    // its own entry: the template takes an arbitrary slot index,
+                    // and the apply pass reads the same record when a split
+                    // could append a slot onto that index.
+                    foreach (var record in evidence.SlotClosureFailures)
                     {
-                        var plan = RuntimeStateResolution.ClassifyRuntimeStates(
-                            extraction.Snapshot,
-                            resolved.SlotResults,
-                            UnityRendererAlphaAnalysis.TriangleClassifier,
-                            UnityRendererAlphaAnalysis.OutcomeIntersector);
-                        opaqueCandidateTriangleCount = plan.OpaqueTriangleCount;
+                        if (record.SlotIndex < resolved.SlotResults.Length)
+                        {
+                            continue;
+                        }
+
+                        AmuseReports.SlotAnalysisRefusal(
+                            renderer,
+                            record.SlotIndex,
+                            RendererAnalysisRefusal
+                                .MaterialDependencyClosureFailed,
+                            renderer.gameObject.name,
+                            closureWaySentence:
+                            AmuseReports.ClosureFailureSentence(
+                                record.Failure));
+                    }
+
+                    // A resolved slot can still carry refused material resolutions. The
+                    // slot stays resolved and the triangles classify Unknown; this entry
+                    // names the lost proof reason. Diagnostic only: no census record.
+                    if (resolved.Refusal == RendererAnalysisRefusal.None)
+                    {
                         for (var slotIndex = 0;
-                             slotIndex < resolved.Slots.Count;
+                             slotIndex < resolved.SlotResults.Length;
                              slotIndex++)
                         {
-                            if (resolved.SlotResults[slotIndex].IsResolved)
+                            var slotResult = resolved.SlotResults[slotIndex];
+                            if (!slotResult.IsResolved)
                             {
-                                foreach (var textureRefusal in
-                                         resolved.Slots[slotIndex]
-                                             .CaptureRefusals)
+                                continue; // refused slots report through the fold loop above.
+                            }
+                            for (var i = 0;
+                                 i < slotResult.MaterialResolutions.Count;
+                                 i++)
+                            {
+                                var resolution = slotResult.MaterialResolutions[i];
+                                if (resolution.IsResolved)
                                 {
-                                    AmuseReports.TextureCaptureRefusal(
+                                    continue;
+                                }
+                                var offender = evidence.AdmittedMaterials[
+                                    resolved.Slots[slotIndex]
+                                        .AdmittedMaterialIndices[i]];
+                                AmuseReports.SlotResolutionRefused(
+                                    renderer, slotIndex, renderer.gameObject.name,
+                                    offender, resolution.Failure);
+                            }
+                        }
+                    }
+
+                    var opaqueCandidateTriangleCount = 0;
+                    var extractionMeshSubMeshCount = -1;
+                    var extractionMaterialSlotCount = -1;
+                    if (refusal == RendererAnalysisRefusal.None)
+                    {
+                        var extraction = UnityRendererAlphaAnalysis.CaptureGeometry(
+                            renderer, resolved.CurrentMaterials);
+                        refusal = extraction.Refusal;
+                        extractionMeshSubMeshCount = extraction.MeshSubMeshCount;
+                        extractionMaterialSlotCount = extraction.MaterialSlotCount;
+                        if (refusal == RendererAnalysisRefusal.None)
+                        {
+                            var plan = RuntimeStateResolution.ClassifyRuntimeStates(
+                                extraction.Snapshot,
+                                resolved.SlotResults,
+                                UnityRendererAlphaAnalysis.TriangleClassifier,
+                                UnityRendererAlphaAnalysis.OutcomeIntersector);
+                            opaqueCandidateTriangleCount = plan.OpaqueTriangleCount;
+                            for (var slotIndex = 0;
+                                 slotIndex < resolved.Slots.Count;
+                                 slotIndex++)
+                            {
+                                if (resolved.SlotResults[slotIndex].IsResolved)
+                                {
+                                    foreach (var textureRefusal in
+                                             resolved.Slots[slotIndex]
+                                                 .CaptureRefusals)
+                                    {
+                                        AmuseReports.TextureCaptureRefusal(
+                                            renderer,
+                                            slotIndex,
+                                            textureRefusal);
+                                    }
+                                }
+
+                                foreach (var propertyName in
+                                         resolved.Slots[slotIndex]
+                                             .NoAlphaChannelProperties)
+                                {
+                                    AmuseReports.TextureAlphaMissing(
                                         renderer,
                                         slotIndex,
-                                        textureRefusal);
+                                        propertyName);
                                 }
                             }
 
-                            foreach (var propertyName in
-                                     resolved.Slots[slotIndex]
-                                         .NoAlphaChannelProperties)
+                            var coverageVectors =
+                                SlotTransformDecision.CoverageVectorsBySlot(
+                                    resolved.CurrentMaterials,
+                                    minimumOpaqueCoveragePercent,
+                                    minimumOpaqueCoverageToPreservePercent,
+                                    cutoutMinimumCoverage,
+                                    cutoutPreserveCoverage);
+                            var separatorOffBySlot = SlotTransformDecision
+                                .SeparatorOffBySlot(
+                                    coverageVectors.CutoutMembershipBySlot,
+                                    cutoutSeparatorEnabled,
+                                    transparentSeparatorEnabled);
+                            var prepared = RetainPreparedSeparation(
+                                state,
+                                extraction.MutationTarget,
+                                rendererPath,
+                                plan,
+                                evidence,
+                                admittedLiveMaterials,
+                                poiyomiConversion,
+                                lilToonConversion,
+                                coverageVectors.CoveragePercentsBySlot,
+                                coverageVectors.PreservePercentsBySlot,
+                                coverageVectors.CutoutMembershipBySlot,
+                                separatorOffBySlot,
+                                rendererTypeName,
+                                allowDepthTestChange,
+                                grantedShaderNames,
+                                resolved.SlotResults);
+
+                            if (lifecycle.BuildPath == AmuseBuildPath.ApplyOnPlay
+                                && prepared != null)
                             {
-                                AmuseReports.TextureAlphaMissing(
-                                    renderer,
-                                    slotIndex,
-                                    propertyName);
+                                RecordPlayModeSlots(
+                                    state, renderer, rendererPath, rendererTypeName,
+                                    prepared.Plan, resolved.SlotResults,
+                                    extraction.Snapshot);
                             }
                         }
-
-                        var coverageVectors =
-                            SlotTransformDecision.CoverageVectorsBySlot(
-                                resolved.CurrentMaterials,
-                                minimumOpaqueCoveragePercent,
-                                minimumOpaqueCoverageToPreservePercent,
-                                cutoutMinimumCoverage,
-                                cutoutPreserveCoverage);
-                        var separatorOffBySlot = SlotTransformDecision
-                            .SeparatorOffBySlot(
-                                coverageVectors.CutoutMembershipBySlot,
-                                cutoutSeparatorEnabled,
-                                transparentSeparatorEnabled);
-                        var prepared = RetainPreparedSeparation(
-                            state,
-                            extraction.MutationTarget,
-                            rendererPath,
-                            plan,
-                            evidence,
-                            admittedLiveMaterials,
-                            poiyomiConversion,
-                            lilToonConversion,
-                            coverageVectors.CoveragePercentsBySlot,
-                            coverageVectors.PreservePercentsBySlot,
-                            coverageVectors.CutoutMembershipBySlot,
-                            separatorOffBySlot,
-                            rendererTypeName,
-                            allowDepthTestChange,
-                            grantedShaderNames,
-                            resolved.SlotResults);
-
-                        if (lifecycle.BuildPath == AmuseBuildPath.ApplyOnPlay
-                            && prepared != null)
-                        {
-                            RecordPlayModeSlots(
-                                state, renderer, rendererPath, rendererTypeName,
-                                prepared.Plan, resolved.SlotResults,
-                                extraction.Snapshot);
-                        }
                     }
-                }
 
-                if (refusal != RendererAnalysisRefusal.None)
-                {
-                    state.RecordRendererRefusal(refusal);
-                    AmuseReports.RendererRefusal(
-                        renderer,
-                        refusal,
-                        extractionMeshSubMeshCount,
-                        extractionMaterialSlotCount,
-                        refusal ==
-                        RendererAnalysisRefusal
-                            .MaterialDependencyClosureFailed &&
-                        evidence.SlotClosureFailures.Count > 0
-                            ? AmuseReports.ClosureFailureSentence(
-                                evidence.SlotClosureFailures[0].Failure)
-                            : null);
-                    if (lifecycle.BuildPath == AmuseBuildPath.ApplyOnPlay)
+                    if (refusal != RendererAnalysisRefusal.None)
                     {
-                        var detail = refusal ==
+                        state.RecordRendererRefusal(refusal);
+                        AmuseReports.RendererRefusal(
+                            renderer,
+                            refusal,
+                            extractionMeshSubMeshCount,
+                            extractionMaterialSlotCount,
+                            refusal ==
                             RendererAnalysisRefusal
                                 .MaterialDependencyClosureFailed &&
                             evidence.SlotClosureFailures.Count > 0
                                 ? AmuseReports.ClosureFailureSentence(
                                     evidence.SlotClosureFailures[0].Failure)
-                                : null;
-                        RecordPlayModeRendererRefusal(
-                            state, renderer, rendererPath, rendererTypeName,
-                            refusal, extractionMeshSubMeshCount, extractionMaterialSlotCount, detail);
-                    }
-                    // The result pairs its slot evidence with its slot
-                    // results, so a renderer-scoped early refusal carries
-                    // none: nothing resolved, so nothing paired. This
-                    // branch still reports each slot's captured texture
-                    // and locked-identity facts, so it derives the slot
-                    // evidence from the capture directly on that path.
-                    var reportedSlots = resolved.Slots;
-                    if (reportedSlots.Count == 0)
-                    {
-                        reportedSlots =
-                            RuntimeStateResolution.MaterialSlotsFor(
-                                evidence, rendererPath,
-                                UnityAnimationEvidenceCapture
-                                    .MaterialSlotBindingParser,
-                                rendererTypeName);
-                    }
-
-                    for (var slotIndex = 0;
-                         slotIndex < reportedSlots.Count;
-                         slotIndex++)
-                    {
-                        var foldedAlready =
-                            resolved.SlotResults.Length > 0 &&
-                            !resolved.SlotResults[slotIndex].IsResolved;
-                        if (foldedAlready)
+                                : null);
+                        if (lifecycle.BuildPath == AmuseBuildPath.ApplyOnPlay)
                         {
-                            continue;
+                            var detail = refusal ==
+                                RendererAnalysisRefusal
+                                    .MaterialDependencyClosureFailed &&
+                                evidence.SlotClosureFailures.Count > 0
+                                    ? AmuseReports.ClosureFailureSentence(
+                                        evidence.SlotClosureFailures[0].Failure)
+                                    : null;
+                            RecordPlayModeRendererRefusal(
+                                state, renderer, rendererPath, rendererTypeName,
+                                refusal, extractionMeshSubMeshCount, extractionMaterialSlotCount, detail);
+                        }
+                        // The result pairs its slot evidence with its slot
+                        // results, so a renderer-scoped early refusal carries
+                        // none: nothing resolved, so nothing paired. This
+                        // branch still reports each slot's captured texture
+                        // and locked-identity facts, so it derives the slot
+                        // evidence from the capture directly on that path.
+                        var reportedSlots = resolved.Slots;
+                        if (reportedSlots.Count == 0)
+                        {
+                            reportedSlots =
+                                RuntimeStateResolution.MaterialSlotsFor(
+                                    evidence, rendererPath,
+                                    UnityAnimationEvidenceCapture
+                                        .MaterialSlotBindingParser,
+                                    rendererTypeName);
                         }
 
-                        var slotEvidence = reportedSlots[slotIndex];
-                        foreach (var captureRefusal in
-                                 slotEvidence.CaptureRefusals)
+                        for (var slotIndex = 0;
+                             slotIndex < reportedSlots.Count;
+                             slotIndex++)
                         {
-                            AmuseReports.TextureCaptureRefusal(
-                                renderer,
-                                slotIndex,
-                                captureRefusal);
-                        }
-
-                        foreach (var noAlphaProperty in
-                                 slotEvidence.NoAlphaChannelProperties)
-                        {
-                            AmuseReports.TextureAlphaMissing(
-                                renderer,
-                                slotIndex,
-                                noAlphaProperty);
-                        }
-
-                        foreach (var materialIndex in
-                                 slotEvidence.AdmittedMaterialIndices)
-                        {
-                            var material =
-                                evidence.AdmittedMaterials[materialIndex];
-                            if (material.LockedIdentityRefusal !=
-                                RendererAnalysisRefusal.None)
+                            var foldedAlready =
+                                resolved.SlotResults.Length > 0 &&
+                                !resolved.SlotResults[slotIndex].IsResolved;
+                            if (foldedAlready)
                             {
-                                AmuseReports.SlotAnalysisRefusal(
+                                continue;
+                            }
+
+                            var slotEvidence = reportedSlots[slotIndex];
+                            foreach (var captureRefusal in
+                                     slotEvidence.CaptureRefusals)
+                            {
+                                AmuseReports.TextureCaptureRefusal(
                                     renderer,
                                     slotIndex,
-                                    material.LockedIdentityRefusal,
-                                    renderer.gameObject.name,
-                                    material,
-                                    unknownReason: null,
-                                    captureRefusals: null,
-                                    closureWaySentence: null);
-                                break;
+                                    captureRefusal);
+                            }
+
+                            foreach (var noAlphaProperty in
+                                     slotEvidence.NoAlphaChannelProperties)
+                            {
+                                AmuseReports.TextureAlphaMissing(
+                                    renderer,
+                                    slotIndex,
+                                    noAlphaProperty);
+                            }
+
+                            foreach (var materialIndex in
+                                     slotEvidence.AdmittedMaterialIndices)
+                            {
+                                var material =
+                                    evidence.AdmittedMaterials[materialIndex];
+                                if (material.LockedIdentityRefusal !=
+                                    RendererAnalysisRefusal.None)
+                                {
+                                    AmuseReports.SlotAnalysisRefusal(
+                                        renderer,
+                                        slotIndex,
+                                        material.LockedIdentityRefusal,
+                                        renderer.gameObject.name,
+                                        material,
+                                        unknownReason: null,
+                                        captureRefusals: null,
+                                        closureWaySentence: null);
+                                    break;
+                                }
                             }
                         }
+
+                        continue;
                     }
 
-                    continue;
+                    state.AnalyzedRendererCount++;
+                    state.OpaqueCandidateTriangleCount +=
+                        opaqueCandidateTriangleCount;
                 }
-
-                state.AnalyzedRendererCount++;
-                state.OpaqueCandidateTriangleCount +=
-                    opaqueCandidateTriangleCount;
+            }
+            catch
+            {
+                // The sweep is best effort. A failure inside the
+                // sweep is logged and swallowed, so it never masks
+                // the build defect that triggered it.
+                TransientUnlockWindowClose.RunAbortSweep(context);
+                throw;
             }
         }
 
