@@ -23,7 +23,8 @@ namespace Alrauna.Amuse.Editor.Build
     internal static class AmuseSessionCaches
     {
         /// <summary>
-        /// Clears the seven session caches in their fixed order.
+        /// Clears the eight session caches in their fixed order. The
+        /// streaming evidence cache is the eighth and last member.
         /// </summary>
         internal static void Clear()
         {
@@ -34,6 +35,7 @@ namespace Alrauna.Amuse.Editor.Build
             Semantics.LilToon.LilToonSourceAttestation.ClearGatherMemo();
             Semantics.Poiyomi.PoiyomiSourceAttestation.ClearSourceHashMemo();
             LockedSourceAlignmentMemo.Clear();
+            UnityStreamingTextureEvidence.ClearCache();
         }
     }
 }

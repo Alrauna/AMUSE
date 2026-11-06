@@ -2146,6 +2146,84 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 "cache fingerprint");
         }
 
+        // --- Falsifier 3: the fingerprint that misses clip file edits ---
+        [Test]
+        public void EditingTheClipFileChangesTheCacheFingerprint()
+        {
+            var fixture = NewComputeFixture(255, 0.5f);
+
+            // The clip lives in its own .anim file inside the temp
+            // folder. The controller only names the file, and the graph
+            // keeps one clip across the edit, so no fingerprint part
+            // that names count or controller identity can move.
+            var clipPath = TempFolder + "/clip_edit_falsifier.anim";
+            var clip = new AnimationClip { name = "clip_edit_falsifier" };
+            AssetDatabase.CreateAsset(clip, clipPath);
+            var controller = _scope.Track(NewSingleLayerController(
+                "clip-edit-falsifier-controller", clip, additive: false));
+            fixture.Root.AddComponent<Animator>()
+                .runtimeAnimatorController = controller;
+
+            var first = NewDryRun(
+                fixture, null, FixtureSelector(), FixtureCapturer());
+            Run(first);
+            Assert.That(
+                _captureCalls, Is.EqualTo(1),
+                "fixture precondition: the first run must compute once");
+            var beforeTick = File.GetLastWriteTimeUtc(clipPath).Ticks;
+
+            // The extra curve drives the cutoff up to one. A cutoff of
+            // one can cut even a fully opaque texel, so the edited
+            // state can own different rows than the stored state.
+            var binding = EditorCurveBinding.FloatCurve(
+                "Body", typeof(SkinnedMeshRenderer), "material._Cutoff");
+            AnimationUtility.SetEditorCurve(
+                clip, binding, AnimationCurve.Linear(0f, 0.5f, 1f, 1f));
+            EditorUtility.SetDirty(clip);
+            AssetDatabase.SaveAssets();
+            AssetDatabase.ImportAsset(
+                clipPath, ImportAssetOptions.ForceSynchronousImport);
+
+            // The edit must reach the file on disk. A silently failed
+            // edit must not fake the observation below, so the file
+            // tick must move and the file must name the new curve.
+            Assert.That(
+                File.GetLastWriteTimeUtc(clipPath).Ticks,
+                Is.Not.EqualTo(beforeTick),
+                "fixture guard: the clip edit must change the file " +
+                "tick");
+            Assert.That(
+                File.ReadAllText(clipPath),
+                Does.Contain("material._Cutoff"),
+                "fixture guard: the edited file must carry the extra " +
+                "cutoff curve");
+
+            var second = NewDryRun(
+                fixture, null, FixtureSelector(), FixtureCapturer());
+            Run(second);
+            Assert.That(
+                _captureCalls, Is.EqualTo(2),
+                "a clip file edit must miss the renderer cache so " +
+                "stale rows cannot serve");
+            var servedSentences = SlotRows(second)
+                .Select(row => row.Sentence).ToList();
+
+            DryRunCache.Clear();
+            var third = NewDryRun(
+                fixture, null, FixtureSelector(), FixtureCapturer());
+            Run(third);
+            Assert.That(
+                _captureCalls, Is.EqualTo(3),
+                "fixture guard: the cleared cache must force a full " +
+                "recompute");
+            Assert.That(
+                servedSentences,
+                Is.EqualTo(SlotRows(third)
+                    .Select(row => row.Sentence).ToList()),
+                "the rows served after the clip edit must equal a " +
+                "full recompute of the same edited state");
+        }
+
         // --- Shared locked material admission (A9, A10.1) --------------------
 
         /// <summary>

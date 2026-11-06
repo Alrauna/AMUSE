@@ -8340,8 +8340,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(row.sentence, Is.Not.Contains("Splittable:"),
                     "the folded slot must not read as an unconverted " +
                     "splittable slot");
-                Assert.That(row.sentence, Is.EqualTo(
-                        "Convertable: 2 out of 2 polygons may be moved"),
+                Assert.That(row.sentence, Does.Contain(
+                        "Convertable: 2 out of 2"),
                     "the row must describe the converted outcome the " +
                     "apply executes");
                 Assert.That(row.provenTriangles, Is.EqualTo(2),

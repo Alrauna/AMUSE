@@ -164,6 +164,51 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             return loaded;
         }
 
+        /// <summary>
+        /// Imports a streaming-resident, compressed RGBA32 texture whose
+        /// witness band sits mid-band in its DXT5 alpha palette. The
+        /// block that holds the band also holds alpha 0 and alpha 255,
+        /// so the block palette spans the full alpha range and the band
+        /// byte cannot survive as a palette endpoint: the import must
+        /// quantize it. Authoring byte 160 decodes above a 0.6 cutoff,
+        /// while its quantized decode near 145 sits below it, so the
+        /// imported texel and the authoring byte decide opposite ways
+        /// at that cutoff.
+        /// </summary>
+        private Texture2D ImportStreamingCompressedBandTexture(string name)
+        {
+            const int size = 8;
+            const byte authoringBandByte = 160;
+            var path = TempFolder + "/" + name + ".png";
+            var pixels = new Color32[size * size];
+            for (var index = 0; index < pixels.Length; index++)
+            {
+                pixels[index] = new Color32(255, 255, 255, 255);
+            }
+
+            // The witness block mixes alpha 0 and alpha 255 into the
+            // band, so the block's alpha palette carries both ends of
+            // the range and the band byte must quantize to an
+            // interpolated palette entry.
+            pixels[0] = new Color32(255, 255, 255, 0);
+            pixels[9] = new Color32(255, 255, 255, authoringBandByte);
+            pixels[10] = new Color32(255, 255, 255, authoringBandByte);
+            var loaded = TestTextureImport.WritePng(
+                path, size, size, pixels, importer =>
+                {
+                    importer.mipmapEnabled = true;
+                    importer.isReadable = true;
+                    importer.textureCompression =
+                        TextureImporterCompression.Compressed;
+                    importer.streamingMipmaps = true;
+                });
+            Assert.That(
+                loaded.streamingMipmaps, Is.True,
+                "fixture precondition: the imported texture must be " +
+                "streaming-resident");
+            return loaded;
+        }
+
         [Test]
         public void StreamingCache_DoesNotServeInertEvidenceUnderGateOnBounds()
         {
@@ -279,6 +324,99 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 chain[0].GetAlpha(40, 32), Is.EqualTo(byte.MaxValue));
             Assert.That(
                 chain[0].GetAlpha(56, 32), Is.EqualTo(byte.MaxValue));
+        }
+
+        /// <summary>
+        /// The direct route binarizes the authoring PNG bytes and never
+        /// sees the imported representation. A compressed import
+        /// quantizes texels, so a band byte can land on one side of the
+        /// material cutoff while its imported decode lands on the
+        /// other: the authoring byte proves opaque, but the texel the
+        /// avatar samples decodes cut out. The capture must not answer
+        /// opaque from the authoring bytes when the import is
+        /// compressed, because the sampled surface is the compressed
+        /// import. This is the falsifier for the direct-route format
+        /// gate. It fails while the direct route runs ungated, because
+        /// the capture answers opaque from the authoring bytes, and it
+        /// must pass once the direct route refuses compressed imports
+        /// and the clone arm reproduces the imported decode.
+        /// </summary>
+        // --- Falsifier 2: the direct route that trusts authoring bytes for compressed imports ---
+        [Test]
+        public void DirectRoute_CompressedImportQuantizesAcrossTheCutoff()
+        {
+            var texture = ImportStreamingCompressedBandTexture(
+                "streaming_compressed_band_falsifier");
+
+            const float cutoff = 0.6f;
+            const byte authoringBandByte = 160;
+            var cutoffByte = SourceImageMaskedChain.DecodeByte(cutoff);
+
+            // The no-op guard: the three preconditions below hold only
+            // for a correctly built fixture. A fixture that fails them
+            // proves a broken fixture, not a capture defect, so each
+            // precondition fails on its own with its own message.
+            Assert.That(
+                texture.format,
+                Is.EqualTo(TextureFormat.DXT5),
+                "fixture precondition: the import must land on the " +
+                "compressed format the quantization path relies on");
+
+            var importedPixels = texture.GetPixels(0);
+            var firstBandByte = SourceImageMaskedChain.DecodeByte(
+                importedPixels[9].a);
+            Assert.That(
+                firstBandByte,
+                Is.LessThan(cutoffByte),
+                "fixture precondition: the imported decode of the " +
+                "first band texel must quantize below the cutoff");
+            var secondBandByte = SourceImageMaskedChain.DecodeByte(
+                importedPixels[10].a);
+            Assert.That(
+                secondBandByte,
+                Is.LessThan(cutoffByte),
+                "fixture precondition: the imported decode of the " +
+                "second band texel must quantize below the cutoff");
+
+            var authoringDecoded = SourceImageMaskedChain.DecodeByte(
+                authoringBandByte / 255f);
+            Assert.That(
+                authoringDecoded,
+                Is.GreaterThanOrEqualTo(cutoffByte),
+                "fixture precondition: the authoring band byte must " +
+                "stay at or above the cutoff");
+
+            // The expected verdict comes from the imported decode at
+            // the material cutoff, not from the authoring bytes: the
+            // decoded byte sits below the cutoff byte, so the verdict
+            // is cut out.
+            var expectedVerdict = firstBandByte >= cutoffByte
+                ? byte.MaxValue
+                : (byte)0;
+
+            var ok = UnityStreamingTextureEvidence.TryCapture(
+                texture,
+                TextureChannel.Alpha,
+                cutoff,
+                AlphaPolicyBounds.Inert,
+                out var chain);
+            Assert.That(
+                ok, Is.True, "the capture must return a chain");
+
+            Assert.That(
+                chain[0].GetAlpha(1, 1),
+                Is.EqualTo(expectedVerdict),
+                $"expected verdict {expectedVerdict} (cut out): the " +
+                $"imported decode byte {firstBandByte} sits below the " +
+                $"cutoff byte {cutoffByte}, but the capture answered " +
+                "opaque from the authoring byte");
+            Assert.That(
+                chain[0].GetAlpha(2, 1),
+                Is.EqualTo(expectedVerdict),
+                $"expected verdict {expectedVerdict} (cut out): the " +
+                $"imported decode byte {secondBandByte} sits below the " +
+                $"cutoff byte {cutoffByte}, but the capture answered " +
+                "opaque from the authoring byte");
         }
 
         /// <summary>

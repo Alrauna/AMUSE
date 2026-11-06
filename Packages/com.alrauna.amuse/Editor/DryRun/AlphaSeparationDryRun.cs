@@ -1926,6 +1926,26 @@ namespace Alrauna.Amuse.Editor.DryRun
                 parts.Add(AssetIdentity(entry.Item2));
             }
 
+            // The controller file names its clips but never their
+            // content, and the graph join counts clips only. A clip
+            // file edit therefore moves nothing else, so each clip
+            // joins here by its own asset identity. Non-persistent
+            // clips hash as instance ids, which a domain reload wipes
+            // with the cache, and a sub-asset clip resolves to its
+            // controller file, which keeps the old invalidation.
+            foreach (var layer in _graph.Layers)
+            {
+                foreach (var clip in layer.Clips)
+                {
+                    if (clip == null || !seen.Add(clip))
+                    {
+                        continue;
+                    }
+
+                    parts.Add(AssetIdentity(clip));
+                }
+            }
+
             parts.Sort(StringComparer.Ordinal);
             return string.Join(BodySeparator, parts);
         }

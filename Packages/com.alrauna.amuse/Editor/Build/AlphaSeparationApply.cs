@@ -71,7 +71,19 @@ namespace Alrauna.Amuse.Editor.Build
                     // recorded on the build state: the window close re-asserts
                     // these recorded slot writes after the animator rebind,
                     // whose stale t=0 application would otherwise win.
-                    ApplyFinalization(finalization, state);
+                    try
+                    {
+                        ApplyFinalization(finalization, state);
+                    }
+                    catch
+                    {
+                        // The sweep is best effort. A failure inside the
+                        // sweep is logged and swallowed, so it never
+                        // masks the apply defect that triggered it.
+                        TransientUnlockWindowClose.RunAbortSweep(context);
+                        throw;
+                    }
+
                     state.AppliedFinalization = finalization;
                 }
             }
@@ -1046,41 +1058,6 @@ namespace Alrauna.Amuse.Editor.Build
         }
 
         /// <summary>
-        /// Counts the triangles an applied write actually moved to
-        /// opaque rendering: the opaque triangles of surviving slots
-        /// whose material result differs from what the renderer held, plus
-        /// the appended submeshes' triangles for surviving Split slots.
-        /// Every candidate whose slot matches a changed material adds, so
-        /// a slot that binds several folded submeshes counts each submesh
-        /// once. The changed slots are recorded on the state, so the
-        /// play-mode record keys its moved-triangle rows on this same
-        /// determination.
-        /// </summary>
-        private static int CountOpaqueTriangles(
-            AlphaSeparationRendererWrite write,
-            Material[] live,
-            AmusePlatformFinishState state,
-            int rendererIndex)
-        {
-            var total = 0;
-            var changedSlots = new List<int>();
-            var survivors = state.SeparationSurvivingCandidates[rendererIndex];
-            foreach (var candidate in survivors)
-            {
-                var slot = candidate.Plan.SourceMaterialBindingIndex;
-                total += candidate.Plan.OpaqueTriangleOrdinals.Count;
-                changedSlots.Add(slot);
-            }
-
-            foreach (var slot in changedSlots)
-            {
-                state.AppliedChangedMaterialSlots.Add((write.Renderer, slot));
-            }
-
-            return total;
-        }
-
-        /// <summary>
         /// The live shared mesh of a prepared renderer, read the same way the
         /// analysis reads it, so the identity check compares like with like.
         /// </summary>
@@ -1222,16 +1199,15 @@ namespace Alrauna.Amuse.Editor.Build
                             candidate.Plan.Disposition !=
                             SubmeshSeparationDisposition.Split)
                         {
-                            // The applied write kept this slot's material.
-                            // An already-opaque self-mapped slot survives the
-                            // plan but moved nothing, so it is not an
+                            // This guard excludes candidate slots whose
+                            // write was a no-op. The apply skips a no-op
+                            // write entirely and marks nothing for it, so
+                            // a skipped slot moved nothing and is not an
                             // applied slot. A surviving Split is different:
                             // the finalization keeps the slot's source
                             // material on its own submesh and moves the
                             // slot's opaque triangles to the appended
-                            // submesh, so the reference comparison never
-                            // sees it, yet the write really moved the
-                            // slot's triangles. A Split is always applied.
+                            // submesh. A Split is always applied.
                             continue;
                         }
 

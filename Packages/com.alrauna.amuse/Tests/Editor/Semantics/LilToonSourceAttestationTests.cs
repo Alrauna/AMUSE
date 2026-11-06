@@ -407,8 +407,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 versionRefusal,
                 Is.EqualTo(LilToonMultiResolutionRefusal.AttestationFailed));
 
-            // The _lilToonVersion stamp moves with the package version, and
-            // 2.3.3 stamps 44. The stamp check is exact.
+            // This test pins the exactness of the stamp compare. The
+            // measurement in commit b106675 says the official artifacts of
+            // 2.3.0 through 2.3.3 are byte-identical to the 2.3.4 release,
+            // at stamp 45.
             Assert.That(
                 VerifyAgainstBaseContainerProfile(
                     MultiEvidence(version: 44f), out var stampRefusal),

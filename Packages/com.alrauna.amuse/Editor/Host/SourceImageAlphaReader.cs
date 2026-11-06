@@ -181,6 +181,33 @@ namespace Alrauna.Amuse.Editor.Host
         }
 
         /// <summary>
+        /// True for the imported byte formats whose texel alpha byte
+        /// equals the authoring PNG alpha byte: Alpha8, R8, RGB24,
+        /// RGBA32, and ARGB32. For these formats the direct route can
+        /// binarize the authoring bytes and still describe the texels
+        /// the imported texture stores. Any other format can quantize a
+        /// texel across the material cutoff while the authoring byte
+        /// stays on the other side, so those imports must ride the
+        /// readable-clone route in UnityStreamingTextureEvidence
+        /// instead, because that route reproduces the imported
+        /// representation.
+        /// </summary>
+        internal static bool AdmitsImportedFormat(TextureFormat format)
+        {
+            switch (format)
+            {
+                case TextureFormat.Alpha8:
+                case TextureFormat.R8:
+                case TextureFormat.RGB24:
+                case TextureFormat.RGBA32:
+                case TextureFormat.ARGB32:
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>
         /// True for the failures that mean this route cannot read the
         /// authoring image today: the file vanished, shrank, or refuses
         /// access. Every other exception is a defect. A defect propagates
