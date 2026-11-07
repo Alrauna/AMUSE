@@ -7,6 +7,8 @@ Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot 'lib/Isolation.ps1')
 
 if ($MyInvocation.InvocationName -ne '.') {
+    $ErrorActionPreference = 'Stop'
+    $ProgressPreference = 'SilentlyContinue'
     $paths = Get-RunPaths
     Stop-LowUserProcesses
     Remove-LowUser

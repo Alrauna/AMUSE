@@ -131,6 +131,8 @@ function Invoke-LicenseReturn {
 }
 
 if ($MyInvocation.InvocationName -ne '.') {
+    $ErrorActionPreference = 'Stop'
+    $ProgressPreference = 'SilentlyContinue'
     if ($Action -eq 'Activate') { Invoke-LicenseActivation }
     elseif ($Action -eq 'Return') { Invoke-LicenseReturn }
     else { throw 'The action must be Activate or Return.' }

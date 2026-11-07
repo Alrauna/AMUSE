@@ -46,12 +46,15 @@ Describe 'Isolation library' {
             $runPaths.LowSecretFile | Should -Be (Join-Path $fakeWork 'lowuser.cred')
             $runPaths.AdminScripts | Should -Be (Join-Path $fakeWork 'admin-scripts')
 
-            # Without a workspace variable the root falls back to the repository
-            # root, two levels above the scripts folder. That fallback is for
-            # local use only.
+            # Without a workspace variable the root falls back to the
+            # repository root. This test folder sits at scripts/ci/tests, so
+            # the repository root is three levels up. The check for the
+            # project version file fails on a root that is off by one folder.
             $env:GITHUB_WORKSPACE = $null
+            $expectedRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
+            Test-Path -LiteralPath (Join-Path $expectedRoot 'ProjectSettings\ProjectVersion.txt') | Should -BeTrue
             $fallback = Get-RunPaths
-            $fallback.Root | Should -Be (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+            $fallback.Root | Should -Be $expectedRoot
         }
         finally {
             $env:GITHUB_WORKSPACE = $oldWorkspace
@@ -187,5 +190,19 @@ Describe 'Isolation library' {
         }
         { Assert-LicensingClientSubject $signature 'CN=Unity Technologies SF, O=Unity Technologies SF' } |
             Should -Throw '*Some Other Company*'
+    }
+
+    It 'EntryScriptsSetErrorPreferenceToStopInTheRunBody' {
+        # The fail fast contract of the spike lives in the run body of every
+        # entry script. It must not sit in a library, because dot-sourcing a
+        # library must not change the behavior of a test process.
+        foreach ($name in 'prepare-run.ps1', 'prepare-project.ps1', 'license.ps1', 'isolation-probe.ps1', 'cleanup.ps1') {
+            $text = Get-Content -LiteralPath (Join-Path $PSScriptRoot "../$name") -Raw
+            $guardAt = $text.IndexOf("InvocationName -ne '.'")
+            $guardAt | Should -BeGreaterThan -1
+            $runBody = $text.Substring($guardAt)
+            $runBody | Should -Match "\`$ErrorActionPreference = 'Stop'"
+            $runBody | Should -Match "\`$ProgressPreference = 'SilentlyContinue'"
+        }
     }
 }

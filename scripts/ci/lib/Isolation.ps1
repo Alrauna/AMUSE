@@ -17,7 +17,7 @@ Set-StrictMode -Version Latest
 # paths from here, so no script derives a path from its own location except
 # the local fallback of Root.
 function Get-RunPaths {
-    $root = if ($env:GITHUB_WORKSPACE) { $env:GITHUB_WORKSPACE } else { (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path }
+    $root = if ($env:GITHUB_WORKSPACE) { $env:GITHUB_WORKSPACE } else { (Resolve-Path (Join-Path $PSScriptRoot '../../..')).Path }
     $work = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [IO.Path]::GetTempPath() }
     $unityHome = Join-Path $work 'UnityEditor'
     $licenseDir = Join-Path $env:ProgramData 'Unity'

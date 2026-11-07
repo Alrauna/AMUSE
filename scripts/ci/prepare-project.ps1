@@ -10,6 +10,8 @@ Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot 'lib/Isolation.ps1')
 
 if ($MyInvocation.InvocationName -ne '.') {
+    $ErrorActionPreference = 'Stop'
+    $ProgressPreference = 'SilentlyContinue'
     $paths = Get-RunPaths
     & robocopy $paths.Root $paths.ProjectPath /E /XD .git /NFL /NDL /NJH /NJS /NP | Out-Null
     if ($LASTEXITCODE -ge 8) { throw "robocopy failed with exit code $LASTEXITCODE." }

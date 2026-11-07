@@ -17,6 +17,8 @@ Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot 'lib/Isolation.ps1')
 
 if ($MyInvocation.InvocationName -ne '.') {
+    $ErrorActionPreference = 'Stop'
+    $ProgressPreference = 'SilentlyContinue'
     $paths = Get-RunPaths
     New-Item -ItemType Directory -Force -Path $paths.Out | Out-Null
     $targetsFile = Join-Path $paths.Out 'probe-targets.json'
