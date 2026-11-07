@@ -131,6 +131,15 @@ function Get-GatePackages($lock) {
     return $result
 }
 
+# Builds one row of the result table. The identifier columns can hold text
+# from the lock, the plan or a vendor listing, so they pass through Redact.
+# The verified cell is added after Redact, because it holds the observed
+# hash of a null-hash package and the log must keep that hash readable.
+function New-PackageRow([string]$name, [string]$version, [string]$sourceKey, [string]$route, [string]$verified) {
+    $prefix = Redact "| $name | $version | $sourceKey | $route | "
+    return "$prefix$verified |"
+}
+
 # Computes the SHA-256 of a downloaded zip and compares it with the expected
 # hash. Stops with the package name on a mismatch. An empty expected hash
 # means that the caller has no route, so the observed hash is returned for
@@ -172,6 +181,17 @@ function Find-MissingDependencies([string]$packagesDir, [string[]]$allowedNames)
         }
     }
     return $missing
+}
+
+# Collects the missing-dependency lines for the failure list. The lines hold
+# names from package.json files inside vendor zips, so every line passes
+# through Redact before it is stored or printed.
+function Get-DependencyFailures([string]$packagesDir, [string[]]$allowedNames) {
+    $failures = @()
+    foreach ($line in @(Find-MissingDependencies -PackagesDir $packagesDir -AllowedNames $allowedNames)) {
+        $failures += Redact $line
+    }
+    return $failures
 }
 
 # Removes the git-fetched Unity MCP entry and the Linux toolchain entries
@@ -286,27 +306,27 @@ if ($MyInvocation.InvocationName -ne '.') {
                 Invoke-WebRequest -Uri $url -OutFile $zip
                 $observed = Assert-ZipHash -Path $zip -Expected $expected -Name $name
                 $verified = Get-VerifiedCell $observed $expected
-                Say "| $name | $version | $sourceKey | $route | $verified |"
+                Say (New-PackageRow $name $version $sourceKey $route $verified)
                 Install-ExtractedZip -Zip $zip -Name $name -ProjectPath $ProjectPath
             }
             catch {
                 $failures += Redact "$name $version failed: $($_.Exception.Message)"
-                Say "| $name | $version | $sourceKey | $route | no |"
+                Say (New-PackageRow $name $version $sourceKey $route 'no')
             }
         }
 
         $packagesRoot = Join-Path $ProjectPath 'Packages'
-        $missing = @(Find-MissingDependencies -PackagesDir $packagesRoot -AllowedNames $allowedNames)
+        $missing = @(Get-DependencyFailures -PackagesDir $packagesRoot -AllowedNames $allowedNames)
         if ($missing.Count -gt 0) {
             foreach ($line in $missing) { $failures += $line }
-            Say "- vpm dependencies outside the allowed set: $($missing -join ', ')"
+            Say (Redact "- vpm dependencies outside the allowed set: $($missing -join ', ')")
         }
         else {
             Say '- vpm dependencies outside the allowed set: none'
         }
 
         $removed = @(Edit-UnityManifest (Join-Path $packagesRoot 'manifest.json'))
-        Say "- removed from the Unity manifest: $(if ($removed.Count -gt 0) { $removed -join ', ' } else { 'none' })"
+        Say (Redact "- removed from the Unity manifest: $(if ($removed.Count -gt 0) { $removed -join ', ' } else { 'none' })")
 
         if ($failures.Count -gt 0) { throw ($failures -join '; ') }
         Say "install-packages finished for $($plan.Count) packages."

@@ -19,6 +19,8 @@ Describe 'Install packages' {
         Get-Command Assert-ZipHash -ErrorAction Stop | Out-Null
         Get-Command Get-VerifiedCell -ErrorAction Stop | Out-Null
         Get-Command Find-MissingDependencies -ErrorAction Stop | Out-Null
+        Get-Command Get-DependencyFailures -ErrorAction Stop | Out-Null
+        Get-Command New-PackageRow -ErrorAction Stop | Out-Null
         Get-Command Edit-UnityManifest -ErrorAction Stop | Out-Null
 
         $tempDir = Join-Path ([IO.Path]::GetTempPath()) "amuse-install-packages-tests-$PID"
@@ -183,6 +185,43 @@ Describe 'Install packages' {
             $allowed = @('com.allowed.thing', 'com.outside.dep')
             $missing = @(Find-MissingDependencies -PackagesDir $packagesDir -AllowedNames $allowed)
             $missing.Count | Should -Be 0
+        }
+
+        It 'DependencyFailureLinesPassRedact' {
+            # The dependency names come from package.json files inside vendor
+            # zips. A name with a double colon must never reach the log raw.
+            $vendorDir = Join-Path $tempDir 'vendor-packages'
+            New-Item -ItemType Directory -Path (Join-Path $vendorDir 'vendor') -Force | Out-Null
+            Set-Content -LiteralPath (Join-Path $vendorDir 'vendor/package.json') -Value @'
+{
+  "name": "vendor.pkg",
+  "vpmDependencies": {
+    "com.bad::thing": "1.0.0"
+  }
+}
+'@
+            $failures = @(Get-DependencyFailures -PackagesDir $vendorDir -AllowedNames @())
+            $failures.Count | Should -Be 1
+            $failures[0] | Should -Not -Match '::'
+            $failures[0] | Should -Be 'vendor.pkg needs com.bad: :thing'
+        }
+    }
+
+    Context 'Result table rows' {
+        It 'PackageRowKeepsObservedHashAfterRedact' {
+            # The observed hash of a null-hash package must stay readable in
+            # the log, so Redact runs on the identifier columns only.
+            $observed = 'c' * 64
+            $row = New-PackageRow -Name 'some.pkg' -Version '1.0.0' -SourceKey 'src' `
+                -Route 'lock' -Verified "no hash available, observed $observed"
+            $row | Should -Match "observed $observed \|"
+        }
+
+        It 'PackageRowSplitsDoubleColonsInIdentifiers' {
+            $row = New-PackageRow -Name 'bad::pkg' -Version '1.0.0' -SourceKey 'src' `
+                -Route 'lock' -Verified 'yes'
+            $row | Should -Not -Match '::'
+            $row | Should -Match '^\| bad: :pkg \|'
         }
     }
 
