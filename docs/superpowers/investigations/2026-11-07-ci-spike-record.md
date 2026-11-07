@@ -10,7 +10,7 @@ This record describes continuous integration runs only. No private avatar data e
 
 The design spec `docs/superpowers/specs/2026-11-06-ci-test-gate-design.md` asks eleven questions, S1 to S11, before any final workflow can exist. A throwaway workflow answered them. It ran on hosted Windows runners. It started on pushes to `ci/**` branches. One Environment held the burner account secrets, and the maintainer approved every run. After the ruling on open decision O6, a run had two jobs in sequence, each with its own approval. Mode `admin` ran the Editor as the runner account. Mode `lowuser` ran the activation, the Editor, and the tests as a local user that was not an administrator. A probe in each job tried to open the runner processes for memory reads and tried to write to the places that administrator steps run from. It printed counts and yes or no answers only.
 
-The spike files were removed from the tree on 2026-11-07 (UTC). The git history of the branch holds them. This note is the record of their runs.
+The branch removed the spike files from the tree on 2026-11-07 (UTC). The git history of the branch holds them. This note is the record of their runs.
 
 ## Runs 1 to 12
 
@@ -83,6 +83,7 @@ S11 failed. The other licensed steps worked.
 ### Run 10, mode lowuser
 
 - The script granted read and execute on the two parent folders, with no inheritance. It printed the rights of the drive root, the agent folder, and the runner temp folder. The package manager server still stopped. The rights list found the cause.
+- S11 failed again. The package manager server stopped, so the Editor could not start.
 - The drive root gives the Users group read and execute, and the right to create files and folders. The agent folder and the runner temp folder inherit that. So the low user could already read both, and it needed no grant.
 - The deny rule that the script set with `icacls` held the right to synchronize, together with the write rights. A deny on synchronize fails every open that waits on the result, even a read. A plain attribute read without a handle worked. That is why Unity itself ran and the package manager server did not.
 - The Node program opens each parent folder with a handle. The deny rule caused the stop. The cause was the rule of the spike, not Unity.
@@ -120,11 +121,11 @@ All steps passed. This run used the vendor versions of the maintainer dev projec
 - S8 named gap. 11 of 12 packages verified by hash. VRCFury has no hash route. Its observed hash is recorded below.
 - S9 informational. No process command line held the credentials in any mode. In admin mode, a scan of 3001 files found nothing. In low-user mode, one file under the low user profile held the email. No file held the password. No file held a JWT-shaped token. Run 6 put a masked serial in a public log, and runs from 7 on removed serials.
 - S10 as expected in both modes. The admin baseline could read runner memory and write to every administrator-run place. The low user could do neither. Its one allowed write was its own license folder.
-- S11 failed in runs 5 to 9. Passed in runs 11 and 12.
+- S11 failed in runs 5 to 10. Run 10 also stopped on the package manager server, so no Editor started. It passed in runs 11 and 12.
 
 ## Root causes
 
-1. A Unity Personal license file is bound to the machine that made it. A copy on a new machine does not license the Editor. The activation uses the account email and password through the licensing client in the Editor install.
+1. A Unity Personal license file binds to the machine that made it. A copy on a new machine does not license the Editor. The activation uses the account email and password through the licensing client in the Editor install.
 2. `net user` asks a yes or no question when a password is longer than 14 characters. The `/y` switch answers it.
 3. The deny rule of the hardening held the right to synchronize. A deny on synchronize fails every open that waits on the result, including a read. The package manager server opens each parent folder with a handle, so it stopped. The rule, not Unity, caused the failure.
 
@@ -138,4 +139,8 @@ Observed in runs 11 and 12 on 2026-11-07 (UTC). These values are public and are 
 
 ## Outcome
 
-The ruling on O6 closed with a pass on 2026-11-07 (UTC). The final design runs the activation, the Editor, and the tests as the non-admin user. The admin mode stays as the fallback. The spike files were removed from the tree on 2026-11-07 (UTC), and the git history of the branch holds them. On 2026-11-07 (UTC), no run of the final workflows had happened yet. The plan record governs their first runs.
+The ruling on O6 closed with a pass on 2026-11-07 (UTC). The final design runs the activation, the Editor, and the tests as the non-admin user. The admin mode stays as the fallback. The branch removed the spike files from the tree on 2026-11-07 (UTC), and the git history holds them. On 2026-11-07 (UTC), no run of the final workflows had happened yet. The plan record governs their first runs.
+
+## Known debt
+
+On 2026-11-07 (UTC), `Get-Json` and the other listing helpers stay duplicated in three entry scripts, and this branch leaves that deduplication as post-merge debt.

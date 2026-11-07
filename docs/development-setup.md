@@ -126,13 +126,13 @@ A pull request can rewrite `pr.yml`. The Environment approval, not `validate`, i
 
 ### The weekly canary
 
-`canary.yml` runs once a week and on a manual start. It floats every vendor package to its newest stable release. Unity stays at the version in `ProjectSettings/ProjectVersion.txt`. It skips releases that are younger than 48 hours when the publisher shows a release date. It never gates a merge, holds no write permission, and changes nothing in the repository. A red run is the signal that a vendor moved. The job summary lists each package as `name old -> new`.
+`canary.yml` runs once a week and on a manual start. It floats every vendor package to its newest stable release. Unity stays at the version in `ProjectSettings/ProjectVersion.txt`. It skips releases that are younger than 48 hours when the publisher shows a release date. It never gates a merge, holds no write permission, and changes nothing in the repository. A red run is the signal that a vendor moved. The job summary holds one table row per package. The columns are package, old, new, date source, and skipped younger.
 
 The licensed jobs of both workflows share one concurrency group. They queue in order instead of cancelling a waiting run. The gate and the canary never sign in to the one account at the same time.
 
 ### The local gate
 
-`scripts/verify.ps1` runs the same checks on this machine, in a temporary clone of the committed state. Uncommitted changes are not in the clone, and the script prints a warning when the working tree holds some. A full run does five steps: the lock check, the release exclusion check, the vendor package install, and the two test assemblies. `-CheckOnly` runs the two checks only. No download starts and no Editor starts. The local gate uses the license of the local Unity Hub. It creates no user and touches no license.
+`scripts/verify.ps1` runs the same checks on this machine, in a temporary clone of the committed state. Uncommitted changes are not in the clone. The script prints a warning only when the working tree holds uncommitted changes under `scripts/`, `.github/`, `Packages/com.alrauna.amuse/`, or in `Packages/vpm-manifest.json`. A full run does five steps: the lock check, the release exclusion check, the vendor package install, and the two test assemblies. `-CheckOnly` runs the two checks only. No download starts and no Editor starts. The local gate uses the license of the local Unity Hub. It creates no user and touches no license.
 
 ### Bump the package lock
 
@@ -151,7 +151,7 @@ The gate fails when the manifest and the lock disagree. `scripts/ci/check-lock.p
 4. Edit `scripts/ci/lock.json` with the confirmed values.
 5. Commit `ProjectSettings/ProjectVersion.txt` and `scripts/ci/lock.json` together.
 
-The lock stores the same subject for the installer and for `licensingClientSubject`, because the licensing client ships inside the installed Editor and the lock builder downloads the installer only. A mismatch on the first run prints the observed subject. Confirm it against a signature check and update the lock.
+The lock stores the same subject for the installer and for `licensingClientSubject`. The reason is simple. The licensing client ships inside the installed Editor. The lock builder downloads the installer only, so it cannot read the client subject. A mismatch on the first run prints the observed subject. Confirm it against a signature check and update the lock.
 
 ### Human setup steps
 

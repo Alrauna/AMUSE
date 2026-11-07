@@ -215,12 +215,12 @@ The damage stays inside the burner Unity account and the job that ran. The canar
 `[DECISION]` The canary shares the one burner account of the gate. The maintainer declined a separate canary account. The canary runs unpinned vendor code with the account secrets in the job, so a theft there loses the account of the gate too.
 The local gate is the break-glass for the required check, and the vendor cooldown in O8 lowers the chance.
 
-- The canary job summary lists each package as `name old -> new`.
+- The canary job summary holds one table row per package. The columns are package, old, new, date source, and skipped younger.
 - `[CALL]` The canary rewrites the `locked` block of `Packages/vpm-manifest.json` in its own checkout to match what it installed.
   Without this, `VendorSuiteStartCheck` fails the suite at the start. Then the maintainer learns only that versions differ and nothing else.
   The rewrite never leaves the runner.
 - The floating version rule takes the highest stable version in the listing. It ignores prereleases.
-- A new transitive dependency that is not in the `locked` block makes the canary fail closed. The summary names it.
+- A new transitive dependency that is not in the `locked` block makes the canary fail closed. The error message names the dependency. The step summary does not name it.
 - `[CALL]` A new SDK release that needs another Unity version makes the run red. That is a valid reminder.
 - `[CALL]` On 2026-11-07 (UTC), the canary job sits in the shared `unity-license` group with `cancel-in-progress: false` and `queue: max`. It never cancels a run, and no waiting run cancels it.
 
@@ -419,7 +419,8 @@ The maintainer does these. The builder cannot.
 - The licensing client can change its signer over time. A change then needs a `lock.json` edit.
 - A vendor can remove a locked version from its listing. The gate stays red until the lock moves.
 - Dependabot pull requests get no secrets and skip the `unity` job. The `fork-notice` job turns red instead.
-- A release-date route for the canary cooldown exists for seven of the twelve packages. Five packages have none. The cooldown does not apply to a package with no route.
+- `[MEASURED]` On 2026-11-07 (UTC), a release-date route for the canary cooldown exists for seven of the twelve packages. Five packages have none. The cooldown does not apply to a package with no route.
+- `[MEASURED]` On 2026-11-07 (UTC), the whole-branch review found no remote run yet of the new workflows. The first run can fail on three known points. The licensing client subject in `lock.json` starts equal to the installer subject. The Pester 5 module on the hosted image is unverified. The assembly name shape in the Unity result file is handled by leaf-name matching and is unproven. No run result is claimed here.
 - The local gate checks only the committed files. `scripts/verify.ps1` clones the committed state.
 - `git diff --check` can flag trailing whitespace inside Unity YAML assets.
 
@@ -429,7 +430,7 @@ Five reviewers read the spec and the spike files. These findings need a ruling f
 
 - O1. `[DECISION]` Accepted. Add `cache-mode: none` to `build-listing.yml` and `release.yml`. This changes two files that N1 left alone. D12 yields to this ruling. `[SOURCE]` On 2026-11-07 (UTC), the edit is in both files on this branch.
 - O2. `[DECISION]` Accepted. The gate lane commits a SHA-256 for the Unity installer and each locked zip. A bump needs a human edit.
-  The canary keeps reading hashes from the publisher. The spike prints the observed installer hash, so the first committed value comes from a reviewed run. `[SOURCE]` On 2026-11-07 (UTC), the plan implemented this lock as `scripts/ci/lock.json`, and `scripts/ci/new-lock.ps1` builds it.
+  The canary keeps reading hashes from the publisher. The spike prints the observed installer hash, so the first committed value comes from a reviewed run. `[SOURCE]` On 2026-11-07 (UTC), the implementation put this lock in `scripts/ci/lock.json`, and `scripts/ci/new-lock.ps1` builds it.
 - O3. `[DECISION]` Ruled by the maintainer on 2026-11-07 (UTC). VRCFury stays unhashed. It is the one source in the gate lane without a committed hash, and section 11 lists it as a known limit. The gate still pins its exact version and prints the observed hash in the log. `[SOURCE]` On 2026-11-07 (UTC), the lock holds VRCFury unhashed with the reason `no hash route`.
 - O2b. `[DECISION]` Ruled by the maintainer on 2026-11-07 (UTC). The committed hash lock holds the vendor versions that the maintainer has installed in the dev project. It does not hold the older versions of the committed `locked` block. `[CALL]` The maintainer commits the matching `Packages/vpm-manifest.json` bump first. The plan then generates the hashes from those exact versions. The spike ran on the older block, so the first gate run on the new versions is a new check. `[SOURCE]` On 2026-11-07 (UTC), the bump is committed and the lock holds hashes for those exact versions.
 - O4. `[DECISION]` Accepted as proposed. No required review and no CODEOWNERS file.
