@@ -107,3 +107,59 @@ The alpha capture gate needs exact Sample support for a texture's graphics forma
 - The ARGB32 test follows the exact sampling gate on the fixture format. Without exact support, it asserts the real capture refusal with no evidence. With exact support, it asserts 255, which passes the opaque predicate, and 128 and 254, which do not.
 
 Thus, a capability observation from one machine does not describe another machine's test results.
+
+## Continuous integration
+
+Two workflows run the EditMode suites on GitHub. Both run on hosted Windows runners. A licensed job activates a burner Unity account. The maintainer approves every licensed pull request run before it starts. That approval is the trust boundary of the gate. It means the maintainer read the full change first, including the workflows and the scripts.
+
+### The gate
+
+`pr.yml` runs on every pull request and on every push to `main`. It holds five jobs.
+
+- `scripts` runs the Pester tests of the CI scripts and checks that `scripts/ci/lock.json` matches `Packages/vpm-manifest.json`.
+- `cheap` checks the changed lines with `git diff --check` and checks the contents of the release package.
+- `unity` installs the locked Editor, activates the license, installs the locked vendor packages with hash checks, and runs the product and research assemblies as two steps of one job. The job runs the tests as a local low-privilege user. A probe fails the job when that user can read runner memory or write to a folder that administrator steps run from.
+- `fork-notice` turns red when a pull request comes from a fork or from Dependabot. Such a pull request gets no secrets, so the `unity` job skips it. The notice asks the maintainer to read the change and to push it to a branch in this repository. The pull request must then come from that branch.
+- `validate` is the required check. It passes only when `scripts`, `cheap`, and `unity` pass and `fork-notice` is skipped.
+
+A pull request can rewrite `pr.yml`. The Environment approval, not `validate`, is the real barrier.
+
+### The weekly canary
+
+`canary.yml` runs once a week and on a manual start. It floats every vendor package to its newest stable release. Unity stays at the version in `ProjectSettings/ProjectVersion.txt`. It skips releases that are younger than 48 hours when the publisher shows a release date. It never gates a merge, holds no write permission, and changes nothing in the repository. A red run is the signal that a vendor moved. The job summary lists each package as `name old -> new`.
+
+The licensed jobs of both workflows share one concurrency group. They queue in order instead of cancelling a waiting run. The gate and the canary never sign in to the one account at the same time.
+
+### The local gate
+
+`scripts/verify.ps1` runs the same checks on this machine, in a temporary clone of the committed state. Uncommitted changes are not in the clone, and the script prints a warning when the working tree holds some. A full run does five steps: the lock check, the release exclusion check, the vendor package install, and the two test assemblies. `-CheckOnly` runs the two checks only. No download starts and no Editor starts. The local gate uses the license of the local Unity Hub. It creates no user and touches no license.
+
+### Bump the package lock
+
+1. Change the locked versions in `Packages/vpm-manifest.json`.
+2. Run `scripts/ci/new-lock.ps1 -Out scripts/ci/lock.json`. The script needs the network.
+3. Read the printed diff. Every package takes its hash from its publisher listing or its GitHub release digest. Only VRCFury has no hash route.
+4. Commit `Packages/vpm-manifest.json` and `scripts/ci/lock.json` together.
+
+The gate fails when the manifest and the lock disagree. `scripts/ci/check-lock.ps1` prints each difference.
+
+### Rotate the Unity half of the lock
+
+1. Change `ProjectSettings/ProjectVersion.txt` to the new version.
+2. Run `scripts/ci/new-lock.ps1`. The script prints the installer SHA-256 and the signer subject.
+3. Compare both values with a second source. Use the Unity release page for the hash. Check the installer signature on the maintainer machine for the subject.
+4. Edit `scripts/ci/lock.json` with the confirmed values.
+5. Commit `ProjectSettings/ProjectVersion.txt` and `scripts/ci/lock.json` together.
+
+The lock stores the same subject for the installer and for `licensingClientSubject`, because the licensing client ships inside the installed Editor and the lock builder downloads the installer only. A mismatch on the first run prints the observed subject. Confirm it against a signature check and update the lock.
+
+### Human setup steps
+
+The maintainer does these once. The spec section 10 holds the full form.
+
+1. Prepare the burner Unity account. Give it a unique password of 20 or more characters with no quote and no space. Turn two-factor sign-in off. Give the account its own mailbox. Set the account up on a clean machine. Add no payment detail, no asset, and no phone number that you share with your main accounts.
+2. Sign in to the Unity Hub once with that account on that clean machine. Activate Personal. Sign out. The account then holds an entitlement.
+3. Create the Environments `unity-gate`, `unity-main`, and `unity-canary`. Set the allowed refs and the reviewers as the spec describes. Turn "Allow administrators to bypass" off on all three. Turn "prevent self-review" off on `unity-gate`.
+4. Add `UNITY_EMAIL` and `UNITY_PASSWORD` to all three Environments with the one account. Delete the old `UNITY_LICENSE` secrets.
+5. Set the repository settings. Require full SHA pinning for actions with an allowlist. Require approval for all outside collaborators. Set the default token permission to read-only.
+6. Limit the `release` Environment to `main`. Set a tag ruleset that blocks tag updates and tag deletions. Tag creation stays allowed.

@@ -7,6 +7,8 @@ Labels: `[SOURCE]` is a fact read in this tree. `[MEASURED]` is an observation f
 
 This record speaks for its date. It does not authorize code. The implementation plan comes next.
 
+`[SOURCE]` On 2026-11-07 (UTC), the implementation plan `docs/superpowers/plans/2026-11-07-ci-test-gate.md` exists in this tree. Tasks 1 to 11 of the plan are implemented on the branch. No run of the new workflows has happened on a hosted runner yet.
+
 ## 1. Intent
 
 As of 2026-11-06, no workflow runs the AMUSE tests. `pr.yml` is a placeholder that always passes.
@@ -99,7 +101,7 @@ The canary lane runs weekly and on manual dispatch. It floats every vendor packa
 - A fork PR never reaches a Unity job. The job carries an `if`. The expression is
   `github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id`.
   A check on `pull_request.head.repo` alone would skip `push` runs, where that field is empty.
-  GitHub also withholds secrets from fork runs. Dependabot runs get no Actions secrets either, so they follow the fork route.
+  GitHub also withholds secrets from fork runs. Dependabot runs get no Actions secrets either. `[MEASURED]` A plan review on 2026-11-07 (UTC) found that Dependabot branches live in this repo, so the condition above does not skip them. The plan adds `github.actor != 'dependabot[bot]'` to the `unity` condition, and a `fork-notice` job covers both cases.
 - `[CALL]` Three Environments, never repository secrets. The first review round on 2026-11-06 showed that one Environment cannot
   ask for approval on branches and skip it on `main`. Required reviewers apply to every job that uses the Environment.
   Branch rules match the ref, and a `pull_request` run uses `refs/pull/<n>/merge`.
@@ -119,7 +121,7 @@ The canary lane runs weekly and on manual dispatch. It floats every vendor packa
 
 `[DECISION]` The new workflows use `actions/checkout` and nothing else. Each reference is a full commit SHA.
 `persist-credentials` is `false`. The workflow default is `permissions: {}`. A job asks for `contents: read` and nothing more.
-Dependabot version updates need a `.github/dependabot.yml` with the `github-actions` ecosystem. The builder adds it. Dependabot PRs get no Actions secrets, so they follow the fork route.
+Dependabot version updates need a `.github/dependabot.yml` with the `github-actions` ecosystem. The builder adds it. Dependabot PRs get no Actions secrets. The `unity` condition leaves them out, and `fork-notice` fails them with a message.
 
 - `[CALL]` The repo setting "require full SHA pinning" goes on. The allowlist keeps GitHub-owned actions and the four named,
   SHA-pinned actions in `release.yml`. This stops the setting from breaking the release workflow.
@@ -153,7 +155,7 @@ A transitive dependency that is not in the block makes the script fail closed. I
 - `[CALL]` The script removes the Unity MCP git-URL entry from `Packages/manifest.json` in the CI checkout. The checkout is not committed.
   This keeps git-fetched tooling out of a licensed editor session.
 - `[CALL]` The script also removes the `com.unity.toolchain.*` entries from the same manifest. They are Linux cross-compile tools that no test needs.
-- `[DECISION]` The canary reads each hash from the publisher at run time. The user wants no human step there. Open decision O2 asks about the gate lane.
+- `[CALL]` On 2026-11-07 (UTC), gate mode takes every hash from the committed lock `scripts/ci/lock.json`, and `scripts/ci/new-lock.ps1` builds that lock. Canary mode reads each vendor hash from the publisher at run time, and it uses the committed Unity installer hash. The user wants no human step in the canary. Open decision O2 closed with the ruling in section 12.
 
 ### D5. Unity invocation
 
@@ -191,8 +193,7 @@ A secret goes to the one step that needs it, through an environment variable of 
 - the release exclusion check from `release.yml`, run on a zip built in the job but not published,
 - `git diff --check`.
 
-The two assemblies run as separate jobs so they fail on their own. Each job installs Unity again. This doubles the install cost.
-If two licensed editors cannot run at once under one license, both assemblies run in one job, one after the other.
+`[CALL]` On 2026-11-07 (UTC), each lane runs the two assemblies as separate steps of one job. One Unity install serves both. A failing assembly fails its step and the job, so the failure still names its assembly.
 
 - `[CALL]` The three opt-in variables stay unset in both lanes. Each skip shows in the run record, by name.
   Turning one on later is a separate decision. The Thry lock fixture talks to a vendor server. The other two delete or write project output.
@@ -221,6 +222,7 @@ The local gate is the break-glass for the required check, and the vendor cooldow
 - The floating version rule takes the highest stable version in the listing. It ignores prereleases.
 - A new transitive dependency that is not in the `locked` block makes the canary fail closed. The summary names it.
 - `[CALL]` A new SDK release that needs another Unity version makes the run red. That is a valid reminder.
+- `[CALL]` On 2026-11-07 (UTC), the canary job sits in the shared `unity-license` group with `cancel-in-progress: false` and `queue: max`. It never cancels a run, and no waiting run cancels it.
 
 ### D9. No cache and no artifacts
 
@@ -235,7 +237,7 @@ For deeper study the maintainer runs `scripts/verify.ps1`.
 - No expression that holds untrusted text, such as a branch name or a PR title, goes into a `run:` body. The value goes through an environment variable.
 - Every job and every Unity step has `timeout-minutes`. The spike uses 300 for the job, because the first import is cold. The spike record sets the real values.
 - `[CALL]` The runner image label is a fixed version, not `latest`. A runner image change then needs a reviewed edit.
-- A concurrency group per ref cancels older runs of the same ref. The canary has its own group and never cancels.
+- `[CALL]` On 2026-11-07 (UTC), the workflow-level group per ref with cancel applies to `pr.yml` only, and it never applies to the licensed job. The licensed jobs of both lanes share the group `unity-license` with `cancel-in-progress: false` and `queue: max`. A waiting run then queues in order, up to 100 waiting runs, instead of an older waiting run being cancelled.
 
 ### D11. Local fallback
 
@@ -246,7 +248,7 @@ It uses a license activated in the local Unity Hub. It is also the exit if the s
 
 `[DECISION]` The maintainer accepted these on 2026-11-06. They go beyond CI. They harden the release path.
 
-- `build-listing.yml` and `release.yml` each get `cache-mode: none` at the top level. This closes the cache path from section 11. `[UNVERIFIED]` The `actions/cache` step in `build-listing.yml` may print a warning or an error when the cache is off. A manual run of `build-listing.yml` after the merge shows which.
+- `build-listing.yml` and `release.yml` each get `cache-mode: none` at the top level. This closes the cache path from section 11. `[REPORT]` The GitHub documentation for the workflow key `cache-mode`, read on 2026-11-07 (UTC), says that a cache step that the setting blocks logs an informational message and continues. The job does not fail. A manual run of `build-listing.yml` after the merge still confirms it.
 - The `build` job in `release.yml` gets `environment: release`. The maintainer limits that Environment to the `main` ref in repository settings.
   A manual start from any other branch then fails before the job gets the write token. A job that names an Environment that does not exist creates it with no rules, so the Environment must be configured before the first release.
 - `[DECISION]` The maintainer sets a tag ruleset that blocks tag updates and tag deletions. Tag creation stays allowed, because `release.yml` makes tags.
@@ -319,6 +321,8 @@ Both modes run a probe. The probe tries to open the runner processes with the ri
 - S11: the probe, the product capture tests (134 of 134), the product shader tests (1415 of 1415) and the research tests (151 of 151) passed. The license return exited with 0. Step times: install 3 minutes, cold import and probe 8 minutes, capture tests 1 minute, shader tests 7 minutes, research tests under 1 minute. D3D11 on the software device and the R8_UNorm readback worked as in run 4.
 - Residue: one file under the low profile holds the email. No file holds the password. The cleanup step deletes the user and its profile.
 `[DECISION]` O6 closes with a pass on 2026-11-07 (UTC). The final design runs the activation, the Editor and the tests as the non-admin user. The admin mode stays as the fallback.
+`[MEASURED]` Run 12 on 2026-11-07 (UTC), job in mode `lowuser`, on the vendor versions from the maintainer dev project. All steps passed. The public log held no email, token or serial. 11 of 12 vendor sources verified by hash. VRCFury 1.1442.0 has no hash route (observed sha256 3104aba8fd29712d31f87a2966afe5fcf081ea38267abf3fc0cf30916fd27390). Product capture tests 134 of 134, product shader tests 1415 of 1415, research tests 151 of 151, shader and compile errors 0, D3D11 device. Install took 4 minutes, first import and probe 9 minutes, shader tests 9 minutes.
+`[MEASURED]` Pinned values for Unity 2022.3.22f1, observed in runs 11 and 12 on 2026-11-07 (UTC). Installer SHA-256: e42d3637666483009c16fee551ca083ba17f4f1b36055c4ca62c552f124dfb01. Authenticode signer subject: CN=Unity Technologies SF, O=Unity Technologies SF, L=San Francisco, S=California, C=US, SERIALNUMBER=3183233, OID.2.5.4.15=Private Organization, OID.1.3.6.1.4.1.311.60.2.1.2=California, OID.1.3.6.1.4.1.311.60.2.1.3=US. The signature was valid and the md5 matched the release API.
 
 Questions and pass rules:
 
@@ -346,6 +350,8 @@ Outcome table:
 | S2 fails with email and password | Stop and ask the maintainer. The remaining routes are a paid serial or the local gate. Section 13 lists them |
 
 The plan must not build the final workflow until the spike record exists.
+
+`[SOURCE]` On 2026-11-07 (UTC), the spike files `.github/workflows/ci-spike.yml`, `scripts/ci/spike.ps1`, and `scripts/ci/spike/SpikeProbe.cs` were removed from the tree. The git history of the branch holds them. The runs are recorded in `docs/superpowers/investigations/2026-11-07-ci-spike-record.md`.
 
 ## 8. Failure modes
 
@@ -404,18 +410,31 @@ The maintainer does these. The builder cannot.
   Nobody tested that on a hosted runner. The licensing pipe is per user, so activation and the Editor must both run as that user. The default rights of folders on the runner could still let the low user plant a file that a later administrator step runs. Open decision O6 covers it.
 - A stolen account password costs one throwaway account. The maintainer can revoke it fast. The maintainer cannot promise that code in the licensed job cannot take it.
 
+`[LIMIT]` The implementation round recorded these known limits on 2026-11-07 (UTC).
+
+- VRCFury has no hash route. The gate pins its exact version and prints its observed hash in the log. See O3.
+- Unity registry packages are not hash-locked. The lock covers the Unity installer and the VPM vendor zips only.
+- The runner image can change under the fixed `windows-2022` label. That change arrives without a reviewed edit.
+- The fork-route condition of the `unity` job was not tested from a real fork.
+- The licensing client can change its signer over time. A change then needs a `lock.json` edit.
+- A vendor can remove a locked version from its listing. The gate stays red until the lock moves.
+- Dependabot pull requests get no secrets and skip the `unity` job. The `fork-notice` job turns red instead.
+- A release-date route for the canary cooldown exists for seven of the twelve packages. Five packages have none. The cooldown does not apply to a package with no route.
+- The local gate checks only the committed files. `scripts/verify.ps1` clones the committed state.
+- `git diff --check` can flag trailing whitespace inside Unity YAML assets.
+
 ## 12. Open decisions after the adversarial review of 2026-11-06
 
 Five reviewers read the spec and the spike files. These findings need a ruling from the maintainer. The rest of the findings are fixed in this record and in the spike files.
 
-- O1. `[DECISION]` Accepted. Add `cache-mode: none` to `build-listing.yml` and `release.yml`. This changes two files that N1 left alone. D12 yields to this ruling.
+- O1. `[DECISION]` Accepted. Add `cache-mode: none` to `build-listing.yml` and `release.yml`. This changes two files that N1 left alone. D12 yields to this ruling. `[SOURCE]` On 2026-11-07 (UTC), the edit is in both files on this branch.
 - O2. `[DECISION]` Accepted. The gate lane commits a SHA-256 for the Unity installer and each locked zip. A bump needs a human edit.
-  The canary keeps reading hashes from the publisher. The spike prints the observed installer hash, so the first committed value comes from a reviewed run.
-- O3. `[DECISION]` Ruled by the maintainer on 2026-11-07 (UTC). VRCFury stays unhashed. It is the one source in the gate lane without a committed hash, and section 11 lists it as a known limit. The gate still pins its exact version and prints the observed hash in the log.
-- O2b. `[DECISION]` Ruled by the maintainer on 2026-11-07 (UTC). The committed hash lock holds the vendor versions that the maintainer has installed in the dev project. It does not hold the older versions of the committed `locked` block. `[CALL]` The maintainer commits the matching `Packages/vpm-manifest.json` bump first. The plan then generates the hashes from those exact versions. The spike ran on the older block, so the first gate run on the new versions is a new check.
+  The canary keeps reading hashes from the publisher. The spike prints the observed installer hash, so the first committed value comes from a reviewed run. `[SOURCE]` On 2026-11-07 (UTC), the plan implemented this lock as `scripts/ci/lock.json`, and `scripts/ci/new-lock.ps1` builds it.
+- O3. `[DECISION]` Ruled by the maintainer on 2026-11-07 (UTC). VRCFury stays unhashed. It is the one source in the gate lane without a committed hash, and section 11 lists it as a known limit. The gate still pins its exact version and prints the observed hash in the log. `[SOURCE]` On 2026-11-07 (UTC), the lock holds VRCFury unhashed with the reason `no hash route`.
+- O2b. `[DECISION]` Ruled by the maintainer on 2026-11-07 (UTC). The committed hash lock holds the vendor versions that the maintainer has installed in the dev project. It does not hold the older versions of the committed `locked` block. `[CALL]` The maintainer commits the matching `Packages/vpm-manifest.json` bump first. The plan then generates the hashes from those exact versions. The spike ran on the older block, so the first gate run on the new versions is a new check. `[SOURCE]` On 2026-11-07 (UTC), the bump is committed and the lock holds hashes for those exact versions.
 - O4. `[DECISION]` Accepted as proposed. No required review and no CODEOWNERS file.
-- R1. `[DECISION]` Accepted. `cache-mode: none` in the old workflows lands now, on this branch. See D12.
-- R2. `[DECISION]` Accepted. The `release` Environment limited to `main`, and the tag ruleset. See D12.
+- R1. `[DECISION]` Accepted. `cache-mode: none` in the old workflows lands now, on this branch. See D12. `[SOURCE]` On 2026-11-07 (UTC), the edits are on this branch. The maintainer confirmation after the merge is a step of plan task 13.
+- R2. `[DECISION]` Accepted. The `release` Environment limited to `main`, and the tag ruleset. See D12. `[SOURCE]` On 2026-11-07 (UTC), both steps stay with the maintainer in plan task 13.
 - R3. `[DECISION]` Deferred. Replacing the four third-party actions in `release.yml`.
 - O5. `[DECISION]` Declined on 2026-11-07 (UTC). No second GitHub account as reviewer. A stolen token of the maintainer account could approve its own run.
 - O6. `[DECISION]` Accepted on 2026-11-07 (UTC) as a spike. See section 7, S10 and S11. The result decides whether the final design runs the Editor as a non-admin user.
