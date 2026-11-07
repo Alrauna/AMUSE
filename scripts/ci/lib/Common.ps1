@@ -93,3 +93,37 @@ function Assert-TestRun($result, [string]$assembly, [int]$unityExit) {
     if ($result.Passed -lt 1) { throw 'The test run has no passed test.' }
     if ($unityExit -ne 0) { throw "The Unity exit code was not zero: $unityExit" }
 }
+
+# Counts the allowlisted shapes of one Unity log without printing the log.
+# The regexes are the exact regexes of the spike runs. The lines about
+# licensing count on their own. A licensing client signature line of the
+# benign kind holds none of the shader or compile shapes, so it never counts
+# there. The function throws when the log is missing, because a run without
+# a log proves nothing.
+function Get-LogFacts([string]$logPath) {
+    if (-not (Test-Path -LiteralPath $logPath)) { throw 'The Unity log is missing.' }
+    $lines = @(Get-Content -LiteralPath $logPath)
+    $shader = @($lines | Where-Object { $_ -match 'Shader error in' })
+    $compile = @($lines | Where-Object { $_ -match 'error CS\d+|Scripts have compiler errors|Compilation failed' })
+    $licensing = @($lines | Where-Object { $_ -match 'icens' })
+    return @{
+        Shader = $shader.Count
+        Compile = $compile.Count
+        Licensing = $licensing.Count
+    }
+}
+
+# Prints the counters and the failed test names of one run and then fails
+# closed. The counters print before every check, so a failed run still
+# reports its numbers. The log check runs after the run checks, so shader
+# and compile errors fail the run even when every test passed. A missing
+# result file, zero tests, a missing assembly, a failed test, an
+# inconclusive test or a non-zero Editor exit code stops the run through
+# Assert-TestRun.
+function Complete-TestRun([string]$xmlPath, [string]$assembly, [int]$unityExit, $logFacts) {
+    $result = Read-NUnitResult $xmlPath
+    Say "- tests: total $($result.Total), passed $($result.Passed), failed $($result.Failed), skipped $($result.Skipped), inconclusive $($result.Inconclusive)"
+    @($result.FailedNames) | Select-Object -First 40 | ForEach-Object { Say (Format-FailedTestLine $_) }
+    Assert-TestRun $result $assembly $unityExit
+    if ($logFacts.Shader -gt 0 -or $logFacts.Compile -gt 0) { throw 'The log holds shader or compile errors.' }
+}
