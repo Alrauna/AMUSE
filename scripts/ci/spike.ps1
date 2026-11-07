@@ -347,6 +347,11 @@ switch ($Phase) {
             Invoke-Icacls @($unityHome, '/grant', "${lowUser}:(OI)(CI)RX") 'Editor install'
             $denyRights = '(WD,AD,WEA,WA,D,DC)'
             Invoke-Icacls @((Split-Path $work -Parent), '/deny', "${lowUser}:(OI)(CI)$denyRights") 'agent work folder deny'
+            # The package manager server is a Node program. Node checks every parent folder of its
+            # script with a stat call, and that needs the right to read attributes. Grant that right
+            # and the right to pass through, on the two parent folders only. It gives no right to list or read.
+            Invoke-Icacls @((Split-Path $work -Parent), '/grant', "${lowUser}:(NP)(RA,X)") 'agent folder traverse'
+            Invoke-Icacls @($work, '/grant', "${lowUser}:(NP)(RA,X)") 'runner temp traverse'
             $worker = Get-Process -Name 'Runner.Worker' -ErrorAction SilentlyContinue | Select-Object -First 1
             if ($worker -and $worker.Path) {
                 $runnerRoot = Split-Path (Split-Path $worker.Path -Parent) -Parent

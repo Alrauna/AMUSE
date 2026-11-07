@@ -302,6 +302,10 @@ Both modes run a probe. The probe tries to open the runner processes with the ri
 `[MEASURED]` Run 7 on 2026-11-07 (UTC), job in mode `lowuser`. The serial no longer appears in the public log. The result of S11 did not change.
 - The log of the package manager was not at the place where the Editor normally writes it, under the profile of the low user. The package manager server probably stopped before it could write a log.
 `[INFERENCE]` The Editor makes the folder for that log only when it uses its default log file. The spike sets its own log file, and the low user is new, so the folder may not exist. Run 8 makes the folder and also runs the package manager server by itself as the low user, to read its own message.
+`[MEASURED]` Run 8 on 2026-11-07 (UTC), job in mode `lowuser`. The profile folders did not change the result. The package manager server run by itself as the low user printed its own error.
+- The package manager server is a Node program. It stopped with `EPERM: operation not permitted, lstat` on the agent folder, which is a parent of the Editor install. Node checks every parent folder of its script with a stat call. The low user had no right to read the attributes of that folder.
+- This is a side effect of the hardening. The agent folder gave the low user no rights, and the script added a deny rule on it. So the cause of S11 is the folder rights of the spike, not Unity or the user.
+- `[CALL]` Run 9 grants the low user only the right to read attributes and to pass through, on the agent folder and the runner temp folder, and on those two only. It gives no right to list or read. It does not change the deny rules for writes.
 
 Questions and pass rules:
 
