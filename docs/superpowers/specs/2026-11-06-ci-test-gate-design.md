@@ -314,6 +314,11 @@ Both modes run a probe. The probe tries to open the runner processes with the ri
 - The deny rule that the spike set with `icacls` held the right to synchronize, together with the write rights. That right is part of every file or folder open that waits on the result. A deny on it makes the open fail, even for a read. A plain attribute read without a handle worked, and that is why Unity itself ran and the package manager server did not.
 - The Node program of the package manager server opens each parent folder with a handle. So the deny rule caused the stop. The cause was the rule of the spike, and not Unity.
 `[CALL]` Run 11 sets the deny rule from .NET, with each right named and without the right to synchronize. It removes the two grants of runs 9 and 10, because they were not needed. A local test showed that the new rule holds the write rights and the delete rights only.
+`[MEASURED]` Run 11 on 2026-11-07 (UTC), job in mode `lowuser`. All steps passed. The Editor ran as the non-admin user. The public log held no email, token or serial.
+- S10: the low user could not open the memory of the runner processes (access denied). It could not write to the admin scripts, the workspace, the runner temp folder, the runner actions folder, the Editor install, the runner root, its bin folder or its externals folder. It could write to its own license folder only.
+- S11: the probe, the product capture tests (134 of 134), the product shader tests (1415 of 1415) and the research tests (151 of 151) passed. The license return exited with 0. Step times: install 3 minutes, cold import and probe 8 minutes, capture tests 1 minute, shader tests 7 minutes, research tests under 1 minute. D3D11 on the software device and the R8_UNorm readback worked as in run 4.
+- Residue: one file under the low profile holds the email. No file holds the password. The cleanup step deletes the user and its profile.
+`[DECISION]` O6 closes with a pass on 2026-11-07 (UTC). The final design runs the activation, the Editor and the tests as the non-admin user. The admin mode stays as the fallback.
 
 Questions and pass rules:
 
@@ -406,7 +411,8 @@ Five reviewers read the spec and the spike files. These findings need a ruling f
 - O1. `[DECISION]` Accepted. Add `cache-mode: none` to `build-listing.yml` and `release.yml`. This changes two files that N1 left alone. D12 yields to this ruling.
 - O2. `[DECISION]` Accepted. The gate lane commits a SHA-256 for the Unity installer and each locked zip. A bump needs a human edit.
   The canary keeps reading hashes from the publisher. The spike prints the observed installer hash, so the first committed value comes from a reviewed run.
-- O3. `[DECISION]` Deferred by the maintainer until a test. The spike installs VRCFury and records its observed hash. The ruling follows the spike record. Until then, VRCFury stays in the spike only.
+- O3. `[DECISION]` Ruled by the maintainer on 2026-11-07 (UTC). VRCFury stays unhashed. It is the one source in the gate lane without a committed hash, and section 11 lists it as a known limit. The gate still pins its exact version and prints the observed hash in the log.
+- O2b. `[DECISION]` Ruled by the maintainer on 2026-11-07 (UTC). The committed hash lock holds the vendor versions that the maintainer has installed in the dev project. It does not hold the older versions of the committed `locked` block. `[CALL]` The maintainer commits the matching `Packages/vpm-manifest.json` bump first. The plan then generates the hashes from those exact versions. The spike ran on the older block, so the first gate run on the new versions is a new check.
 - O4. `[DECISION]` Accepted as proposed. No required review and no CODEOWNERS file.
 - R1. `[DECISION]` Accepted. `cache-mode: none` in the old workflows lands now, on this branch. See D12.
 - R2. `[DECISION]` Accepted. The `release` Environment limited to `main`, and the tag ruleset. See D12.
