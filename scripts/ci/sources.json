@@ -1,0 +1,27 @@
+{
+  "sources": {
+    "vrchat": "https://vrchat.github.io/packages/index.json",
+    "nadena": "https://vpm.nadena.dev/vpm.json",
+    "poiyomi": "https://poiyomi.github.io/vpm/index.json",
+    "liltoon": "https://lilxyzw.github.io/vpm-repos/vpm.json",
+    "aao": "https://vpm.anatawa12.com/vpm.json",
+    "d4rk": "https://d4rkc0d3r.github.io/vpm-repos/main.json",
+    "vrcfury": "https://vcc.vrcfury.com/",
+    "redsim": "https://redsim.github.io/vpmlisting/index.json",
+    "ltcgi": "https://vpm.pimaker.at/index.json"
+  },
+  "packages": {
+    "nadena.dev.ndmf": "nadena",
+    "nadena.dev.modular-avatar": "nadena",
+    "com.vrchat.base": "vrchat",
+    "com.vrchat.avatars": "vrchat",
+    "com.poiyomi.toon": "poiyomi",
+    "com.poiyomi.thryeditor": "poiyomi",
+    "jp.lilxyzw.liltoon": "liltoon",
+    "com.anatawa12.avatar-optimizer": "aao",
+    "d4rkpl4y3r.d4rkavataroptimizer": "d4rk",
+    "com.vrcfury.vrcfury": "vrcfury",
+    "red.sim.lightvolumes": "redsim",
+    "at.pimaker.ltcgi": "ltcgi"
+  }
+}
