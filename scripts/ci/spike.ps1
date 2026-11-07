@@ -212,6 +212,38 @@ function Show-LogTail([string]$logPath, [int]$count, [string]$label = 'Editor lo
     }
 }
 
+# Spike only. Prints the lines of a log that match a pattern, redacted.
+function Show-LogMatches([string]$logPath, [string]$pattern, [int]$count, [string]$label) {
+    if (-not (Test-Path $logPath)) { Say "- no $label to show"; return }
+    $hits = @(Get-Content -Path $logPath | Where-Object { $_ -match $pattern } | Select-Object -First $count)
+    Say "- $label, $($hits.Count) lines:"
+    foreach ($line in $hits) {
+        $text = [regex]::Replace((Redact ([string]$line)), '\d{6,}', '<num>')
+        if ($text.Length -gt 220) { $text = $text.Substring(0, 220) }
+        Say "  - $text"
+    }
+}
+
+# Spike only. Runs the package manager server of the Editor as the chosen user, by itself.
+# Its own message shows why the server stops.
+function Show-PackageManagerProbe {
+    $server = Get-ChildItem -Path $unityHome -Recurse -Filter 'UnityPackageManager.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $server) { Say '- no UnityPackageManager.exe in the Editor install'; return }
+    $stdoutPath = Join-Path $out 'upm-probe.out'
+    $stderrPath = Join-Path $out 'upm-probe.err'
+    $run = Start-Tool $server.FullName '--version' $stdoutPath $stderrPath 30000
+    Say "- package manager server run by itself, finished: $($run.Finished), exit code: $($run.ExitCode)"
+    foreach ($path in @($stdoutPath, $stderrPath)) {
+        if (Test-Path $path) {
+            foreach ($line in @(Get-Content -Path $path | Select-Object -First 15)) {
+                $text = [regex]::Replace((Redact ([string]$line)), '\d{6,}', '<num>')
+                if ($text.Length -gt 220) { $text = $text.Substring(0, 220) }
+                Say "  - $text"
+            }
+        }
+    }
+}
+
 # Spike only. Prints a small, redacted set of licensing lines. They show why the
 # editor refuses the license. Numbers, ids and emails are removed first.
 function Show-LicenseFacts([string]$logPath) {
@@ -332,6 +364,12 @@ switch ($Phase) {
             if ($LASTEXITCODE -ge 8) { throw "robocopy failed with exit code $LASTEXITCODE." }
             Say "- project copied for the low user, robocopy exit code: $LASTEXITCODE"
             $global:LASTEXITCODE = 0
+            # The Editor and the package manager write to folders under the profile of the user.
+            # The Editor makes these folders only when it uses its default log file.
+            foreach ($folder in @('Unity\Editor', 'Unity\cache')) {
+                New-Item -ItemType Directory -Force -Path (Join-Path (Get-LocalAppData) $folder) | Out-Null
+            }
+            Say '- profile folders for the package manager prepared'
         }
     }
 
@@ -572,7 +610,8 @@ foreach ($t in $targets) {
         if (-not $line) {
             Show-LicenseFacts $log
             Show-LogTail $log 50
-            Show-LogTail (Join-Path (Get-LocalAppData) 'Unity\Editor\upm.log') 40 'package manager log'
+            Show-LogMatches $log 'Package Manager|upm|Upm' 25 'package manager lines of the Editor log'
+            Show-PackageManagerProbe
             $log2 = Join-Path $out 'unity-license-check.log'
             $check = Start-Tool $unityExe "-batchmode -nographics -quit -logFile `"$log2`"" (Join-Path $out 'check.stdout') (Join-Path $out 'check.stderr') 600000
             Say "- no-graphics license check exit code: $($check.ExitCode)"

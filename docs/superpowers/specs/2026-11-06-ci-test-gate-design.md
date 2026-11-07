@@ -299,6 +299,9 @@ Both modes run a probe. The probe tries to open the runner processes with the ri
 - The cause of S11 is the Unity Package Manager. Its local server process stopped with exit code 1. The Editor then could not connect to it after 30 seconds and exited with code 1. The cause of that stop is open. Run 7 prints the log of the package manager.
 - S9, mode `lowuser`: one file under the low user profile holds the email. No file holds the password. No file holds a JWT-shaped token. No process command line held the credentials.
 - `[LIMIT]` A line of the Editor log named the Personal serial of the burner account, with the last group masked by Unity. It reached the public log of run 6. The script now removes serials from every printed line.
+`[MEASURED]` Run 7 on 2026-11-07 (UTC), job in mode `lowuser`. The serial no longer appears in the public log. The result of S11 did not change.
+- The log of the package manager was not at the place where the Editor normally writes it, under the profile of the low user. The package manager server probably stopped before it could write a log.
+`[INFERENCE]` The Editor makes the folder for that log only when it uses its default log file. The spike sets its own log file, and the low user is new, so the folder may not exist. Run 8 makes the folder and also runs the package manager server by itself as the low user, to read its own message.
 
 Questions and pass rules:
 
