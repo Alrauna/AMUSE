@@ -309,6 +309,11 @@ Both modes run a probe. The probe tries to open the runner processes with the ri
 `[MEASURED]` Run 9 on 2026-11-07 (UTC), job in mode `lowuser`. The grant of the right to read attributes and to pass through did not change the result. The package manager server stopped with the same error on the same folder. The S10 results did not change either.
 `[CALL]` Run 10 grants read and execute on the two parent folders, with no inheritance. It also prints the rights of the drive root, the agent folder and the runner temp folder, and it tests whether the low user can read the attributes of each parent folder with a plain call. That shows which right is missing.
 `[INFERENCE]` If run 10 still fails, the plan moves the Editor install out of the agent folder, to a folder that only administrators can write and that the low user can read.
+`[MEASURED]` Run 10 on 2026-11-07 (UTC), job in mode `lowuser`. The package manager server stopped with the same error. The rights list found the cause.
+- The drive root gives the Users group read and execute, and the right to create files and folders. The agent folder and the runner temp folder inherit that. So the low user could already read them, and it needed no grant.
+- The deny rule that the spike set with `icacls` held the right to synchronize, together with the write rights. That right is part of every file or folder open that waits on the result. A deny on it makes the open fail, even for a read. A plain attribute read without a handle worked, and that is why Unity itself ran and the package manager server did not.
+- The Node program of the package manager server opens each parent folder with a handle. So the deny rule caused the stop. The cause was the rule of the spike, and not Unity.
+`[CALL]` Run 11 sets the deny rule from .NET, with each right named and without the right to synchronize. It removes the two grants of runs 9 and 10, because they were not needed. A local test showed that the new rule holds the write rights and the delete rights only.
 
 Questions and pass rules:
 

@@ -74,6 +74,20 @@ function Invoke-Icacls([string[]]$arguments, [string]$label) {
     if ($code -ne 0) { throw "icacls failed for $label." }
 }
 
+# Denies write rights to the low user on a folder and everything below it. The rule names
+# each right on purpose. A deny rule that includes the right to synchronize makes every
+# open of the folder fail, even a read, and the package manager server then stops.
+function Add-DenyWrite([string]$path, [string]$label) {
+    $rights = [Security.AccessControl.FileSystemRights]'WriteData, AppendData, WriteExtendedAttributes, WriteAttributes, DeleteSubdirectoriesAndFiles, Delete'
+    $inherit = [Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit'
+    $rule = New-Object Security.AccessControl.FileSystemAccessRule($lowUser, $rights, $inherit, [Security.AccessControl.PropagationFlags]::None, [Security.AccessControl.AccessControlType]::Deny)
+    $timer = [Diagnostics.Stopwatch]::StartNew()
+    $acl = Get-Acl -LiteralPath $path
+    $acl.AddAccessRule($rule)
+    Set-Acl -LiteralPath $path -AclObject $acl
+    Say "- deny write rule for the low user on $label set, $([int]$timer.Elapsed.TotalSeconds) s"
+}
+
 function Get-LocalAppData {
     if ($mode -eq 'lowuser') { return (Join-Path $env:SystemDrive "Users\$lowUser\AppData\Local") }
     return $env:LOCALAPPDATA
@@ -345,18 +359,14 @@ switch ($Phase) {
             Invoke-Icacls @($lowRoot, '/grant', "${lowUser}:(OI)(CI)M") 'low folder'
             Invoke-Icacls @($licenseDir, '/grant', "${lowUser}:(OI)(CI)M") 'license folder'
             Invoke-Icacls @($unityHome, '/grant', "${lowUser}:(OI)(CI)RX") 'Editor install'
-            $denyRights = '(WD,AD,WEA,WA,D,DC)'
-            Invoke-Icacls @((Split-Path $work -Parent), '/deny', "${lowUser}:(OI)(CI)$denyRights") 'agent work folder deny'
-            # The package manager server is a Node program. Node checks every parent folder of its
-            # script with a stat call. Run 9 showed that the right to read attributes and to pass
-            # through was not enough. Grant read and execute on the two parent folders only, with no
-            # inheritance. The write rules stay. Run 10 lists the rights of these folders.
-            Invoke-Icacls @((Split-Path $work -Parent), '/grant', "${lowUser}:(NP)(RX)") 'agent folder read'
-            Invoke-Icacls @($work, '/grant', "${lowUser}:(NP)(RX)") 'runner temp read'
+            # The deny rules block writes. The Users group already holds read and execute on these
+            # folders, so no grant is needed. Run 10 showed that the deny rule of run 9 had also
+            # blocked the right to synchronize, and that this stopped the package manager server.
+            Add-DenyWrite (Split-Path $work -Parent) 'agent folder'
             $worker = Get-Process -Name 'Runner.Worker' -ErrorAction SilentlyContinue | Select-Object -First 1
             if ($worker -and $worker.Path) {
                 $runnerRoot = Split-Path (Split-Path $worker.Path -Parent) -Parent
-                Invoke-Icacls @($runnerRoot, '/deny', "${lowUser}:(OI)(CI)$denyRights") 'runner folder deny'
+                Add-DenyWrite $runnerRoot 'runner folder'
             }
             else { Say '- no Runner.Worker process found, so the runner folder deny was skipped' }
         }
