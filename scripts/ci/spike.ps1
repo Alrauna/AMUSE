@@ -184,26 +184,38 @@ function Measure-CredentialResidue([string]$email, [string]$password) {
     $profileData = if ($mode -eq 'lowuser') { Join-Path $env:SystemDrive "Users\$lowUser\AppData" } else { Split-Path (Get-LocalAppData) -Parent }
     $roots = @((Join-Path $env:ProgramData 'Unity'), $profileData, $out) | Where-Object { $_ -and (Test-Path $_) }
     $scanned = 0
-    $hits = 0
+    $emailHits = 0
+    $passwordHits = 0
     $tokenHits = 0
     foreach ($rootDir in $roots) {
         $files = @(Get-ChildItem -Path $rootDir -Recurse -File -ErrorAction SilentlyContinue | Where-Object { $_.Length -lt 20MB } | Select-Object -First 3000)
         foreach ($file in $files) {
             $scanned++
-            if (Select-String -Path $file.FullName -SimpleMatch -Pattern $password, $email -Quiet -ErrorAction SilentlyContinue) { $hits++ }
+            if (Select-String -Path $file.FullName -SimpleMatch -Pattern $email -Quiet -ErrorAction SilentlyContinue) { $emailHits++ }
+            if (Select-String -Path $file.FullName -SimpleMatch -Pattern $password -Quiet -ErrorAction SilentlyContinue) { $passwordHits++ }
             if (Select-String -Path $file.FullName -Pattern 'eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}' -Quiet -ErrorAction SilentlyContinue) { $tokenHits++ }
         }
     }
     Say "- files scanned under the Unity data, the profile data and the out folder: $scanned"
-    Say "- files that hold the email or password: $hits, files that hold a JWT-shaped token: $tokenHits"
+    Say "- files that hold the email: $emailHits, files that hold the password: $passwordHits, files that hold a JWT-shaped token: $tokenHits"
+}
+
+# Spike only. Prints the last lines of an Editor log, redacted, when the Editor did not run.
+function Show-LogTail([string]$logPath, [int]$count) {
+    if (-not (Test-Path $logPath)) { Say '- no Editor log to show'; return }
+    Say "- last $count lines of the Editor log:"
+    foreach ($line in @(Get-Content -Path $logPath | Select-Object -Last $count)) {
+        $text = [regex]::Replace((Redact ([string]$line)), '\d{6,}', '<num>')
+        if ($text.Length -gt 220) { $text = $text.Substring(0, 220) }
+        Say "  - $text"
+    }
 }
 
 # Spike only. Prints a small, redacted set of licensing lines. They show why the
 # editor refuses the license. Numbers, ids and emails are removed first.
 function Show-LicenseFacts([string]$logPath) {
     if (-not (Test-Path $logPath)) { return }
-    $pattern = 'error|fail|no valid|not found|activat|expired|invalid|denied|entitle|binding|machine'
-    $hits = @(Get-Content -Path $logPath | Where-Object { $_ -match 'icens' -and $_ -match $pattern } | Select-Object -First 25)
+    $hits = @(Get-Content -Path $logPath | Where-Object { $_ -match 'icens' } | Select-Object -First 40)
     Say "- licensing diagnostics, $($hits.Count) lines:"
     foreach ($hit in $hits) {
         $text = Redact $hit
@@ -491,7 +503,7 @@ switch ($Phase) {
         ConvertTo-Json -InputObject $targets | Set-Content -Path $targetsFile
         $probeScript = Join-Path $out 'probe.ps1'
         $probeBody = @'
-param([string]$TargetsFile)
+param([string]$TargetsFile, [string]$ClientPath)
 $ErrorActionPreference = 'Continue'
 try {
     Add-Type -Namespace Probe -Name Native -MemberDefinition '[DllImport("kernel32.dll", SetLastError=true)] public static extern System.IntPtr OpenProcess(uint access, bool inherit, int pid); [DllImport("kernel32.dll")] public static extern bool CloseHandle(System.IntPtr handle);'
@@ -514,6 +526,10 @@ foreach ($name in 'Runner.Worker', 'Runner.Listener') {
     }
     "$name processes found: $($found.Count), readable for memory: $readable, error codes: $($codes -join ',')"
 }
+if ($ClientPath -and (Test-Path -LiteralPath $ClientPath)) {
+    $sig = Get-AuthenticodeSignature -FilePath $ClientPath
+    "licensing client signature as this user: $($sig.Status)"
+}
 $targets = @(Get-Content -Path $TargetsFile -Raw | ConvertFrom-Json)
 foreach ($t in $targets) {
     $ok = $false
@@ -531,7 +547,9 @@ foreach ($t in $targets) {
         Set-Content -Path $probeScript -Value $probeBody
         $pwsh = (Get-Command pwsh).Source
         $stdoutPath = Join-Path $out 'probe.out'
-        $run = Start-Tool $pwsh "-NoProfile -File `"$probeScript`" -TargetsFile `"$targetsFile`"" $stdoutPath (Join-Path $out 'probe.err') 180000
+        $licensingClient = Find-LicensingClient
+        $clientArgument = if ($licensingClient) { " -ClientPath `"$($licensingClient.FullName)`"" } else { '' }
+        $run = Start-Tool $pwsh "-NoProfile -File `"$probeScript`" -TargetsFile `"$targetsFile`"$clientArgument" $stdoutPath (Join-Path $out 'probe.err') 180000
         Say '## O6 memory read and write probe'
         Say "- mode: $mode, finished: $($run.Finished), exit code: $($run.ExitCode)"
         if (Test-Path $stdoutPath) { Get-Content -Path $stdoutPath | ForEach-Object { Say "- $(Redact $_)" } }
@@ -552,6 +570,7 @@ foreach ($t in $targets) {
         $line = Get-Content -Path $log | Where-Object { $_ -match 'SPIKE-PROBE ' } | Select-Object -First 1
         if (-not $line) {
             Show-LicenseFacts $log
+            Show-LogTail $log 50
             $log2 = Join-Path $out 'unity-license-check.log'
             $check = Start-Tool $unityExe "-batchmode -nographics -quit -logFile `"$log2`"" (Join-Path $out 'check.stdout') (Join-Path $out 'check.stderr') 600000
             Say "- no-graphics license check exit code: $($check.ExitCode)"

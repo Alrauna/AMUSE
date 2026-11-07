@@ -287,6 +287,13 @@ Both modes run a probe. The probe tries to open the runner processes with the ri
 - S9: no process command line held the credentials after activation. A scan of 3001 files under the Unity data folders found no credentials and no JWT-shaped token.
 - S10, admin baseline: the admin account could open both runner processes for memory reads, and it could write to every place that an administrator step runs from.
 `[MEASURED]` The job in mode `lowuser` failed at once in `PrepareMode`. `net user` asked a yes or no question for a password longer than 14 characters and got no answer. The fix is the `/y` switch. Nothing of the credentials was used in that job. Run 5 tests mode `lowuser` only.
+`[MEASURED]` Run 5 on 2026-11-07 (UTC), job in mode `lowuser`.
+- The low user was created and was not an administrator. The licensing client, run as the low user, activated the burner account with exit code 0.
+- S10 passed. The low user got "access denied" when it tried to open the runner worker and the runner listener for memory reads. A control on its own process worked.
+- S10 passed for writes. The low user could not write to the admin scripts folder, the workspace, the runner temp folder, the runner actions folder, the Editor install, the runner root, `bin`, or `externals`. It could write only to the license folder, which the script granted to it.
+- S9 in mode `lowuser`: no process command line held the credentials. One file under the low user profile held the email or the password. The scan did not tell which. The next run counts them separately.
+- S11 failed. The Editor started as the low user exited with code 1 in under a minute, with and without graphics. Its log said that it could not verify the licensing client signature and that no access token was available. It then resolved entitlements and exited. The cause is open.
+- The Editor is the same one that passed in mode `admin`. So the cause is a difference of the user, the environment, or the folder rights. Run 6 prints the last lines of the Editor log and the signature check as the low user.
 
 Questions and pass rules:
 
