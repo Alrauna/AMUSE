@@ -21,9 +21,11 @@ permissions: {}
 # No cache restore and no cache save for any job in this workflow.
 cache-mode: none
 
-# A new push to the same pull request cancels the older run. A cancelled
-# unity job still returns the license and cleans up, because those steps run
-# with if: always(). Runs on main never cancel each other.
+# A new push to the same pull request cancels the older run. A running run
+# on main is never cancelled by a newer run. A cancelled unity job still
+# returns the license and cleans up when the runner still runs the job,
+# because those steps run with if: always(). A hard kill or a lost runner
+# can skip the return step.
 concurrency:
   group: pr-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
@@ -32,7 +34,7 @@ jobs:
   scripts:
     name: scripts
     runs-on: windows-2022
-    timeout-minutes: 15
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
@@ -44,7 +46,8 @@ jobs:
       # A failing test must turn the step red. Pester gives the run result
       # only with the PassThru setting, so the checks below read the counts
       # from the result. A plain -CI run reports zero tests as green, and
-      # zero tests must also be red.
+      # zero tests must also be red. A run where every test is skipped or
+      # not run proves nothing, so it is red too.
       - name: Run the CI script tests
         timeout-minutes: 10
         shell: pwsh
@@ -56,8 +59,7 @@ jobs:
           $config.Output.Verbosity = 'Detailed'
           $result = Invoke-Pester -Configuration $config
           if ($result.FailedCount -gt 0) { exit 1 }
-          $count = $result.PassedCount + $result.FailedCount + $result.SkippedCount + $result.NotRunCount
-          if ($count -lt 1) { throw 'The test run reports zero tests.' }
+          if (($result.PassedCount + $result.FailedCount) -lt 1) { throw 'The test run reports zero passed or failed tests.' }
 
       - name: Check the lock files
         timeout-minutes: 5
@@ -180,7 +182,9 @@ jobs:
         shell: pwsh
         run: ${{ runner.temp }}/admin-scripts/run-tests.ps1 -AsLowUser -Assembly Alrauna.Amuse.Research.Tests.Editor -TimeoutMinutes 55
 
-      # A cancelled run still frees the activation and cleans up.
+      # A cancelled run still frees the activation and cleans up when the
+      # runner still runs the job. A hard kill or a lost runner can skip
+      # this step.
       - name: Return the license
         if: always()
         timeout-minutes: 10

@@ -94,7 +94,9 @@ jobs:
         shell: pwsh
         run: ${{ runner.temp }}/admin-scripts/run-tests.ps1 -AsLowUser -Assembly Alrauna.Amuse.Research.Tests.Editor -TimeoutMinutes 55
 
-      # A cancelled run still frees the activation and cleans up.
+      # A cancelled run still frees the activation and cleans up when the
+      # runner still runs the job. A hard kill or a lost runner can skip
+      # this step.
       - name: Return the license
         if: always()
         timeout-minutes: 10
