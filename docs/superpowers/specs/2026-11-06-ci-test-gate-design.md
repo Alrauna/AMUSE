@@ -1,9 +1,9 @@
 # CI test gate and weekly canary — design
 
-Date: 2026-11-06. Basis: a grilling session between the controller and the user.
-Labels: `[SOURCE]` is a fact read in this tree. `[DECISION]` is a choice the user made.
-`[CALL]` is a choice the author made. The user did not rule on it. `[LIMIT]` is a known limit.
-`[UNVERIFIED]` is a belief that the spike must prove before the design relies on it.
+Date: 2026-11-06. Revised 2026-11-07 (UTC), after two spike runs and a second adversarial review. Basis: a grilling session between the controller and the user.
+Labels: `[SOURCE]` is a fact read in this tree. `[MEASURED]` is an observation from a run or a test in this work. `[REPORT]` is a claim from a third party, read on the date given.
+`[DECISION]` is a choice the user made. `[CALL]` is a choice the author made. The user did not rule on it. `[LIMIT]` is a known limit.
+`[INFERENCE]` is a belief from reasoning that nobody tested. `[UNVERIFIED]` is a belief that the spike must prove before the design relies on it.
 
 This record speaks for its date. It does not authorize code. The implementation plan comes next.
 
@@ -56,7 +56,7 @@ Anti-goals. Each of these makes the work a failure even if the tests pass:
 
 The decision is "maximum paranoia". The user accepts dropping the whole idea if the risk cannot be bounded.
 
-Assets, most valuable first: the maintainer's trust in a green check, the license secret, the repository write token, the release path.
+Assets, most valuable first: the maintainer's trust in a green check, the burner Unity account credentials, the repository write token, the release path.
 
 Attackers:
 
@@ -71,7 +71,7 @@ Facts that shape the design:
 - Test code is arbitrary code. Any job that runs it can read every secret that the job holds.
 - A `pull_request` workflow from an in-repo branch runs the branch's own copy of the workflow file.
 - Hosted runners give no egress control without a third-party tool. `[LIMIT]` Egress cannot be restricted.
-- The only secret in scope is a Unity license. `[UNVERIFIED]` Repository and organization settings cannot be read from the tree.
+- The only secrets in scope are the burner Unity account email and password. `[UNVERIFIED]` Repository and organization settings cannot be read from the tree.
   The repo write token is never given to a Unity step.
 
 ## 5. Approaches
@@ -165,12 +165,20 @@ It does not pass `-nographics`. The step reads the result XML after the run. It 
 - the named assembly did not run,
 - any test failed or errored.
 
-The step writes the counts and the name of each failing test to the job summary. It never passes the license or the token as a command-line argument.
-The script never prints a raw Unity log. The repository is public, so job logs are public. It prints counters and a fixed allowlist of lines.
-A licensing line is counted, never shown. `[LIMIT]` Redaction cannot hide structured data such as the license XML. Hostile code can print it in encoded form.
-The license is a burner, so the response to any licensing anomaly is to rotate it.
-`[UNVERIFIED]` Unity may need the account email and password as well as the license file. They can only be passed as command-line arguments,
-and any local process can read those. If the spike shows that need, the plan stops and asks the maintainer. D5 forbids that route as it stands.
+The step writes the counts and the name of each failing test to the job summary. It never passes a secret as a command-line argument, with one exception: the activation step below.
+The script never prints a raw Unity log or a raw licensing client output. The repository is public, so job logs are public.
+The test steps print counters and a fixed allowlist of lines. The activation step prints a redacted allowlist of client lines.
+`[LIMIT]` Redaction cannot hide structured data. Hostile code can print a secret in encoded form.
+`[MEASURED]` On 2026-11-07 (UTC), run 2 and a local test by the maintainer showed that a Unity Personal license file does not license a new machine.
+Published sources agree that the file is bound to the hardware of the machine that made it. See section 13.
+`[DECISION]` The runner activates with the burner account email and password, through `Unity.Licensing.Client`. This is a change to D5.
+The client takes both values as command-line arguments. The script clears them from its own environment first, and no project and no vendor code runs while the client runs.
+`[CALL]` The script checks the licensing client before it passes the password. The client must sit at the expected path in the Editor install, and Unity Technologies must have signed it.
+The script also accepts only an email of a plain shape and a password of letters and digits. Public reports say other characters break the sign-in.
+`[CALL]` The activation step runs before the vendor packages are on disk. After it, the script counts where the credentials still appear: process command lines and the Unity data folders. It prints counts only.
+`[DECISION]` The maintainer declined a separate account for the canary on 2026-11-07 (UTC). One burner account serves all three Environments. A theft through the canary then reaches the account of the gate.
+`[LIMIT]` Any local process can read a command line. A secret held by a job is also in the memory of the runner process.
+Code that runs later in the same job could read it. See section 11. The account is a burner for this reason.
 A secret goes to the one step that needs it, through an environment variable of that step. It never goes to the job level.
 
 ### D6. Scope of the suites
@@ -201,7 +209,9 @@ This closes the skipped-job path of A3. It does not close the forged-workflow pa
 including releases outside the range that AMUSE supports. A red run reminds the maintainer to update.
 `[DECISION]` The signal is the failed run and the email that GitHub sends. The canary has no write permission and opens no issue.
 `[DECISION]` Pins protect the gate lane only. The canary ignores pins by design. A hijacked new vendor release can run in the canary.
-The damage stays inside the burner Unity account, because the canary has no write token, no cache, and no secret except the license.
+The damage stays inside the burner Unity account and the job that ran. The canary has no write token and no cache. It does hold the account secrets, so section 11 applies.
+`[DECISION]` The canary shares the one burner account of the gate. The maintainer declined a separate canary account. The canary runs unpinned vendor code with the account secrets in the job, so a theft there loses the account of the gate too.
+The local gate is the break-glass for the required check, and the vendor cooldown in O8 lowers the chance.
 
 - The canary job summary lists each package as `name old -> new`.
 - `[CALL]` The canary rewrites the `locked` block of `Packages/vpm-manifest.json` in its own checkout to match what it installed.
@@ -248,18 +258,39 @@ A throwaway workflow on this branch answers the `[UNVERIFIED]` items before any 
 It triggers on `push` to branches that match `ci/**`. A `workflow_dispatch` trigger would work only after the file exists on `main`.
 It runs under `unity-gate` with approval. The result goes into a dated investigation note with no private identifiers.
 
+`[MEASURED]` Run 1 on 2026-11-07 (UTC). S1 passed. The installer md5 matched, the Authenticode signature was valid for Unity Technologies, the install took 5 minutes, and 142 GB of disk was free.
+The package step then failed on a script bug in the dependency check. The 11 packages with a hash route passed their hash check. VRCFury had none.
+`[MEASURED]` Run 2 on 2026-11-07 (UTC), after the fix. S8 passed. The editor then exited with code 1 in under a minute and logged one "no valid license" line.
+So S2 failed: the license file alone did not activate the editor. S3, S4, S5 and S7 could not run, because no editor started.
+`[REPORT]` Published sources read on 2026-11-07 (UTC) show a working route for a Personal license on a clean runner. The Unity Licensing Client activates with the account email and password.
+Run 3 tests that route on a hosted Windows runner. It replaces the license file step with an activation step and adds a return step at the end. It prints only redacted lines. Section 13 lists the sources.
+`[CALL]` Run 3 also logs the client version and its signature result, the video controllers on the runner, the size of the license file, and counts of where the credentials still appear.
+`[DECISION]` The maintainer accepted open decision O6 on 2026-11-07 (UTC). Run 3 is two jobs, one after the other. Each job waits for its own approval.
+Mode `admin` runs the Editor and the tests as the runner account. Mode `lowuser` runs the activation, the Editor and the tests as a new local user that is not an administrator.
+Both modes run a probe. The probe tries to open the runner processes with the right to read memory, and it tests whether it can write to the places that administrator steps run from. It prints counts and yes or no answers only. It reads no memory and it changes no file content.
+`[MEASURED]` A third review on 2026-11-07 (UTC) found that a low user is only a speed bump when an administrator step later runs a file that the low user can write. The workspace and the runner temp folder are such places. The spike therefore does five more things in mode `lowuser`.
+`[CALL]` It copies the scripts to a folder that only administrators can write, and every later step runs that copy.
+`[CALL]` It gives the low user a private copy of the project and the output on its own folder, and no write access to the workspace.
+`[CALL]` It denies the low user write access to the agent work folder and to the runner folder.
+`[CALL]` It points the profile variables of the low user at its own profile and blanks the variables that name runner files and services.
+`[CALL]` It stops every process of the low user and deletes the user at the end.
+`[UNVERIFIED]` Whether the Editor can create a Direct3D 11 device as another user, without a window station and desktop right for that user, is the main risk of S11. The spike logs the session context to settle it.
+
 Questions and pass rules:
 
 | # | Question | Pass rule |
 |---|---|---|
 | S1 | Does the Unity installer download and verify? | Signature valid and checksum equal |
-| S2 | Does the license file alone activate Unity? | Editor starts in batch mode with the file only. If not, record that an account email and password are also needed. See D5 |
+| S2 | Does the Unity Licensing Client activate the burner account on a hosted Windows runner, with email and password only? | The client exits with code 0, then the editor starts in batch mode with no other license input. Record whether the client sits in the Editor install, and whether the return step exits with code 0 |
 | S3 | Does `-force-d3d11` start on a runner with no GPU? | The editor starts and reports a Direct3D 11 device |
 | S4 | Does alpha capture work on that device? | `SystemInfo.supportsAsyncGPUReadback` is true. R8_UNorm is supported for render and read. `UnityAlphaFieldEvidenceTests` pass |
 | S5 | Do Poiyomi and lilToon import and compile their shaders? | No shader error line in any log. The product tests under the `Semantics` namespace pass. The spike runs them and fails a step on any shader error line |
 | S6 | How long does one lane take, how much disk does it use, and does one license work in two jobs at the same time? | Time and free disk recorded. The one-job spike cannot test the concurrency half. D6 holds the fallback if that half fails |
 | S7 | Does the research assembly pass with no private input? | Zero failures, more than zero tests |
 | S8 | Does every package in the locked block have a hash route? | One verified hash per package, or a named gap. Known before the spike: VRCFury has none. The spike records the observed hash for it |
+| S9 | Where do the credentials still appear after the client exits, and does anything keep a session? | Informational. The spike prints counts only. A non-zero count shapes the plan, and no count is a pass or a fail |
+| S10 | Can code that runs as a non-admin local user read the memory of the runner processes, or write to the places that administrator steps run from? | The `lowuser` job reports zero readable runner processes and no writable administrator-run place. The `admin` job reports more than zero readable processes. Any other result is recorded as it is, and a writable administrator-run place means that low-user mode is only a speed bump |
+| S11 | Do the activation, the D3D11 probe and the tests all pass in mode `lowuser`? | Same pass rules as S2 to S7, in a job that runs as the non-admin user |
 
 Outcome table:
 
@@ -268,14 +299,14 @@ Outcome table:
 | S1 to S5 and S7 pass | Build D1 to D11 as written |
 | S3 or S4 fails | The tests that need the device cannot run in CI. Take path D (local gate). Cheap checks only in CI. The record names what CI cannot prove |
 | S8 gap for a vendor | That vendor falls out of CI, or the maintainer approves another check. The plan must name it. VRCFury is the known case. `VendorSuiteStartCheck` treats an absent optional vendor as a recorded fact, so dropping it is allowed by the suite. The VRCFury production-order fixture is opt-in and stays off in CI anyway |
-| S2 needs an account password | Stop and ask the maintainer. A password on a command line is visible to local processes, and D5 forbids it |
+| S2 fails with email and password | Stop and ask the maintainer. The remaining routes are a paid serial or the local gate. Section 13 lists them |
 
 The plan must not build the final workflow until the spike record exists.
 
 ## 8. Failure modes
 
-- The license becomes unusable. Both Unity jobs go red. `validate` goes red. The fix is a new license and a secret update.
-  The local gate stays available.
+- The account becomes unusable, or Unity locks it. Both Unity jobs go red. `validate` goes red. The fix is a new account and new secrets.
+  The local gate stays available, and it is the break-glass for the required check.
 - A vendor changes a package under the same version. The hash check fails the install only when the hash comes from a source that the change did not touch. See the D4 limit.
 - A VPM listing is down. The install fails. The run goes red. A rerun is safe.
 - The Unity installer link moves. The install fails closed.
@@ -293,11 +324,14 @@ The plan must not build the final workflow until the spike record exists.
 
 The maintainer does these. The builder cannot.
 
-1. Make one new Unity account for CI. Use a unique password. Add no payment detail and no asset. Never use the main account.
-2. Activate a free license for that account in the local Unity Hub. Keep the license file. Never commit it.
+1. You already have one burner account, and its password is not stored anywhere. Reset the password from the mailbox of that account.
+   Use a unique password of 20 or more letters and digits. Turn two-factor sign-in off, because a headless sign-in cannot answer a prompt.
+   Give the account its own mailbox at a mail provider that holds nothing else. The mailbox can reset the account, so protect it. Add no payment detail, no asset, no organization, and no phone number that you share with your main accounts.
+   `[REPORT]` Unity links accounts and a block on one account can reach linked ones. So do this on a clean virtual machine or in Windows Sandbox, and not on your own machine.
+2. Sign in to the Unity Hub once with that account on that clean machine, and activate Personal, so the account holds an entitlement. Sign out afterwards.
 3. Create the Environments `unity-gate`, `unity-main` and `unity-canary`. Set allowed refs and reviewers as in D2.
    Turn "Allow administrators to bypass" off on all three. Turn "prevent self-review" off on `unity-gate`.
-4. Add the license file text as the secret `UNITY_LICENSE` in all three Environments.
+4. Add `UNITY_EMAIL` and `UNITY_PASSWORD` to all three Environments with the one account. Delete the old `UNITY_LICENSE` secrets. `[SOURCE]` The maintainer did this on 2026-11-07 (UTC).
 5. Set the repository settings in D3.
 6. Review the spike branch diff. Approve the spike run in the Actions tab.
 
@@ -315,6 +349,16 @@ The maintainer does these. The builder cannot.
 - `validate` is not a trust boundary. A PR can rewrite `pr.yml` so that `validate` passes. The test verdict is also computed inside the VM that runs vendor code.
   The maintainer reads the diff before merging. Nothing else stops a forged result.
 - GitHub may disable scheduled workflows after a long period without repository activity. `[UNVERIFIED]` The canary could stop without notice.
+- `[LIMIT]` The burner account password can be stolen. The job holds it, and the runner process keeps every secret of the job in memory.
+  Any code that runs later in the same job, such as a vendor package or a test, could read it. A reviewer click does not prevent this when the code is hostile.
+  The pins and hashes of the gate lane lower the chance. The canary lane raises it, because it runs unpinned vendor code with the same kind of secrets.
+  The account must hold nothing worth taking. A theft costs a new account and new secrets. The maintainer accepts this risk or takes the local gate.
+- `[LIMIT]` The Unity account and Unity's rules can change without notice. `[REPORT]` Unity enforced two-factor sign-in for accounts that enabled it in 2026. Two-factor sign-in being off may stop working.
+  A headless activation breaks then. The local gate stays a live exit.
+- `[LIMIT]` Many sign-ins from one account in a short time can be throttled by Unity. The spike and the lanes must not run in parallel on one account. A concurrency group that does not cancel serializes them.
+- `[INFERENCE]` The password can be read from the memory of the runner process by any code in the job. Running the Editor and the tests as a second, non-admin Windows user could stop that.
+  Nobody tested that on a hosted runner. The licensing pipe is per user, so activation and the Editor must both run as that user. The default rights of folders on the runner could still let the low user plant a file that a later administrator step runs. Open decision O6 covers it.
+- A stolen account password costs one throwaway account. The maintainer can revoke it fast. The maintainer cannot promise that code in the licensed job cannot take it.
 
 ## 12. Open decisions after the adversarial review of 2026-11-06
 
@@ -328,3 +372,17 @@ Five reviewers read the spec and the spike files. These findings need a ruling f
 - R1. `[DECISION]` Accepted. `cache-mode: none` in the old workflows lands now, on this branch. See D12.
 - R2. `[DECISION]` Accepted. The `release` Environment limited to `main`, and the tag ruleset. See D12.
 - R3. `[DECISION]` Deferred. Replacing the four third-party actions in `release.yml`.
+- O5. `[DECISION]` Declined on 2026-11-07 (UTC). No second GitHub account as reviewer. A stolen token of the maintainer account could approve its own run.
+- O6. `[DECISION]` Accepted on 2026-11-07 (UTC) as a spike. See section 7, S10 and S11. The result decides whether the final design runs the Editor as a non-admin user.
+- O7. Open. The maintainer asked what it buys. Answer: little on top of O6. The broker would move the password out of GitHub storage and would release it once per run. The password would still be in the memory of the runner process after release. It adds a service to host and a second place that holds the password. Not adopted.
+- O8. `[DECISION]` Accepted on 2026-11-07 (UTC). The canary skips vendor releases that are younger than 24 to 48 hours. `[CALL]` The plan uses 48 hours. It works only for sources that show a release date, and it is partial for the others.
+
+## 13. Sources for the account-based activation
+
+`[REPORT]` Read on 2026-11-07 (UTC). These are third-party reports, not tests of this repository.
+
+- Unity manual for 2022.3, "Manage your license through the command line". The command-line route works for Plus and Pro serials only. Personal uses the Hub.
+- A public write-up dated 2026-07-17 that used Unity 2022.3.22f1. A license file is bound to the machine, and the error says the machine bindings do not match. Activation worked with email and password on a Linux runner.
+- The `Unity.Licensing.Client` route, as used by two public GitHub tools: the client runs with `--activate-ulf`, the account email and password, and `--include-personal`. It runs `--return-ulf` to free the activation.
+- Unity's own CLI cannot activate Personal without a browser. A service account has no Personal entitlement.
+- `[UNVERIFIED]` No source shows this on a hosted Windows runner with this Editor version. Run 3 is the test.

@@ -1,8 +1,8 @@
 # THROWAWAY. Step 0 of docs/superpowers/specs/2026-11-06-ci-test-gate-design.md.
-# It answers the spike questions S1 to S8 except the concurrency half of S6.
+# It answers the spike questions S1 to S11 except the concurrency half of S6.
 # It is deleted once the spike record exists. It runs only on pushes to ci/**
-# branches. The Environment holds the license and waits for the maintainer to
-# approve each run. Read the full diff, including scripts/, before approving.
+# branches. The Environment holds the burner account secrets and waits for the
+# maintainer to approve each run. Read the full diff, including scripts/, first.
 name: CI Spike
 
 on:
@@ -18,10 +18,21 @@ cache-mode: none
 
 concurrency:
   group: ci-spike-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   spike:
+    name: spike (${{ matrix.mode }})
+    # Two jobs, one after the other. Each job waits for its own approval.
+    # Mode admin runs the Editor as the runner account. Mode lowuser runs it as a
+    # local user that is not an administrator. Open decision O6 asks which is safe.
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        mode: [admin, lowuser]
+    env:
+      SPIKE_MODE: ${{ matrix.mode }}
     runs-on: windows-2022
     timeout-minutes: 300
     environment: unity-gate
@@ -38,58 +49,89 @@ jobs:
         shell: pwsh
         run: ./scripts/ci/spike.ps1 -Phase InstallUnity
 
+      # This step copies the scripts to a folder that only administrators can write.
+      # Every later step runs that copy, because the workspace may hold code that ran
+      # as the low user.
+      - name: Prepare the run mode
+        timeout-minutes: 30
+        shell: pwsh
+        run: ./scripts/ci/spike.ps1 -Phase PrepareMode
+
+      # Only this step sees the account secrets. The script removes them from its
+      # environment before it starts the licensing client. No vendor package is on
+      # disk yet, and no project is open, while the password is on a command line.
+      - name: S2 activate license
+        timeout-minutes: 20
+        shell: pwsh
+        env:
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        run: ${{ runner.temp }}/admin-scripts/spike.ps1 -Phase ActivateLicense
+
       - name: S8 install vendor packages
         timeout-minutes: 30
         shell: pwsh
-        run: ./scripts/ci/spike.ps1 -Phase InstallPackages
+        run: ${{ runner.temp }}/admin-scripts/spike.ps1 -Phase InstallPackages
 
-      # Only this step sees the secret.
-      - name: S2 place license
+      - name: Prepare the project for the run mode
+        timeout-minutes: 15
         shell: pwsh
-        env:
-          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
-        run: ./scripts/ci/spike.ps1 -Phase PlaceLicense
+        run: ${{ runner.temp }}/admin-scripts/spike.ps1 -Phase PrepareProject
+
+      - name: O6 memory read and write probe
+        timeout-minutes: 10
+        continue-on-error: true
+        shell: pwsh
+        run: ${{ runner.temp }}/admin-scripts/spike.ps1 -Phase MemoryProbe
 
       - name: S3 S4 S5 probe the graphics device
         id: probe
-        timeout-minutes: 120
+        timeout-minutes: 115
         continue-on-error: true
         shell: pwsh
-        run: ./scripts/ci/spike.ps1 -Phase Probe
+        run: ${{ runner.temp }}/admin-scripts/spike.ps1 -Phase Probe
 
       - name: S4 capture tests on the product assembly
         id: capture
         timeout-minutes: 60
         continue-on-error: true
         shell: pwsh
-        run: ./scripts/ci/spike.ps1 -Phase ProductCaptureTests
+        run: ${{ runner.temp }}/admin-scripts/spike.ps1 -Phase ProductCaptureTests
 
       - name: S5 shader frontend tests on the product assembly
         id: shaders
         timeout-minutes: 90
         continue-on-error: true
         shell: pwsh
-        run: ./scripts/ci/spike.ps1 -Phase ProductShaderTests
+        run: ${{ runner.temp }}/admin-scripts/spike.ps1 -Phase ProductShaderTests
 
       - name: S7 research assembly
         id: research
         timeout-minutes: 60
         continue-on-error: true
         shell: pwsh
-        run: ./scripts/ci/spike.ps1 -Phase ResearchTests
+        run: ${{ runner.temp }}/admin-scripts/spike.ps1 -Phase ResearchTests
 
-      - name: Remove license
+      - name: Return license
+        if: always()
+        timeout-minutes: 5
+        shell: pwsh
+        run: ${{ runner.temp }}/admin-scripts/spike.ps1 -Phase ReturnLicense
+
+      - name: Remove license file and the low user
         if: always()
         shell: pwsh
-        run: ./scripts/ci/spike.ps1 -Phase Cleanup
+        run: ${{ runner.temp }}/admin-scripts/spike.ps1 -Phase Cleanup
 
       - name: Verdict
+        if: always()
         shell: pwsh
         env:
           PROBE: ${{ steps.probe.outcome }}
           CAPTURE: ${{ steps.capture.outcome }}
           SHADERS: ${{ steps.shaders.outcome }}
           RESEARCH: ${{ steps.research.outcome }}
+          MODE: ${{ matrix.mode }}
         run: |
-          "### Spike verdict`n- probe: $env:PROBE`n- capture tests: $env:CAPTURE`n- shader tests: $env:SHADERS`n- research tests: $env:RESEARCH" | Add-Content $env:GITHUB_STEP_SUMMARY
+          "### Spike verdict, mode $env:MODE`n- probe: $env:PROBE`n- capture tests: $env:CAPTURE`n- shader tests: $env:SHADERS`n- research tests: $env:RESEARCH" | Add-Content $env:GITHUB_STEP_SUMMARY
           if ("$env:PROBE$env:CAPTURE$env:SHADERS$env:RESEARCH" -ne "successsuccesssuccesssuccess") { exit 1 }
