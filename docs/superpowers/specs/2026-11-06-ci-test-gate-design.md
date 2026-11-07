@@ -174,7 +174,8 @@ Published sources agree that the file is bound to the hardware of the machine th
 `[DECISION]` The runner activates with the burner account email and password, through `Unity.Licensing.Client`. This is a change to D5.
 The client takes both values as command-line arguments. The script clears them from its own environment first, and no project and no vendor code runs while the client runs.
 `[CALL]` The script checks the licensing client before it passes the password. The client must sit at the expected path in the Editor install, and Unity Technologies must have signed it.
-The script also accepts only an email of a plain shape and a password of letters and digits. Public reports say other characters break the sign-in.
+The script also accepts only an email of a plain shape, and a password with no quote and no space. No shell reads the command line, so other special characters are allowed.
+`[REPORT]` Two public sources advise against special characters: a game-ci troubleshooting page and a 2022 Unity forum thread. Both describe runs through a shell. The spike shows whether Unity itself refuses any of them.
 `[CALL]` The activation step runs before the vendor packages are on disk. After it, the script counts where the credentials still appear: process command lines and the Unity data folders. It prints counts only.
 `[DECISION]` The maintainer declined a separate account for the canary on 2026-11-07 (UTC). One burner account serves all three Environments. A theft through the canary then reaches the account of the gate.
 `[LIMIT]` Any local process can read a command line. A secret held by a job is also in the memory of the runner process.
@@ -325,7 +326,7 @@ The plan must not build the final workflow until the spike record exists.
 The maintainer does these. The builder cannot.
 
 1. You already have one burner account, and its password is not stored anywhere. Reset the password from the mailbox of that account.
-   Use a unique password of 20 or more letters and digits. Turn two-factor sign-in off, because a headless sign-in cannot answer a prompt.
+   Use a unique password of 20 or more characters with no quote and no space. Unity may force a special character. That is fine. Turn two-factor sign-in off, because a headless sign-in cannot answer a prompt.
    Give the account its own mailbox at a mail provider that holds nothing else. The mailbox can reset the account, so protect it. Add no payment detail, no asset, no organization, and no phone number that you share with your main accounts.
    `[REPORT]` Unity links accounts and a block on one account can reach linked ones. So do this on a clean virtual machine or in Windows Sandbox, and not on your own machine.
 2. Sign in to the Unity Hub once with that account on that clean machine, and activate Personal, so the account holds an entitlement. Sign out afterwards.

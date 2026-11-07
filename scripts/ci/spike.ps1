@@ -324,13 +324,17 @@ switch ($Phase) {
     'ActivateLicense' {
         # The licensing client takes the account email and password as command-line
         # arguments. Both secrets leave this process environment before the client starts.
-        $email = $env:UNITY_EMAIL
-        $password = $env:UNITY_PASSWORD
+        $email = ([string]$env:UNITY_EMAIL).Trim()
+        $password = ([string]$env:UNITY_PASSWORD).Trim()
         Remove-Item Env:UNITY_EMAIL -ErrorAction SilentlyContinue
         Remove-Item Env:UNITY_PASSWORD -ErrorAction SilentlyContinue
         if ([string]::IsNullOrWhiteSpace($email) -or [string]::IsNullOrWhiteSpace($password)) { throw 'UNITY_EMAIL or UNITY_PASSWORD is empty.' }
         if ($email -notmatch '^[A-Za-z0-9._+-]+@[A-Za-z0-9.-]+$') { throw 'UNITY_EMAIL has an unexpected shape.' }
-        if ($password -notmatch '^[A-Za-z0-9]+$') { throw 'UNITY_PASSWORD must use only letters and digits.' }
+        # No shell reads this command line, so most special characters are safe.
+        # A quote or a space would end the quoted argument early, so stop on those.
+        if ($password -match '["\s]') {
+            throw "UNITY_PASSWORD must not hold a quote or a space. Has a quote: $($password.Contains('"')). Has whitespace inside: $($password -match '\s')."
+        }
         $client = Find-LicensingClient
         if (-not $client) { throw 'Unity.Licensing.Client.exe was not found in the Editor install.' }
         Assert-UnitySigned $client.FullName
@@ -339,7 +343,9 @@ switch ($Phase) {
         Say "- licensing client version: $($client.VersionInfo.ProductVersion), signed by Unity Technologies: True"
         $outFile = Join-Path $out 'license-client.out'
         $errFile = Join-Path $out 'license-client.err'
-        $arguments = "--activate-ulf --username `"$email`" --password `"$password`" --include-personal"
+        # A backslash at the end of the password would escape the closing quote, so double it.
+        $quotedPassword = [regex]::Replace($password, '(\\+)$', '$1$1')
+        $arguments = "--activate-ulf --username `"$email`" --password `"$quotedPassword`" --include-personal"
         $run = Start-Tool $client.FullName $arguments $outFile $errFile 600000
         $finished = $run.Finished
         $exitCode = $run.ExitCode
