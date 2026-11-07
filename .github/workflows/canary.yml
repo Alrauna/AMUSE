@@ -1,7 +1,8 @@
 # The canary floats the vendor packages to their newest stable releases.
 # It runs once a week and on a manual start. It never gates a merge and it
 # never edits the repository. It holds no write permission. A red run is
-# the signal that a vendor moved.
+# the signal that a vendor moved. A canary that waits behind a gate run
+# still runs after it.
 name: Canary
 
 on:
@@ -24,11 +25,13 @@ jobs:
     permissions:
       contents: read
     # One license account serves the whole repository. Licensed jobs sign in
-    # one after the other. A queued job waits here instead of cancelling a
-    # running licensed job.
+    # one after the other. A run that waits in the group stays in line and
+    # runs in order, up to 100 waiting runs. If the queue is full, extra
+    # runs are cancelled. A waiting run never cancels the running job.
     concurrency:
       group: unity-license
       cancel-in-progress: false
+      queue: max
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
