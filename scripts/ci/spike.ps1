@@ -208,7 +208,7 @@ switch ($Phase) {
             if (-not (Test-Path $packageJsonPath)) { continue }
             $packageJson = Get-Content -Path $packageJsonPath -Raw | ConvertFrom-Json
             if ($packageJson.PSObject.Properties['vpmDependencies']) {
-                foreach ($dependency in $packageJson.vpmDependencies.PSObject.Properties.Name) {
+                foreach ($dependency in @($packageJson.vpmDependencies.PSObject.Properties | ForEach-Object { $_.Name })) {
                     if ($lockedNames -notcontains $dependency) { $missing += "$($package.Name) needs $dependency" }
                 }
             }
@@ -217,7 +217,7 @@ switch ($Phase) {
         # Keep git-fetched tooling and Linux toolchains out of the CI project.
         $unityManifestPath = Join-Path $root 'Packages/manifest.json'
         $unityManifest = Get-Content -Path $unityManifestPath -Raw | ConvertFrom-Json
-        foreach ($name in @($unityManifest.dependencies.PSObject.Properties.Name)) {
+        foreach ($name in @($unityManifest.dependencies.PSObject.Properties | ForEach-Object { $_.Name })) {
             if ($name -eq 'com.coplaydev.unity-mcp' -or $name -like 'com.unity.toolchain.*') {
                 $unityManifest.dependencies.PSObject.Properties.Remove($name)
             }
