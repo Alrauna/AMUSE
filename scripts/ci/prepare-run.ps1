@@ -25,7 +25,7 @@ if ($MyInvocation.InvocationName -ne '.') {
     Add-DenyWrite (Split-Path $paths.Work -Parent) 'agent folder'
     $worker = Get-Process -Name 'Runner.Worker' -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($worker -and $worker.Path) {
-        $runnerRoot = Split-Path (Split-Path $worker.Path -Parent) -Parent
+        $runnerRoot = Get-RunnerRoot -WorkerPath $worker.Path
         Add-DenyWrite $runnerRoot 'runner folder'
     }
     else { Say '- no Runner.Worker process found, so the runner folder deny was skipped' }

@@ -62,7 +62,10 @@ function New-ReleaseZip([string]$packagePath, [string]$zipPath) {
         $files = @(Get-ChildItem -LiteralPath $packagePath -Recurse -File | Sort-Object FullName)
         foreach ($file in $files) {
             $entryName = [IO.Path]::GetRelativePath($packagePath, $file.FullName).Replace('\', '/')
-            if ($entryName -like 'Tests/*' -or $entryName -ceq 'Tests.meta') { continue }
+            # The release step drops the top-level Tests folder with a
+            # case-sensitive pattern. The check must drop exactly the same
+            # entries, so a lowercase tests folder stays in the zip.
+            if ($entryName -cmatch '^Tests/' -or $entryName -ceq 'Tests.meta') { continue }
             # The static call, because PowerShell does not resolve the
             # extension method on the archive instance.
             [void][IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $file.FullName, $entryName)

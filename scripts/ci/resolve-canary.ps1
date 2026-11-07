@@ -57,9 +57,10 @@ function Resolve-ListingEntry($listing, [string]$name, [string]$version) {
 }
 
 # Returns the entry of one package version and stops when it is missing.
+# The message can hold text from a listing, so it passes through Redact.
 function Get-VersionEntryOrThrow($listing, [string]$name, [string]$version) {
     $entry = Resolve-ListingEntry $listing $name $version
-    if (-not $entry) { throw "$name $version is not in its own named listing." }
+    if (-not $entry) { throw (Redact "$name $version is not in its own named listing.") }
     return $entry
 }
 
@@ -79,7 +80,7 @@ function Get-VersionNames($listing, [string]$name) {
 # Same helper as in install-packages.ps1.
 function Get-PackageSourceKey([string]$name, $sources) {
     $property = $sources.packages.PSObject.Properties[$name]
-    if (-not $property) { throw "No source key is named for the package: $name" }
+    if (-not $property) { throw (Redact "No source key is named for the package: $name") }
     return [string]$property.Value
 }
 
@@ -157,8 +158,9 @@ function Select-CanaryVersion($versions, [datetimeoffset]$now, [int]$cooldownHou
 # Returns the release date of one listing entry and the route that gave it.
 # The route is listing when the entry holds a date field, github when the
 # entry holds a GitHub release url, and none when no route exists. The
-# GitHub call is unauthenticated and reads the date of one release.
-function Get-ReleaseDate($entry) {
+# GitHub call is unauthenticated and reads the date of one release. The
+# name of the package is only for the warning line when the lookup fails.
+function Get-ReleaseDate($entry, [string]$name) {
     foreach ($fieldName in 'date', 'published', 'releaseDate') {
         $property = $entry.PSObject.Properties[$fieldName]
         if ($property -and $property.Value) {
@@ -179,8 +181,10 @@ function Get-ReleaseDate($entry) {
             }
         }
         catch {
-            # A release that the API cannot find gives no date. The cooldown
-            # then does not apply. The plan says none for the package.
+            # The lookup failed, so the route stays none and the version is
+            # kept. The run must say why the cooldown did not apply. One
+            # redacted line names the package.
+            Say (Redact "- warning: the release date lookup for $name failed. The 48 hour cooldown was skipped for this package.")
         }
     }
     return @{ Date = $null; Source = 'none' }
@@ -198,12 +202,12 @@ function Get-CanaryChoice($listing, [string]$name, $stableNames, [datetimeoffset
         $choice = Select-CanaryVersion $stableNames $now $cooldownHours $dates
         if (-not $choice.Version) {
             $skippedText = @($choice.Skipped) -join ', '
-            throw ("No stable version of " + $name + " passed the cooldown of " + $cooldownHours +
-                " hours. Skipped: " + $skippedText)
+            throw (Redact ("No stable version of " + $name + " passed the cooldown of " + $cooldownHours +
+                " hours. Skipped: " + $skippedText))
         }
         $entry = Get-VersionEntryOrThrow $listing $name $choice.Version
         if (-not $routes.ContainsKey($choice.Version)) {
-            $routes[$choice.Version] = Get-ReleaseDate $entry
+            $routes[$choice.Version] = Get-ReleaseDate $entry $name
         }
         $route = $routes[$choice.Version]
         if ($choice.DateSource -eq 'none' -and $route.Source -eq 'none') {
@@ -232,8 +236,8 @@ function Assert-PlanDependencies($plan, [string[]]$planNames) {
         foreach ($depProperty in @($depsProperty.Value.PSObject.Properties)) {
             $depName = [string]$depProperty.Name
             if ($planNames -notcontains $depName) {
-                throw ("The chosen version of " + $item.Name + " needs the dependency " +
-                    $depName + ", and " + $depName + " is not in the plan.")
+                throw (Redact ("The chosen version of " + $item.Name + " needs the dependency " +
+                    $depName + ", and " + $depName + " is not in the plan."))
             }
         }
     }
@@ -280,7 +284,7 @@ function Update-LockedVersions([string]$manifestText, $versionsByName) {
 
     foreach ($name in $versionsByName.Keys) {
         if (-not $found.ContainsKey($name)) {
-            throw "The name $name is not in the locked block of the manifest."
+            throw (Redact "The name $name is not in the locked block of the manifest.")
         }
     }
     return $result.ToString()
@@ -333,13 +337,13 @@ if ($MyInvocation.InvocationName -ne '.') {
     foreach ($property in $lockedEntries) {
         $name = $property.Name
         $versionProperty = $property.Value.PSObject.Properties['version']
-        if (-not $versionProperty) { throw "The locked entry of $name has no version." }
+        if (-not $versionProperty) { throw (Redact "The locked entry of $name has no version.") }
         $old = [string]$versionProperty.Value
 
         $sourceKey = Get-PackageSourceKey $name $sources
         $listing = Get-ListingFromCache $sourceKey $sources $listings
         $stableNames = @(Get-StableVersions (Get-VersionNames $listing $name))
-        if ($stableNames.Count -lt 1) { throw "The package $name has no stable version in its listing." }
+        if ($stableNames.Count -lt 1) { throw (Redact "The package $name has no stable version in its listing.") }
 
         $outcome = Get-CanaryChoice $listing $name $stableNames $now $cooldownHours
         $new = [string]$outcome.Choice.Version
@@ -348,7 +352,7 @@ if ($MyInvocation.InvocationName -ne '.') {
 
         $urlProperty = $outcome.Entry.PSObject.Properties['url']
         if (-not $urlProperty -or -not ([string]$urlProperty.Value)) {
-            throw "The chosen version of $name has no download url in its listing entry."
+            throw (Redact "The chosen version of $name has no download url in its listing entry.")
         }
         $url = [string]$urlProperty.Value
 

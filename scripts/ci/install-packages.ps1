@@ -46,10 +46,11 @@ function Resolve-ListingEntry($listing, [string]$name, [string]$version) {
 }
 
 # Same as Resolve-ListingEntry but stops the job when the entry is missing.
-# The message names the package so a vendor regression is easy to see.
+# The message names the package so a vendor regression is easy to see. The
+# message can hold vendor text, so it passes through Redact.
 function Get-ListingEntryOrThrow($listing, [string]$name, [string]$version) {
     $entry = Resolve-ListingEntry $listing $name $version
-    if (-not $entry) { throw "$name $version is not in its own named listing." }
+    if (-not $entry) { throw (Redact "$name $version is not in its own named listing.") }
     return $entry
 }
 
@@ -57,7 +58,7 @@ function Get-ListingEntryOrThrow($listing, [string]$name, [string]$version) {
 # no key is named, so an unknown package can never pick a random listing.
 function Get-PackageSourceKey([string]$name, $sources) {
     $property = $sources.packages.PSObject.Properties[$name]
-    if (-not $property) { throw "No source key is named for the package: $name" }
+    if (-not $property) { throw (Redact "No source key is named for the package: $name") }
     return [string]$property.Value
 }
 
@@ -66,7 +67,7 @@ function Get-PackageSourceKey([string]$name, $sources) {
 function Get-ListingFromCache([string]$key, $sources, $cache) {
     if (-not $cache.ContainsKey($key)) {
         $urlProperty = $sources.sources.PSObject.Properties[$key]
-        if (-not $urlProperty) { throw "No listing url is named for the source key: $key" }
+        if (-not $urlProperty) { throw (Redact "No listing url is named for the source key: $key") }
         $cache[$key] = Get-Json ([string]$urlProperty.Value)
     }
     return $cache[$key]
@@ -109,7 +110,7 @@ function Get-GatePackages($lock) {
         $entry = $property.Value
         $versionProperty = $entry.PSObject.Properties['version']
         if (-not $versionProperty -or -not ([string]$versionProperty.Value)) {
-            throw "The lock entry has no version for $name."
+            throw (Redact "The lock entry has no version for $name.")
         }
         $expected = $null
         $hashProperty = $entry.PSObject.Properties['sha256']
@@ -119,7 +120,7 @@ function Get-GatePackages($lock) {
         if (-not $expected) {
             $reasonProperty = $entry.PSObject.Properties['unhashedReason']
             if (-not $reasonProperty -or -not ([string]$reasonProperty.Value)) {
-                throw "The lock entry for $name has no hash and no unhashedReason."
+                throw (Redact "The lock entry for $name has no hash and no unhashedReason.")
             }
         }
         $result += [pscustomobject]@{
@@ -140,15 +141,37 @@ function New-PackageRow([string]$name, [string]$version, [string]$sourceKey, [st
     return "$prefix$verified |"
 }
 
+# Redacts one failure line but keeps a plain SHA-256 shape readable. Only a
+# run of exactly 64 lowercase hex digits passes through, because that is the
+# shape of the zip hashes that the maintainer compares on a mismatch. Every
+# other part of the line goes through Redact.
+function Redact-KeepingHash([string]$line) {
+    $hashes = @([regex]::Matches($line, '(?<![0-9a-fA-F])[0-9a-f]{64}(?![0-9a-fA-F])') | ForEach-Object { $_.Value })
+    $masked = $line
+    for ($i = 0; $i -lt $hashes.Count; $i++) {
+        $masked = $masked.Replace($hashes[$i], "[[amuse-hash$i]]")
+    }
+    $redacted = Redact $masked
+    for ($i = 0; $i -lt $hashes.Count; $i++) {
+        $redacted = $redacted.Replace("[[amuse-hash$i]]", $hashes[$i])
+    }
+    return $redacted
+}
+
 # Computes the SHA-256 of a downloaded zip and compares it with the expected
 # hash. Stops with the package name on a mismatch. An empty expected hash
 # means that the caller has no route, so the observed hash is returned for
-# the log and nothing is compared.
+# the log and nothing is compared. The mismatch message keeps a hash that
+# matches the plain SHA-256 shape readable, so the maintainer can compare
+# the two values in the public log. Any other text in the message is
+# redacted, and the failure line is redacted again in the loop catch.
 function Assert-ZipHash([string]$path, [string]$expected, [string]$name) {
-    if (-not (Test-Path -LiteralPath $path)) { throw "The downloaded zip is missing for $name." }
+    if (-not (Test-Path -LiteralPath $path)) { throw (Redact "The downloaded zip is missing for $name.") }
     $observed = (Get-FileHash -Algorithm SHA256 -LiteralPath $path).Hash.ToLowerInvariant()
     if ($expected -and $observed -ne $expected.ToLowerInvariant()) {
-        throw "hash mismatch for ${name}: expected $expected, observed $observed"
+        $expectedShape = if ($expected -cmatch '^[0-9a-f]{64}$') { $expected } else { '<redacted>' }
+        $observedShape = if ($observed -cmatch '^[0-9a-f]{64}$') { $observed } else { '<redacted>' }
+        throw "hash mismatch for $(Redact $name): expected $expectedShape, observed $observedShape"
     }
     return $observed
 }
@@ -288,14 +311,14 @@ if ($MyInvocation.InvocationName -ne '.') {
                     $entry = Get-ListingEntryOrThrow $listing $name $version
                     $urlProperty = $entry.PSObject.Properties['url']
                     if (-not $urlProperty -or -not ([string]$urlProperty.Value)) {
-                        throw "$name $version has no download url in its listing entry."
+                        throw (Redact "$name $version has no download url in its listing entry.")
                     }
                     $url = [string]$urlProperty.Value
                     $route = 'lock'
                 }
                 else {
                     $url = $item.Url
-                    if (-not $url) { throw "$name $version has no download url in the plan." }
+                    if (-not $url) { throw (Redact "$name $version has no download url in the plan.") }
                     $entry = Resolve-ListingEntry $listing $name $version
                     if (-not $entry) { $entry = [pscustomobject]@{ url = $url } }
                     $publisher = Get-PublisherHash $entry
@@ -310,7 +333,7 @@ if ($MyInvocation.InvocationName -ne '.') {
                 Install-ExtractedZip -Zip $zip -Name $name -ProjectPath $ProjectPath
             }
             catch {
-                $failures += Redact "$name $version failed: $($_.Exception.Message)"
+                $failures += Redact-KeepingHash "$name $version failed: $($_.Exception.Message)"
                 Say (New-PackageRow $name $version $sourceKey $route 'no')
             }
         }

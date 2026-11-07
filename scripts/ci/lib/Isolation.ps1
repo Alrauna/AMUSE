@@ -229,6 +229,17 @@ function Assert-LicensingClientSubject($signature, [string]$expectedSubject) {
     }
 }
 
+# Derives the runner root folder from the path of the Runner.Worker process.
+# The root is the grandparent folder of the worker executable. Returns
+# nothing when no usable path is given. The -WorkerPath parameter is the
+# seam that the tests use, so no process starts here.
+function Get-RunnerRoot([string]$WorkerPath) {
+    if (-not $WorkerPath) { return $null }
+    $parent = Split-Path $WorkerPath -Parent
+    if (-not $parent) { return $null }
+    return Split-Path $parent -Parent
+}
+
 # Builds the list of places that the probe tests. The license folder is the
 # one place where the low user may write. Every other place is a place that
 # an administrator step runs from, so the low user must not write there.
@@ -245,7 +256,7 @@ function Get-ProbeTargets {
     )
     $worker = Get-Process -Name 'Runner.Worker' -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($worker -and $worker.Path) {
-        $runnerRoot = Split-Path (Split-Path $worker.Path -Parent) -Parent
+        $runnerRoot = Get-RunnerRoot -WorkerPath $worker.Path
         $targets += @(
             @{ Label = 'runner root'; Path = $runnerRoot; AllowWrite = $false }
             @{ Label = 'runner bin'; Path = (Join-Path $runnerRoot 'bin'); AllowWrite = $false }

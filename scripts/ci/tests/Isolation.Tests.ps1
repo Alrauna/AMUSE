@@ -15,12 +15,18 @@ Describe 'Isolation library' {
         foreach ($name in 'Get-RunPaths', 'New-DenyWriteRule', 'Add-DenyWrite', 'Get-LowCredential',
             'New-LowUser', 'Grant-LowAccess', 'Get-LowEnvironment', 'Start-AsLowUser', 'Stop-Tree',
             'Stop-LowUserProcesses', 'Remove-LowUser', 'Copy-AdminScripts', 'Find-LicensingClient',
-            'Assert-LicensingClientSubject', 'Get-ProbeTargets', 'Get-IsolationVerdict') {
+            'Assert-LicensingClientSubject', 'Get-ProbeTargets', 'Get-IsolationVerdict', 'Get-RunnerRoot') {
             Get-Command $name -ErrorAction Stop | Out-Null
         }
 
         $tempDir = Join-Path ([IO.Path]::GetTempPath()) "amuse-isolation-tests-$PID"
         New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
+    }
+
+    AfterAll {
+        if (Get-Variable -Name tempDir -ErrorAction SilentlyContinue) {
+            Remove-Item -LiteralPath $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
     }
 
     It 'RunPathsDeriveFromTheEnvironment' {
@@ -192,11 +198,22 @@ Describe 'Isolation library' {
             Should -Throw '*Some Other Company*'
     }
 
+    It 'RunnerRootIsTheGrandparentOfTheWorkerExecutable' {
+        # The runner root sits two folders above the worker executable. The
+        # -WorkerPath parameter is the seam, so no process starts here. A
+        # missing path returns nothing.
+        $fakeWorker = Join-Path (Join-Path (Join-Path $tempDir 'fake-runner') 'bin') 'Runner.Worker.exe'
+        Get-RunnerRoot -WorkerPath $fakeWorker | Should -Be (Join-Path $tempDir 'fake-runner')
+        Get-RunnerRoot -WorkerPath '' | Should -BeNullOrEmpty
+    }
+
     It 'EntryScriptsSetErrorPreferenceToStopInTheRunBody' {
         # The fail fast contract of the spike lives in the run body of every
         # entry script. It must not sit in a library, because dot-sourcing a
         # library must not change the behavior of a test process.
-        foreach ($name in 'prepare-run.ps1', 'prepare-project.ps1', 'license.ps1', 'isolation-probe.ps1', 'cleanup.ps1') {
+        foreach ($name in 'prepare-run.ps1', 'prepare-project.ps1', 'license.ps1', 'isolation-probe.ps1', 'cleanup.ps1',
+            'run-tests.ps1', 'install-unity.ps1', 'install-packages.ps1', 'resolve-canary.ps1',
+            'check-lock.ps1', 'check-release-exclusion.ps1', 'new-lock.ps1') {
             $text = Get-Content -LiteralPath (Join-Path $PSScriptRoot "../$name") -Raw
             $guardAt = $text.IndexOf("InvocationName -ne '.'")
             $guardAt | Should -BeGreaterThan -1

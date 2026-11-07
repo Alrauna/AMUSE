@@ -58,6 +58,12 @@ Describe 'Unity install' {
         }
     }
 
+    AfterAll {
+        if (Get-Variable -Name tempDir -ErrorAction SilentlyContinue) {
+            Remove-Item -LiteralPath $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
     It 'WrongSha256Throws' {
         $badLock = @{ unity = @{
             installerSha256 = ('f' * 64)
@@ -129,15 +135,22 @@ Describe 'Unity install' {
             Set-Content -LiteralPath $OutFile -Value 'downloaded installer bytes'
         }
         Mock Assert-UnityInstaller { }
-        Mock Invoke-UnityInstaller {
-            param($InstallerPath, $TargetDir)
-            New-Item -ItemType Directory -Force -Path (Join-Path $TargetDir 'Editor') | Out-Null
-            Set-Content -LiteralPath (Join-Path $TargetDir 'Editor\Unity.exe') -Value 'unity exe'
+        # The real Invoke-UnityInstaller runs, so the process arguments reach
+        # the Start-Process seam. The mock creates the Editor binary that
+        # Install-Unity checks afterwards.
+        Mock Start-Process {
+            param($FilePath, $ArgumentList, $Wait)
+            $target = [string](@($ArgumentList | Where-Object { $_ -like '/D=*' })[0]).Substring(3)
+            New-Item -ItemType Directory -Force -Path (Join-Path $target 'Editor') | Out-Null
+            Set-Content -LiteralPath (Join-Path $target 'Editor\Unity.exe') -Value 'unity exe'
         }
         $targetDir = Join-Path $tempDir 'target'
         Install-Unity -Lock $lockFixture -TargetDir $targetDir -WorkDir $tempDir
         Test-Path -LiteralPath (Join-Path $targetDir 'Editor\Unity.exe') | Should -BeTrue
         Test-Path -LiteralPath $installerPath | Should -BeFalse
-        Should -Invoke Invoke-UnityInstaller -Exactly -Times 1 -Scope It
+        # The silent switch is part of the contract. A dropped /S fails here.
+        Should -Invoke Start-Process -Exactly -Times 1 -Scope It -ParameterFilter {
+            @($ArgumentList).Count -eq 2 -and @($ArgumentList)[0] -ceq '/S' -and @($ArgumentList)[1] -like '/D=*'
+        }
     }
 }

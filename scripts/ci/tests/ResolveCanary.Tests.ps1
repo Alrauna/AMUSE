@@ -89,6 +89,12 @@ Describe 'Canary resolver' {
 '@
     }
 
+    AfterAll {
+        if (Get-Variable -Name tempDir -ErrorAction SilentlyContinue) {
+            Remove-Item -LiteralPath $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
     It 'PicksHighestStableVersion' {
         $result = Select-CanaryVersion @('1.2.3', '2.0.0', '1.9.9') $now
         $result.Version | Should -Be '2.0.0'
@@ -180,5 +186,36 @@ Describe 'Canary resolver' {
         { Update-LockedManifest -Path $path -Versions @{ 'com.example.missing' = '1.0.0' } } |
             Should -Throw '*not in the locked block*'
         Get-Content -LiteralPath $path -Raw | Should -BeExactly $manifestExpected
+    }
+
+    It 'VersionEntryThrowSplitsDoubleColonsInTheName' {
+        # The thrown message can hold vendor text, so it passes through
+        # Redact. A name that holds a double colon can then never act as a
+        # workflow command, and the dotted name stays readable.
+        $emptyListing = (@'
+{
+  "packages": {}
+}
+'@ | ConvertFrom-Json)
+        { Get-VersionEntryOrThrow $emptyListing 'com::evil.pkg' '1.0.0' } |
+            Should -Throw '*com: :evil.pkg*'
+    }
+
+    It 'FailedDateLookupPrintsAWarningAndNamesThePackage' {
+        # The GitHub date lookup can fail on a rate limit, on a missing
+        # release, or on the network. The route stays none and the version
+        # stays, but the run must say why the cooldown did not apply.
+        Mock Invoke-RestMethod { throw 'The request failed.' }
+        $captured = New-Object System.Collections.Generic.List[string]
+        Mock Say { param([string]$text) $captured.Add($text) }
+        $entry = (@'
+{ "url": "https://github.com/example-owner/example-repo/releases/download/1.0.0/com.example.alpha.zip" }
+'@ | ConvertFrom-Json)
+        $route = Get-ReleaseDate $entry 'com.example.alpha'
+        $route.Source | Should -Be 'none'
+        $route.Date | Should -BeNullOrEmpty
+        $captured.Count | Should -Be 1
+        $captured[0] | Should -BeLike '*com.example.alpha*'
+        $captured[0] | Should -BeLike '*cooldown*'
     }
 }

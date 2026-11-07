@@ -100,4 +100,27 @@ Describe 'Release exclusion check' {
         $names | Should -Contain 'Runtime/x.cs'
         @(Test-ReleaseZip $names).Count | Should -Be 0
     }
+
+    It 'BuilderKeepsALowercaseTestsFolder' {
+        # The builder drops the top-level Tests folder only. The gate zip
+        # must keep a lowercase tests folder, because the release step keeps
+        # it too. The case-sensitive check makes both behave the same.
+        $package = Join-Path $tempRoot 'lower-package'
+        New-Item -ItemType Directory -Path (Join-Path $package 'Editor') -Force | Out-Null
+        New-Item -ItemType Directory -Path (Join-Path $package 'tests') -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $package 'Editor/Alrauna.Amuse.Editor.asmdef') -Value '{ "name": "x" }'
+        Set-Content -LiteralPath (Join-Path $package 'tests/lower.cs') -Value 'class L {}'
+
+        $zipPath = Join-Path $tempRoot 'lower-package.zip'
+        New-ReleaseZip -PackagePath $package -ZipPath $zipPath
+        $zip = [IO.Compression.ZipFile]::OpenRead($zipPath)
+        try {
+            $names = @($zip.Entries | ForEach-Object { $_.FullName })
+        } finally {
+            $zip.Dispose()
+        }
+        $names | Should -Contain 'tests/lower.cs'
+        $names | Should -Contain 'Editor/Alrauna.Amuse.Editor.asmdef'
+        @(Test-ReleaseZip $names).Count | Should -Be 0
+    }
 }

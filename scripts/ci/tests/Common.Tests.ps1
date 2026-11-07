@@ -41,6 +41,21 @@ Describe 'Common library' {
   <test-suite type="SetUpFixture" name="AMUSE.Product.Tests" />
 </test-run>
 '@
+
+        # Unity can write the assembly suite name as a full path. The two
+        # suites here use a forward-slash path and a backslash path. Neither
+        # fixture name holds a machine identity.
+        $xmlPathStyleRun = @'
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<test-run total="2" passed="2" failed="0" skipped="0" inconclusive="0">
+  <test-suite type="Assembly" name="/agents/work/job/AMUSE.Product.Tests.dll" fullname="/agents/work/job/AMUSE.Product.Tests.dll">
+    <test-case fullname="AMUSE.Product.Tests.OrderTests.Sends_Order" result="Passed" />
+  </test-suite>
+  <test-suite type="Assembly" name="job\AMUSE.Research.Tests.dll" fullname="job\AMUSE.Research.Tests.dll">
+    <test-case fullname="AMUSE.Research.Tests.SampleTests.Samples_One" result="Passed" />
+  </test-suite>
+</test-run>
+'@
     }
 
     AfterAll {
@@ -122,6 +137,22 @@ Describe 'Common library' {
         It 'ReadNUnitResultThrowsOnMissingFile' {
             Get-Command Read-NUnitResult -ErrorAction Stop | Out-Null
             { Read-NUnitResult (Join-Path $resultsDir 'missing-run.xml') } | Should -Throw
+        }
+
+        It 'ReadNUnitResultReducesAPathStyleAssemblyNameToItsLeaf' {
+            # Unity can write the assembly suite name as a full path with
+            # forward or back separators. The reader must keep the leaf name
+            # without the .dll suffix.
+            $path = Write-ResultFile 'path-style-run.xml' $xmlPathStyleRun
+            $result = Read-NUnitResult $path
+            @($result.Assemblies) | Should -Be @('AMUSE.Product.Tests', 'AMUSE.Research.Tests')
+        }
+
+        It 'AssertTestRunAcceptsAPathStyleAssemblyName' {
+            $path = Write-ResultFile 'path-style-run.xml' $xmlPathStyleRun
+            $result = Read-NUnitResult $path
+            Assert-TestRun $result 'AMUSE.Product.Tests' 0
+            Assert-TestRun $result 'amuse.research.tests' 0
         }
     }
 

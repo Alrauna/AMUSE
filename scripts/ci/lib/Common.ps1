@@ -57,14 +57,18 @@ function ConvertTo-LicensingArguments([string]$email, [string]$password) {
 }
 
 # Reads a NUnit 3 result file. The root element is test-run. Returns the
-# counters, the full names of the failed tests, and the names of the assembly
-# suites without the .dll suffix. Throws when the file is missing.
+# counters, the full names of the failed tests, and the leaf names of the
+# assembly suites without the .dll suffix. Unity can write the assembly
+# suite name as a full path with forward or back separators, so only the
+# part after the last separator stays. Throws when the file is missing.
 function Read-NUnitResult([string]$xmlPath) {
     if (-not (Test-Path $xmlPath)) { throw 'The result file is missing.' }
     [xml]$xml = Get-Content -Path $xmlPath -Raw
     $run = $xml.'test-run'
     $failed = @($xml.SelectNodes("//test-case[@result='Failed']") | ForEach-Object { $_.fullname })
-    $assemblies = @($xml.SelectNodes("//test-suite[@type='Assembly']") | ForEach-Object { ([string]$_.name) -replace '\.dll$', '' })
+    $assemblies = @($xml.SelectNodes("//test-suite[@type='Assembly']") | ForEach-Object {
+        (([string]$_.name) -replace '^.*[/\\]', '') -replace '\.dll$', ''
+    })
     return [pscustomobject]@{
         Total = [int]$run.total
         Passed = [int]$run.passed
@@ -82,9 +86,9 @@ function Format-FailedTestLine([string]$fullName) {
     return Redact "  - FAILED $fullName"
 }
 
-# Fails closed on a run that proves nothing. Zero tests, an assembly that is
-# not in the result file, any failed test, any inconclusive test, zero passed
-# tests, or a non-zero Editor exit code stops the run.
+# Fails closed on a run that proves nothing. Zero tests, an assembly whose
+# leaf name is not in the result file, any failed test, any inconclusive
+# test, zero passed tests, or a non-zero Editor exit code stops the run.
 function Assert-TestRun($result, [string]$assembly, [int]$unityExit) {
     if ($result.Total -lt 1) { throw 'The test run has zero tests.' }
     if (@($result.Assemblies) -notcontains $assembly) { throw "The assembly is not in the result file: $assembly" }

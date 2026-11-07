@@ -95,6 +95,8 @@ function Install-Unity($lock, [string]$targetDir, [string]$workDir) {
 }
 
 if ($MyInvocation.InvocationName -ne '.') {
+    $ErrorActionPreference = 'Stop'
+    $ProgressPreference = 'SilentlyContinue'
     $lockPath = Join-Path $PSScriptRoot 'lock.json'
     $lock = Get-Content -Path $lockPath -Raw | ConvertFrom-Json
     $work = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [IO.Path]::GetTempPath() }

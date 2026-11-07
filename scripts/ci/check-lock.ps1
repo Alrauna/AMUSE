@@ -3,6 +3,7 @@
 # Dot-source this file to get Test-LockMatchesManifest. Run the file directly
 # to check the repository files. The direct run exits 1 and prints one line
 # per difference. A matching lock prints nothing and exits 0.
+Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot 'lib/Common.ps1')
 
 # Returns one line per difference. An empty list means the lock matches.
@@ -19,7 +20,6 @@ function Test-LockMatchesManifest {
         [string]$VersionFilePath,
         [string]$SourcesPath
     )
-    Set-StrictMode -Version Latest
     $differences = @()
 
     $lock = Get-Content -Path $LockPath -Raw | ConvertFrom-Json
@@ -84,6 +84,8 @@ function Test-LockMatchesManifest {
 
 if ($MyInvocation.InvocationName -ne '.') {
     Set-StrictMode -Version Latest
+    $ErrorActionPreference = 'Stop'
+    $ProgressPreference = 'SilentlyContinue'
     $repoLock = Join-Path $PSScriptRoot 'lock.json'
     if (-not (Test-Path $repoLock)) {
         Say 'lock check failed: the lock file is missing.'

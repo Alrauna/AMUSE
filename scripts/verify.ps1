@@ -75,16 +75,20 @@ if ($MyInvocation.InvocationName -ne '.') {
 
     # Warning, not an error: the clone misses these uncommitted changes.
     $dirty = @(& git -C $root diff HEAD --name-only -- scripts .github 'Packages/com.alrauna.amuse' 'Packages/vpm-manifest.json')
-    if ($dirty.Count -gt 0) {
+    if ($LASTEXITCODE -ne 0) {
+        Say 'warning: reading the changed files failed, so the warning below can be incomplete.'
+    }
+    elseif ($dirty.Count -gt 0) {
         Say 'warning: the working tree has uncommitted changes in the gate folders. The clone does not include them.'
     }
 
     $clonePath = Join-Path ([IO.Path]::GetTempPath()) "amuse-verify-$PID"
-    Say 'cloning the committed state into a new folder under the system temp folder.'
-    & git clone --quiet --no-hardlinks -- $root $clonePath
-    if ($LASTEXITCODE -ne 0) { throw 'Cloning the repository failed.' }
 
     try {
+        Say 'cloning the committed state into a new folder under the system temp folder.'
+        & git clone --quiet --no-hardlinks -- $root $clonePath
+        if ($LASTEXITCODE -ne 0) { throw 'Cloning the repository failed.' }
+
         $cloneCi = Join-Path $clonePath 'scripts/ci'
 
         # The Unity version comes from the lock file of the clone.

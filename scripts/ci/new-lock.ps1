@@ -12,18 +12,14 @@
 # an installed Editor, and this script downloads the installer only. The lock
 # therefore stores the installer signer subject for both subject values, and
 # the maintainer confirms the client subject after an Editor install.
+#
+# Run it directly. Dot-sourcing it runs nothing and gives no run behavior.
 param(
     [string]$Out
 )
 
 Set-StrictMode -Version Latest
-$ErrorActionPreference = 'Stop'
-$ProgressPreference = 'SilentlyContinue'
 . (Join-Path $PSScriptRoot 'lib/Common.ps1')
-
-$root = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
-$work = Join-Path ([IO.Path]::GetTempPath()) "amuse-new-lock-$PID"
-New-Item -ItemType Directory -Path $work -Force | Out-Null
 
 # Some listings start with a byte order mark. Invoke-RestMethod would then
 # return a string, so the raw body is decoded first.
@@ -211,31 +207,42 @@ function Show-LockDiff($newLock, $committedLock) {
     foreach ($line in $changes) { Say (Redact $line) }
 }
 
-try {
-    $unity = New-UnityLock
-    $packages = New-PackageLock
-    $newLock = [ordered]@{
-        unity = $unity
-        licensingClientSubject = $unity.signerSubject
-        packages = $packages
-    }
+# The run body sits inside the dot-source guard. Running the file directly
+# keeps the old behavior. Dot-sourcing the file runs nothing.
+if ($MyInvocation.InvocationName -ne '.') {
+    $ErrorActionPreference = 'Stop'
+    $ProgressPreference = 'SilentlyContinue'
 
-    $committedPath = Join-Path $PSScriptRoot 'lock.json'
-    $committedLock = $null
-    if (Test-Path $committedPath) {
-        $committedLock = Get-Content -Path $committedPath -Raw | ConvertFrom-Json
-    }
-    Show-LockDiff $newLock $committedLock
+    $root = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
+    $work = Join-Path ([IO.Path]::GetTempPath()) "amuse-new-lock-$PID"
+    New-Item -ItemType Directory -Path $work -Force | Out-Null
 
-    if ($Out) {
-        $json = ConvertTo-Json -InputObject $newLock -Depth 6
-        Set-Content -Path $Out -Value $json -Encoding utf8
-        Say "wrote the lock to $Out"
+    try {
+        $unity = New-UnityLock
+        $packages = New-PackageLock
+        $newLock = [ordered]@{
+            unity = $unity
+            licensingClientSubject = $unity.signerSubject
+            packages = $packages
+        }
+
+        $committedPath = Join-Path $PSScriptRoot 'lock.json'
+        $committedLock = $null
+        if (Test-Path $committedPath) {
+            $committedLock = Get-Content -Path $committedPath -Raw | ConvertFrom-Json
+        }
+        Show-LockDiff $newLock $committedLock
+
+        if ($Out) {
+            $json = ConvertTo-Json -InputObject $newLock -Depth 6
+            Set-Content -Path $Out -Value $json -Encoding utf8
+            Say "wrote the lock to $Out"
+        }
+        else {
+            Say 'no -Out path was given. No file was written.'
+        }
     }
-    else {
-        Say 'no -Out path was given. No file was written.'
+    finally {
+        Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
     }
-}
-finally {
-    Remove-Item -LiteralPath $work -Recurse -Force -ErrorAction SilentlyContinue
 }

@@ -92,6 +92,32 @@ Describe 'Install packages' {
             Assert-ZipHash -Path $zipPath -Expected $zipHash -Name 'alpha.dev.pack' |
                 Should -Be $zipHash
         }
+
+        It 'HashMismatchMessageKeepsBothHashesAndSplitsTheName' {
+            # The failure line of the install loop redacts everything except
+            # a plain SHA-256 shape. A mismatch must then keep both hashes
+            # readable for the maintainer, and a name with a double colon
+            # must still lose it.
+            $notTheZipHash = 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2'
+            $caught = $null
+            try { Assert-ZipHash -Path $zipPath -Expected $notTheZipHash -Name 'com::evil.pkg' }
+            catch { $caught = $_ }
+            $caught | Should -Not -BeNullOrEmpty
+            $line = Redact-KeepingHash "com::evil.pkg 1.0.0 failed: $($caught.Exception.Message)"
+            $line | Should -Match $notTheZipHash
+            $line | Should -Match ([regex]::Escape($zipHash))
+            $line | Should -Not -Match '::'
+            $line | Should -BeLike '*com: :evil.pkg*'
+        }
+
+        It 'RedactKeepingHashStillRedactsOtherLongHex' {
+            # Only a run of exactly 64 lowercase hex digits passes through.
+            # A longer run stays redacted.
+            $line = "com.pkg 1.0.0 failed: token $('z9' * 40)"
+            $out = Redact-KeepingHash $line
+            $out | Should -Match '<token>'
+            $out | Should -Not -Match 'z9z9'
+        }
     }
 
     Context 'Listing resolution' {
@@ -100,6 +126,14 @@ Describe 'Install packages' {
                 Should -BeNullOrEmpty
             { Get-ListingEntryOrThrow -Listing $listing -Name 'missing.pkg' -Version '1.0.0' } |
                 Should -Throw '*missing.pkg*'
+        }
+
+        It 'ListingEntryThrowSplitsDoubleColonsInTheName' {
+            # The thrown message can hold vendor text, so it passes through
+            # Redact. A name that holds a double colon can then never act as
+            # a workflow command, and the dotted name stays readable.
+            { Get-ListingEntryOrThrow -Listing $listing -Name 'com::evil.pkg' -Version '1.0.0' } |
+                Should -Throw '*com: :evil.pkg*'
         }
 
         It 'ResolveListingEntryFindsVersionEntry' {
