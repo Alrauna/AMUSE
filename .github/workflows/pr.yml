@@ -1,22 +1,255 @@
-# The 0.1.0 release-candidate version series has arrived. This gate
-# remains a deliberate branch-protection placeholder: removing it needs
-# the required-check change first, or branch protection loses its gate.
+# This workflow is the merge gate for pull requests and for pushes to main.
+# The scripts job tests the CI scripts. The cheap job checks the changed
+# lines for whitespace problems and checks the release package. The unity
+# job installs the locked Editor, activates the license and runs the product
+# and research tests as a local low-privilege user. A maintainer approves
+# every unity-gate run before it starts. That approval is the trust boundary
+# of this gate. It means the maintainer read the full change first. The
+# fork-notice job asks the maintainer to move a fork change to a branch in
+# this repository. The validate job turns all results into one check.
 name: PR Check
 
 on:
   pull_request:
-  workflow_dispatch:
+  push:
+    branches:
+      - main
 
-# No secrets are exposed to pull_request runs; this caps the token read-only
-# regardless of repo defaults.
-permissions:
-  contents: read
+# No secrets and no token scope by default. Each job asks for what it needs.
+permissions: {}
+
+# No cache restore and no cache save for any job in this workflow.
+cache-mode: none
+
+# A new push to the same pull request cancels the older run. A cancelled
+# unity job still returns the license and cleans up, because those steps run
+# with if: always(). Runs on main never cancel each other.
+concurrency:
+  group: pr-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
+  scripts:
+    name: scripts
+    runs-on: windows-2022
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      # A failing test must turn the step red. Pester gives the run result
+      # only with the PassThru setting, so the checks below read the counts
+      # from the result. A plain -CI run reports zero tests as green, and
+      # zero tests must also be red.
+      - name: Run the CI script tests
+        timeout-minutes: 10
+        shell: pwsh
+        run: |
+          Import-Module Pester -MinimumVersion 5.0 -MaximumVersion 5.99
+          $config = New-PesterConfiguration
+          $config.Run.Path = 'scripts/ci/tests'
+          $config.Run.PassThru = $true
+          $config.Output.Verbosity = 'Detailed'
+          $result = Invoke-Pester -Configuration $config
+          if ($result.FailedCount -gt 0) { exit 1 }
+          $count = $result.PassedCount + $result.FailedCount + $result.SkippedCount + $result.NotRunCount
+          if ($count -lt 1) { throw 'The test run reports zero tests.' }
+
+      - name: Check the lock files
+        timeout-minutes: 5
+        shell: pwsh
+        run: ./scripts/ci/check-lock.ps1
+
+  cheap:
+    name: cheap
+    runs-on: windows-2022
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Check the changed lines for whitespace problems
+        timeout-minutes: 5
+        shell: pwsh
+        env:
+          PR_BASE: ${{ github.base_ref }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # The base branch name and the earlier commit id arrive through the
+          # environment. They never appear in this script text.
+          if ($env:GITHUB_EVENT_NAME -eq 'pull_request') {
+              if (-not $env:PR_BASE) { throw 'The pull request names no base branch.' }
+              $base = "refs/remotes/origin/$($env:PR_BASE)"
+          }
+          else {
+              if (-not $env:PUSH_BEFORE) { throw 'The push event names no earlier commit.' }
+              if ($env:PUSH_BEFORE -eq '0000000000000000000000000000000000000000') {
+                  # The branch has no earlier commit. The empty tree stands in.
+                  $base = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
+              }
+              else { $base = $env:PUSH_BEFORE }
+          }
+          git rev-parse --verify --quiet "$base"
+          if ($LASTEXITCODE -ne 0) { throw 'The base commit is missing from the checkout.' }
+          git diff --check "$base" HEAD
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Output 'No whitespace problems in the changed lines.'
+
+      - name: Check the release package
+        timeout-minutes: 5
+        shell: pwsh
+        run: ./scripts/ci/check-release-exclusion.ps1
+
+  unity:
+    name: unity
+    needs: [scripts, cheap]
+    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id) && github.actor != 'dependabot[bot]'
+    runs-on: windows-2022
+    timeout-minutes: 300
+    environment: ${{ github.event_name == 'push' && 'unity-main' || 'unity-gate' }}
+    permissions:
+      contents: read
+    # One license account serves the whole repository. Licensed jobs sign in
+    # one after the other. A queued job waits here instead of cancelling a
+    # running licensed job.
+    concurrency:
+      group: unity-license
+      cancel-in-progress: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Install Unity
+        timeout-minutes: 20
+        shell: pwsh
+        run: ./scripts/ci/install-unity.ps1
+
+      # This step copies the scripts to a folder that only administrators can
+      # write. Every later step runs that copy, because the workspace may hold
+      # code that ran as the low user.
+      - name: Prepare the run as a low-privilege user
+        timeout-minutes: 10
+        shell: pwsh
+        run: ./scripts/ci/prepare-run.ps1
+
+      # Only this step sees the account secrets.
+      - name: Activate the license
+        timeout-minutes: 20
+        shell: pwsh
+        env:
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        run: ${{ runner.temp }}/admin-scripts/license.ps1 -Action Activate
+
+      - name: Install the vendor packages
+        timeout-minutes: 30
+        shell: pwsh
+        run: ${{ runner.temp }}/admin-scripts/install-packages.ps1 -Mode gate -ProjectPath ${{ github.workspace }}
+
+      - name: Prepare the project for the low user
+        timeout-minutes: 15
+        shell: pwsh
+        run: ${{ runner.temp }}/admin-scripts/prepare-project.ps1
+
+      - name: Probe the isolation of the low user
+        timeout-minutes: 10
+        shell: pwsh
+        run: ${{ runner.temp }}/admin-scripts/isolation-probe.ps1
+
+      - name: Run the product tests
+        timeout-minutes: 60
+        shell: pwsh
+        run: ${{ runner.temp }}/admin-scripts/run-tests.ps1 -AsLowUser -Assembly Alrauna.Amuse.Tests.Editor -TimeoutMinutes 55
+
+      - name: Run the research tests
+        timeout-minutes: 60
+        shell: pwsh
+        run: ${{ runner.temp }}/admin-scripts/run-tests.ps1 -AsLowUser -Assembly Alrauna.Amuse.Research.Tests.Editor -TimeoutMinutes 55
+
+      # A cancelled run still frees the activation and cleans up.
+      - name: Return the license
+        if: always()
+        timeout-minutes: 10
+        shell: pwsh
+        run: ${{ runner.temp }}/admin-scripts/license.ps1 -Action Return
+
+      - name: Clean up the low user and the license file
+        if: always()
+        timeout-minutes: 10
+        shell: pwsh
+        run: ${{ runner.temp }}/admin-scripts/cleanup.ps1
+
+  fork-notice:
+    name: fork-notice
+    if: github.event_name == 'pull_request' && (github.event.pull_request.head.repo.id != github.repository_id || github.actor == 'dependabot[bot]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Ask the maintainer to use a branch in this repository
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          echo "The Unity gate does not run on this change."
+          echo "The change comes from a fork or from Dependabot."
+          echo "Fork runs get no secrets, so the gate cannot work here."
+          echo "Push this change to a branch in this repository."
+          echo "Then open the pull request from that branch."
+          exit 1
+
   validate:
     name: validate
+    needs: [scripts, cheap, unity, fork-notice]
+    if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
     steps:
-      # No checkout: nothing from the PR is ever executed.
-      - name: Placeholder gate
-        run: echo "No-op check; real CI arrives with the 0.1.0 release candidate."
+      # No checkout. Nothing from the pull request runs here.
+      - name: Decide the gate verdict
+        timeout-minutes: 5
+        shell: pwsh
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: |
+          # GitHub counts a skipped job as a passing check. This function
+          # closes that path. It turns every bad job result into one problem
+          # line. The gate passes only when the list of problems is empty.
+          function Get-ValidateVerdict($needs) {
+              $problems = @()
+              $expected = [ordered]@{
+                  'scripts'     = 'success'
+                  'cheap'       = 'success'
+                  'unity'       = 'success'
+                  'fork-notice' = 'skipped'
+              }
+              foreach ($name in $expected.Keys) {
+                  $property = $needs.PSObject.Properties[$name]
+                  if ($null -eq $property) {
+                      $problems += "job result missing: $name"
+                      continue
+                  }
+                  $actual = [string]$property.Value.result
+                  if ($actual -cne $expected[$name]) {
+                      $problems += "$name result is '$actual', expected '$($expected[$name])'"
+                  }
+              }
+              return $problems
+          }
+          $needs = $env:NEEDS_JSON | ConvertFrom-Json
+          $problems = @(Get-ValidateVerdict $needs)
+          foreach ($problem in $problems) { Write-Output "gate problem: $problem" }
+          if ($problems.Count -gt 0) { exit 1 }
+          Write-Output 'The gate passes.'
