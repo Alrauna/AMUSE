@@ -348,10 +348,11 @@ switch ($Phase) {
             $denyRights = '(WD,AD,WEA,WA,D,DC)'
             Invoke-Icacls @((Split-Path $work -Parent), '/deny', "${lowUser}:(OI)(CI)$denyRights") 'agent work folder deny'
             # The package manager server is a Node program. Node checks every parent folder of its
-            # script with a stat call, and that needs the right to read attributes. Grant that right
-            # and the right to pass through, on the two parent folders only. It gives no right to list or read.
-            Invoke-Icacls @((Split-Path $work -Parent), '/grant', "${lowUser}:(NP)(RA,X)") 'agent folder traverse'
-            Invoke-Icacls @($work, '/grant', "${lowUser}:(NP)(RA,X)") 'runner temp traverse'
+            # script with a stat call. Run 9 showed that the right to read attributes and to pass
+            # through was not enough. Grant read and execute on the two parent folders only, with no
+            # inheritance. The write rules stay. Run 10 lists the rights of these folders.
+            Invoke-Icacls @((Split-Path $work -Parent), '/grant', "${lowUser}:(NP)(RX)") 'agent folder read'
+            Invoke-Icacls @($work, '/grant', "${lowUser}:(NP)(RX)") 'runner temp read'
             $worker = Get-Process -Name 'Runner.Worker' -ErrorAction SilentlyContinue | Select-Object -First 1
             if ($worker -and $worker.Path) {
                 $runnerRoot = Split-Path (Split-Path $worker.Path -Parent) -Parent
@@ -547,7 +548,7 @@ switch ($Phase) {
         ConvertTo-Json -InputObject $targets | Set-Content -Path $targetsFile
         $probeScript = Join-Path $out 'probe.ps1'
         $probeBody = @'
-param([string]$TargetsFile, [string]$ClientPath)
+param([string]$TargetsFile, [string]$ClientPath, [string]$Ancestors)
 $ErrorActionPreference = 'Continue'
 try {
     Add-Type -Namespace Probe -Name Native -MemberDefinition '[DllImport("kernel32.dll", SetLastError=true)] public static extern System.IntPtr OpenProcess(uint access, bool inherit, int pid); [DllImport("kernel32.dll")] public static extern bool CloseHandle(System.IntPtr handle);'
@@ -574,6 +575,11 @@ if ($ClientPath -and (Test-Path -LiteralPath $ClientPath)) {
     $sig = Get-AuthenticodeSignature -FilePath $ClientPath
     "licensing client signature as this user: $($sig.Status)"
 }
+foreach ($a in @($Ancestors -split ';')) {
+    if (-not $a) { continue }
+    try { $attributes = [IO.File]::GetAttributes($a); "parent folder, read attributes, ${a}: ok ($attributes)" }
+    catch { "parent folder, read attributes, ${a}: failed, $($_.Exception.GetType().Name)" }
+}
 $targets = @(Get-Content -Path $TargetsFile -Raw | ConvertFrom-Json)
 foreach ($t in $targets) {
     $ok = $false
@@ -593,7 +599,17 @@ foreach ($t in $targets) {
         $stdoutPath = Join-Path $out 'probe.out'
         $licensingClient = Find-LicensingClient
         $clientArgument = if ($licensingClient) { " -ClientPath `"$($licensingClient.FullName)`"" } else { '' }
-        $run = Start-Tool $pwsh "-NoProfile -File `"$probeScript`" -TargetsFile `"$targetsFile`"$clientArgument" $stdoutPath (Join-Path $out 'probe.err') 180000
+        $agentRoot = Split-Path $work -Parent
+        $driveRoot = Split-Path $agentRoot -Parent
+        Say '## O6 rights of the parent folders'
+        foreach ($folder in @($driveRoot, $agentRoot, $work)) {
+            Say "- $folder"
+            foreach ($entry in @((Get-Acl -LiteralPath $folder).Access)) {
+                Say "  - $($entry.IdentityReference) $($entry.AccessControlType) $($entry.FileSystemRights) inherited: $($entry.IsInherited)"
+            }
+        }
+        $ancestorList = "$driveRoot;$agentRoot;$work;$unityHome"
+        $run = Start-Tool $pwsh "-NoProfile -File `"$probeScript`" -TargetsFile `"$targetsFile`"$clientArgument -Ancestors `"$ancestorList`"" $stdoutPath (Join-Path $out 'probe.err') 180000
         Say '## O6 memory read and write probe'
         Say "- mode: $mode, finished: $($run.Finished), exit code: $($run.ExitCode)"
         if (Test-Path $stdoutPath) { Get-Content -Path $stdoutPath | ForEach-Object { Say "- $(Redact $_)" } }

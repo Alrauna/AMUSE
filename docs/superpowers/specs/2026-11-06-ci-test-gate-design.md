@@ -306,6 +306,9 @@ Both modes run a probe. The probe tries to open the runner processes with the ri
 - The package manager server is a Node program. It stopped with `EPERM: operation not permitted, lstat` on the agent folder, which is a parent of the Editor install. Node checks every parent folder of its script with a stat call. The low user had no right to read the attributes of that folder.
 - This is a side effect of the hardening. The agent folder gave the low user no rights, and the script added a deny rule on it. So the cause of S11 is the folder rights of the spike, not Unity or the user.
 - `[CALL]` Run 9 grants the low user only the right to read attributes and to pass through, on the agent folder and the runner temp folder, and on those two only. It gives no right to list or read. It does not change the deny rules for writes.
+`[MEASURED]` Run 9 on 2026-11-07 (UTC), job in mode `lowuser`. The grant of the right to read attributes and to pass through did not change the result. The package manager server stopped with the same error on the same folder. The S10 results did not change either.
+`[CALL]` Run 10 grants read and execute on the two parent folders, with no inheritance. It also prints the rights of the drive root, the agent folder and the runner temp folder, and it tests whether the low user can read the attributes of each parent folder with a plain call. That shows which right is missing.
+`[INFERENCE]` If run 10 still fails, the plan moves the Editor install out of the agent folder, to a folder that only administrators can write and that the low user can read.
 
 Questions and pass rules:
 
