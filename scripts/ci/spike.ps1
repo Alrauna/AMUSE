@@ -46,6 +46,7 @@ function Say-Resources {
 # so that no printed line can act as a workflow command.
 function Redact([string]$line) {
     $line = $line.Replace('::', ': :')
+    $line = [regex]::Replace($line, '\b[A-Z0-9]{2}(-[A-Z0-9]{4}){4,5}\b', '<serial>')
     $line = [regex]::Replace($line, '[\w.+-]+@[\w-]+(\.[\w-]+)+', '<email>')
     $line = [regex]::Replace($line, '[0-9a-fA-F]{8}(-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}', '<guid>')
     $line = [regex]::Replace($line, '[0-9a-fA-F]{24,}', '<hex>')
@@ -201,9 +202,9 @@ function Measure-CredentialResidue([string]$email, [string]$password) {
 }
 
 # Spike only. Prints the last lines of an Editor log, redacted, when the Editor did not run.
-function Show-LogTail([string]$logPath, [int]$count) {
-    if (-not (Test-Path $logPath)) { Say '- no Editor log to show'; return }
-    Say "- last $count lines of the Editor log:"
+function Show-LogTail([string]$logPath, [int]$count, [string]$label = 'Editor log') {
+    if (-not (Test-Path $logPath)) { Say "- no $label to show"; return }
+    Say "- last $count lines of the ${label}:"
     foreach ($line in @(Get-Content -Path $logPath | Select-Object -Last $count)) {
         $text = [regex]::Replace((Redact ([string]$line)), '\d{6,}', '<num>')
         if ($text.Length -gt 220) { $text = $text.Substring(0, 220) }
@@ -571,6 +572,7 @@ foreach ($t in $targets) {
         if (-not $line) {
             Show-LicenseFacts $log
             Show-LogTail $log 50
+            Show-LogTail (Join-Path (Get-LocalAppData) 'Unity\Editor\upm.log') 40 'package manager log'
             $log2 = Join-Path $out 'unity-license-check.log'
             $check = Start-Tool $unityExe "-batchmode -nographics -quit -logFile `"$log2`"" (Join-Path $out 'check.stdout') (Join-Path $out 'check.stderr') 600000
             Say "- no-graphics license check exit code: $($check.ExitCode)"

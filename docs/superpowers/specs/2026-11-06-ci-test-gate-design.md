@@ -294,6 +294,11 @@ Both modes run a probe. The probe tries to open the runner processes with the ri
 - S9 in mode `lowuser`: no process command line held the credentials. One file under the low user profile held the email or the password. The scan did not tell which. The next run counts them separately.
 - S11 failed. The Editor started as the low user exited with code 1 in under a minute, with and without graphics. Its log said that it could not verify the licensing client signature and that no access token was available. It then resolved entitlements and exited. The cause is open.
 - The Editor is the same one that passed in mode `admin`. So the cause is a difference of the user, the environment, or the folder rights. Run 6 prints the last lines of the Editor log and the signature check as the low user.
+`[MEASURED]` Run 6 on 2026-11-07 (UTC), job in mode `lowuser`.
+- The licensing client was valid as the low user. The Editor log shows that licensing works for the low user: the client connected, the license updated, and the entitlements resolved. The "Code 10" signature message is not the cause. It says "ignoring" and the Editor goes on.
+- The cause of S11 is the Unity Package Manager. Its local server process stopped with exit code 1. The Editor then could not connect to it after 30 seconds and exited with code 1. The cause of that stop is open. Run 7 prints the log of the package manager.
+- S9, mode `lowuser`: one file under the low user profile holds the email. No file holds the password. No file holds a JWT-shaped token. No process command line held the credentials.
+- `[LIMIT]` A line of the Editor log named the Personal serial of the burner account, with the last group masked by Unity. It reached the public log of run 6. The script now removes serials from every printed line.
 
 Questions and pass rules:
 
