@@ -12,6 +12,9 @@ concurrency:
   group: "release"
   cancel-in-progress: false
 
+# No cache restore and no cache save for any job in this workflow.
+cache-mode: none
+
 jobs:
 
   # Validate Repository Configuration
@@ -36,6 +39,9 @@ jobs:
   build:
     needs: config
     runs-on: ubuntu-latest
+    # Limited to the main branch in repository settings. A manual start from
+    # another branch then fails before this job can get the write token.
+    environment: release
     permissions:
       contents: write
     env:
