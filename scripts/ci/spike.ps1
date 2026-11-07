@@ -286,7 +286,8 @@ switch ($Phase) {
             $bytes = New-Object byte[] 24
             [Security.Cryptography.RandomNumberGenerator]::Fill($bytes)
             $generated = 'Aa1!' + [Convert]::ToBase64String($bytes).Replace('+', 'x').Replace('/', 'y').Replace('=', 'z')
-            & net user $lowUser $generated /add | Out-Null
+            # The /y switch answers the prompt that net user shows for a password longer than 14 characters.
+            & net user $lowUser $generated /add /y | Out-Null
             if ($LASTEXITCODE -ne 0) { throw 'The low user could not be created.' }
             Set-Content -Path $lowSecretFile -Value $generated -NoNewline
             $generated = $null
@@ -583,8 +584,10 @@ foreach ($t in $targets) {
     }
 
     'ReturnLicense' {
-        $client = Find-LicensingClient
-        if (-not $client) { Say '- no licensing client on this runner, so nothing to return' }
+        $client = $null
+        if ($mode -eq 'lowuser' -and -not (Test-Path $lowSecretFile)) { Say '- the low user was never created, so nothing to return' }
+        else { $client = Find-LicensingClient }
+        if (-not $client) { Say '- no licensing client to return the license with' }
         else {
             New-Item -ItemType Directory -Force -Path $out | Out-Null
             $outFile = Join-Path $out 'license-return.out'

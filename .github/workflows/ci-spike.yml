@@ -30,7 +30,8 @@ jobs:
       fail-fast: false
       max-parallel: 1
       matrix:
-        mode: [admin, lowuser]
+        # Run 4 passed in mode admin on 2026-11-07 (UTC). The next run tests mode lowuser only.
+        mode: [lowuser]
     env:
       SPIKE_MODE: ${{ matrix.mode }}
     runs-on: windows-2022

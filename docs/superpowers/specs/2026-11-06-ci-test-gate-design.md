@@ -277,6 +277,17 @@ Both modes run a probe. The probe tries to open the runner processes with the ri
 `[CALL]` It stops every process of the low user and deletes the user at the end.
 `[UNVERIFIED]` Whether the Editor can create a Direct3D 11 device as another user, without a window station and desktop right for that user, is the main risk of S11. The spike logs the session context to settle it.
 
+`[MEASURED]` Run 4 on 2026-11-07 (UTC), job in mode `admin`. The whole job passed in about 27 minutes on a hosted `windows-2022` runner.
+- S1 passed again. The install took 4 minutes.
+- S2 passed. The licensing client in the Editor install (version 1.15.0) activated the burner account with email and password and exited with code 0. It took about 5 minutes. The return step also exited with code 0.
+- S3 and S4 passed. The runner has no GPU. The Editor got a Direct3D 11 device named Microsoft Basic Render Driver. Async readback and R8_UNorm render and read all worked, and the blit test returned the expected value.
+- S5 passed. No shader error line in any log. The 1415 tests under the `Semantics` namespace passed.
+- S4 and S7 passed. The 134 capture tests and the 151 research tests passed.
+- S8 passed except VRCFury, which had no hash. The cold project import and the probe took 8 minutes. The semantics tests took 8 minutes.
+- S9: no process command line held the credentials after activation. A scan of 3001 files under the Unity data folders found no credentials and no JWT-shaped token.
+- S10, admin baseline: the admin account could open both runner processes for memory reads, and it could write to every place that an administrator step runs from.
+`[MEASURED]` The job in mode `lowuser` failed at once in `PrepareMode`. `net user` asked a yes or no question for a password longer than 14 characters and got no answer. The fix is the `/y` switch. Nothing of the credentials was used in that job. Run 5 tests mode `lowuser` only.
+
 Questions and pass rules:
 
 | # | Question | Pass rule |
