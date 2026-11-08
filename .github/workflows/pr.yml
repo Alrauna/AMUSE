@@ -1,12 +1,15 @@
 # This workflow is the merge gate for pull requests and for pushes to main.
 # The scripts job tests the CI scripts. The cheap job checks the changed
-# lines for whitespace problems and checks the release package. The unity
-# job installs the locked Editor, activates the license and runs the product
-# and research tests as a local low-privilege user. A maintainer approves
-# every unity-gate run before it starts. That approval is the trust boundary
-# of this gate. It means the maintainer read the full change first. The
-# fork-notice job asks the maintainer to move a fork change to a branch in
-# this repository. The validate job turns all results into one check.
+# lines for whitespace problems and checks the release package. The scope
+# job reads the changed paths and says whether the Unity job is needed. Only
+# a short allow list of paths, such as docs and Dependabot files, can skip
+# it. The unity job installs the locked Editor, activates the license and
+# runs the product and research tests as a local low-privilege user. A
+# maintainer approves every unity-gate run before it starts. That approval
+# is the trust boundary of this gate. It means the maintainer read the full
+# change first. The fork-notice job asks the maintainer to move a fork
+# change to a branch in this repository. The validate job turns all results
+# into one check.
 name: PR Check
 
 on:
@@ -114,10 +117,37 @@ jobs:
         shell: pwsh
         run: ./scripts/ci/check-release-exclusion.ps1
 
+  # Decides from the changed paths whether the Unity job is needed. The
+  # answer comes from the diff alone. A label or a message cannot change it.
+  # A push to main, any other event and any doubt all mean the job is needed.
+  scope:
+    name: scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      unity_needed: ${{ steps.scope.outputs.unity_needed }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Read the changed paths
+        id: scope
+        timeout-minutes: 5
+        shell: pwsh
+        env:
+          PR_BASE: ${{ github.base_ref }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: ./scripts/ci/get-change-scope.ps1
+
   unity:
     name: unity
-    needs: [scripts, cheap]
-    if: (github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id) && github.actor != 'dependabot[bot]'
+    needs: [scripts, cheap, scope]
+    if: needs.scope.outputs.unity_needed == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id) && github.actor != 'dependabot[bot]'
     runs-on: windows-2022
     timeout-minutes: 300
     environment: ${{ github.event_name == 'push' && 'unity-main' || 'unity-gate' }}
@@ -208,7 +238,8 @@ jobs:
 
   fork-notice:
     name: fork-notice
-    if: github.event_name == 'pull_request' && (github.event.pull_request.head.repo.id != github.repository_id || github.actor == 'dependabot[bot]')
+    needs: [scope]
+    if: needs.scope.outputs.unity_needed == 'true' && github.event_name == 'pull_request' && (github.event.pull_request.head.repo.id != github.repository_id || github.actor == 'dependabot[bot]')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}
@@ -226,7 +257,7 @@ jobs:
 
   validate:
     name: validate
-    needs: [scripts, cheap, unity, fork-notice]
+    needs: [scripts, cheap, scope, unity, fork-notice]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -242,12 +273,33 @@ jobs:
           # GitHub counts a skipped job as a passing check. This function
           # closes that path. It turns every bad job result into one problem
           # line. The gate passes only when the list of problems is empty.
+          # A skipped unity job is legal only when the scope job succeeded
+          # and said exactly false. Any other answer expects unity to pass.
           function Get-ValidateVerdict($needs) {
               $problems = @()
+              $unityExpected = 'success'
+              $scope = $needs.PSObject.Properties['scope']
+              if ($null -eq $scope) {
+                  $problems += 'job result missing: scope'
+              }
+              else {
+                  $scopeResult = [string]$scope.Value.result
+                  if ($scopeResult -cne 'success') {
+                      $problems += "scope result is '$scopeResult', expected 'success'"
+                  }
+                  $outputs = $scope.Value.PSObject.Properties['outputs']
+                  $answer = ''
+                  if ($null -ne $outputs -and $null -ne $outputs.Value) {
+                      $neededProperty = $outputs.Value.PSObject.Properties['unity_needed']
+                      if ($null -ne $neededProperty) { $answer = [string]$neededProperty.Value }
+                  }
+                  if ($answer -ceq 'false') { $unityExpected = 'skipped' }
+                  elseif ($answer -cne 'true') { $problems += "scope answer is '$answer', expected 'true' or 'false'" }
+              }
               $expected = [ordered]@{
                   'scripts'     = 'success'
                   'cheap'       = 'success'
-                  'unity'       = 'success'
+                  'unity'       = $unityExpected
                   'fork-notice' = 'skipped'
               }
               foreach ($name in $expected.Keys) {

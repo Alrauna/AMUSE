@@ -213,7 +213,7 @@ Describe 'Isolation library' {
         # library must not change the behavior of a test process.
         foreach ($name in 'prepare-run.ps1', 'prepare-project.ps1', 'license.ps1', 'isolation-probe.ps1', 'cleanup.ps1',
             'run-tests.ps1', 'install-unity.ps1', 'install-packages.ps1', 'resolve-canary.ps1',
-            'check-lock.ps1', 'check-release-exclusion.ps1', 'new-lock.ps1') {
+            'check-lock.ps1', 'check-release-exclusion.ps1', 'new-lock.ps1', 'get-change-scope.ps1') {
             $text = Get-Content -LiteralPath (Join-Path $PSScriptRoot "../$name") -Raw
             $guardAt = $text.IndexOf("InvocationName -ne '.'")
             $guardAt | Should -BeGreaterThan -1
