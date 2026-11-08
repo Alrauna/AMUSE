@@ -40,11 +40,11 @@ jobs:
       
       # Checkout Local Repository
       - name: Checkout Local Repository
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
       # Checkout Automation Repository without removing prior checkouts
       - name: Checkout Automation Repository
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: vrchat-community/package-list-action
           ref: cb31c3b5d17d1070d7741c61de2ca1b219224039
