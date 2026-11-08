@@ -131,3 +131,41 @@ function Complete-TestRun([string]$xmlPath, [string]$assembly, [int]$unityExit, 
     Assert-TestRun $result $assembly $unityExit
     if ($logFacts.Shader -gt 0 -or $logFacts.Compile -gt 0) { throw 'The log holds shader or compile errors.' }
 }
+
+# Says whether an error is a short network fault that can pass on its own.
+# These count: an HTTP 408, 429 or 5xx answer, a request that never got an
+# answer, a timeout, and a broken connection. An HTTP 4xx answer and every
+# other error do not count, so a bad hash or a missing file fails at once.
+# The test walks the inner exceptions and matches by type name.
+function Test-TransientFault($errorRecord) {
+    $ex = $errorRecord.Exception
+    while ($ex) {
+        $typeName = $ex.GetType().Name
+        if ($typeName -eq 'HttpResponseException') {
+            $status = [int]$ex.Response.StatusCode
+            return ($status -eq 408 -or $status -eq 429 -or $status -ge 500)
+        }
+        if ($typeName -in @('HttpRequestException', 'TaskCanceledException', 'SocketException', 'IOException')) { return $true }
+        $ex = $ex.InnerException
+    }
+    return $false
+}
+
+# Runs a script block. A transient fault runs it again after a pause, up to
+# MaxAttempts runs in all. Any other error, and the last transient fault,
+# throw at once. Each retry prints one line with the HTTP status or the
+# exception type, never the message. Use it only for a step that is safe to
+# repeat, such as a download whose hash is checked afterward.
+function Invoke-WithRetry([scriptblock]$Action, [int]$MaxAttempts = 3, [int[]]$DelaySeconds = @(5, 20)) {
+    for ($attempt = 1; ; $attempt++) {
+        try { return (& $Action) }
+        catch {
+            if ($attempt -ge $MaxAttempts -or -not (Test-TransientFault $_)) { throw }
+            $delay = $DelaySeconds[[Math]::Min($attempt - 1, $DelaySeconds.Count - 1)]
+            $ex = $_.Exception
+            $what = if ($ex.GetType().Name -eq 'HttpResponseException') { "HTTP $([int]$ex.Response.StatusCode)" } else { $ex.GetType().Name }
+            Say (Redact "Transient fault ($what). Run $($attempt + 1) of $MaxAttempts starts in $delay s.")
+            Start-Sleep -Seconds $delay
+        }
+    }
+}

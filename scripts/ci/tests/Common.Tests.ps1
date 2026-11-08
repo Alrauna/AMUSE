@@ -191,4 +191,83 @@ Describe 'Common library' {
             { Assert-TestRun (New-RunResult 4 4 0 0 0) 'AMUSE.Product.Tests' 0 } | Should -Not -Throw
         }
     }
+
+    Context 'Retry of transient faults' {
+        BeforeAll {
+            function New-HttpFault([int]$code) {
+                $response = [System.Net.Http.HttpResponseMessage]::new([System.Net.HttpStatusCode]$code)
+                return [Microsoft.PowerShell.Commands.HttpResponseException]::new("raw message $code", $response)
+            }
+            # Runs Invoke-WithRetry on an action that throws the given faults in order and then succeeds.
+            function Invoke-Faulty($faults, [int]$maxAttempts = 3) {
+                $state = @{ Calls = 0 }
+                $action = {
+                    $state.Calls++
+                    if ($state.Calls -le $faults.Count) { throw $faults[$state.Calls - 1] }
+                    return 'ok'
+                }.GetNewClosure()
+                try { $value = Invoke-WithRetry $action -MaxAttempts $maxAttempts; $thrown = $null }
+                catch { $value = $null; $thrown = $_ }
+                return @{ Calls = $state.Calls; Value = $value; Thrown = $thrown }
+            }
+        }
+
+        BeforeEach {
+            Mock Start-Sleep { }
+            Mock Say { }
+        }
+
+        It 'AnHttp504RunsAgainAndThenSucceeds' {
+            $run = Invoke-Faulty @((New-HttpFault 504))
+            $run.Calls | Should -Be 2
+            $run.Value | Should -Be 'ok'
+        }
+
+        It 'ARequestWithNoAnswerRunsAgain' {
+            $run = Invoke-Faulty @([System.Net.Http.HttpRequestException]::new('no route'))
+            $run.Calls | Should -Be 2
+        }
+
+        It 'ATimeoutRunsAgain' {
+            $run = Invoke-Faulty @([System.Threading.Tasks.TaskCanceledException]::new('timeout'))
+            $run.Calls | Should -Be 2
+        }
+
+        It 'ARateLimitAnswerRunsAgain' {
+            (Invoke-Faulty @((New-HttpFault 429))).Calls | Should -Be 2
+        }
+
+        It 'AnHttp404StopsAtOnce' {
+            $run = Invoke-Faulty @((New-HttpFault 404))
+            $run.Calls | Should -Be 1
+            $run.Thrown | Should -Not -BeNullOrEmpty
+        }
+
+        It 'AnHttp403StopsAtOnce' {
+            (Invoke-Faulty @((New-HttpFault 403))).Calls | Should -Be 1
+        }
+
+        It 'AHashMismatchStopsAtOnce' {
+            $run = Invoke-Faulty @([System.Exception]::new('hash mismatch'))
+            $run.Calls | Should -Be 1
+            $run.Thrown | Should -Not -BeNullOrEmpty
+        }
+
+        It 'AFaultThatNeverPassesStopsAfterTheLastRun' {
+            $run = Invoke-Faulty @((New-HttpFault 504), (New-HttpFault 504), (New-HttpFault 504), (New-HttpFault 504))
+            $run.Calls | Should -Be 3
+            $run.Thrown.Exception.Response.StatusCode | Should -Be 504
+        }
+
+        It 'ThePausesGrowFromFiveToTwentySeconds' {
+            Invoke-Faulty @((New-HttpFault 504), (New-HttpFault 504)) | Out-Null
+            Should -Invoke Start-Sleep -Times 1 -ParameterFilter { $Seconds -eq 5 }
+            Should -Invoke Start-Sleep -Times 1 -ParameterFilter { $Seconds -eq 20 }
+        }
+
+        It 'TheRetryLinePrintsTheStatusAndNotTheMessage' {
+            Invoke-Faulty @((New-HttpFault 504)) | Out-Null
+            Should -Invoke Say -Times 1 -ParameterFilter { $text -like '*HTTP 504*' -and $text -notlike '*raw message*' }
+        }
+    }
 }

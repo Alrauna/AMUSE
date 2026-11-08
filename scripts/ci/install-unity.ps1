@@ -33,7 +33,7 @@ function Select-UnityDownload($releaseResponse) {
 
 # Asks the vendor release API for the installer of one version.
 function Get-UnityDownload([string]$version) {
-    $release = Invoke-RestMethod "https://services.api.unity.com/unity/editor/release/v1/releases?version=$version&limit=1"
+    $release = Invoke-WithRetry { Invoke-RestMethod "https://services.api.unity.com/unity/editor/release/v1/releases?version=$version&limit=1" }
     return Select-UnityDownload $release
 }
 
@@ -82,7 +82,7 @@ function Install-Unity($lock, [string]$targetDir, [string]$workDir) {
     $version = [string]$lock.unity.version
     $download = Get-UnityDownload $version
     $installer = Join-Path $workDir 'UnitySetup64.exe'
-    Invoke-WebRequest -Uri $download.Url -OutFile $installer
+    Invoke-WithRetry { Invoke-WebRequest -Uri $download.Url -OutFile $installer }
     Assert-UnityInstaller -Path $installer -Lock $lock -ExpectedMd5 $download.Md5
     Invoke-UnityInstaller -InstallerPath $installer -TargetDir $targetDir
     Remove-Item -LiteralPath $installer -Force

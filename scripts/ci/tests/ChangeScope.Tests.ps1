@@ -140,6 +140,58 @@ Describe 'Change scope' {
             Get-UnityNeededForEvent -EventName 'pull_request' -Paths @('docs/a.md') -BaseBranch '' -DefaultBranch 'main' | Should -BeTrue
         }
     }
+
+    Context 'Test-PushIsMergedPullRequest' {
+        BeforeAll {
+            $script:sha = 'a' * 40
+            $script:ref = 'refs/heads/main'
+            function New-Pull([string]$mergedAt = '2026-11-08T08:00:00Z', [string]$mergeSha = ('a' * 40), [string]$baseRef = 'main') {
+                return [pscustomobject]@{ merged_at = $mergedAt; merge_commit_sha = $mergeSha; base = [pscustomobject]@{ ref = $baseRef } }
+            }
+        }
+
+        It 'AMergedPullRequestThatMadeTheCommitSkipsTheSecondRun' {
+            Test-PushIsMergedPullRequest @((New-Pull)) $script:sha $script:ref 'main' | Should -BeTrue
+        }
+
+        It 'ADirectPushWithNoLinkedPullRequestStillRuns' {
+            Test-PushIsMergedPullRequest @() $script:sha $script:ref 'main' | Should -BeFalse
+            Test-PushIsMergedPullRequest $null $script:sha $script:ref 'main' | Should -BeFalse
+        }
+
+        It 'AnOpenPullRequestThatOnlyContainsTheCommitStillRuns' {
+            # Falsifier: the API also lists open pull requests that contain
+            # the commit. A direct push could sit inside one of them.
+            Test-PushIsMergedPullRequest @((New-Pull -mergedAt '')) $script:sha $script:ref 'main' | Should -BeFalse
+            Test-PushIsMergedPullRequest @([pscustomobject]@{ merged_at = $null; merge_commit_sha = $null; base = [pscustomobject]@{ ref = 'main' } }) $script:sha $script:ref 'main' | Should -BeFalse
+        }
+
+        It 'AMergedPullRequestWithAnotherMergeCommitStillRuns' {
+            # Falsifier: a commit that is only inside a merged pull request,
+            # such as a branch commit pushed later, is not the tested merge.
+            Test-PushIsMergedPullRequest @((New-Pull -mergeSha ('b' * 40))) $script:sha $script:ref 'main' | Should -BeFalse
+        }
+
+        It 'AMergedPullRequestAgainstAnotherBranchStillRuns' {
+            Test-PushIsMergedPullRequest @((New-Pull -baseRef 'feature/x')) $script:sha $script:ref 'main' | Should -BeFalse
+        }
+
+        It 'APushToAnotherBranchStillRuns' {
+            Test-PushIsMergedPullRequest @((New-Pull)) $script:sha 'refs/heads/feature/x' 'main' | Should -BeFalse
+            Test-PushIsMergedPullRequest @((New-Pull)) $script:sha 'refs/tags/main' 'main' | Should -BeFalse
+        }
+
+        It 'AMissingValueFailsClosed' {
+            Test-PushIsMergedPullRequest @((New-Pull)) '' $script:ref 'main' | Should -BeFalse
+            Test-PushIsMergedPullRequest @((New-Pull)) $script:sha $script:ref '' | Should -BeFalse
+            Test-PushIsMergedPullRequest @([pscustomobject]@{ title = 'odd' }) $script:sha $script:ref 'main' | Should -BeFalse
+        }
+
+        It 'TheShaAndBranchComparisonsAreCaseSensitive' {
+            Test-PushIsMergedPullRequest @((New-Pull -mergeSha ('A' * 40))) $script:sha $script:ref 'main' | Should -BeFalse
+            Test-PushIsMergedPullRequest @((New-Pull -baseRef 'Main')) $script:sha $script:ref 'main' | Should -BeFalse
+        }
+    }
 }
 
 Describe 'Validate verdict in pr.yml' {

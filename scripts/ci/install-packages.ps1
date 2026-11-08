@@ -26,7 +26,7 @@ Set-StrictMode -Version Latest
 # Some listings start with a byte order mark. Invoke-RestMethod would then
 # return a string, so the raw body is decoded first. Moved from new-lock.ps1.
 function Get-Json([string]$uri) {
-    $body = (Invoke-WebRequest -Uri $uri).Content
+    $body = (Invoke-WithRetry { Invoke-WebRequest -Uri $uri }).Content
     if ($body -is [byte[]]) { $body = [Text.Encoding]::UTF8.GetString($body) }
     return ([string]$body).TrimStart([char]0xFEFF) | ConvertFrom-Json
 }
@@ -88,7 +88,7 @@ function Get-PublisherHash($entry) {
         $repo = $Matches[2]
         $tag = $Matches[3]
         $file = $Matches[4]
-        $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$owner/$repo/releases/tags/$tag" -Headers @{ 'User-Agent' = 'amuse-ci-install-packages' }
+        $release = Invoke-WithRetry { Invoke-RestMethod -Uri "https://api.github.com/repos/$owner/$repo/releases/tags/$tag" -Headers @{ 'User-Agent' = 'amuse-ci-install-packages' } }
         $asset = $release.assets | Where-Object { $_.name -eq $file } | Select-Object -First 1
         if ($asset -and @($asset.PSObject.Properties.Name) -contains 'digest' -and ([string]$asset.digest -match '^sha256:(.+)$')) {
             return @{ Hash = $Matches[1].ToLowerInvariant(); Route = 'GitHub release digest' }
@@ -326,7 +326,7 @@ if ($MyInvocation.InvocationName -ne '.') {
                     $route = $publisher.Route
                 }
                 $zip = Join-Path $workDir "$name.zip"
-                Invoke-WebRequest -Uri $url -OutFile $zip
+                Invoke-WithRetry { Invoke-WebRequest -Uri $url -OutFile $zip }
                 $observed = Assert-ZipHash -Path $zip -Expected $expected -Name $name
                 $verified = Get-VerifiedCell $observed $expected
                 Say (New-PackageRow $name $version $sourceKey $route $verified)
