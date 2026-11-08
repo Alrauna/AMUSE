@@ -117,15 +117,17 @@ jobs:
         shell: pwsh
         run: ./scripts/ci/check-release-exclusion.ps1
 
-  # Decides from the changed paths whether the Unity job is needed. The
-  # answer comes from the diff alone. A label or a message cannot change it.
-  # A push to main, any other event and any doubt all mean the job is needed.
+  # Decides whether the Unity job is needed. A pull request answer comes from
+  # the changed paths alone. A push answer comes from the pull requests linked
+  # to the commit. A label or a message cannot change either answer. Any
+  # other event and any doubt mean the job is needed.
   scope:
     name: scope
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
+      pull-requests: read
     outputs:
       unity_needed: ${{ steps.scope.outputs.unity_needed }}
     steps:
@@ -142,6 +144,7 @@ jobs:
         env:
           PR_BASE: ${{ github.base_ref }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          GH_TOKEN: ${{ github.token }}
         run: ./scripts/ci/get-change-scope.ps1
 
   unity:

@@ -165,6 +165,72 @@ Describe 'Install packages' {
         }
     }
 
+    Context 'Download with release API fallback' {
+        BeforeAll {
+            function New-HttpFault([int]$code) {
+                return [Microsoft.PowerShell.Commands.HttpResponseException]::new("raw $code", [System.Net.Http.HttpResponseMessage]::new([System.Net.HttpStatusCode]$code))
+            }
+            $script:ghUrl = 'https://github.com/one/two/releases/download/v1/pack.zip?'
+            $script:assetApiUrl = 'https://api.github.com/repos/one/two/releases/assets/7'
+        }
+
+        BeforeEach {
+            Mock Start-Sleep { }
+            Mock Say { }
+            Mock Invoke-RestMethod { [pscustomobject]@{ assets = @([pscustomobject]@{ name = 'pack.zip'; url = $script:assetApiUrl }) } }
+        }
+
+        It 'ADirectDownloadThatWorksNeverCallsTheApi' {
+            Mock Invoke-WebRequest { }
+            Save-Download $script:ghUrl 'out.zip'
+            Should -Invoke Invoke-WebRequest -Times 1
+            Should -Invoke Invoke-RestMethod -Times 0
+        }
+
+        It 'ADirectLinkThatKeepsAnswering504TakesTheAssetFromTheApi' {
+            Mock Invoke-WebRequest { throw (New-HttpFault 504) } -ParameterFilter { $Uri -eq $script:ghUrl }
+            Mock Invoke-WebRequest { } -ParameterFilter { $Uri -eq $script:assetApiUrl }
+            Save-Download $script:ghUrl 'out.zip'
+            Should -Invoke Invoke-WebRequest -Times 2 -ParameterFilter { $Uri -eq $script:ghUrl }
+            Should -Invoke Invoke-WebRequest -Times 1 -ParameterFilter { $Uri -eq $script:assetApiUrl -and $Headers['Accept'] -eq 'application/octet-stream' }
+        }
+
+        It 'AnHttp404OnTheDirectLinkStopsWithoutTheApi' {
+            # Falsifier: a missing file is not a transient fault.
+            Mock Invoke-WebRequest { throw (New-HttpFault 404) }
+            { Save-Download $script:ghUrl 'out.zip' } | Should -Throw
+            Should -Invoke Invoke-RestMethod -Times 0
+        }
+
+        It 'ALinkOutsideGithubThatRedirectsNowhereKeepsTheDirectError' {
+            Mock Invoke-WebRequest { throw (New-HttpFault 504) }
+            Mock Get-RedirectLocation { $null }
+            { Save-Download 'https://listing.example.invalid/pack.zip' 'out.zip' } | Should -Throw
+            Should -Invoke Invoke-RestMethod -Times 0
+        }
+
+        It 'ALinkThatRedirectsToAGithubReleaseUsesTheApi' {
+            Mock Invoke-WebRequest { throw (New-HttpFault 504) } -ParameterFilter { $Uri -like 'https://listing.example.invalid/*' }
+            Mock Invoke-WebRequest { } -ParameterFilter { $Uri -eq $script:assetApiUrl }
+            Mock Get-RedirectLocation { 'https://github.com/one/two/releases/download/v1/pack.zip' }
+            Save-Download 'https://listing.example.invalid/pack.zip' 'out.zip'
+            Should -Invoke Invoke-WebRequest -Times 1 -ParameterFilter { $Uri -eq $script:assetApiUrl }
+        }
+
+        It 'ARedirectToAnotherHostDoesNotUseTheApi' {
+            Mock Invoke-WebRequest { throw (New-HttpFault 504) }
+            Mock Get-RedirectLocation { 'https://other.example.invalid/pack.zip' }
+            { Save-Download 'https://listing.example.invalid/pack.zip' 'out.zip' } | Should -Throw
+            Should -Invoke Invoke-RestMethod -Times 0
+        }
+
+        It 'AReleaseWithoutTheNamedAssetStops' {
+            Mock Invoke-WebRequest { throw (New-HttpFault 504) }
+            Mock Invoke-RestMethod { [pscustomobject]@{ assets = @([pscustomobject]@{ name = 'other.zip'; url = $script:assetApiUrl }) } }
+            { Save-Download $script:ghUrl 'out.zip' } | Should -Throw '*no asset*'
+        }
+    }
+
     Context 'Lock package rules' {
         It 'UnhashedPackageWithoutReasonStops' {
             $lockJson = @'
