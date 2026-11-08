@@ -114,15 +114,16 @@ Two workflows run the EditMode suites on GitHub. Both run on hosted Windows runn
 
 ### The gate
 
-`pr.yml` runs on every pull request and on every push to `main`. It holds five jobs.
+`pr.yml` runs on every pull request and on every push to `main`. It holds six jobs.
 
 - `scripts` runs the Pester tests of the CI scripts and checks that `scripts/ci/lock.json` matches `Packages/vpm-manifest.json`.
 - `cheap` checks the changed lines with `git diff --check` and checks the contents of the release package. The whitespace check skips the YAML files that Unity writes: `.meta`, `.asset`, `.unity`, `.prefab`, `.mat`, `.anim`, and `.controller`.
+- `scope` reads the changed paths of a pull request and says whether the `unity` job is needed. The job is not needed only when the pull request targets the default branch and every changed path is on a short allow list. The list holds `docs/` files of type `.md` and common image types, `README.md`, `CHANGELOG.md`, and `CONTRIBUTING.md` in the repository root, `.github/dependabot.yml`, `.github/workflows/build-listing.yml`, and `.github/workflows/release.yml`. The list is in `scripts/ci/get-change-scope.ps1`. A push to `main`, a pull request against another branch, an empty change, an unusual path, and any error all mean that the job is needed. A label, a title, or a commit message cannot skip the job.
 - `unity` installs the locked Editor, activates the license, installs the locked vendor packages with hash checks, and runs the product and research assemblies as two steps of one job. The job runs the tests as a local low-privilege user. A probe fails the job when that user can read runner memory or write to a folder that administrator steps run from.
-- `fork-notice` turns red when a pull request comes from a fork or from Dependabot. Such a pull request gets no secrets, so the `unity` job skips it. The notice asks the maintainer to read the change and to push it to a branch in this repository. The pull request must then come from that branch.
-- `validate` is the required check. It passes only when `scripts`, `cheap`, and `unity` pass and `fork-notice` is skipped.
+- `fork-notice` turns red when `scope` says the `unity` job is needed and the pull request comes from a fork or from Dependabot. Such a pull request gets no secrets, so the `unity` job skips it. The notice asks the maintainer to read the change and to push it to a branch in this repository. The pull request must then come from that branch. A fork or Dependabot pull request that changes only allow-listed paths needs no Unity run, so it gets no notice.
+- `validate` is the required check. It passes only when `scripts`, `cheap`, and `scope` pass and `fork-notice` is skipped. It also needs `unity` to pass, unless `scope` said exactly `false`. In that case `unity` must be skipped.
 
-A pull request can rewrite `pr.yml`. The Environment approval, not `validate`, is the real barrier.
+A pull request can rewrite `pr.yml` or `scripts/ci/get-change-scope.ps1`. The skip decision runs the code of the pull request, as the rest of `validate` does. A pull request that rewrites either file can force a skip, so a change to them does not always need a Unity run. The review of changes to `.github/` and `scripts/ci/` is the only barrier. Settings outside the repository can add a second barrier. Examples are a required review and a code owner rule for those paths.
 
 ### The weekly canary
 
@@ -163,3 +164,4 @@ The maintainer does these once. The spec section 10 holds the full form.
 4. Add `UNITY_EMAIL` and `UNITY_PASSWORD` to all three Environments with the one account. Delete the old `UNITY_LICENSE` secrets.
 5. Set the repository settings. Require full SHA pinning for actions with an allowlist. Require approval for all outside collaborators. Set the default token permission to read-only.
 6. Limit the `release` Environment to `main`. Set a tag ruleset that blocks tag updates and tag deletions. Tag creation stays allowed.
+7. Check that no rule merges Dependabot pull requests on its own. A pull request that changes only allow-listed paths can reach a green `validate` with no approval of the `unity-gate` Environment. Read such a pull request before you merge it. Branch protection of `main` requires no review as of 2026-11-08 (UTC), by ruling O4 of the spec.
