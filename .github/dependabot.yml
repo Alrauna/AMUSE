@@ -6,6 +6,8 @@
 # a Dependabot pull request. Such a pull request shows a red
 # fork-notice job. The maintainer reads the change and pushes it again
 # from a branch in this repository.
+# All action updates arrive as one grouped pull request each week. One
+# pull request means one re-push, not one per action.
 version: 2
 updates:
   - package-ecosystem: "github-actions"
@@ -13,3 +15,7 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    groups:
+      github-actions:
+        patterns:
+          - "*"
