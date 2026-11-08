@@ -130,6 +130,13 @@ jobs:
       cancel-in-progress: false
       queue: max
     steps:
+      # Git for Windows turns LF into CRLF on checkout by default. Some
+      # product tests hold verbatim multi-line strings and compare them with
+      # LF text. The step must run before the checkout.
+      - name: Keep LF line endings
+        shell: pwsh
+        run: git config --global core.autocrlf false
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:

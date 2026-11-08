@@ -86,7 +86,7 @@ if ($MyInvocation.InvocationName -ne '.') {
 
     try {
         Say 'cloning the committed state into a new folder under the system temp folder.'
-        & git clone --quiet --no-hardlinks -- $root $clonePath
+        & git -c core.autocrlf=false clone --quiet --no-hardlinks -- $root $clonePath
         if ($LASTEXITCODE -ne 0) { throw 'Cloning the repository failed.' }
 
         $cloneCi = Join-Path $clonePath 'scripts/ci'
