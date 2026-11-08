@@ -1,0 +1,59 @@
+{
+  "unity": {
+    "version": "2022.3.22f1",
+    "installerSha256": "e42d3637666483009c16fee551ca083ba17f4f1b36055c4ca62c552f124dfb01",
+    "signerSubject": "CN=Unity Technologies SF, O=Unity Technologies SF, L=San Francisco, S=California, C=US, SERIALNUMBER=3183233, OID.2.5.4.15=Private Organization, OID.1.3.6.1.4.1.311.60.2.1.2=California, OID.1.3.6.1.4.1.311.60.2.1.3=US"
+  },
+  "licensingClientSubject": "CN=Unity Technologies SF, O=Unity Technologies SF, L=San Francisco, S=California, C=US, SERIALNUMBER=3183233, OID.2.5.4.15=Private Organization, OID.1.3.6.1.4.1.311.60.2.1.2=California, OID.1.3.6.1.4.1.311.60.2.1.3=US",
+  "packages": {
+    "nadena.dev.ndmf": {
+      "version": "1.14.8",
+      "sha256": "e1103ea150b9f1d49d415d632ed4da4e46cd8121a1f1f7ea917b155193a1ab83"
+    },
+    "com.vrchat.base": {
+      "version": "3.10.6",
+      "sha256": "c1f891298905e80c5b0c4bcd4f8e48303bf27ec04a0826256b7b532884c9f9c9"
+    },
+    "com.vrchat.avatars": {
+      "version": "3.10.6",
+      "sha256": "4c9086b0726711cac03bf7bffce24118c79961b1590904f22cd5131981f2d1a4"
+    },
+    "d4rkpl4y3r.d4rkavataroptimizer": {
+      "version": "4.7.1",
+      "sha256": "4cb4093c11a1cbdb6a2c1a394c7bb9d7d2baea299049adc426b52593779b2e85"
+    },
+    "jp.lilxyzw.liltoon": {
+      "version": "2.4.1",
+      "sha256": "90f8bed7cdd7435f4904bca3d885a81a1811bd25036d712f21942c531d940247"
+    },
+    "com.anatawa12.avatar-optimizer": {
+      "version": "1.9.21",
+      "sha256": "ee48b616d7f7249229cf8dd72607bf104eb13be66c4b5f650d07c4191c3dcbf3"
+    },
+    "com.vrcfury.vrcfury": {
+      "version": "1.1442.0",
+      "sha256": null,
+      "unhashedReason": "no hash route"
+    },
+    "nadena.dev.modular-avatar": {
+      "version": "1.18.7",
+      "sha256": "a627cb84ac6012ecff719566e7f57cdda6452d74193922dffd01d19e7bf31ed9"
+    },
+    "red.sim.lightvolumes": {
+      "version": "3.0.1",
+      "sha256": "8e74519c4b0ef103fe6af2342a26625dff0cb92191f59d99ff3e89c10a69a09b"
+    },
+    "com.poiyomi.toon": {
+      "version": "10.0.29",
+      "sha256": "99e2d6e893687e0ebd54680e03039ca7a1e5a24a08f713584ab9160cfbda063e"
+    },
+    "at.pimaker.ltcgi": {
+      "version": "1.7.4",
+      "sha256": "55067158747b39892fce90cc65707883e3845d5099e1690a305185f731f2e67f"
+    },
+    "com.poiyomi.thryeditor": {
+      "version": "2.74.4",
+      "sha256": "546842cc47c228482dcfc25c960c77f4c9cc42f21bf0921cd3f9f9411b0a6e88"
+    }
+  }
+}

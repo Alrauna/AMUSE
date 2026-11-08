@@ -1,0 +1,117 @@
+# The canary floats the vendor packages to their newest stable releases.
+# It runs once a week and on a manual start. It never gates a merge and it
+# never edits the repository. It holds no write permission. A red run is
+# the signal that a vendor moved. A canary that waits behind a gate run
+# still runs after it.
+name: Canary
+
+on:
+  schedule:
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+
+# No secrets and no token scope by default. The job asks for what it needs.
+permissions: {}
+
+# No cache restore and no cache save for any job in this workflow.
+cache-mode: none
+
+jobs:
+  canary:
+    name: canary
+    runs-on: windows-2022
+    timeout-minutes: 300
+    environment: unity-canary
+    permissions:
+      contents: read
+    # One license account serves the whole repository. Licensed jobs sign in
+    # one after the other. A run that waits in the group stays in line and
+    # runs in order, up to 100 waiting runs. If the queue is full, extra
+    # runs are cancelled. A waiting run never cancels the running job.
+    concurrency:
+      group: unity-license
+      cancel-in-progress: false
+      queue: max
+    steps:
+      # Git for Windows turns LF into CRLF on checkout by default. Some
+      # product tests hold verbatim multi-line strings and compare them with
+      # LF text. The step must run before the checkout.
+      - name: Keep LF line endings
+        shell: pwsh
+        run: git config --global core.autocrlf false
+
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+
+      - name: Install Unity
+        timeout-minutes: 20
+        shell: pwsh
+        run: ./scripts/ci/install-unity.ps1
+
+      # This step copies the scripts to a folder that only administrators can
+      # write. Every later step runs that copy, because the workspace may hold
+      # code that ran as the low user.
+      - name: Prepare the run as a low-privilege user
+        timeout-minutes: 10
+        shell: pwsh
+        run: ./scripts/ci/prepare-run.ps1
+
+      # Only this step sees the account secrets.
+      - name: Activate the license
+        timeout-minutes: 20
+        shell: pwsh
+        env:
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        run: ${{ runner.temp }}/admin-scripts/license.ps1 -Action Activate
+
+      # The resolver reads JSON listings and the GitHub release API. It runs
+      # vendor code never. The plan names the versions that the canary
+      # installs, and the resolver rewrites the locked block of the manifest
+      # in this checkout. The rewrite never leaves the runner.
+      - name: Resolve the canary plan
+        timeout-minutes: 10
+        shell: pwsh
+        run: ${{ runner.temp }}/admin-scripts/resolve-canary.ps1 -Out ${{ runner.temp }}/canary-plan.json -ProjectPath ${{ github.workspace }}
+
+      - name: Install the vendor packages
+        timeout-minutes: 30
+        shell: pwsh
+        run: ${{ runner.temp }}/admin-scripts/install-packages.ps1 -Mode canary -PlanPath ${{ runner.temp }}/canary-plan.json -ProjectPath ${{ github.workspace }}
+
+      - name: Prepare the project for the low user
+        timeout-minutes: 15
+        shell: pwsh
+        run: ${{ runner.temp }}/admin-scripts/prepare-project.ps1
+
+      - name: Probe the isolation of the low user
+        timeout-minutes: 10
+        shell: pwsh
+        run: ${{ runner.temp }}/admin-scripts/isolation-probe.ps1
+
+      - name: Run the product tests
+        timeout-minutes: 60
+        shell: pwsh
+        run: ${{ runner.temp }}/admin-scripts/run-tests.ps1 -AsLowUser -Assembly Alrauna.Amuse.Tests.Editor -TimeoutMinutes 55
+
+      - name: Run the research tests
+        timeout-minutes: 60
+        shell: pwsh
+        run: ${{ runner.temp }}/admin-scripts/run-tests.ps1 -AsLowUser -Assembly Alrauna.Amuse.Research.Tests.Editor -TimeoutMinutes 55
+
+      # A cancelled run still frees the activation and cleans up when the
+      # runner still runs the job. A hard kill or a lost runner can skip
+      # this step.
+      - name: Return the license
+        if: always()
+        timeout-minutes: 10
+        shell: pwsh
+        run: ${{ runner.temp }}/admin-scripts/license.ps1 -Action Return
+
+      - name: Clean up the low user and the license file
+        if: always()
+        timeout-minutes: 10
+        shell: pwsh
+        run: ${{ runner.temp }}/admin-scripts/cleanup.ps1

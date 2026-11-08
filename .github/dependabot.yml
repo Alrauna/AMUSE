@@ -1,0 +1,15 @@
+# Dependabot keeps the pinned GitHub Actions current. It covers the
+# SHA-pinned actions/checkout in each workflow, the four pinned
+# actions in release.yml, and the four pinned GitHub-owned actions
+# in build-listing.yml.
+# Dependabot runs get no Actions secrets. The unity job in pr.yml skips
+# a Dependabot pull request. Such a pull request shows a red
+# fork-notice job. The maintainer reads the change and pushes it again
+# from a branch in this repository.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5

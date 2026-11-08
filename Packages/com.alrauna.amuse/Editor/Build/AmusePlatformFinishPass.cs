@@ -189,6 +189,23 @@ namespace Alrauna.Amuse.Editor.Build
                 ?? VersionConsentDialog.Present;
         }
 
+        /// <summary>
+        /// Test seam for the batch-mode answer of the consent gate. Null in
+        /// production, where the gate reads the real batch-mode state. A
+        /// batch-mode build declines every consent without a dialog. An
+        /// EditMode run in batch mode would then decline the tests that
+        /// grant consent through a presenter. The test assembly sets this
+        /// seam to false once for the Build tests.
+        /// </summary>
+        internal static Func<bool> BatchModeForTests = null;
+
+        private static bool IsBatchMode()
+        {
+            return BatchModeForTests != null
+                ? BatchModeForTests()
+                : UnityEngine.Application.isBatchMode;
+        }
+
         private static void Execute(
             BuildContext context,
             AmusePlatformFinishState state,
@@ -341,7 +358,7 @@ namespace Alrauna.Amuse.Editor.Build
             if (subjects.Count > 0
                 && !VersionConsentDialog.ShouldProceed(
                     subjects,
-                    UnityEngine.Application.isBatchMode,
+                    IsBatchMode(),
                     ResolveConsentPresenter(consentPresenter)))
             {
                 AmuseReports.ConsentDeclined(subjects);

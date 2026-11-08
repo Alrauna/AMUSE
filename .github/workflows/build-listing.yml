@@ -24,6 +24,9 @@ concurrency:
   group: "pages"
   cancel-in-progress: true
 
+# No cache restore and no cache save for any job in this workflow.
+cache-mode: none
+
 jobs:
   
   # Build the VPM Listing Website and deploy to GitHub Pages
