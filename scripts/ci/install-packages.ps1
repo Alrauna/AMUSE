@@ -31,6 +31,64 @@ function Get-Json([string]$uri) {
     return ([string]$body).TrimStart([char]0xFEFF) | ConvertFrom-Json
 }
 
+# Returns the target of the first redirect of a url, or null when the url
+# does not redirect. The redirect is read and not followed.
+function Get-RedirectLocation([string]$url) {
+    $handler = [System.Net.Http.HttpClientHandler]::new()
+    $handler.AllowAutoRedirect = $false
+    $client = [System.Net.Http.HttpClient]::new($handler)
+    try {
+        $request = [System.Net.Http.HttpRequestMessage]::new([System.Net.Http.HttpMethod]::Head, $url)
+        $response = $client.SendAsync($request).GetAwaiter().GetResult()
+        if ($response.Headers.Location) { return $response.Headers.Location.AbsoluteUri }
+        return $null
+    }
+    finally { $client.Dispose() }
+}
+
+# Finds the GitHub release asset behind a download url. A github.com release
+# link names it directly. Another host may redirect to one, so one redirect is
+# read. Returns owner, repo, tag and file, or null when the url leads to no
+# GitHub release asset. The data only asks the release API. The zip hash is
+# still checked after the download.
+function Get-GitHubReleaseAssetRef([string]$url) {
+    $pattern = '^https://github\.com/([^/]+)/([^/]+)/releases/download/([^/]+)/([^?]+)'
+    $match = [regex]::Match($url, $pattern)
+    if (-not $match.Success) {
+        $location = Get-RedirectLocation $url
+        if (-not $location) { return $null }
+        $match = [regex]::Match([string]$location, $pattern)
+        if (-not $match.Success) { return $null }
+    }
+    return @{ Owner = $match.Groups[1].Value; Repo = $match.Groups[2].Value; Tag = $match.Groups[3].Value; File = $match.Groups[4].Value }
+}
+
+# Downloads one zip. The direct link runs again on a short network fault. The
+# github.com release link has answered scripts with HTTP 504 while a browser
+# got the file. When the direct link still fails with a short fault and the
+# url leads to a GitHub release asset, the asset comes from the release API
+# instead. A hash mismatch or an HTTP 4xx answer never takes that route. The
+# caller checks the zip hash after this function returns.
+function Save-Download([string]$url, [string]$outFile) {
+    try {
+        Invoke-WithRetry -MaxAttempts 2 -DelaySeconds @(3) { Invoke-WebRequest -Uri $url -OutFile $outFile }
+        return
+    }
+    catch {
+        if (-not (Test-TransientFault $_)) { throw }
+        $direct = $_
+    }
+    $ref = Get-GitHubReleaseAssetRef $url
+    if (-not $ref) { throw $direct }
+    Say 'The direct link failed. The asset comes from the GitHub release API.'
+    $owner = $ref.Owner; $repo = $ref.Repo; $tag = $ref.Tag; $file = $ref.File
+    $release = Invoke-WithRetry { Invoke-RestMethod -Uri "https://api.github.com/repos/$owner/$repo/releases/tags/$tag" -Headers @{ 'User-Agent' = 'amuse-ci-install-packages' } }
+    $asset = $release.assets | Where-Object { $_.name -eq $file } | Select-Object -First 1
+    if (-not $asset) { throw (Redact "The release holds no asset named $file.") }
+    $assetUrl = [string]$asset.url
+    Invoke-WithRetry { Invoke-WebRequest -Uri $assetUrl -Headers @{ 'User-Agent' = 'amuse-ci-install-packages'; 'Accept' = 'application/octet-stream' } -OutFile $outFile }
+}
+
 # Returns the entry of one package version in a listing, or null when the
 # name or the version is not in the listing.
 function Resolve-ListingEntry($listing, [string]$name, [string]$version) {
@@ -326,7 +384,7 @@ if ($MyInvocation.InvocationName -ne '.') {
                     $route = $publisher.Route
                 }
                 $zip = Join-Path $workDir "$name.zip"
-                Invoke-WithRetry { Invoke-WebRequest -Uri $url -OutFile $zip }
+                Save-Download $url $zip
                 $observed = Assert-ZipHash -Path $zip -Expected $expected -Name $name
                 $verified = Get-VerifiedCell $observed $expected
                 Say (New-PackageRow $name $version $sourceKey $route $verified)
