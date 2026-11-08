@@ -117,7 +117,7 @@ Two workflows run the EditMode suites on GitHub. Both run on hosted Windows runn
 `pr.yml` runs on every pull request and on every push to `main`. It holds five jobs.
 
 - `scripts` runs the Pester tests of the CI scripts and checks that `scripts/ci/lock.json` matches `Packages/vpm-manifest.json`.
-- `cheap` checks the changed lines with `git diff --check` and checks the contents of the release package.
+- `cheap` checks the changed lines with `git diff --check` and checks the contents of the release package. The whitespace check skips the YAML files that Unity writes: `.meta`, `.asset`, `.unity`, `.prefab`, `.mat`, `.anim`, and `.controller`.
 - `unity` installs the locked Editor, activates the license, installs the locked vendor packages with hash checks, and runs the product and research assemblies as two steps of one job. The job runs the tests as a local low-privilege user. A probe fails the job when that user can read runner memory or write to a folder that administrator steps run from.
 - `fork-notice` turns red when a pull request comes from a fork or from Dependabot. Such a pull request gets no secrets, so the `unity` job skips it. The notice asks the maintainer to read the change and to push it to a branch in this repository. The pull request must then come from that branch.
 - `validate` is the required check. It passes only when `scripts`, `cheap`, and `unity` pass and `fork-notice` is skipped.

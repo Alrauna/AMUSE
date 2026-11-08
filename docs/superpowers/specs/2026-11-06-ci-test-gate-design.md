@@ -422,7 +422,7 @@ The maintainer does these. The builder cannot.
 - `[MEASURED]` On 2026-11-07 (UTC), a release-date route for the canary cooldown exists for seven of the twelve packages. Five packages have none. The cooldown does not apply to a package with no route.
 - `[MEASURED]` On 2026-11-07 (UTC), the whole-branch review found no remote run yet of the new workflows. The first run can fail on three known points. The licensing client subject in `lock.json` starts equal to the installer subject. The Pester 5 module on the hosted image is unverified. The assembly name shape in the Unity result file is handled by leaf-name matching and is unproven. No run result is claimed here.
 - The local gate checks only the committed files. `scripts/verify.ps1` clones the committed state.
-- `git diff --check` can flag trailing whitespace inside Unity YAML assets.
+- `git diff --check` flags trailing whitespace inside Unity YAML files. The first run of the new `cheap` job on 2026-11-08 (UTC) failed on a new `.meta` file for this reason. The gate now skips the file types that Unity writes.
 
 ## 12. Open decisions after the adversarial review of 2026-11-06
 

@@ -103,7 +103,9 @@ jobs:
           }
           git rev-parse --verify --quiet "$base"
           if ($LASTEXITCODE -ne 0) { throw 'The base commit is missing from the checkout.' }
-          git diff --check "$base" HEAD
+          # Unity writes trailing spaces in its own YAML files. The check
+          # skips them, because no author controls that output.
+          git diff --check "$base" HEAD -- . ':(exclude)*.meta' ':(exclude)*.asset' ':(exclude)*.unity' ':(exclude)*.prefab' ':(exclude)*.mat' ':(exclude)*.anim' ':(exclude)*.controller'
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Write-Output 'No whitespace problems in the changed lines.'
 
