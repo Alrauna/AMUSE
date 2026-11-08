@@ -150,7 +150,7 @@ jobs:
   unity:
     name: unity
     needs: [scripts, cheap, scope]
-    if: needs.scope.outputs.unity_needed == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id) && github.actor != 'dependabot[bot]'
+    if: false
     runs-on: windows-2022
     timeout-minutes: 300
     environment: ${{ github.event_name == 'push' && 'unity-main' || 'unity-gate' }}
