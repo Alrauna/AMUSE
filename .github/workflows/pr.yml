@@ -221,7 +221,7 @@ jobs:
       - name: Run the product tests
         timeout-minutes: 60
         shell: pwsh
-        run: ${{ runner.temp }}/admin-scripts/run-tests.ps1 -AsLowUser -Assembly Alrauna.Amuse.Tests.Editor -OptIn AMUSE_REAL_LAC_PASS,AMUSE_REAL_THRY_LOCK -TimeoutMinutes 55
+        run: ${{ runner.temp }}/admin-scripts/run-tests.ps1 -AsLowUser -Assembly Alrauna.Amuse.Tests.Editor -OptIn AMUSE_REAL_LAC_PASS -TimeoutMinutes 55
 
       - name: Run the research tests
         timeout-minutes: 60

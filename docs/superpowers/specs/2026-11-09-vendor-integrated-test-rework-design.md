@@ -202,7 +202,7 @@ Placement:
 
 |Job|Gates set|Reason|
 |---|---|---|
-|PR gate (`unity`)|`AMUSE_REAL_LAC_PASS`, `AMUSE_REAL_THRY_LOCK`|These two guard the real path of code that a pull request changes. A gated test that never runs in CI protects nothing.|
+|PR gate (`unity`)|`AMUSE_REAL_LAC_PASS`|This gate guards the real path of code that a pull request changes. A gated test that never runs in CI protects nothing. Status as of 2026-11-11: the first PR run that also set `AMUSE_REAL_THRY_LOCK` failed 13 tests of the older real-lock suite on the hosted runner. That gate moved out of the PR step until the cause is known.|
 |Weekly canary|All four|The canary never blocks a merge. It is the safe place for the tests that change more project state.|
 
 The proving run is the pull request that carries C2. A maintainer approves its `unity-gate` run. That run is the trial. If it fails for a reason of the CI environment, such as no network for the Thry counter, the fix is one of two choices: move that gate to the canary only, or allow the network for the low user in a reviewed change. The PR gate keeps no unproven gate. The canary cannot prove the PR-gate tests, because it floats vendor versions while the tests pin them. So the canary plays no part in promotion.

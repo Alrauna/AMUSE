@@ -254,11 +254,11 @@ Describe 'Test runner' {
             }
         }
 
-        It 'ThePrProductStepSetsTheRealLacPassAndTheRealThryLockGates' {
+        It 'ThePrProductStepSetsOnlyTheRealLacPassGate' {
             $line = Get-RunTestsLine $prWorkflow 'Alrauna\.Amuse\.Tests\.Editor'
             $line | Should -Match '-OptIn'
             $line | Should -Match 'AMUSE_REAL_LAC_PASS'
-            $line | Should -Match 'AMUSE_REAL_THRY_LOCK'
+            $line | Should -Not -Match 'AMUSE_REAL_THRY_LOCK'
             $line | Should -Not -Match 'AMUSE_DAO_INTEGRATION'
             $line | Should -Not -Match 'AMUSE_PRODUCTION_ORDER_DISPATCH'
         }

@@ -135,7 +135,7 @@ The licensed jobs of both workflows share one concurrency group. They queue in o
 
 ### Opt-in gates in CI
 
-`scripts/ci/run-tests.ps1` unsets all four opt-in gates before every Editor run. The `-OptIn` parameter then sets only the named gates to 1 for the Editor process. The parameter accepts only the four gate names. The script restores the caller values after the run. As of 2026-11-10, `pr.yml` passes `AMUSE_REAL_LAC_PASS` and `AMUSE_REAL_THRY_LOCK` to the product run. `canary.yml` passes all four. The research run passes none. A Pester test for each workflow fails when a name leaves the step. The CI proving run of this change is not done as of 2026-11-10, and a skip guard for gate skips is not built yet.
+`scripts/ci/run-tests.ps1` unsets all four opt-in gates before every Editor run. The `-OptIn` parameter then sets only the named gates to 1 for the Editor process. The parameter accepts only the four gate names. The script restores the caller values after the run. As of 2026-11-11, `pr.yml` passes `AMUSE_REAL_LAC_PASS` to the product run. `canary.yml` passes all four. The research run passes none. A Pester test for each workflow fails when a name leaves the step. The first PR run with `AMUSE_REAL_THRY_LOCK` set failed 13 tests of the older real-lock suite on the hosted runner. The same suite passes in the dev editor. The cause is not known, because CI prints test names only. So the PR gate does not set that gate. A skip guard for gate skips is not built yet.
 
 ### The local gate
 

@@ -293,7 +293,7 @@ Nothing is committed, staged, or pushed. All work sits in the working tree.
 |2a|Done. The stale LAC test is rewritten. A mutation of `ResetForTests` fails it.|
 |C1|Done as of 2026-11-11. The lock holds the Avatar Compressor 0.9.0 and d4rkAvatarOptimizer 4.7.2. Each hash came from the GitHub release digest and matched the downloaded zip. `check-lock.ps1` exits 0. Pester passes 156. The first CI install of the new lock is not observed yet.|
 |1|Done. The LAC ground check and the fourth gate exist. The gated run passes. The ungated run skips by name.|
-|C2|Done locally, with Pester tests. The branch is pushed. A canary start from the branch failed at once, because the `unity-canary` environment allows only `main`. The PR gate proving run needs a pull request and is not observed yet. The first canary run is possible only after a merge to `main`.|
+|C2|Done locally, with Pester tests. The first PR run on 2026-11-11 set both gates and failed 13 tests of the older real-lock suite, which passes in the dev editor. The PR step now sets `AMUSE_REAL_LAC_PASS` only. A canary start from the branch failed at once, because the `unity-canary` environment allows only `main`. The first canary run is possible only after a merge to `main`.|
 |C3|Not done. It needs a real `TestResults.xml` from a run that batch-mode Unity cannot make while the dev editor holds the project.|
 |2|Done. 11 tests read the real LAC version. Two gated real-output tests are new. No test was removed.|
 |3|Done for the lilToon test files and for `AlphaSeparationPreparationTests`. The shared Semantics and Apply rows moved under stage 4.|
