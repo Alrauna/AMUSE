@@ -48,7 +48,11 @@ Describe 'Test runner' {
         $xmlFailedRun = @'
 <test-run total="3" passed="2" failed="1" skipped="0" inconclusive="0">
   <test-suite type="Assembly" name="Alrauna.Amuse.Tests.Editor.dll" fullname="Alrauna.Amuse.Tests.Editor.dll" />
-  <test-case fullname="Namespace.A test with user@example.com and a::colon fails" result="Failed" />
+  <test-case fullname="Namespace.A test with user@example.com and a::colon fails" result="Failed">
+    <failure><message><![CDATA[Real lock isolation preflight refused: DirtyAsset for owner@example.com
+second line with a::colon
+third line is dropped]]></message></failure>
+  </test-case>
 </test-run>
 '@
         $passingXmlPath = Write-FixtureFile 'passing-results.xml' $xmlPassingRun
@@ -154,6 +158,24 @@ Describe 'Test runner' {
             # The counters print before the verdict, so a failed run still
             # reports its numbers.
             $printed | Should -Contain '- tests: total 3, passed 2, failed 1, skipped 0, inconclusive 0'
+        }
+
+        It 'CompleteTestRunPrintsTheFirstTwoMessageLinesThroughRedact' {
+            $printed = [System.Collections.Generic.List[string]]::new()
+            Mock Say { param($text) $printed.Add([string]$text) }
+            { Complete-TestRun $failedXmlPath $assembly 0 $greenFacts } | Should -Throw '*failed tests*'
+            $messageLines = @($printed | Where-Object { $_ -like '      message: *' })
+            $messageLines | Should -HaveCount 1
+            $messageLines[0] | Should -Match 'DirtyAsset'
+            $messageLines[0] | Should -Match 'second line'
+            $messageLines[0] | Should -Not -Match 'third line'
+            $messageLines[0] | Should -Match '<email>'
+            $messageLines[0] | Should -Not -Match 'owner@example\.com'
+            $messageLines[0] | Should -Not -Match '::'
+        }
+
+        It 'FailedMessageLineIsCutToThreeHundredCharacters' {
+            (Format-FailedMessageLine ('word ' * 200)).Length | Should -BeLessThan 330
         }
 
         It 'CompleteTestRunIsGreenWhenEverythingPasses' {
