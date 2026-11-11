@@ -321,6 +321,12 @@
       "source": "embedded",
       "dependencies": {}
     },
+    "dev.limitex.avatar-compressor": {
+      "version": "file:dev.limitex.avatar-compressor",
+      "depth": 0,
+      "source": "embedded",
+      "dependencies": {}
+    },
     "jp.lilxyzw.liltoon": {
       "version": "file:jp.lilxyzw.liltoon",
       "depth": 0,

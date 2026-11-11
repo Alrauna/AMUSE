@@ -19,8 +19,8 @@
       "sha256": "4c9086b0726711cac03bf7bffce24118c79961b1590904f22cd5131981f2d1a4"
     },
     "d4rkpl4y3r.d4rkavataroptimizer": {
-      "version": "4.7.1",
-      "sha256": "4cb4093c11a1cbdb6a2c1a394c7bb9d7d2baea299049adc426b52593779b2e85"
+      "version": "4.7.2",
+      "sha256": "2e9aa94e940f8c06778eb4818a510391981381f1fccca58fd2b0368953c5b47a"
     },
     "jp.lilxyzw.liltoon": {
       "version": "2.4.1",
@@ -54,6 +54,10 @@
     "com.poiyomi.thryeditor": {
       "version": "2.74.4",
       "sha256": "546842cc47c228482dcfc25c960c77f4c9cc42f21bf0921cd3f9f9411b0a6e88"
+    },
+    "dev.limitex.avatar-compressor": {
+      "version": "0.9.0",
+      "sha256": "9b38ca60ae39b21f13de98a9595917d156b4d09237c151df05a0d9c0f316f9b6"
     }
   }
 }
