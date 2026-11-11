@@ -291,13 +291,13 @@ Nothing is committed, staged, or pushed. All work sits in the working tree.
 |Stage|State as of 2026-11-10|
 |---|---|
 |2a|Done. The stale LAC test is rewritten. A mutation of `ResetForTests` fails it.|
-|C1|Not done. It needs network access that the owner has not authorized.|
+|C1|Done as of 2026-11-11. The lock holds the Avatar Compressor 0.9.0 and d4rkAvatarOptimizer 4.7.2. Each hash came from the GitHub release digest and matched the downloaded zip. `check-lock.ps1` exits 0. Pester passes 156. The first CI install of the new lock is not observed yet.|
 |1|Done. The LAC ground check and the fourth gate exist. The gated run passes. The ungated run skips by name.|
-|C2|Done locally, with Pester tests. The CI proving run is not done. It needs a push.|
+|C2|Done locally, with Pester tests. The branch is pushed. A canary start from the branch failed at once, because the `unity-canary` environment allows only `main`. The PR gate proving run needs a pull request and is not observed yet. The first canary run is possible only after a merge to `main`.|
 |C3|Not done. It needs a real `TestResults.xml` from a run that batch-mode Unity cannot make while the dev editor holds the project.|
 |2|Done. 11 tests read the real LAC version. Two gated real-output tests are new. No test was removed.|
 |3|Done for the lilToon test files and for `AlphaSeparationPreparationTests`. The shared Semantics and Apply rows moved under stage 4.|
-|4|Partly done as of 2026-11-11. Tasks 4.1 to 4.4 are done. Task 4.6 is done: 7 Semantics rows and 12 Apply rows moved under 4c, and about 400 leaves in the Poiyomi Semantics folder moved to real unlocked bundled materials in six batches, each reviewed. The recount found no movable row in the dry-run file (28 rows use another shader family, 2 are exact-control, 1 needs a locked material), so that file stays as it is. Task 4.5 (gated real-lock tests) is not written, because the real lock calls the vendor usage counter over the network.|
+|4|Done as of 2026-11-11. Tasks 4.1 to 4.4 are done. Task 4.5 is done: two gated real-lock tests (one per bundled Poiyomi row) passed with `AMUSE_REAL_THRY_LOCK` set, and a scratch mutation that skips the revert made both fail. Task 4.6 is done: 7 Semantics rows and 12 Apply rows moved under 4c, and about 400 leaves in the Poiyomi Semantics folder moved to real unlocked bundled materials in six batches, each reviewed. The recount found no movable row in the dry-run file (28 rows use another shader family, 2 are exact-control, 1 needs a locked material), so that file stays as it is.|
 |5|Done. The controller-graph tests run on stub and real NDMF bindings. The gated Modular Avatar probe and its tier B twin pass.|
 |6|Done. The AAO monotone-atlas case, the d4rk skip text, and the d4rk arm removal are done.|
 |7|Partly done. The root README line and this status table are done. In `docs/development-setup.md` the fourth gate, the CI opt-in section, and the Limitex repository row are done. The gate-skip CI rule is not done, because C3 is not done. A reviewer found no identifier hit in the files changed before 2026-11-11.|

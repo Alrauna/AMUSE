@@ -87,7 +87,7 @@ The installed vendors act on the project and on the editor. The suites record th
 Some fixtures write project-level vendor state. Each of them sits behind a named opt-in environment variable. An unset gate reports a named skip with its disclosure. Set a gate to 1 only in a disposable project, never in a project whose state matters.
 
 - `AMUSE_DAO_INTEGRATION`: the d4rkAvatarOptimizer combined-sequence tests. They delete project-level d4rkAvatarOptimizer output.
-- `AMUSE_REAL_THRY_LOCK`: the real Thry lock characterization. The lock writes vendor-owned cache data under `Assets/_LockedShaderCache` and calls the vendor usage counter over the network.
+- `AMUSE_REAL_THRY_LOCK`: the real Thry lock characterization and the gated end-to-end unlock-window tests on the two bundled Poiyomi rows. The lock writes vendor-owned cache data under `Assets/_LockedShaderCache` and calls the vendor usage counter over the network.
 - `AMUSE_PRODUCTION_ORDER_DISPATCH`: the production-order fixtures that build through the SDK callback dispatcher. The dispatcher runs VRCFury, and VRCFury writes generated controllers under `Packages/com.vrcfury.temp` during the build.
 - `AMUSE_REAL_LAC_PASS`: the ground check that runs the real Avatar Compressor pass. The pass writes generated build assets and reads the LAC editor preferences. The fixture freezes both preferences for its build and restores them.
 
