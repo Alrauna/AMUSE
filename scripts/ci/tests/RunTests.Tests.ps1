@@ -11,7 +11,8 @@ Describe 'Test runner' {
 
         # The tests below must fail when a function is missing. They must not
         # pass because a throw test silently swallowed the error.
-        foreach ($name in 'Get-LogFacts', 'Complete-TestRun', 'Get-UnityTestArguments') {
+        foreach ($name in 'Get-LogFacts', 'Complete-TestRun', 'Get-UnityTestArguments',
+            'Save-OptInGateVariables', 'Restore-OptInGateVariables') {
             Get-Command $name -ErrorAction Stop | Out-Null
         }
 
@@ -161,6 +162,119 @@ Describe 'Test runner' {
             { Complete-TestRun $passingXmlPath $assembly 0 $greenFacts } | Should -Not -Throw
             $printed | Should -Contain '- tests: total 3, passed 3, failed 0, skipped 0, inconclusive 0'
             @($printed | Where-Object { $_ -like '  - FAILED *' }) | Should -HaveCount 0
+        }
+    }
+
+    Context 'Opt-in gate variables' {
+        BeforeAll {
+            # The four gate names of the repo, so a test can strip them
+            # without a reference into the script under test.
+            $gateNames = @('AMUSE_DAO_INTEGRATION', 'AMUSE_REAL_THRY_LOCK', 'AMUSE_PRODUCTION_ORDER_DISPATCH', 'AMUSE_REAL_LAC_PASS')
+        }
+
+        It 'RejectsANameOutsideTheAllowListWithANamedError' {
+            { Save-OptInGateVariables @('AMUSE_NOT_A_GATE') } |
+                Should -Throw "*Unknown opt-in name 'AMUSE_NOT_A_GATE'*"
+        }
+
+        It 'SetsTheListedGateToOneAndLeavesTheOthersUnset' {
+            foreach ($gate in $gateNames) {
+                [Environment]::SetEnvironmentVariable($gate, [NullString]::Value)
+            }
+            $saved = Save-OptInGateVariables @('AMUSE_REAL_THRY_LOCK')
+            try {
+                Test-Path 'Env:\AMUSE_REAL_THRY_LOCK' | Should -BeTrue
+                [Environment]::GetEnvironmentVariable('AMUSE_REAL_THRY_LOCK') | Should -Be '1'
+                Test-Path 'Env:\AMUSE_DAO_INTEGRATION' | Should -BeFalse
+                Test-Path 'Env:\AMUSE_PRODUCTION_ORDER_DISPATCH' | Should -BeFalse
+                Test-Path 'Env:\AMUSE_REAL_LAC_PASS' | Should -BeFalse
+            }
+            finally {
+                Restore-OptInGateVariables $saved
+            }
+            # The caller had the gate unset, so the restore must remove the
+            # name again. A plain emptiness check would accept a leftover
+            # value of 1.
+            Test-Path 'Env:\AMUSE_REAL_THRY_LOCK' | Should -BeFalse
+        }
+
+        It 'SavesTheCallerValuesAndRestoresThemAfterTheRun' {
+            [Environment]::SetEnvironmentVariable('AMUSE_DAO_INTEGRATION', 'keep-me')
+            try {
+                $saved = Save-OptInGateVariables @()
+                $saved['AMUSE_DAO_INTEGRATION'] | Should -Be 'keep-me'
+                [Environment]::GetEnvironmentVariable('AMUSE_DAO_INTEGRATION') | Should -BeNullOrEmpty
+                Restore-OptInGateVariables $saved
+                [Environment]::GetEnvironmentVariable('AMUSE_DAO_INTEGRATION') | Should -Be 'keep-me'
+            }
+            finally {
+                # The test set this value, so the test unsets it again. The
+                # runner and the dev machine carry no gate names.
+                [Environment]::SetEnvironmentVariable('AMUSE_DAO_INTEGRATION', $null)
+            }
+        }
+
+        It 'RemovesAnOptInGateThatTheCallerNeverHadAndKeepsTheSavedValue' {
+            [Environment]::SetEnvironmentVariable('AMUSE_DAO_INTEGRATION', 'keep-me')
+            try {
+                $saved = Save-OptInGateVariables @('AMUSE_REAL_THRY_LOCK')
+                Restore-OptInGateVariables $saved
+                # The caller never had the opt-in gate, so the restore must
+                # remove the name. The caller value must come back.
+                Test-Path 'Env:\AMUSE_REAL_THRY_LOCK' | Should -BeFalse
+                Test-Path 'Env:\AMUSE_DAO_INTEGRATION' | Should -BeTrue
+                [Environment]::GetEnvironmentVariable('AMUSE_DAO_INTEGRATION') | Should -Be 'keep-me'
+            }
+            finally {
+                [Environment]::SetEnvironmentVariable('AMUSE_DAO_INTEGRATION', [NullString]::Value)
+            }
+        }
+    }
+
+    Context 'Workflow opt-in gates' {
+        BeforeAll {
+            # The workflows call the admin copy of run-tests.ps1. A silent
+            # removal of a gate from a product step must turn these tests
+            # red. The precedent is the ChangeScope suite, which cuts text
+            # out of pr.yml.
+            $prWorkflow = Get-Content -LiteralPath (Join-Path $PSScriptRoot '../../../.github/workflows/pr.yml') -Raw
+            $canaryWorkflow = Get-Content -LiteralPath (Join-Path $PSScriptRoot '../../../.github/workflows/canary.yml') -Raw
+
+            # Returns the one run-tests.ps1 step line of the workflow that
+            # names the assembly pattern. Zero or two lines are a defect.
+            function Get-RunTestsLine([string]$workflowText, [string]$assemblyPattern) {
+                $lines = @(
+                    $workflowText -split "`n" |
+                        Where-Object { $_ -match ('run-tests\.ps1.*' + $assemblyPattern) }
+                )
+                if ($lines.Count -ne 1) {
+                    throw "Expected one run-tests.ps1 step line for '$assemblyPattern', found $($lines.Count)."
+                }
+                return $lines[0]
+            }
+        }
+
+        It 'ThePrProductStepSetsTheRealLacPassAndTheRealThryLockGates' {
+            $line = Get-RunTestsLine $prWorkflow 'Alrauna\.Amuse\.Tests\.Editor'
+            $line | Should -Match '-OptIn'
+            $line | Should -Match 'AMUSE_REAL_LAC_PASS'
+            $line | Should -Match 'AMUSE_REAL_THRY_LOCK'
+            $line | Should -Not -Match 'AMUSE_DAO_INTEGRATION'
+            $line | Should -Not -Match 'AMUSE_PRODUCTION_ORDER_DISPATCH'
+        }
+
+        It 'TheCanaryProductStepSetsAllFourGates' {
+            $line = Get-RunTestsLine $canaryWorkflow 'Alrauna\.Amuse\.Tests\.Editor'
+            $line | Should -Match '-OptIn'
+            $line | Should -Match 'AMUSE_DAO_INTEGRATION'
+            $line | Should -Match 'AMUSE_REAL_THRY_LOCK'
+            $line | Should -Match 'AMUSE_PRODUCTION_ORDER_DISPATCH'
+            $line | Should -Match 'AMUSE_REAL_LAC_PASS'
+        }
+
+        It 'TheResearchStepsSetNoGate' {
+            Get-RunTestsLine $prWorkflow 'Alrauna\.Amuse\.Research\.Tests\.Editor' | Should -Not -Match '-OptIn'
+            Get-RunTestsLine $canaryWorkflow 'Alrauna\.Amuse\.Research\.Tests\.Editor' | Should -Not -Match '-OptIn'
         }
     }
 }
