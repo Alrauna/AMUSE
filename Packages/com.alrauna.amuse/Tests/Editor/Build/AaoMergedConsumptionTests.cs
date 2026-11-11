@@ -804,6 +804,153 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// The monotone-atlas case of the real Avatar Optimizer route.
+        /// With Optimize Texture enabled over solid-color sources, the
+        /// installed Avatar Optimizer collapses every packed atlas into
+        /// its one monotone color texture, named with the pinned
+        /// "AAO Monotone " marker. The real route must produce that
+        /// collapse, the admission must accept the live one-texel
+        /// texture over its corroborated slot material, and the
+        /// generated capture route must serve it. The shipped
+        /// minimum-texture-size policy, observed on 2026-11-10, never
+        /// consults a one-texel chain, so every triangle answer over
+        /// the collapse comes back unknown and nothing proves. The
+        /// renderer still analyzes, because a missing texture field is
+        /// a valid all-unknown resolution and not a refusal. The
+        /// soundness pin of this case: every authored triangle survives
+        /// exactly once, every slot keeps a clone of its source
+        /// material, and no generated material exists anywhere. A run
+        /// where the collapse never happens fails here instead of
+        /// silently exercising no transformation.
+        /// </summary>
+        [Test]
+        public void RealAaoMonotoneAtlasIsAdmittedAndNothingProvesOverIt()
+        {
+            RequireIntegrationEnvironment(
+                out var traceAndOptimizeType,
+                out var transparentShader,
+                out _);
+            AssetDatabase.CreateFolder("Assets", "AmuseTests_AaoMerge");
+
+            var root = new GameObject("AMUSE AAO monotone atlas");
+            try
+            {
+                FixtureAvatarIdentity.AttachVrcDescriptor(root);
+                root.AddComponent<AmuseAvatarOptimizer>();
+                var traceAndOptimize =
+                    root.AddComponent(traceAndOptimizeType);
+                ConfigureTraceAndOptimize(
+                    traceAndOptimize, mergeSkinnedMesh: true,
+                    optimizeTexture: true);
+                AttachAnimationFixture(root, "monotone-atlas");
+                var textureA =
+                    Track(ImportSolidAlphaTexture("solid_mono_a"));
+                var textureB =
+                    Track(ImportSolidAlphaTexture("solid_mono_b"));
+                // The corroboration conjunct resolves the slot material
+                // one hop to an asset-backed original, so the fixture
+                // persists both source materials as assets, the same
+                // shape the real avatar's authored materials have.
+                var materialA = NewTransparentMaterial(
+                    transparentShader, textureA);
+                AssetDatabase.CreateAsset(
+                    materialA, TempFolder + "/monotone-atlas-source-a.mat");
+                var materialB = NewTransparentMaterial(
+                    transparentShader, textureB);
+                AssetDatabase.CreateAsset(
+                    materialB, TempFolder + "/monotone-atlas-source-b.mat");
+
+                CreateSkinnedRenderer(
+                    root, "AMUSE monotone renderer A",
+                    "AMUSE monotone mesh A",
+                    new[] { materialA },
+                    new[] { Band.Opaque, Band.Opaque },
+                    new[] { 0, 0 },
+                    firstTriangleIndex: 0);
+                CreateSkinnedRenderer(
+                    root, "AMUSE monotone renderer B",
+                    "AMUSE monotone mesh B",
+                    new[] { materialB },
+                    new[] { Band.Opaque, Band.Opaque },
+                    new[] { 0, 0 },
+                    firstTriangleIndex: 3);
+
+                OptimizerMergeObservation.Reset();
+                OptimizerMergeObservation.Enabled = true;
+                try
+                {
+                    var context = AvatarProcessor.ProcessAvatar(
+                        root, AmbientPlatform.DefaultPlatform);
+                    Assert.That(context.Successful, Is.True,
+                        "fixture precondition: the ambient build must" +
+                        " complete");
+
+                    AssertMonotoneAtlasReplacedTheFixtureTextures(
+                        root, new[] { textureA, textureB });
+                    Assert.That(
+                        OptimizerMergeObservation.Atlases,
+                        Is.Not.Empty,
+                        "Optimize Texture must pack the solid fixture" +
+                        " textures at the post-optimizer boundary");
+                    foreach (var atlas
+                        in OptimizerMergeObservation.Atlases)
+                    {
+                        Assert.That(
+                            atlas.Name.StartsWith(
+                                AaoAtlasTextureAttestation
+                                    .MonotoneNamePrefix,
+                                StringComparison.Ordinal),
+                            Is.True,
+                            "the solid fixture textures must collapse" +
+                            " into monotone atlases. The observed name" +
+                            " was: " + atlas.Name);
+                        Assert.That(
+                            atlas.HasAssetPath, Is.False,
+                            "the real monotone atlas stays a live" +
+                            " in-memory texture while the build runs");
+                        Assert.That(
+                            atlas.Admitted, Is.True,
+                            "the real monotone atlas of the installed" +
+                            " Avatar Optimizer must pass the shape and" +
+                            " corroboration conjuncts over its" +
+                            " registered slot material");
+                        Assert.That(
+                            atlas.ServedByGeneratedRoute, Is.True,
+                            "the generated capture route must serve" +
+                            " the real monotone atlas");
+                    }
+
+                    var state =
+                        context.GetState<AmusePlatformFinishState>();
+                    Assert.That(
+                        state.AnalyzedRendererCount, Is.EqualTo(1),
+                        "the shipped minimum-texture-size policy keeps" +
+                        " every triangle answer over the one-texel" +
+                        " monotone atlas unknown, so the renderer" +
+                        " analyzes with zero proven triangles and the" +
+                        " slot refusal never fires");
+                    var generated = state.Separation?.CreatedClones
+                        ?? (IEnumerable<Material>)Array.Empty<Material>();
+                    Assert.That(
+                        generated, Is.Empty,
+                        "nothing may prove over the one-texel monotone" +
+                        " atlas, so nothing may move to a generated" +
+                        " material");
+                    AssertMonotoneCaseMovedNothing(
+                        root, new[] { materialA, materialB });
+                }
+                finally
+                {
+                    OptimizerMergeObservation.Reset();
+                }
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
         /// The component-information contract observed on the real
         /// boundary: after Avatar Optimizer's passes and again after
         /// AMUSE's own sequence, the AMUSE component must still be on
@@ -1380,11 +1527,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// triangle by its own slot's texture. Any cross-slot evidence
         /// leak converts whole mixed slots, which this test fails on.
         /// </summary>
+        /// <para>
+        /// This case carries no d4rk arm as of 2026-11-10. The installed
+        /// d4rkAvatarOptimizer registers only the SDK preprocess
+        /// callback, so an ambient ProcessAvatar build never runs it,
+        /// and a d4rk component on this fixture would sit inert. The
+        /// gated d4rk cases live in DaoMergedConsumptionTests.
+        /// </para>
         [Test]
-        [TestCase(false)]
-        [TestCase(true)]
-        public void ManySlotMergedRendererKeepsMixedAlphaTrianglesOnTheirSlots(
-            bool includeDao)
+        public void ManySlotMergedRendererKeepsMixedAlphaTrianglesOnTheirSlots()
         {
             RequireIntegrationEnvironment(
                 out var traceAndOptimizeType,
@@ -1392,8 +1543,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 out var cutoutShader);
             AssetDatabase.CreateFolder("Assets", "AmuseTests_AaoMerge");
 
-            var root = new GameObject("AMUSE many slot merged"
-                + (includeDao ? " with DAO" : ""));
+            var root = new GameObject("AMUSE many slot merged");
             try
             {
                 FixtureAvatarIdentity.AttachVrcDescriptor(root);
@@ -1404,8 +1554,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 ConfigureTraceAndOptimize(
                     traceAndOptimize, mergeSkinnedMesh: true,
                     optimizeTexture: false,
-                    allowShuffleMaterialSlots: true,
-                    includeDao: includeDao);
+                    allowShuffleMaterialSlots: true);
                 AttachAnimationFixture(root, "many-slots");
 
                 var banded =
@@ -1574,6 +1723,94 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 + " exercise the real texture transformation; if packing"
                 + " refused this fixture, shrink the islands - never"
                 + " weaken this assertion");
+        }
+
+        private static void AssertMonotoneAtlasReplacedTheFixtureTextures(
+            GameObject root, Texture2D[] sources)
+        {
+            var sourceNames = new HashSet<string>(
+                sources.Select(texture => texture.name));
+            var monotoneSeen = false;
+            foreach (var renderer in root.GetComponentsInChildren<
+                         SkinnedMeshRenderer>(true))
+            {
+                var mesh = renderer.sharedMesh;
+                if (mesh == null) continue;
+                foreach (var material in renderer.sharedMaterials)
+                {
+                    if (material == null) continue;
+                    if (!material.HasProperty("_MainTex")) continue;
+                    var texture = material.GetTexture("_MainTex");
+                    if (texture == null) continue;
+                    Assert.That(
+                        sourceNames,
+                        Does.Not.Contain(texture.name),
+                        "Optimize Texture must replace the solid fixture"
+                        + " texture; slot " + material.name + " still"
+                        + " references " + texture.name);
+                    Assert.That(
+                        texture.name,
+                        Does.StartWith(
+                            AaoAtlasTextureAttestation.MonotoneNamePrefix),
+                        "the solid fixture texture must collapse into a"
+                        + " monotone atlas; slot " + material.name
+                        + " carries " + texture.name);
+                    Assert.That(
+                        texture.width, Is.EqualTo(1),
+                        "the monotone atlas is the one-texel collapse;"
+                        + " slot " + material.name + " carries width "
+                        + texture.width);
+                    monotoneSeen = true;
+                }
+            }
+
+            Assert.That(
+                monotoneSeen, Is.True,
+                "Optimize Texture must leave at least one monotone slot"
+                + " to exercise the real monotone route; if packing"
+                + " refused this fixture, shrink the islands - never"
+                + " weaken this assertion");
+        }
+
+        /// <summary>
+        /// The soundness pin of the conservative monotone outcome. The
+        /// built avatar must keep every slot on a clone of its source
+        /// material and must carry every authored triangle exactly
+        /// once, so nothing proved, nothing moved, and nothing was
+        /// lost. Avatar Optimizer clones the source materials per
+        /// renderer, so the pins compare names, not instances.
+        /// </summary>
+        private void AssertMonotoneCaseMovedNothing(
+            GameObject root, Material[] sources)
+        {
+            var slots = root.GetComponentsInChildren<
+                    SkinnedMeshRenderer>(true)
+                .SelectMany(renderer => renderer.sharedMaterials
+                    ?? Array.Empty<Material>())
+                .ToList();
+            var slotNames = slots.Select(material => material != null
+                ? material.name : "<null>").ToList();
+            Assert.That(
+                slotNames, Is.EquivalentTo(
+                    sources.Select(material => material.name).ToList()),
+                "the conservative monotone outcome must keep every"
+                + " slot on a clone of its source material");
+            var snapshot = OptimizerMergeObservation.AfterAmuse;
+            Assert.That(
+                snapshot, Is.Not.Null,
+                "the observation pass after the AMUSE passes must have"
+                + " run");
+            var built = snapshot.Renderers
+                .SelectMany(entry => entry.TriangleKeys)
+                .OrderBy(key => key, StringComparer.Ordinal)
+                .ToList();
+            var expected = authored.Keys
+                .OrderBy(key => key, StringComparer.Ordinal)
+                .ToList();
+            Assert.That(
+                built, Is.EqualTo(expected),
+                "the built avatar must carry every authored triangle"
+                + " exactly once");
         }
     }
 }

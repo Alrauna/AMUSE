@@ -45,6 +45,7 @@ The test suites run against the installed vendor packages. The `locked` block of
 | `https://vcc.vrcfury.com/` | VRCFury |
 | `https://redsim.github.io/vpmlisting/index.json` | Red Sim Light Volumes |
 | `https://vpm.pimaker.at/index.json` | LTCGI |
+| `https://vpm.limitex.dev/index.json` | Limitex Avatar Compressor |
 
 These repositories supply third-party vendor packages for local testing. Register only the ones your work needs. The suite treats an absent optional vendor as a recorded fact and a named skip, never as a failure.
 
@@ -88,6 +89,7 @@ Some fixtures write project-level vendor state. Each of them sits behind a named
 - `AMUSE_DAO_INTEGRATION`: the d4rkAvatarOptimizer combined-sequence tests. They delete project-level d4rkAvatarOptimizer output.
 - `AMUSE_REAL_THRY_LOCK`: the real Thry lock characterization. The lock writes vendor-owned cache data under `Assets/_LockedShaderCache` and calls the vendor usage counter over the network.
 - `AMUSE_PRODUCTION_ORDER_DISPATCH`: the production-order fixtures that build through the SDK callback dispatcher. The dispatcher runs VRCFury, and VRCFury writes generated controllers under `Packages/com.vrcfury.temp` during the build.
+- `AMUSE_REAL_LAC_PASS`: the ground check that runs the real Avatar Compressor pass. The pass writes generated build assets and reads the LAC editor preferences. The fixture freezes both preferences for its build and restores them.
 
 ### Duration
 
@@ -130,6 +132,10 @@ A pull request can rewrite `pr.yml` or `scripts/ci/get-change-scope.ps1`. The sk
 `canary.yml` runs once a week and on a manual start. It floats every vendor package to its newest stable release. Unity stays at the version in `ProjectSettings/ProjectVersion.txt`. It skips releases that are younger than 48 hours when the publisher shows a release date. It never gates a merge, holds no write permission, and changes nothing in the repository. A red run is the signal that a vendor moved. The job summary holds one table row per package. The columns are package, old, new, date source, and skipped younger.
 
 The licensed jobs of both workflows share one concurrency group. They queue in order instead of cancelling a waiting run. The gate and the canary never sign in to the one account at the same time.
+
+### Opt-in gates in CI
+
+`scripts/ci/run-tests.ps1` unsets all four opt-in gates before every Editor run. The `-OptIn` parameter then sets only the named gates to 1 for the Editor process. The parameter accepts only the four gate names. The script restores the caller values after the run. As of 2026-11-10, `pr.yml` passes `AMUSE_REAL_LAC_PASS` and `AMUSE_REAL_THRY_LOCK` to the product run. `canary.yml` passes all four. The research run passes none. A Pester test for each workflow fails when a name leaves the step. The CI proving run of this change is not done as of 2026-11-10, and a skip guard for gate skips is not built yet.
 
 ### The local gate
 

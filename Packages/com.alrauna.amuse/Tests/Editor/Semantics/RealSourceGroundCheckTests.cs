@@ -327,6 +327,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                     Is.EqualTo(PoiyomiSourceAttestation.CanonicalShaderGuid),
                     "the verified evidence must carry the shader the " +
                     "pinned GUID loaded");
+                Assert.That(
+                    PoiyomiSourceAttestation.IsLockedOriginalAdmittedName(
+                        mainShader.name),
+                    Is.True,
+                    "the admitted row of the installed bundled main " +
+                    "shader must admit locked originals");
 
                 var twoPassEvidence = PoiyomiSourceAttestation
                     .GatherAlphaSourceEvidence(
@@ -347,6 +353,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                         PoiyomiSourceAttestation.TwoPassCanonicalShaderGuid),
                     "the verified evidence must carry the shader the " +
                     "pinned GUID loaded");
+                Assert.That(
+                    PoiyomiSourceAttestation.IsLockedOriginalAdmittedName(
+                        twoPassShader.name),
+                    Is.True,
+                    "the admitted row of the installed bundled two-pass " +
+                    "shader must admit locked originals");
             }
             finally
             {

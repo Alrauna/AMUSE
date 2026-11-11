@@ -33,7 +33,7 @@ Add the **AMUSE Avatar Optimizer** component to the avatar root and build as usu
 - PC only. Android and Quest builds get a named refusal.
 - **Disable AMUSE** on the component makes the build treat it as absent: nothing runs, nothing is reported.
 - **Alpha Separator** is on by default. Turn it off to skip alpha separation for that avatar.
-- The combined sequence of AMUSE and d4rkAvatarOptimizer is exercised by the opt-in gated integration tests of this repository. Those tests run only in a disposable project with their gate variable set. The default test run leaves this combination out by name.
+- Combining AMUSE with d4rkAvatarOptimizer is not validated in 0.1.0. Opt-in gated tests of this repository observe the combined sequence in a disposable project. They are observation, not validation.
 
 ## What 0.1.0 does
 

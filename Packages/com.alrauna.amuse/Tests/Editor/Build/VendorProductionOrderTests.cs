@@ -55,6 +55,24 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         private const string MergeAnimatorTypeName =
             "nadena.dev.modular_avatar.core.ModularAvatarMergeAnimator,"
             + " nadena.dev.modular-avatar.core";
+        private const string MaObjectToggleTypeName =
+            "nadena.dev.modular_avatar.core.ModularAvatarObjectToggle,"
+            + " nadena.dev.modular-avatar.core";
+        private const string MaMenuItemTypeName =
+            "nadena.dev.modular_avatar.core.ModularAvatarMenuItem,"
+            + " nadena.dev.modular-avatar.core";
+        private const string MaToggledObjectTypeName =
+            "nadena.dev.modular_avatar.core.ToggledObject,"
+            + " nadena.dev.modular-avatar.core";
+        private const string MaObjectReferenceTypeName =
+            "nadena.dev.modular_avatar.core.AvatarObjectReference,"
+            + " nadena.dev.modular-avatar.core";
+        private const string MaToggleProbeName =
+            "AMUSE production order MA toggle probe";
+        private const string MaToggleHolderName =
+            "AMUSE production order MA toggle holder";
+        private const string MaToggleParameterName =
+            "AMUSE production order MA toggle";
         private const string VrcFuryTypeName = "VF.Model.VRCFury, VRCFury";
         private const string FuryToggleTypeName =
             "VF.Model.Feature.Toggle, VRCFury";
@@ -63,6 +81,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
         private const string MaSwapClipName =
             "AMUSE production order MA swap";
+        private const string MaToggleTwinClipName =
+            "AMUSE production order MA toggle twin";
         private const string FuryToggleName =
             "AMUSE production order fury toggle";
         private const string FuryTwinSwapClipName =
@@ -75,12 +95,22 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
         private const string VrcFuryBuildsFolder =
             "Packages/com.vrcfury.temp/Builds";
+        private const string NdmfGeneratedAssetsRoot =
+            "Packages/nadena.dev.ndmf/__Generated";
 
         // True from a dispatched build until its teardown ran. The
         // residue cleanup and the tier A texture arm both read it, so
         // tier B twins, skipped runs, and every other suite keep the
         // strict behavior and delete nothing.
         private static bool _dispatchRanThisTest;
+
+        // The avatar name of the dispatched build. The teardown deletes
+        // the vendor generated assets folder of that name, so the next
+        // dispatched build of the same avatar never rebuilds over a
+        // stale deleted folder. The vendor AssetSaver deletes and
+        // recreates that folder per build, and a stale deletion state
+        // turned its asset path empty on 2026-11-10.
+        private static string _dispatchedAvatarName;
 
         // The Builds folder entry names before the dispatch of the
         // running test. The teardown deletes only the new entries, so
@@ -178,6 +208,66 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        /// <summary>
+        /// The tier B twin of the Modular Avatar object toggle fixture.
+        /// The vendor reactive object system animates the renderer
+        /// holder active state on the VRChat platform, so the twin
+        /// injects the equivalent animation input by hand: one holder
+        /// active state clip on the root Animator. The build runs on
+        /// the dedicated platform through the mirrored five pass
+        /// topology. No vendor component and no VRChat SDK take part.
+        /// </summary>
+        [Test]
+        public void ModularAvatarObjectToggleKeepsTrianglesSound()
+        {
+            RequireLilToonEnvironment(
+                out var transparentShader, out var cutoutShader);
+            AssetDatabase.CreateFolder("Assets", TempFolderName);
+
+            var root = new GameObject("AMUSE production order MA toggle twin");
+            try
+            {
+                root.AddComponent<AmuseAvatarOptimizer>();
+                FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
+
+                AttachBandedRenderer(root, MaToggleHolderName,
+                    "AMUSE production order MA toggle twin mesh",
+                    "banded_production_ma", transparentShader,
+                    cutoutShader, out _, out _);
+
+                var toggleClip = Track(NewHolderToggleClip(
+                    MaToggleTwinClipName, MaToggleHolderName));
+                AlphaSeparationTestLifecycle.NewController(
+                    root, "AMUSE production order MA toggle twin graph",
+                    toggleClip);
+
+                BuildOnTierBPlatform(root);
+
+                AssertCommittedRootGraphCarriesMotion(
+                    root, MaToggleTwinClipName);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
+        /// One hand built clip that holds the fixture renderer holder
+        /// on. The vendor reactive object system animates the same
+        /// property through the menu toggle on the VRChat platform, so
+        /// the twin injects the equivalent animation input by hand.
+        /// </summary>
+        private static AnimationClip NewHolderToggleClip(
+            string name, string holderPath)
+        {
+            var clip = new AnimationClip { name = name };
+            clip.SetCurve(
+                holderPath, typeof(GameObject), "m_IsActive",
+                AnimationCurve.Constant(0f, 1f, 1f));
+            return clip;
+        }
+
         private void BuildOnTierBPlatform(GameObject root)
         {
             // The production capture route is the tier B lifecycle the
@@ -270,6 +360,96 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     VendorProductionOrderCapture.Context, root);
                 AssertCommittedDescriptorFxCarriesMotion(
                     root, MaSwapClipName);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
+        /// The tier A fixture of the Modular Avatar object toggle. The
+        /// standard fixture avatar carries one reflected
+        /// ModularAvatarObjectToggle component on a probe object. The
+        /// toggle holds the on state for the fixture renderer holder, so
+        /// the vendor reactive object system builds a real toggle layer
+        /// into the FX controller. The build runs through the installed
+        /// SDK callback dispatcher, so the whole production order
+        /// executes. The oracle holds on the built avatar and the
+        /// committed FX graph carries the holder active state animation,
+        /// so a silent vendor skip cannot turn green.
+        /// </summary>
+        [Test]
+        [Category(VendorVrChatTierGate.TierACategory)]
+        public void ModularAvatarObjectToggleKeepsTrianglesSoundVendorVRChat()
+        {
+            VendorVrChatTierGate.RequireInstalledVrcSdkPackages();
+            // The same opt-in gate as the other tier A fixtures: the
+            // dispatch runs VRCFury, and VRCFury writes project level
+            // state during the build. No new dispatch gate is added.
+            VendorOptInGate.Require(
+                VendorOptInGate.ProductionOrderDispatch,
+                "Set " + VendorOptInGate.ProductionOrderDispatch + "=1"
+                + " in a disposable project to run this fixture. The"
+                + " SDK callback dispatcher runs VRCFury, and VRCFury"
+                + " writes generated controllers into Packages/"
+                + "com.vrcfury.temp during the build.");
+            var toggleType = Type.GetType(MaObjectToggleTypeName);
+            if (toggleType == null)
+            {
+                Assert.Ignore(
+                    "The " + ModularAvatarPackageId + " package "
+                    + ModularAvatarLockedVersion + " is not installed in"
+                    + " this project. Install it to run this fixture.");
+            }
+            RequireLilToonEnvironment(
+                out var transparentShader, out var cutoutShader);
+            AssetDatabase.CreateFolder("Assets", TempFolderName);
+
+            var root = new GameObject("AMUSE production order MA toggle");
+            try
+            {
+                FixtureAvatarIdentity.AttachVrcDescriptor(root);
+                root.AddComponent<AmuseAvatarOptimizer>();
+                FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
+                AttachAnimationFixture(root, "production-order-ma-toggle");
+                PinProbeWriteDefaultsOff(root);
+
+                var renderer = AttachBandedRenderer(root, MaToggleHolderName,
+                    "AMUSE production order MA toggle mesh",
+                    "banded_production_ma", transparentShader,
+                    cutoutShader, out _, out _);
+
+                var toggledObjectType = Type.GetType(MaToggledObjectTypeName);
+                var objectReferenceType =
+                    Type.GetType(MaObjectReferenceTypeName);
+                var menuItemType = Type.GetType(MaMenuItemTypeName);
+                Assert.That(
+                    toggledObjectType, Is.Not.Null,
+                    "the installed " + ModularAvatarPackageId + " must"
+                    + " carry the ToggledObject model (version pin)");
+                Assert.That(
+                    objectReferenceType, Is.Not.Null,
+                    "the installed " + ModularAvatarPackageId + " must"
+                    + " carry the AvatarObjectReference model (version"
+                    + " pin)");
+                Assert.That(
+                    menuItemType, Is.Not.Null,
+                    "the installed " + ModularAvatarPackageId + " must"
+                    + " carry the ModularAvatarMenuItem model (version"
+                    + " pin)");
+#if AMUSE_VRCSDK3_AVATARS
+                AttachMaObjectToggle(
+                    toggleType, toggledObjectType, objectReferenceType,
+                    menuItemType, root, renderer.gameObject);
+#endif
+
+                BuildThroughSdkDispatcher(root);
+
+                AssertBuiltTrianglesMatchAuthoring(
+                    VendorProductionOrderCapture.Context, root);
+                AssertCommittedDescriptorFxTogglesHolder(
+                    root, MaToggleHolderName);
             }
             finally
             {
@@ -397,6 +577,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             // added under the vendor builds folder. Vendor content
             // that predates the test survives, and a tier B twin or a
             // skipped run deletes nothing.
+            DeleteDispatchedGeneratedAssets();
             if (!_dispatchRanThisTest)
             {
                 return;
@@ -420,6 +601,44 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
                 AssetDatabase.DeleteAsset(entry);
             }
+        }
+
+        /// <summary>
+        /// Deletes the vendor generated assets folder of the dispatched
+        /// avatar. The vendor AssetSaver deletes and recreates that
+        /// folder on every build. A folder left behind by an earlier
+        /// dispatched build put the next same-named build into a stale
+        /// deletion state, the vendor asset path resolved empty, and
+        /// the SDK callback failure raised a blocking dialog on
+        /// 2026-11-10. The deletion removes that state after every
+        /// dispatched build. The folder holds only this build's
+        /// generated transients, so vendor content that predates the
+        /// test survives.
+        /// </summary>
+        private static void DeleteDispatchedGeneratedAssets()
+        {
+            if (!_dispatchRanThisTest
+                || string.IsNullOrEmpty(_dispatchedAvatarName))
+            {
+                return;
+            }
+
+            var generatedFolder = NdmfGeneratedAssetsRoot + "/"
+                + _dispatchedAvatarName;
+            if (AssetDatabase.IsValidFolder(generatedFolder))
+            {
+                AssetDatabase.DeleteAsset(generatedFolder);
+            }
+            if (System.IO.Directory.Exists(generatedFolder))
+            {
+                System.IO.Directory.Delete(generatedFolder, true);
+            }
+            var generatedMeta = generatedFolder + ".meta";
+            if (System.IO.File.Exists(generatedMeta))
+            {
+                System.IO.File.Delete(generatedMeta);
+            }
+            _dispatchedAvatarName = null;
         }
 
         /// <summary>
@@ -522,6 +741,69 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// Builds the reflected Modular Avatar object toggle probe. One
+        /// probe object carries one reflected ModularAvatarMenuItem with
+        /// a Toggle control and one reflected
+        /// ModularAvatarObjectToggle. The menu item gives the toggle a
+        /// real parameter condition, and the toggle targets the fixture
+        /// renderer holder and holds the on state, so the vendor
+        /// reactive object system generates a parameter driven toggle
+        /// layer into the FX controller. A bare object toggle carries no
+        /// controlling condition, and the vendor prunes that shape
+        /// instead of animating it. The fields are set by name or by
+        /// direct SDK construction per the installed model shape, so a
+        /// missing field is a version-specific fixture failure, never a
+        /// silent default.
+        /// </summary>
+        private static void AttachMaObjectToggle(
+            Type toggleType,
+            Type toggledObjectType,
+            Type objectReferenceType,
+            Type menuItemType,
+            GameObject root,
+            GameObject holder)
+        {
+            var probe = new GameObject(MaToggleProbeName);
+            probe.transform.SetParent(root.transform, false);
+
+#if AMUSE_VRCSDK3_AVATARS
+            var menuItem = probe.AddComponent(menuItemType);
+            menuItemType.GetField("Control").SetValue(menuItem,
+                new VRC.SDK3.Avatars.ScriptableObjects
+                    .VRCExpressionsMenu.Control
+                    {
+                        type = VRC.SDK3.Avatars.ScriptableObjects
+                            .VRCExpressionsMenu.Control.ControlType.Toggle,
+                        parameter = new VRC.SDK3.Avatars.ScriptableObjects
+                            .VRCExpressionsMenu.Control.Parameter
+                            {
+                                name = MaToggleParameterName,
+                            },
+                        value = 1f,
+                    });
+#endif
+
+            var component = probe.AddComponent(toggleType);
+            // The explicit argument array binds the GameObject
+            // constructor. The parameterized reflection form left the
+            // reference path unset, and the vendor then silently
+            // skipped the whole reaction.
+            var reference = Activator.CreateInstance(
+                objectReferenceType, new object[] { holder });
+            var entry = Activator.CreateInstance(toggledObjectType);
+            toggledObjectType.GetField("Object")
+                .SetValue(entry, reference);
+            toggledObjectType.GetField("Active")
+                .SetValue(entry, true);
+
+            var listType = typeof(List<>).MakeGenericType(toggledObjectType);
+            var list = (IList)Activator.CreateInstance(listType);
+            list.Add(entry);
+            toggleType.GetProperty("Objects")
+                .SetValue(component, list);
+        }
+
+        /// <summary>
         /// Builds the reflected Toggle feature on the reflected VRCFury
         /// component. The feature fields are set by name through
         /// reflection per the installed model shape. One feature sits
@@ -572,10 +854,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             // vendor folder before the build, and the flag marks the
             // test that dispatched one.
             _dispatchRanThisTest = false;
+            _dispatchedAvatarName = root.name;
             BuildsFolderSnapshot.Clear();
             BuildsFolderSnapshot.UnionWith(SnapshotBuildsEntries());
 
             using (VendorProductionOrderCapture.Arm())
+            using (PinValidNdmfTemporaryAssetRoot())
             {
                 try
                 {
@@ -610,6 +894,34 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 + " the installed callback dispatcher cannot be"
                 + " exercised.");
 #endif
+        }
+
+        /// <summary>
+        /// Pins the NDMF temporary asset root for one dispatched build.
+        /// The root is a process wide vendor static. The observed
+        /// blocking dialog of 2026-11-10 came from a build whose root
+        /// read as invalid, so the first vendor asset save failed
+        /// inside the SDK callback and the SDK turned that failure into
+        /// a blocking dialog. The pin keeps the dispatch on a valid
+        /// root, and restores the previous value after the build, so a
+        /// leaked invalid root cannot block the editor main thread.
+        /// </summary>
+        private static IDisposable PinValidNdmfTemporaryAssetRoot()
+        {
+            var field = typeof(nadena.dev.ndmf.AvatarProcessor)
+                .GetField(
+                    "TemporaryAssetRoot",
+                    BindingFlags.NonPublic | BindingFlags.Static);
+            Assert.That(
+                field, Is.Not.Null,
+                "the installed NDMF must carry the temporary asset"
+                + " root (NDMF version pin)");
+            var current = field.GetValue(null) as string;
+            var root = string.IsNullOrEmpty(current)
+                ? NdmfGeneratedAssetsRoot
+                : current;
+            return new nadena.dev.ndmf.OverrideTemporaryDirectoryScope(
+                root);
         }
 
         /// <summary>

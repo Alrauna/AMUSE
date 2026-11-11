@@ -20,6 +20,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
     /// _SubpassCutoff 0.5, _DistanceFade.z 0, _DstBlend 10.
     /// </para>
     /// </summary>
+    // Kept stand-in reason: evidence-level absence and schema-lacking
+    // sources are inputs no vendor produces. The moved rows run on the
+    // installed shader.
     public sealed class LilToonTransparentSourceEligibilityTests
         : LilToonFixtureTestBase
     {
@@ -174,7 +177,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void CustomRenderQueue_RefusesUnsupportedRenderQueue()
         {
-            var material = NewTransparentFixtureMaterial();
+            var material = RealTransparentSource();
             material.renderQueue = 2475;
 
             AssertRefusal(
@@ -189,7 +192,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             // the bucket admission.
             foreach (var queue in new[] { 3000, 3005, 3010, 3099 })
             {
-                var material = NewTransparentFixtureMaterial();
+                var material = RealTransparentSource();
                 material.renderQueue = queue;
                 var result = EvaluateFor(material);
                 Assert.That(
@@ -206,7 +209,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             // must keep refusing. ---
             foreach (var queue in new[] { 2461, 2999, 3100, 3999 })
             {
-                var material = NewTransparentFixtureMaterial();
+                var material = RealTransparentSource();
                 material.renderQueue = queue;
                 AssertRefusal(
                     EvaluateFor(material),
@@ -217,7 +220,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void CustomRenderType_RefusesUnsupportedRenderType()
         {
-            var material = NewTransparentFixtureMaterial();
+            var material = RealTransparentSource();
             material.SetOverrideTag("RenderType", "Transparent");
 
             AssertRefusal(
@@ -252,7 +255,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             float value,
             object expected)
         {
-            var material = NewTransparentFixtureMaterial();
+            var material = RealTransparentSource();
             material.SetFloat(property, value);
 
             // Falsifies: silently normalizing authored render state the
@@ -267,7 +270,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         public void DepthTestLessWithPolicyConvertsAndFlagsDivergence()
         {
             var eligibility = EvaluateWithPolicy(
-                NewTransparentFixtureMaterial(), "_ZTest", 2f, true);
+                RealTransparentSource(), "_ZTest", 2f, true);
             AssertConvertible(eligibility);
             Assert.That(eligibility.DepthTestDivergence, Is.True);
         }
@@ -276,7 +279,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         public void DepthTestLessWithoutPolicyStillRefuses()
         {
             var eligibility = EvaluateWithPolicy(
-                NewTransparentFixtureMaterial(), "_ZTest", 2f, false);
+                RealTransparentSource(), "_ZTest", 2f, false);
             AssertRefusal(
                 eligibility,
                 LilToonOpaqueConversionRefusal.UnsupportedDepthComparison);
@@ -286,7 +289,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         public void DepthTestGreaterWithPolicyStillRefuses()
         {
             var eligibility = EvaluateWithPolicy(
-                NewTransparentFixtureMaterial(), "_ZTest", 5f, true);
+                RealTransparentSource(), "_ZTest", 5f, true);
             AssertRefusal(
                 eligibility,
                 LilToonOpaqueConversionRefusal.UnsupportedDepthComparison);
@@ -296,7 +299,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         public void DepthTestLEqualWithPolicyCarriesNoDivergence()
         {
             var eligibility = EvaluateWithPolicy(
-                NewTransparentFixtureMaterial(), "_ZTest", 4f, true);
+                RealTransparentSource(), "_ZTest", 4f, true);
             AssertConvertible(eligibility);
             Assert.That(eligibility.DepthTestDivergence, Is.False);
         }
@@ -304,7 +307,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void TransparentDstBlendDefault_IsAdmittedByGateNine()
         {
-            var material = NewTransparentFixtureMaterial();
+            var material = RealTransparentSource();
 
             // OneMinusSrcAlpha evaluates to 0 at alpha 1, so the canonical
             // transparent default is already admitted; the recipe's 10 -> 0
@@ -318,7 +321,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         public void NonFiniteScalar_RefusesConversionPropertyNotFinite(
             float value)
         {
-            var material = NewTransparentFixtureMaterial();
+            var material = RealTransparentSource();
             material.SetFloat("_ZTest", value);
 
             AssertRefusal(
@@ -342,7 +345,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [TestCase(1.0f)]
         public void CutoffAtOrBelowOne_IsConvertible(float cutoff)
         {
-            var material = NewTransparentFixtureMaterial();
+            var material = RealTransparentSource();
             material.SetFloat("_Cutoff", cutoff);
 
             AssertConvertible(EvaluateFor(material));
@@ -351,7 +354,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void CutoffAboveOne_RefusesClipThresholdDiscardsOpaqueAlpha()
         {
-            var material = NewTransparentFixtureMaterial();
+            var material = RealTransparentSource();
             material.SetFloat("_Cutoff", 1.001f);
 
             AssertRefusal(
@@ -366,7 +369,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [TestCase(10f)]
         public void AlphaBoostFaAtOrAboveOne_IsConvertible(float boost)
         {
-            var material = NewTransparentFixtureMaterial();
+            var material = RealTransparentSource();
             material.SetFloat("_AlphaBoostFA", boost);
 
             AssertConvertible(EvaluateFor(material));
@@ -377,7 +380,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         public void AlphaBoostFaBelowOne_RefusesTheNamedForwardAddRefusal(
             float boost)
         {
-            var material = NewTransparentFixtureMaterial();
+            var material = RealTransparentSource();
             material.SetFloat("_AlphaBoostFA", boost);
 
             AssertRefusal(
@@ -391,7 +394,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void DistanceFadeEnabled_RefusesUnsupportedDistanceFade()
         {
-            var material = NewTransparentFixtureMaterial();
+            var material = RealTransparentSource();
             material.SetVector(
                 "_DistanceFade", new Vector4(0.1f, 0.01f, 0.5f, 0f));
 
@@ -403,7 +406,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void DistanceFadeNonFinite_RefusesConversionPropertyNotFinite()
         {
-            var material = NewTransparentFixtureMaterial();
+            var material = RealTransparentSource();
             material.SetVector(
                 "_DistanceFade",
                 new Vector4(0.1f, 0.01f, 0f, float.NaN));
@@ -420,7 +423,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [TestCase(1.0f)]
         public void SubpassCutoffAtOrBelowOne_IsConvertible(float value)
         {
-            var material = NewTransparentFixtureMaterial();
+            var material = RealTransparentSource();
             material.SetFloat("_SubpassCutoff", value);
 
             // 0.5 is the shipped default: a bound tighter than the measured
@@ -431,7 +434,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void SubpassCutoffJustAboveOne_RefusesUnsupportedSubpassCutoff()
         {
-            var material = NewTransparentFixtureMaterial();
+            var material = RealTransparentSource();
             var subpassCutoff = FloatUlp.NextFloatAbove(1f);
 
             // Degradation guard: the row depends on the step being exactly
@@ -449,7 +452,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void NonFiniteSubpassCutoff_RefusesBeforeTheNamedGate()
         {
-            var material = NewTransparentFixtureMaterial();
+            var material = RealTransparentSource();
             material.SetFloat("_SubpassCutoff", float.NaN);
 
             // Gate order is load-bearing: a NaN must not dress itself up as
@@ -469,7 +472,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             string property,
             float value)
         {
-            var material = NewTransparentFixtureMaterial();
+            var material = RealTransparentSource();
             material.SetFloat(property, value);
 
             // Each is proven inert at a = 1 (T1 §4.4, §5.6, §6). A gate here
@@ -480,7 +483,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void CutoutEligibility_IsUnchangedByTheTransparentFamily()
         {
-            var cutout = NewCutoutFixtureMaterial();
+            var cutout = Track(RealLilToonMaterial.Cutout());
             cutout.SetFloat("_Cutoff", 1f);
 
             EffectiveRenderState.ReadEffectiveRenderState(
@@ -500,6 +503,17 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                     evidence, queue, renderType),
                 LilToonOpaqueConversionRefusal
                     .ClipThresholdDiscardsOpaqueAlpha);
+        }
+
+        /// <summary>
+        /// The conversion-eligible source on the installed transparent
+        /// shader, loaded by the production GUID pin. The fresh vendor
+        /// defaults are the positive baseline. The fixture scope destroys
+        /// the material.
+        /// </summary>
+        private Material RealTransparentSource()
+        {
+            return Track(RealLilToonMaterial.Transparent());
         }
 
         /// <summary>

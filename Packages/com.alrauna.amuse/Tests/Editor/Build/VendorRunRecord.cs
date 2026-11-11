@@ -52,6 +52,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             VendorOptInGate.RealThryLock,
             VendorOptInGate.DaoIntegration,
             VendorOptInGate.ProductionOrderDispatch,
+            VendorOptInGate.RealLacPass,
         };
 
         // The fixtures an unset gate excludes from a run. A later task
@@ -67,6 +68,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             (VendorOptInGate.ProductionOrderDispatch,
                 "Alrauna.Amuse.Tests.Editor.Build."
                 + "VendorProductionOrderTests"),
+            (VendorOptInGate.RealLacPass,
+                "Alrauna.Amuse.Tests.Editor.Build."
+                + "RealLacPassGroundCheckTests"),
         };
 
         // The read seams of the capture. Tests inject hand-built texts

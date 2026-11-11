@@ -26,6 +26,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
     /// here is RED by construction while the gate-refusal assertions are
     /// already covered by the implemented gate sequence.
     /// </summary>
+    // Kept stand-in reason: exact falsifier control. The adversarial value,
+    // fold, and keyword-gate rows need inputs no vendor write produces.
+    // The moved rows run on the installed cutout shader.
     public sealed class LilToonCutoutAlphaTests : LilToonFixtureTestBase
     {
         private const string MainTextureProperty = "_MainTex";
@@ -970,7 +973,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void AlphaMaskMode1_IgnoresTheMainTextureAlphaChannel()
         {
-            var material = NewCutoutFixtureMaterial();
+            var material = Track(RealLilToonMaterial.Cutout());
             material.SetTexture(
                 MainTextureProperty,
                 ImportMipmapTexture(
@@ -1032,7 +1035,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void AlphaMaskUnassigned_Mode1_Scale1Value0_IsUniformProvenOpaque()
         {
-            var material = NewCutoutFixtureMaterial();
+            var material = Track(RealLilToonMaterial.Cutout());
             material.SetFloat("_AlphaMaskMode", 1f);
             material.SetFloat("_AlphaMaskScale", 1f);
             material.SetFloat("_AlphaMaskValue", 0f);
@@ -1227,7 +1230,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void AlphaMaskUnassigned_Mode1_Scale0ValueHalf_IsUniformMustRemainTransparent()
         {
-            var material = NewCutoutFixtureMaterial();
+            var material = Track(RealLilToonMaterial.Cutout());
             material.SetFloat("_AlphaMaskMode", 1f);
             material.SetFloat("_AlphaMaskScale", 0f);
             material.SetFloat("_AlphaMaskValue", 0.5f);
@@ -1461,7 +1464,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         public void
             BilinearFootprintReachesHalfATexelOutsideTheHull_PointDoesNot()
         {
-            var pointMaterial = NewCutoutFixtureMaterial();
+            var pointMaterial = Track(RealLilToonMaterial.Cutout());
             pointMaterial.SetTexture(
                 MainTextureProperty,
                 ImportMipmapTexture(
@@ -1471,7 +1474,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                     OpaqueGridWithTransparentTexel(3, 0),
                     FilterMode.Point,
                     TextureWrapMode.Clamp));
-            var bilinearMaterial = NewCutoutFixtureMaterial();
+            var bilinearMaterial = Track(RealLilToonMaterial.Cutout());
             bilinearMaterial.SetTexture(
                 MainTextureProperty,
                 ImportMipmapTexture(
@@ -1507,7 +1510,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         public void
             RepeatWrapCatchesATransparentTexelAcrossTheSeam_ClampFlipsConsistently()
         {
-            var repeatMaterial = NewCutoutFixtureMaterial();
+            var repeatMaterial = Track(RealLilToonMaterial.Cutout());
             repeatMaterial.SetTexture(
                 MainTextureProperty,
                 ImportMipmapTexture(
@@ -1517,7 +1520,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
                     OpaqueGridWithTransparentTexel(0, 0),
                     FilterMode.Point,
                     TextureWrapMode.Repeat));
-            var clampMaterial = NewCutoutFixtureMaterial();
+            var clampMaterial = Track(RealLilToonMaterial.Cutout());
             clampMaterial.SetTexture(
                 MainTextureProperty,
                 ImportMipmapTexture(
@@ -1553,7 +1556,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void MirrorWrapImport_RefusesSamplingAtTheInterpretation()
         {
-            var material = NewCutoutFixtureMaterial();
+            var material = Track(RealLilToonMaterial.Cutout());
             var mirrorTexture = ImportMipmapTexture(
                 "mirror",
                 4,
@@ -1598,7 +1601,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void MismatchedWrapImport_RefusesSamplingAtTheInterpretation()
         {
-            var material = NewCutoutFixtureMaterial();
+            var material = Track(RealLilToonMaterial.Cutout());
             material.SetTexture(
                 MainTextureProperty,
                 ImportMipmapTexture(
@@ -1649,7 +1652,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         public void
             TextureWithoutResolvableSourceIdentity_IsRefusedAndNeverBecomesAConstant()
         {
-            var material = NewCutoutFixtureMaterial();
+            var material = Track(RealLilToonMaterial.Cutout());
             material.SetTexture(
                 MainTextureProperty,
                 Track(new Texture2D(4, 4, TextureFormat.RGBA32, false)));
@@ -1730,7 +1733,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void UnassignedMainTex_AtUnitTint_ProvesTheCornerTriangleOpaque()
         {
-            var material = NewCutoutFixtureMaterial();
+            var material = Track(RealLilToonMaterial.Cutout());
 
             var resolution = ResolveThroughUnassignedCutout(material);
 
@@ -1744,7 +1747,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void UnassignedMainTex_BelowCutoff_IsUniformMustRemainTransparent()
         {
-            var material = NewCutoutFixtureMaterial();
+            var material = Track(RealLilToonMaterial.Cutout());
             material.SetColor(ColorProperty, new Color(1f, 1f, 1f, 0.25f));
 
             var resolution = ResolveThroughUnassignedCutout(material);
@@ -1863,7 +1866,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             // assigned main texture with no stable source identity cannot
             // back a sampled alpha term, so the main chain refuses with
             // the unstable-identity code naming _MainTex.
-            var material = NewCutoutFixtureMaterial();
+            var material = Track(RealLilToonMaterial.Cutout());
             material.SetTexture(
                 MainTextureProperty, Track(new Texture2D(2, 2)));
 
@@ -1885,7 +1888,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             // A multiply-mode mask whose texture has no stable source
             // identity refuses the mask term itself, before any other
             // gate, with the unstable-identity code naming _AlphaMask.
-            var material = NewCutoutFixtureMaterial();
+            var material = Track(RealLilToonMaterial.Cutout());
             material.SetFloat("_AlphaMaskMode", 2f);
             material.SetTexture("_AlphaMask", Track(new Texture2D(2, 2)));
 

@@ -17,16 +17,19 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
     /// itself.
     /// </para>
     /// <para>
-    /// The cutout stand-in shader does not declare the 18 recipe properties
-    /// (it is the cutout contract, not the opaque one), so the
-    /// conversion-eligible stand-ins are materials of the opaque stand-in
-    /// shader <c>LilToonOpaqueConversionTest</c>, whose fresh defaults are
-    /// canonical except <c>_AlphaToMask</c> (1, deliberately ungated) and
-    /// which carries <c>_Cutoff = 0.5</c>. The cutout stand-in still plays
-    /// itself where its missing tuple is the point: the
-    /// <c>ConversionPropertyAbsent</c> row.
+    /// The eligibility gate rows run on the installed cutout shader through
+    /// <c>ConversionEligibleRealSource</c>, loaded by the production GUID
+    /// pin. The kept stand-ins are the two rows whose point is a missing
+    /// schema or a missing evidence vector: the schema-lacking cutout
+    /// stand-in plays itself in the <c>ConversionPropertyAbsent</c> row,
+    /// and the schema-complete opaque stand-in lacks
+    /// <c>_DistanceFade</c>, so its capture carries the vector-absent
+    /// state.
     /// </para>
     /// </summary>
+    // Kept stand-in reason: evidence-level absence and schema-lacking
+    // sources are inputs no vendor produces. The gate rows run on the
+    // installed shader.
     public sealed class LilToonCutoutSourceEligibilityTests : LilToonFixtureTestBase
     {
         /// <summary>
@@ -242,14 +245,13 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         /// <summary>
-        /// The conversion-eligible stand-in is the schema-complete cutout
-        /// source. Its defaults are canonical except
-        /// <c>_AlphaToMask = 1</c>, which conversion writes but deliberately
-        /// does not gate (spec §9.3).
+        /// The conversion-eligible source on the installed cutout shader,
+        /// loaded by the production GUID pin. The fresh vendor defaults are
+        /// the positive baseline. The fixture scope destroys the material.
         /// </summary>
-        private Material ConversionEligibleStandIn()
+        private Material ConversionEligibleRealSource()
         {
-            return NewCutoutFixtureMaterial();
+            return Track(RealLilToonMaterial.Cutout());
         }
 
         /// <summary>
@@ -269,7 +271,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void CustomRenderQueue_RefusesBeforeCanonicalization()
         {
-            var material = ConversionEligibleStandIn();
+            var material = ConversionEligibleRealSource();
             material.renderQueue = 3000;
 
             AssertRefusal(
@@ -280,7 +282,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void CustomRenderType_RefusesBeforeCanonicalization()
         {
-            var material = ConversionEligibleStandIn();
+            var material = ConversionEligibleRealSource();
             material.SetOverrideTag("RenderType", "Transparent");
 
             AssertRefusal(
@@ -295,7 +297,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void ClipThresholdAtMaxProvableCutoff_IsConvertible()
         {
-            var material = ConversionEligibleStandIn();
+            var material = ConversionEligibleRealSource();
             material.SetFloat(
                 "_Cutoff", LilToonCutoutSourceEligibility.MaxProvableCutoff);
 
@@ -305,7 +307,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void ClipThresholdAtOne_Refuses()
         {
-            var material = ConversionEligibleStandIn();
+            var material = ConversionEligibleRealSource();
             material.SetFloat("_Cutoff", 1f);
 
             AssertRefusal(
@@ -321,7 +323,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void ClipThresholdBeyondTheBound_Refuses()
         {
-            var material = ConversionEligibleStandIn();
+            var material = ConversionEligibleRealSource();
             material.SetFloat("_Cutoff", 1.001f);
 
             AssertRefusal(
@@ -339,7 +341,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void NonFiniteClipThreshold_RefusesAsNotFinite()
         {
-            var material = ConversionEligibleStandIn();
+            var material = ConversionEligibleRealSource();
 
             AssertRefusal(
                 EvaluateWith(material, "_Cutoff", float.NaN),
@@ -365,7 +367,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void DistanceFadeNonFinite_RefusesConversionPropertyNotFinite()
         {
-            var material = NewCutoutFixtureMaterial();
+            var material = ConversionEligibleRealSource();
             material.SetVector(
                 "_DistanceFade", new Vector4(0.1f, 0.01f, 0f, float.NaN));
 
@@ -417,7 +419,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         public void NonCanonicalRenderState_RefusesWithTheNamedGate(
             string property, float value, object expected)
         {
-            var material = ConversionEligibleStandIn();
+            var material = ConversionEligibleRealSource();
             material.SetFloat(property, value);
 
             AssertRefusal(
@@ -429,7 +431,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         public void DepthTestLessWithPolicyConvertsAndFlagsDivergence()
         {
             var eligibility = EvaluateWith(
-                ConversionEligibleStandIn(), "_ZTest", 2f, true);
+                ConversionEligibleRealSource(), "_ZTest", 2f, true);
             AssertConvertible(eligibility);
             Assert.That(eligibility.DepthTestDivergence, Is.True);
         }
@@ -439,7 +441,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         {
             AssertRefusal(
                 EvaluateWith(
-                    ConversionEligibleStandIn(), "_ZTest", 2f, false),
+                    ConversionEligibleRealSource(), "_ZTest", 2f, false),
                 LilToonOpaqueConversionRefusal.UnsupportedDepthComparison);
         }
 
@@ -448,7 +450,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         {
             AssertRefusal(
                 EvaluateWith(
-                    ConversionEligibleStandIn(), "_ZTest", 5f, true),
+                    ConversionEligibleRealSource(), "_ZTest", 5f, true),
                 LilToonOpaqueConversionRefusal.UnsupportedDepthComparison);
         }
 
@@ -456,7 +458,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         public void DepthTestLEqualWithPolicyCarriesNoDivergence()
         {
             var eligibility = EvaluateWith(
-                ConversionEligibleStandIn(), "_ZTest", 4f, true);
+                ConversionEligibleRealSource(), "_ZTest", 4f, true);
             AssertConvertible(eligibility);
             Assert.That(eligibility.DepthTestDivergence, Is.False);
         }
@@ -474,7 +476,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         public void OpaqueEquivalentBlendState_IsConvertible(
             string property, float value)
         {
-            var material = ConversionEligibleStandIn();
+            var material = ConversionEligibleRealSource();
             material.SetFloat(property, value);
 
             AssertConvertible(EvaluateFor(material));
@@ -483,7 +485,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void NonFiniteConversionProperty_RefusesAsNotFinite()
         {
-            var material = ConversionEligibleStandIn();
+            var material = ConversionEligibleRealSource();
 
             AssertRefusal(
                 EvaluateWith(material, "_ZWrite", float.NaN),
@@ -520,7 +522,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         public void UngatedProperties_DoNotAffectEligibility(
             string property, float value)
         {
-            var material = ConversionEligibleStandIn();
+            var material = ConversionEligibleRealSource();
             material.SetFloat(property, value);
 
             AssertConvertible(EvaluateFor(material));

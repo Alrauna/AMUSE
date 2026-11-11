@@ -21,6 +21,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
     /// feature-off.
     /// --- Falsifier: a gate that trusts the shader name alone, or a gate that demands the animation-derived color keywords, fails these fixtures. ---
     /// </summary>
+    // Kept stand-in reason: exact falsifier control. The rows pin exact
+    // Multi keyword states, and the gate stand-in declares exactly the two
+    // scalar facts the gate rules read.
     public sealed class LilToonMultiModeGateTests
     {
         // The gate stand-in declares exactly the two scalar facts the gate

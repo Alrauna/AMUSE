@@ -12,6 +12,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
     /// <summary>
     /// Unit tests for finiteness validation in lilToon alpha mask interpretation.
     /// </summary>
+    // Kept stand-in reason: an input no vendor produces. The rows drive
+    // non-finite mask scalars and absence states no vendor material
+    // carries.
     public sealed class LilToonAlphaMaskSemanticsTests
     {
         [Test]

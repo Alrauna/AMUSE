@@ -28,6 +28,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
     /// stand-in for the swap tests.
     /// </para>
     /// </summary>
+    // Kept stand-in reason: an independent outcome oracle. The rows pin
+    // the canonical conversion tuple and refuse any render-state, tag, or
+    // keyword inheritance from the source.
     public sealed class LilToonOpaqueTargetTests : LilToonFixtureTestBase
     {
         /// <summary>

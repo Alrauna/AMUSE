@@ -16,12 +16,25 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
     /// draws proves exactly one, so the claim completes only through the
     /// conjunction of the two families.
     /// </summary>
+    // Kept stand-in reason: the non-binary second force-opaque flag row
+    // needs an input no vendor produces. The moved rows run on the
+    // installed bundled Two Pass shader.
     public sealed class PoiyomiTwoPassAlphaTests : PoiyomiFixtureTestBase
     {
         private const string TwoPassColor = "_TwoPassColor";
         private const string ForceOpaque = "_AlphaForceOpaque";
         private const string ForceOpaque2 = "_AlphaForceOpaque2";
         private const string IgnoreMainTexAlpha = "_MainIgnoreTexAlpha";
+
+        /// <summary>
+        /// A fresh material on the installed bundled Two Pass shader
+        /// loaded by its pinned GUID. The caller owns destruction through
+        /// Track.
+        /// </summary>
+        private Material RealTwoPassMaterial()
+        {
+            return Track(RealPoiyomiMaterial.TwoPass());
+        }
 
         private static void AssertExactlyOne(PoiyomiSemanticResult result)
         {
@@ -46,6 +59,22 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             return material;
         }
 
+        /// <summary>
+        /// The divergent state on the installed bundled Two Pass shader
+        /// loaded by its pinned GUID. The written state matches the
+        /// stand-in divergent builder. The stand-in divergent builder
+        /// stays for the kept falsifier row. The caller owns destruction
+        /// through Track.
+        /// </summary>
+        private Material RealDivergentFixture(float secondTintAlpha)
+        {
+            var material = RealTwoPassMaterial();
+            material.SetFloat(ForceOpaque, 1f);
+            material.SetFloat(ForceOpaque2, 0f);
+            material.SetColor(TwoPassColor, new Color(1f, 1f, 1f, secondTintAlpha));
+            return material;
+        }
+
         // --- Falsifier 1: family divergence ---------------------------------
 
         [Test]
@@ -56,7 +85,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // reads only _AlphaForceOpaque claims a proven one and lets the
             // second family writer slip into it, so the unknown assertion is
             // the one that fails against that shape.
-            var result = InterpretTwoPass(DivergentFixture(0.5f));
+            var result = InterpretTwoPass(RealDivergentFixture(0.5f));
 
             Assert.That(
                 IsComplete(result, PoiyomiSemanticOutput.Alpha),
@@ -77,7 +106,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // family's own tint sub-one. The refusal names the first family's
             // tint, and the row fails any implementation that gates only the
             // second flag.
-            var material = NewTwoPassFixtureMaterial();
+            var material = RealTwoPassMaterial();
             material.SetFloat(ForceOpaque, 0f);
             material.SetFloat(ForceOpaque2, 1f);
             material.SetColor("_Color", new Color(1f, 1f, 1f, 0.5f));
@@ -99,7 +128,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void TwoPassBothFamiliesForced_CompletesExactlyOne()
         {
-            var material = NewTwoPassFixtureMaterial();
+            var material = RealTwoPassMaterial();
             material.SetFloat(ForceOpaque, 1f);
             material.SetFloat(ForceOpaque2, 1f);
 
@@ -112,7 +141,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // No force-opaque anywhere: each family's chain must prove one
             // from its own tint, so the completion exercises the second
             // family's read of _TwoPassColor.a rather than any shortcut.
-            var material = NewTwoPassFixtureMaterial();
+            var material = RealTwoPassMaterial();
             material.SetFloat(ForceOpaque, 0f);
             material.SetFloat(ForceOpaque2, 0f);
             material.SetColor("_Color", new Color(1f, 1f, 1f, 1f));
@@ -128,7 +157,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // family's chain proves 0.5 from its own tint. The conjunction
             // refuses, and the diagnostic names the second tint, because
             // that tint is where the family's alpha value is decided.
-            var material = NewTwoPassFixtureMaterial();
+            var material = RealTwoPassMaterial();
             material.SetFloat(ForceOpaque, 0f);
             material.SetFloat(ForceOpaque2, 0f);
             material.SetColor("_Color", new Color(1f, 1f, 1f, 1f));
@@ -171,7 +200,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // the ignore flag discards the texture term for both families
             // and each tint's alpha stands alone. With both tints at one the
             // claim completes even with a texture assigned.
-            var material = NewTwoPassFixtureMaterial();
+            var material = RealTwoPassMaterial();
             material.SetFloat(ForceOpaque, 0f);
             material.SetFloat(ForceOpaque2, 0f);
             material.SetFloat(IgnoreMainTexAlpha, 1f);

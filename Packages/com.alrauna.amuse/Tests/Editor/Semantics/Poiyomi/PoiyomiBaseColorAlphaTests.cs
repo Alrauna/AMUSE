@@ -15,6 +15,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
     /// per-feature alpha writers are each proven to fail closed, and the shared
     /// main sample is proven to need no color-import evidence for alpha.
     /// </summary>
+    // Kept stand-in reason: the non-binary and non-finite rows need inputs
+    // no vendor produces. The unsupported UV row pins an out-of-set UV
+    // mode. The gamma color space row is exact control. The moved rows run
+    // on the installed bundled shader.
     public sealed class PoiyomiAlphaTests : PoiyomiFixtureTestBase
     {
         // Coverage/clip mechanisms that change effective alpha coverage even
@@ -76,6 +80,19 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             return material;
         }
 
+        /// <summary>
+        /// The non-forced state on the installed bundled shader loaded by
+        /// its pinned GUID. The written state matches the stand-in
+        /// non-forced builder. The caller owns destruction through Track.
+        /// </summary>
+        private Material RealNonForcedMaterial()
+        {
+            var material = Track(RealPoiyomiMaterial.Main());
+            material.SetFloat("_AlphaForceOpaque", 0f);
+            material.SetFloat("_MainAlphaMaskMode", 0f);
+            return material;
+        }
+
         private static TextureSample MainSample(Texture texture)
         {
             return new TextureSample(
@@ -90,7 +107,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void DefaultForceOpaque_IsConstantOne()
         {
-            var value = Alpha(Interpret(NewFixtureMaterial()));
+            var value = Alpha(Interpret(Track(RealPoiyomiMaterial.Main())));
 
             Assert.That(value.Kind, Is.EqualTo(ScalarSemanticValueKind.Constant));
             Assert.That(value.GetConstantValue(), Is.EqualTo(1f));
@@ -99,7 +116,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void ForceOpaque_OverridesMainTexAndColorAlpha_IsConstantOne()
         {
-            var material = NewFixtureMaterial();
+            var material = Track(RealPoiyomiMaterial.Main());
             material.SetTexture("_MainTex", ImportTexture("alpha_forced"));
             material.SetColor("_Color", new Color(1f, 1f, 1f, 0.5f));
 
@@ -114,7 +131,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void NonForced_NoMainTex_IsConstantColorAlpha()
         {
-            var material = NonForcedMaterial();
+            var material = RealNonForcedMaterial();
             material.SetColor("_Color", new Color(1f, 1f, 1f, 0.5f));
 
             var value = Alpha(Interpret(material));
@@ -126,7 +143,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void NonForced_IgnoreMainAlpha_IsConstantColorAlpha()
         {
-            var material = NonForcedMaterial();
+            var material = RealNonForcedMaterial();
             material.SetTexture("_MainTex", ImportTexture("alpha_ignore"));
             material.SetFloat("_MainIgnoreTexAlpha", 1f);
             material.SetColor("_Color", new Color(1f, 1f, 1f, 0.25f));
@@ -142,7 +159,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void NonForced_MainTexFullColorAlpha_IsTextureAlpha()
         {
-            var material = NonForcedMaterial();
+            var material = RealNonForcedMaterial();
             var texture = ImportTexture("alpha_texture");
             material.SetTexture("_MainTex", texture);
             material.SetColor("_Color", Color.white);
@@ -158,7 +175,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void NonForcedMainTexNonIdentityStPreservesMappingAndClassifies()
         {
-            var material = NonForcedMaterial();
+            var material = RealNonForcedMaterial();
             var texture = ImportTexture("alpha_nonidentity_st");
             material.SetTexture("_MainTex", texture);
             material.SetTextureScale("_MainTex", new Vector2(2f, 2f));
@@ -213,7 +230,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void NonForced_MainTexPartialColorAlpha_IsTextureTimesConstant()
         {
-            var material = NonForcedMaterial();
+            var material = RealNonForcedMaterial();
             var texture = ImportTexture("alpha_texture_tinted");
             material.SetTexture("_MainTex", texture);
             material.SetColor("_Color", new Color(1f, 1f, 1f, 0.5f));
@@ -231,7 +248,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         {
             // Alpha is a raw scalar: unlike BaseColor, a native texture asset
             // with no color-import evidence still yields a complete alpha.
-            var material = NonForcedMaterial();
+            var material = RealNonForcedMaterial();
             var texture = NewNativeTextureAsset("alpha_native");
             material.SetTexture("_MainTex", texture);
             material.SetColor("_Color", Color.white);
@@ -252,7 +269,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             [ValueSource(nameof(AlphaCoverageGates))] string property)
         {
             // Coverage/clip gates apply even on the force-opaque path.
-            var material = NewFixtureMaterial();
+            var material = Track(RealPoiyomiMaterial.Main());
             material.SetFloat(property, 1f);
 
             AssertUnsupportedOutput(
@@ -278,9 +295,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // No-op guard: with the module off the same exactly-one domain
             // proves, so the refusal below comes from the module gate.
             AssertOutputComplete(
-                Interpret(NonForcedMaterial()), PoiyomiSemanticOutput.Alpha);
+                Interpret(RealNonForcedMaterial()), PoiyomiSemanticOutput.Alpha);
 
-            var material = NonForcedMaterial();
+            var material = RealNonForcedMaterial();
             material.SetFloat("_BSSEnabled", 1f);
 
             AssertUnsupportedOutput(
@@ -304,9 +321,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // No-op guard: without the module the forced material proves the
             // constant, so the refusal below comes from the module gate.
             AssertOutputComplete(
-                Interpret(NewFixtureMaterial()), PoiyomiSemanticOutput.Alpha);
+                Interpret(Track(RealPoiyomiMaterial.Main())),
+                PoiyomiSemanticOutput.Alpha);
 
-            var material = NewFixtureMaterial();
+            var material = Track(RealPoiyomiMaterial.Main());
             material.SetFloat("_BSSEnabled", 1f);
 
             AssertUnsupportedOutput(
@@ -320,7 +338,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         public void AlphaFeatureGateEnabled_IsUnsupportedFeature(
             [ValueSource(nameof(AlphaFeatureGates))] string property)
         {
-            var material = NonForcedMaterial();
+            var material = RealNonForcedMaterial();
             material.SetFloat(property, 1f);
 
             AssertUnsupportedOutput(
@@ -349,9 +367,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // proves. A refusal below can only come from the premultiply
             // gate.
             AssertOutputComplete(
-                Interpret(NonForcedMaterial()), PoiyomiSemanticOutput.Alpha);
+                Interpret(RealNonForcedMaterial()), PoiyomiSemanticOutput.Alpha);
 
-            var material = NonForcedMaterial();
+            var material = RealNonForcedMaterial();
             material.SetFloat("_AlphaPremultiply", 1f);
 
             var result = Interpret(material);
@@ -378,13 +396,13 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         {
             // No-op guard: without the feature the same sub-one domain stays
             // unproven. The answer below comes from the alpha value alone.
-            var ungated = NonForcedMaterial();
+            var ungated = RealNonForcedMaterial();
             ungated.SetColor("_Color", new Color(1f, 1f, 1f, 0.5f));
             Assert.That(
                 ClassifyAlphaTriangle(ungated),
                 Is.Not.EqualTo(TriangleAlphaOutcome.ProvenOpaque));
 
-            var material = NonForcedMaterial();
+            var material = RealNonForcedMaterial();
             material.SetFloat("_AlphaPremultiply", 1f);
             material.SetColor("_Color", new Color(1f, 1f, 1f, 0.5f));
 
@@ -486,7 +504,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         {
             // UI preset, cutoff, and blend factors are not part of the
             // normalized alpha equation and must never gate it.
-            var material = NonForcedMaterial();
+            var material = RealNonForcedMaterial();
             material.SetColor("_Color", new Color(1f, 1f, 1f, 0.5f));
             material.SetFloat("_Mode", 3f);
             material.SetFloat("_Cutoff", 0.3f);
@@ -504,7 +522,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         {
             // A writer outside the alpha equation must not invalidate the
             // independently proven Alpha output.
-            var material = NewFixtureMaterial();
+            var material = Track(RealPoiyomiMaterial.Main());
             material.SetFloat("_DetailEnabled", 1f);
 
             AssertOutputComplete(
@@ -521,7 +539,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void AlphaResultDoesNotChangeWithColorRgb()
         {
-            var material = NonForcedMaterial();
+            var material = RealNonForcedMaterial();
             material.SetColor("_Color", new Color(0.1f, 0.2f, 0.3f, 0.5f));
             var before = Alpha(Interpret(material));
 

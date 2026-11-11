@@ -9,13 +9,33 @@ using NUnit.Framework;
 using UnityEditor;
 using UnityEditor.Animations;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace Alrauna.Amuse.Tests.Editor.Host
 {
     public sealed class CommittedControllerGraphTests
     {
+        // The real arm drives the enumeration through the real NDMF
+        // generic bindings singleton. The real bindings read innate
+        // controllers from Animator components, so the real arm
+        // attaches the controller to a root Animator. The stub arm
+        // keeps the original fixture shape with no Animator.
+        private static IPlatformAnimatorBindings Bindings(
+            GameObject root,
+            bool realBindings,
+            RuntimeAnimatorController controller)
+        {
+            if (!realBindings) return new StubBindings(controller);
+
+            var animator = root.GetComponent<Animator>();
+            if (animator == null) animator = root.AddComponent<Animator>();
+            animator.runtimeAnimatorController = controller;
+            return GenericPlatformAnimatorBindings.Instance;
+        }
+
         [Test]
-        public void OverrideControllerIsRefusedByForm()
+        public void OverrideControllerIsRefusedByForm(
+            [Values(false, true)] bool realBindings)
         {
             var root = new GameObject("override form");
             var baseController = new AnimatorController();
@@ -26,7 +46,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 root.AddComponent<Animator>().runtimeAnimatorController = over;
 
                 var result = CommittedControllerGraph.Enumerate(
-                    root, new StubBindings(over));
+                    root, Bindings(root, realBindings, over));
 
                 Assert.That(result.Refusal, Is.EqualTo(
                     AvatarAnimationRefusal.UnsupportedAnimatorControllerForm));
@@ -41,7 +61,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         [Test]
-        public void PlainControllerLayersAndClipsAreEnumerated()
+        public void PlainControllerLayersAndClipsAreEnumerated(
+            [Values(false, true)] bool realBindings)
         {
             var root = new GameObject("plain controller");
             var controller = new AnimatorController { name = "plain" };
@@ -55,7 +76,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 controller.layers = layers;
 
                 var result = CommittedControllerGraph.Enumerate(
-                    root, new StubBindings(controller, true));
+                    root, Bindings(root, realBindings, controller));
 
                 Assert.That(result.Refusal, Is.EqualTo(AvatarAnimationRefusal.None));
                 Assert.That(result.Layers.Count, Is.EqualTo(1));
@@ -74,7 +95,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         [Test]
-        public void SyncedLayerReturnsNamedRefusalAndNoPartialGraph()
+        public void SyncedLayerReturnsNamedRefusalAndNoPartialGraph(
+            [Values(false, true)] bool realBindings)
         {
             var root = new GameObject("synced layer");
             var controller = new AnimatorController();
@@ -87,7 +109,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 controller.layers = layers;
 
                 var result = CommittedControllerGraph.Enumerate(
-                    root, new StubBindings(controller));
+                    root, Bindings(root, realBindings, controller));
 
                 Assert.That(result.Refusal,
                     Is.EqualTo(AvatarAnimationRefusal.UnsupportedSyncedLayerOverrides));
@@ -101,10 +123,19 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         [Test]
-        public void AControllerLayerWithoutAStateMachineRefusesByName()
+        public void AControllerLayerWithoutAStateMachineRefusesByName(
+            [Values(false, true)] bool realBindings)
         {
             var root = new GameObject("layer without state machine");
             var controller = new AnimatorController();
+            // The fixture carries a deliberately broken layer, so the
+            // root Animator of the real arm logs the missing state
+            // machine on every bind pass and repeats the message while
+            // the animator is alive. The test expects that fixture
+            // byproduct over its whole body and keeps its refusal
+            // assertions unchanged.
+            var previousIgnore = LogAssert.ignoreFailingMessages;
+            LogAssert.ignoreFailingMessages = true;
             try
             {
                 controller.AddLayer("broken");
@@ -112,18 +143,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 layers[0].stateMachine = null;
                 controller.layers = layers;
 
-                var result = CommittedControllerGraph.Enumerate(
-                    root, new StubBindings(controller));
-
-                Assert.That(result.Refusal,
-                    Is.EqualTo(AvatarAnimationRefusal.MalformedControllerLayer));
-                Assert.That(result.Layers, Is.Empty);
-                Assert.That(
-                    AmuseReportStrings.Has(
-                        AmuseReportStrings.AvatarKey(
-                            AvatarAnimationRefusal.MalformedControllerLayer)),
-                    Is.True,
-                    "the named refusal must have its report table entry");
+                RunMalformedLayerCase(root, realBindings, controller);
             }
             finally
             {
@@ -131,11 +151,13 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 // shared DestroyController helper does not apply here.
                 Object.DestroyImmediate(root);
                 Object.DestroyImmediate(controller);
+                LogAssert.ignoreFailingMessages = previousIgnore;
             }
         }
 
         [Test]
-        public void NestedBehaviourFreeGraphEnumeratesClipsOnce()
+        public void NestedBehaviourFreeGraphEnumeratesClipsOnce(
+            [Values(false, true)] bool realBindings)
         {
             var root = new GameObject("nested graph");
             var controller = new AnimatorController();
@@ -146,6 +168,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             try
             {
                 controller.AddLayer("L0");
+                controller.AddParameter(
+                    "Blend", AnimatorControllerParameterType.Float);
                 var machine = controller.layers[0].stateMachine;
                 machine.AddState("duplicate").motion = sharedClip;
                 var nestedMachine = machine.AddStateMachine("nested machine");
@@ -156,7 +180,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 nestedState.motion = outerTree;
 
                 var result = CommittedControllerGraph.Enumerate(
-                    root, new StubBindings(controller));
+                    root, Bindings(root, realBindings, controller));
 
                 Assert.That(result.Refusal, Is.EqualTo(AvatarAnimationRefusal.None));
                 Assert.That(result.Layers.Single().Clips,
@@ -177,7 +201,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         [Test]
-        public void StateBehaviourReturnsAvatarRefusalAndNoPartialGraph()
+        public void StateBehaviourReturnsAvatarRefusalAndNoPartialGraph(
+            [Values(false, true)] bool realBindings)
         {
             var root = new GameObject("state behaviour");
             var controller = new AnimatorController();
@@ -191,7 +216,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                     "fixture state behaviour must be attached");
 
                 var result = CommittedControllerGraph.Enumerate(
-                    root, new StubBindings(controller));
+                    root, Bindings(root, realBindings, controller));
 
                 Assert.That(result.Refusal, Is.EqualTo(
                     AvatarAnimationRefusal.UnrecognizedStateMachineBehaviour));
@@ -205,7 +230,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         [Test]
-        public void StateMachineBehaviourReturnsAvatarRefusalAndNoPartialGraph()
+        public void StateMachineBehaviourReturnsAvatarRefusalAndNoPartialGraph(
+            [Values(false, true)] bool realBindings)
         {
             var root = new GameObject("state machine behaviour");
             var controller = new AnimatorController();
@@ -217,7 +243,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                     "fixture state-machine behaviour must be attached");
 
                 var result = CommittedControllerGraph.Enumerate(
-                    root, new StubBindings(controller));
+                    root, Bindings(root, realBindings, controller));
 
                 Assert.That(result.Refusal, Is.EqualTo(
                     AvatarAnimationRefusal.UnrecognizedStateMachineBehaviour));
@@ -231,7 +257,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         [Test]
-        public void BehaviourOnNestedStateMachineCannotBypassAuthorization()
+        public void BehaviourOnNestedStateMachineCannotBypassAuthorization(
+            [Values(false, true)] bool realBindings)
         {
             var root = new GameObject("nested state machine behaviour");
             var controller = new AnimatorController();
@@ -244,7 +271,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                     "fixture nested state-machine behaviour must be attached");
 
                 var result = CommittedControllerGraph.Enumerate(
-                    root, new StubBindings(controller));
+                    root, Bindings(root, realBindings, controller));
 
                 Assert.That(result.Refusal, Is.EqualTo(
                     AvatarAnimationRefusal.UnrecognizedStateMachineBehaviour));
@@ -258,7 +285,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         [Test]
-        public void EventBearingClipReturnsAvatarRefusalAndNoPartialGraph()
+        public void EventBearingClipReturnsAvatarRefusalAndNoPartialGraph(
+            [Values(false, true)] bool realBindings)
         {
             var root = new GameObject("event bearing clip");
             var controller = new AnimatorController();
@@ -275,7 +303,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 AttachEvents(eventClip, 1);
 
                 var result = CommittedControllerGraph.Enumerate(
-                    root, new StubBindings(controller));
+                    root, Bindings(root, realBindings, controller));
 
                 Assert.That(result.Refusal, Is.EqualTo(
                     AvatarAnimationRefusal.AnimationEventPresent));
@@ -292,7 +320,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         [Test]
-        public void MultipleEventsRefuseIdenticallyToOne()
+        public void MultipleEventsRefuseIdenticallyToOne(
+            [Values(false, true)] bool realBindings)
         {
             var root = new GameObject("multiple events");
             var controller = new AnimatorController();
@@ -304,7 +333,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 AttachEvents(eventClip, 3);
 
                 var result = CommittedControllerGraph.Enumerate(
-                    root, new StubBindings(controller));
+                    root, Bindings(root, realBindings, controller));
 
                 Assert.That(result.Refusal, Is.EqualTo(
                     AvatarAnimationRefusal.AnimationEventPresent));
@@ -319,7 +348,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         [Test]
-        public void EventOnNestedBlendTreeClipCannotBypassDetection()
+        public void EventOnNestedBlendTreeClipCannotBypassDetection(
+            [Values(false, true)] bool realBindings)
         {
             var root = new GameObject("nested event clip");
             var controller = new AnimatorController();
@@ -330,6 +360,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             try
             {
                 controller.AddLayer("L0");
+                controller.AddParameter(
+                    "Blend", AnimatorControllerParameterType.Float);
                 var machine = controller.layers[0].stateMachine;
                 machine.AddState("plain state").motion = plainClip;
                 var nestedMachine = machine.AddStateMachine("nested machine");
@@ -339,7 +371,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 AttachEvents(eventClip, 1);
 
                 var result = CommittedControllerGraph.Enumerate(
-                    root, new StubBindings(controller));
+                    root, Bindings(root, realBindings, controller));
 
                 Assert.That(result.Refusal, Is.EqualTo(
                     AvatarAnimationRefusal.AnimationEventPresent));
@@ -356,6 +388,10 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             }
         }
 
+        // Stage 5 note, 2026-11-10: this test stays on the stub only.
+        // The real generic bindings report no special motions, so the
+        // special-clip arm of this rule has no real case. The plain
+        // event refusals above run on both bindings shapes.
         [Test]
         public void SpecialMotionStateDoesNotAuthorizeEvents()
         {
@@ -394,7 +430,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         // resolved hop, so this fixture pins the provenance read
         // itself, not the hop count. ---
         [Test]
-        public void EventRefusalSurvivesTwoHandRegisteredCloneHops()
+        public void EventRefusalSurvivesTwoHandRegisteredCloneHops(
+            [Values(false, true)] bool realBindings)
         {
             var root = new GameObject("two hop clone chain");
             var controller = new AnimatorController();
@@ -420,7 +457,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                     // the refusal below can only come from the registry
                     // provenance.
                     var unregistered = CommittedControllerGraph.Enumerate(
-                        root, new StubBindings(controller));
+                        root, Bindings(root, realBindings, controller));
                     Assert.That(unregistered.Refusal,
                         Is.EqualTo(AvatarAnimationRefusal.None));
                     Assert.That(
@@ -431,7 +468,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                     ObjectRegistry.RegisterReplacedObject(cloneOne, cloneTwo);
 
                     var result = CommittedControllerGraph.Enumerate(
-                        root, new StubBindings(controller));
+                        root, Bindings(root, realBindings, controller));
 
                     Assert.That(result.Refusal, Is.EqualTo(
                         AvatarAnimationRefusal.AnimationEventPresent));
@@ -458,7 +495,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         // one hop, so the cap itself stays defense in depth and this
         // witness pins the deep registration chain. ---
         [Test]
-        public void EventRefusalOnAChainDeeperThanTheCapStillRefuses()
+        public void EventRefusalOnAChainDeeperThanTheCapStillRefuses(
+            [Values(false, true)] bool realBindings)
         {
             var root = new GameObject("chain deeper than the cap");
             var controller = new AnimatorController();
@@ -490,7 +528,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                     // below can only come from the authored event in the
                     // provenance.
                     var clean = CommittedControllerGraph.Enumerate(
-                        root, new StubBindings(controller));
+                        root, Bindings(root, realBindings, controller));
                     Assert.That(clean.Refusal,
                         Is.EqualTo(AvatarAnimationRefusal.None));
                     Assert.That(
@@ -500,7 +538,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                     AttachEvents(authored, 1);
 
                     var result = CommittedControllerGraph.Enumerate(
-                        root, new StubBindings(controller));
+                        root, Bindings(root, realBindings, controller));
 
                     Assert.That(result.Refusal, Is.EqualTo(
                         AvatarAnimationRefusal.AnimationEventPresent));
@@ -522,7 +560,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         [Test]
-        public void EventFreeNestedGraphRemainsAccepted()
+        public void EventFreeNestedGraphRemainsAccepted(
+            [Values(false, true)] bool realBindings)
         {
             var root = new GameObject("event free graph");
             var controller = new AnimatorController();
@@ -532,6 +571,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             try
             {
                 controller.AddLayer("L0");
+                controller.AddParameter(
+                    "Blend", AnimatorControllerParameterType.Float);
                 var machine = controller.layers[0].stateMachine;
                 machine.AddState("plain state").motion = plainClip;
                 tree.AddChild(nestedClip);
@@ -541,7 +582,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 Assert.That(nestedClip.events, Is.Empty);
 
                 var result = CommittedControllerGraph.Enumerate(
-                    root, new StubBindings(controller));
+                    root, Bindings(root, realBindings, controller));
 
                 Assert.That(result.Refusal, Is.EqualTo(AvatarAnimationRefusal.None));
                 Assert.That(result.Layers.Single().Clips,
@@ -557,10 +598,12 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             }
         }
 
-        [TestCase(true, false)]
-        [TestCase(false, true)]
+        [TestCase(true, false, false)]
+        [TestCase(true, false, true)]
+        [TestCase(false, true, false)]
+        [TestCase(false, true, true)]
         public void DirectBlendTreeNormalizationIsReadFromCommittedSerialization(
-            bool normalized, bool expectedUnnormalized)
+            bool normalized, bool expectedUnnormalized, bool realBindings)
         {
             var root = new GameObject("direct blend tree");
             var controller = new AnimatorController();
@@ -577,10 +620,12 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 serialized.ApplyModifiedPropertiesWithoutUndo();
 
                 controller.AddLayer("L0");
+                controller.AddParameter(
+                    "Blend", AnimatorControllerParameterType.Float);
                 controller.layers[0].stateMachine.AddState("direct").motion = direct;
 
                 var result = CommittedControllerGraph.Enumerate(
-                    root, new StubBindings(controller));
+                    root, Bindings(root, realBindings, controller));
 
                 Assert.That(result.Refusal, Is.EqualTo(AvatarAnimationRefusal.None));
                 Assert.That(result.Layers.Single().HasUnnormalizedDirectBlendTree,
@@ -596,7 +641,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         [Test]
-        public void NullVirtualizedControllerContributesNothing()
+        public void NullVirtualizedControllerContributesNothing(
+            [Values(false, true)] bool realBindings)
         {
             var root = new GameObject("null virtualized controller");
             try
@@ -604,7 +650,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 root.AddComponent<VirtualizedControllerProbe>();
 
                 var result = CommittedControllerGraph.Enumerate(
-                    root, new StubBindings());
+                    root, Bindings(root, realBindings, null));
 
                 Assert.That(result.Refusal, Is.EqualTo(AvatarAnimationRefusal.None));
                 Assert.That(result.Layers, Is.Empty);
@@ -616,7 +662,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         [Test]
-        public void ValidVirtualizedControllerIsEnumerated()
+        public void ValidVirtualizedControllerIsEnumerated(
+            [Values(false, true)] bool realBindings)
         {
             var root = new GameObject("valid virtualized controller");
             var controller = new AnimatorController();
@@ -629,7 +676,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                     controller;
 
                 var result = CommittedControllerGraph.Enumerate(
-                    root, new StubBindings());
+                    root, Bindings(root, realBindings, null));
 
                 Assert.That(result.Refusal, Is.EqualTo(AvatarAnimationRefusal.None));
                 Assert.That(result.Layers.Single().Clips.Single(), Is.SameAs(clip));
@@ -643,7 +690,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         [Test]
-        public void UnsupportedVirtualizedControllerReturnsNamedRefusal()
+        public void UnsupportedVirtualizedControllerReturnsNamedRefusal(
+            [Values(false, true)] bool realBindings)
         {
             var root = new GameObject("unsupported virtualized controller");
             var baseController = new AnimatorController();
@@ -653,7 +701,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 root.AddComponent<VirtualizedControllerProbe>().AnimatorController = over;
 
                 var result = CommittedControllerGraph.Enumerate(
-                    root, new StubBindings());
+                    root, Bindings(root, realBindings, null));
 
                 Assert.That(result.Refusal, Is.EqualTo(
                     AvatarAnimationRefusal.UnsupportedAnimatorControllerForm));
@@ -668,7 +716,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         [Test]
-        public void NullVirtualizedMotionContributesNothing()
+        public void NullVirtualizedMotionContributesNothing(
+            [Values(false, true)] bool realBindings)
         {
             var root = new GameObject("null virtualized motion");
             try
@@ -676,7 +725,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 root.AddComponent<VirtualizedMotionProbe>();
 
                 var result = CommittedControllerGraph.Enumerate(
-                    root, new StubBindings());
+                    root, Bindings(root, realBindings, null));
 
                 Assert.That(result.Refusal, Is.EqualTo(AvatarAnimationRefusal.None));
                 Assert.That(result.Layers, Is.Empty);
@@ -688,7 +737,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         [Test]
-        public void NonNullVirtualizedMotionRefusesWithoutPartialGraph()
+        public void NonNullVirtualizedMotionRefusesWithoutPartialGraph(
+            [Values(false, true)] bool realBindings)
         {
             var root = new GameObject("unresolved virtualized motion");
             var controller = new AnimatorController();
@@ -702,7 +752,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 root.AddComponent<VirtualizedMotionProbe>().Motion = standaloneClip;
 
                 var result = CommittedControllerGraph.Enumerate(
-                    root, new StubBindings(controller));
+                    root, Bindings(root, realBindings, controller));
 
                 Assert.That(result.Refusal, Is.EqualTo(
                     AvatarAnimationRefusal.UnresolvedVirtualizedMotionContext));
@@ -715,6 +765,27 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 Object.DestroyImmediate(standaloneClip);
                 DestroyController(controller);
             }
+        }
+
+        // The original assertions of the malformed layer rule, split
+        // out so the fixture log scope above stays narrow.
+        private static void RunMalformedLayerCase(
+            GameObject root,
+            bool realBindings,
+            RuntimeAnimatorController controller)
+        {
+            var result = CommittedControllerGraph.Enumerate(
+                root, Bindings(root, realBindings, controller));
+
+            Assert.That(result.Refusal,
+                Is.EqualTo(AvatarAnimationRefusal.MalformedControllerLayer));
+            Assert.That(result.Layers, Is.Empty);
+            Assert.That(
+                AmuseReportStrings.Has(
+                    AmuseReportStrings.AvatarKey(
+                        AvatarAnimationRefusal.MalformedControllerLayer)),
+                Is.True,
+                "the named refusal must have its report table entry");
         }
 
         private static void DestroyController(AnimatorController controller)

@@ -11,11 +11,14 @@ using UnityEngine;
 namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 {
     /// <summary>
-    /// Shared Editor-test fixture for the verified Poiyomi interpreter. It builds
-    /// a schema-complete stand-in shader material and disposable texture assets
-    /// under one temp folder; no real Poiyomi shader is installed. The
-    /// interpreter's equation outputs are exercised through the verified-material
-    /// seam, so the stand-in never needs the pinned source hash.
+    /// Shared Editor-test fixture for the verified Poiyomi interpreter. The
+    /// stand-in builders serve the exact-control and falsifier rows that
+    /// keep their hand-shaped states. The moved rows build materials on the
+    /// installed bundled Poiyomi shaders through RealPoiyomiMaterial. The
+    /// base class also stages disposable texture assets under one temp
+    /// folder. The interpreter's equation outputs are exercised through the
+    /// verified-material seam, so the stand-in never needs the pinned
+    /// source hash.
     /// </summary>
     public abstract class PoiyomiFixtureTestBase
     {

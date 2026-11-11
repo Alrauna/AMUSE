@@ -10,6 +10,7 @@ using nadena.dev.ndmf;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Experimental.Rendering;
+using Alrauna.Amuse.Tests.Editor.Build;
 
 namespace Alrauna.Amuse.Tests.Editor.Host
 {
@@ -18,6 +19,13 @@ namespace Alrauna.Amuse.Tests.Editor.Host
     /// negative case is a refusal predicate: unprovable texture state must return
     /// false with a null field, never a field that fabricates opacity.
     /// </summary>
+    // Falsifier header, dated 2026-11-10. The BC5 refusal tests of this
+    // class stay synthetic. The capture policy, not the producer, owns
+    // the BC5 refusal, so the replacement-copy BC5 test pins it with a
+    // version injection and restores the production state after the
+    // test. The admitted capture tests drop the version seam. They
+    // read the installed producer version through production admission
+    // and skip by name when the package is absent.
     public sealed class UnityAlphaFieldEvidenceTests
     {
         private const string TempFolder = "Assets/AmuseTests_AlphaField";
@@ -2159,6 +2167,11 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         [Test]
         public void AdmittedReplacementCopyCapturesThroughTheGeneratedRoute()
         {
+            // The version conjunct reads the installed producer
+            // version. No provider injection remains.
+            RealLacPass.SkipWhenComponentAbsent(
+                "the capture route reads the installed producer"
+                + " version.");
             var registryGuard = new ObjectRegistryGuard();
             var source = ImportSourceAsset("route");
             var copy = new Texture2D(16, 16, TextureFormat.RGBA32, true);
@@ -2166,11 +2179,9 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             try
             {
                 ObjectRegistry.RegisterReplacedObject(source, copy);
-                ReplacementTextureAttestation.Versions.SetAdmittedVersionsForTests("0.9.0");
-                ReplacementTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
-                    _ => "0.9.0";
-                // Fill so the chain is nontrivial, then mark the copy admitted by
-                // minting through the identity path TryCapture consults.
+                // Fill so the chain is nontrivial, then let production
+                // admission admit the copy through the identity path
+                // TryCapture consults.
                 var colors = new Color32[16 * 16];
                 for (var i = 0; i < colors.Length; i++)
                 {
@@ -2191,6 +2202,9 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             finally
             {
                 UnityEngine.Object.DestroyImmediate(copy);
+                // The class has no per-test SetUp reset. The cache
+                // entry this test filled must go, so the injecting
+                // falsifier behind it keeps its own isolation.
                 ReplacementTextureAttestation.Versions.ResetForTests();
                 registryGuard.Dispose();
                 DeleteTempFolder();
@@ -2412,9 +2426,14 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         [Test]
         public void PersistedStreamingCompressedCopy_CapturesThroughGeneratedRoute()
         {
+            // The persisted-copy route reads the installed producer
+            // version. No provider injection remains. The reset at the
+            // start keeps the cache entry of an earlier test out of
+            // this read.
             ReplacementTextureAttestation.Versions.ResetForTests();
-            ReplacementTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
-                _ => "0.9.0";
+            RealLacPass.SkipWhenComponentAbsent(
+                "the capture route reads the installed producer"
+                + " version.");
             var container = ScriptableObject.CreateInstance<nadena.dev.ndmf.runtime.SubAssetContainer>();
             AssetDatabase.CreateAsset(container, CaptureContainerPath);
             var copy = new Texture2D(64, 64, TextureFormat.RGBA32, true, true);

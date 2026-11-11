@@ -2,10 +2,19 @@ using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
 using Alrauna.Amuse.Editor.Semantics;
+using Alrauna.Amuse.Tests.Editor.Build;
 
 namespace Alrauna.Amuse.Tests.Editor.Semantics
 {
     [TestFixture]
+    // Falsifier header, dated 2026-11-10. The refusal tests of this
+    // class stay synthetic. No producer delivers a loose texture, an
+    // uncharacterized name, a foreign or derived container, an
+    // unadmitted version, or an unregistered bake output. Those tests
+    // keep the version seam and the per-test reset. The two
+    // persisted-copy happy paths drop the version seam. They read the
+    // installed producer version through production admission and
+    // skip by name when the package is absent.
     public class GeneratedTextureAttestationTests
     {
         private const string TestContainerPath = "Assets/AmuseTests_AttestationContainer.asset";
@@ -195,7 +204,11 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [Test]
         public void PersistedCompressedCopyInNdmfContainer_IsIdentifiedAsCharacterizedProducer()
         {
-            InstallAdmittedCompressorVersion();
+            // The version conjunct reads the installed producer
+            // version. No provider injection remains.
+            RealLacPass.SkipWhenComponentAbsent(
+                "the persisted-copy route reads the installed"
+                + " producer version.");
             var copy = new Texture2D(8, 8, TextureFormat.RGBA32, true);
             copy.name = "MainTex_compressed";
             AssetDatabase.AddObjectToAsset(copy, TestContainerPath);
@@ -209,7 +222,11 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [Test]
         public void PersistedBakedCopyInNdmfContainer_IsIdentifiedAsCharacterizedProducer()
         {
-            InstallAdmittedCompressorVersion();
+            // The version conjunct reads the installed producer
+            // version. No provider injection remains.
+            RealLacPass.SkipWhenComponentAbsent(
+                "the persisted-copy route reads the installed"
+                + " producer version.");
             var baked = new Texture2D(8, 8, TextureFormat.RGBA32, true);
             baked.name = "MainTex_baked";
             AssetDatabase.AddObjectToAsset(baked, TestContainerPath);

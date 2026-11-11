@@ -11,6 +11,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
     /// Malformed API or resolved host evidence throws; valid but unsupported
     /// state returns Unknown with a diagnostic.
     /// </summary>
+    // Kept stand-in reason: malformed API inputs and the attestation refusal
+    // contrast need inputs no vendor produces.
     public sealed class LilToonAdversarialTests : LilToonFixtureTestBase
     {
         [Test]
@@ -68,30 +70,34 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void DefaultMaterial_AlphaIsComplete()
         {
-            var material = NewFixtureMaterial();
+            var material = Track(RealLilToonMaterial.Opaque());
 
             var result = Interpret(material);
 
             Assert.That(result.IsSupportedMaterial, Is.True);
             Assert.That(result.Diagnostics, Is.Empty);
-            Assert.That(result.Semantics.Alpha.IsComplete, Is.True);
+            Assert.That(result.Semantics.Alpha.IsComplete, Is.True,
+                "the real-material row must answer Complete, never an " +
+                "accidental Unknown");
         }
 
         [Test]
         public void UnknownAlpha_StaysUnknown()
         {
-            var material = NewFixtureMaterial();
+            var material = Track(RealLilToonMaterial.Opaque());
             material.SetFloat("_UDIMDiscardCompile", 1f);
 
             var result = Interpret(material);
 
-            Assert.That(result.Semantics.Alpha.IsComplete, Is.False);
+            Assert.That(result.Semantics.Alpha.IsComplete, Is.False,
+                "a coverage gate set on the real material must refuse, " +
+                "never answer an accidental Unknown-free constant");
         }
 
         [Test]
         public void Diagnostics_AreImmutable()
         {
-            var material = NewFixtureMaterial();
+            var material = Track(RealLilToonMaterial.Opaque());
             material.SetFloat("_UseParallax", 1f);
 
             var result = Interpret(material);

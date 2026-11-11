@@ -8,6 +8,11 @@ using UnityEngine;
 
 namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 {
+    // Kept stand-in reason: the null and destroyed rows, the foreign shader
+    // rows, the result contract rows, and the adversarial identity rows
+    // need inputs no vendor produces, and the evidence request and
+    // attestation pins read no material state. The Two Pass capture row
+    // runs on the installed bundled Two Pass shader.
     public sealed class PoiyomiMaterialSemanticsTests
     {
         private readonly List<UnityEngine.Object> _created =
@@ -35,6 +40,18 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 Is.Not.Null,
                 $"Test setup requires the built-in shader '{shaderName}'.");
             var material = new Material(shader);
+            _created.Add(material);
+            return material;
+        }
+
+        /// <summary>
+        /// Tracks one material on the installed bundled Two Pass shader.
+        /// The pinned GUID load is the only reliable resolve, because a
+        /// name lookup can answer with a stand-in shader.
+        /// </summary>
+        private Material NewRealTwoPassMaterial()
+        {
+            var material = RealPoiyomiMaterial.TwoPass();
             _created.Add(material);
             return material;
         }
@@ -141,7 +158,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void InterpretVerifiedTwoPassMaterial_CapturesSecondPassAlphaParameters()
         {
-            var material = NewMaterial(PoiyomiFixtureTestBase.TwoPassFixtureShaderName);
+            var material = NewRealTwoPassMaterial();
             material.SetFloat("_AlphaForceOpaque", 1f);
             material.SetFloat("_AlphaForceOpaque2", 0f);
             material.SetColor("_TwoPassColor", new Color(1f, 1f, 1f, 0.5f));
