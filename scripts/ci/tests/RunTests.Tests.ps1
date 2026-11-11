@@ -280,7 +280,7 @@ third line is dropped]]></message></failure>
             $line = Get-RunTestsLine $prWorkflow 'Alrauna\.Amuse\.Tests\.Editor'
             $line | Should -Match '-OptIn'
             $line | Should -Match 'AMUSE_REAL_LAC_PASS'
-            $line | Should -Not -Match 'AMUSE_REAL_THRY_LOCK'
+            $line | Should -Match 'AMUSE_REAL_THRY_LOCK'
             $line | Should -Not -Match 'AMUSE_DAO_INTEGRATION'
             $line | Should -Not -Match 'AMUSE_PRODUCTION_ORDER_DISPATCH'
         }
