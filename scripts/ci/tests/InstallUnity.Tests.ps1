@@ -31,7 +31,7 @@ Describe 'Unity install' {
         }
 
         # The integrity value of the release API is md5 followed by base64.
-        $fixtureMd5 = '0123456789abcdef'
+        $fixtureMd5 = '0123456789abcdef0123456789abcdef'
         $fixtureMd5Base64 = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes($fixtureMd5))
         $fixtureIntegrity = "md5-$fixtureMd5Base64"
 
@@ -109,6 +109,19 @@ Describe 'Unity install' {
         $download = Select-UnityDownload (New-ReleaseResponse 'https://download.unity3d.com/UnitySetup64.exe' $fixtureIntegrity)
         $download.Url | Should -Be 'https://download.unity3d.com/UnitySetup64.exe'
         $download.Md5 | Should -Be $fixtureMd5
+    }
+
+    It 'ParsesTheRawDigestForm' {
+        $raw = [byte[]](0x4b, 0x5b, 0xce, 0xa6, 0x3f, 0x3d, 0xe8, 0x37, 0x7e, 0x69, 0xd1, 0x27, 0xd3, 0xce, 0x4c, 0x1d)
+        $integrity = 'md5-' + [Convert]::ToBase64String($raw)
+        $download = Select-UnityDownload (New-ReleaseResponse 'https://download.unity3d.com/UnitySetup64.exe' $integrity)
+        $download.Md5 | Should -Be '4b5bcea63f3de8377e69d127d3ce4c1d'
+    }
+
+    It 'UnexpectedDigestLengthThrows' {
+        $integrity = 'md5-' + [Convert]::ToBase64String([byte[]](1, 2, 3))
+        { Select-UnityDownload (New-ReleaseResponse 'https://download.unity3d.com/UnitySetup64.exe' $integrity) } |
+            Should -Throw '*unexpected length*'
     }
 
     It 'FailedCheckNeverStartsTheInstaller' {

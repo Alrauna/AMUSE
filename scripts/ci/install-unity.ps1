@@ -27,7 +27,17 @@ function Select-UnityDownload($releaseResponse) {
     if (([string]$download.integrity) -notmatch '^md5-(.+)$') {
         throw 'The release API gave no md5 integrity value.'
     }
-    $md5 = [Text.Encoding]::ASCII.GetString([Convert]::FromBase64String($Matches[1])).ToLowerInvariant()
+    $bytes = [Convert]::FromBase64String($Matches[1])
+    # The API once gave base64 of the 32 hex characters. On 2026-11-13 it gave
+    # base64 of the 16 raw digest bytes. Both forms are accepted. Any other
+    # length is refused.
+    if ($bytes.Length -eq 16) {
+        $md5 = ([BitConverter]::ToString($bytes) -replace '-', '').ToLowerInvariant()
+    } elseif ($bytes.Length -eq 32) {
+        $md5 = [Text.Encoding]::ASCII.GetString($bytes).ToLowerInvariant()
+    } else {
+        throw 'The release API gave an md5 integrity value of unexpected length.'
+    }
     return @{ Url = [string]$download.url; Md5 = $md5 }
 }
 
