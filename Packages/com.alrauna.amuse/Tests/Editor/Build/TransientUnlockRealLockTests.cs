@@ -799,22 +799,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 fixtureExists, Is.False,
                 "a fixture folder from an earlier run still exists at "
                 + FixtureFolder);
-            var dirty =
-                Resources.FindObjectsOfTypeAll<UnityEngine.Object>()
-                    .Any(IsBlockingDirtyAsset);
-            for (var index = 0; index <
-                UnityEngine.SceneManagement.SceneManager.sceneCount;
-                index++)
-            {
-                dirty |= UnityEngine.SceneManagement.SceneManager
-                    .GetSceneAt(index).isDirty;
-            }
-
+            var dirty = RealVendorLockTestSupport.AnyBlockingDirtyState();
             Assert.That(
                 dirty, Is.False,
-                "a native asset or an open scene is dirty. The owner"
-                + " waiver excludes only the player settings, so a lock"
-                + " must never run beside unsaved user work");
+                "a native asset outside ProjectSettings or a saved scene is"
+                + " dirty, so a lock must never run beside unsaved user work. "
+                + RealVendorLockTestSupport.DescribeDirtyState());
             Assert.That(
                 ShaderUtil.anythingCompiling ||
                 EditorApplication.isCompiling ||
@@ -829,18 +819,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "vendor lock work is already pending");
             AssertNoRecoverableLockedMaterial();
             _cacheSnapshot = snapshot;
-        }
-
-        // The dirty asset rule. The owner approved this narrow waiver
-        // for the dev editor only. A dirty native asset blocks the case,
-        // the player settings never do.
-        private static bool IsBlockingDirtyAsset(UnityEngine.Object asset)
-        {
-            return asset != null &&
-                EditorUtility.IsPersistent(asset) &&
-                EditorUtility.IsDirty(asset) &&
-                AssetDatabase.IsNativeAsset(asset) &&
-                asset.GetType() != typeof(PlayerSettings);
         }
 
         private static int EffectiveTeardownTimeout()

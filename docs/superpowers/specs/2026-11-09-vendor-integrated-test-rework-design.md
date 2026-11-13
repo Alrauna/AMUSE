@@ -27,9 +27,9 @@ The facts below were observed on 2026-11-09.
 |`scripts/ci/check-lock.ps1` reports 2 differences. `scripts/ci/lock.json` holds d4rkAvatarOptimizer 4.7.1 and the manifest locks 4.7.2. LAC is in the manifest and absent from the lock.|Local run of `check-lock.ps1`.|
 |`scripts/ci/lock.json` and `scripts/ci/sources.json` hold no LAC entry and no LAC source. The LAC repository listing is public. It has no `zipSHA256`. The 0.9.0 asset has a GitHub release digest.|Both files. The reviewers read the listing and the release data.|
 |`scripts/ci/run-tests.ps1` unsets the three opt-in variables before every Editor run. Its comment says the gate keeps them unset. So no gated test runs in CI.|`scripts/ci/run-tests.ps1`, lines 73 to 106.|
-|`Assert-TestRun` fails on zero tests, a failed test, an inconclusive test, zero passed tests, and a bad exit code. It never counts skipped tests. `Read-NUnitResult` returns counters, failed names, and assembly names. It reads no skip reason.|`scripts/ci/lib/Common.ps1`.|
+|`Assert-TestRun` fails on zero tests, a failed test, an inconclusive test, zero passed tests, and a bad exit code. It never counts skipped tests. `Read-NUnitResult` returns counters, failed names, the first two message lines of each failed test, and assembly names. It reads no skip reason.|`scripts/ci/lib/Common.ps1`.|
 |`pr.yml` and `canary.yml` call `run-tests.ps1` with the same arguments. Both workflows install the full lock. The lock has no LAC.|Workflow files.|
-|`Start-AsLowUser` copies the caller environment to the Editor child process. It blanks only the `GITHUB`, `RUNNER`, and `ACTIONS` prefixes.|`scripts/ci/lib/Isolation.ps1`.|
+|`Start-AsLowUser` copies the caller environment to the Editor child process. It blanks the `GITHUB`, `RUNNER`, and `ACTIONS` prefixes, `ImageOS`, and `ImageVersion`.|`scripts/ci/lib/Isolation.ps1`.|
 
 The dev project has LAC and CI had none. Until C1 lands, one test can pass in CI and fail in the dev project. This is the environment split.
 
@@ -238,7 +238,7 @@ Then the checks:
 
 - **Environment split.** Dev has LAC and CI had none. Section 5 orders 2a, then C1, to close it.
 - **Vendor drift between pin and run.** A drift fails with a named message. The canary is the early signal.
-- **Static state.** `ReplacementTextureAttestation.Versions`, the NDMF plugin-disable key, and `EditorPrefs` need a reset in `finally`. `VendorSessionStateGuard` covers the NDMF key. The five LAC-shaped classes already reset per test.
+- **Static state.** `ReplacementTextureAttestation.Versions`, the NDMF plugin-disable key, and `EditorPrefs` need a reset in `finally`. `VendorSessionStateGuard` covers the NDMF key. The four LAC-shaped classes reset per test.
 - **Scripting defines.** LTCGI and Red Sim Light Volumes write defines on load. A define change can force a recompile mid-run. No stage tries to prevent it.
 - **Cold-session cost.** First use of real lilToon and Poiyomi shaders compiles variants. Stage 4 measures it.
 - **LAC internal API.** The component type is internal. A LAC release can rename a field. The harness asserts the version and the field names.
