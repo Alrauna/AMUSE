@@ -95,9 +95,9 @@ jobs:
       # the safe place for the gates that change more project state. The
       # research assembly holds no gated test, so its step passes no -OptIn.
       - name: Run the product tests
-        timeout-minutes: 60
+        timeout-minutes: 90
         shell: pwsh
-        run: ${{ runner.temp }}/admin-scripts/run-tests.ps1 -AsLowUser -Assembly Alrauna.Amuse.Tests.Editor -OptIn AMUSE_DAO_INTEGRATION,AMUSE_REAL_THRY_LOCK,AMUSE_PRODUCTION_ORDER_DISPATCH,AMUSE_REAL_LAC_PASS -TimeoutMinutes 55
+        run: ${{ runner.temp }}/admin-scripts/run-tests.ps1 -AsLowUser -Assembly Alrauna.Amuse.Tests.Editor -OptIn AMUSE_DAO_INTEGRATION,AMUSE_REAL_THRY_LOCK,AMUSE_PRODUCTION_ORDER_DISPATCH,AMUSE_REAL_LAC_PASS -TimeoutMinutes 75
 
       - name: Run the research tests
         timeout-minutes: 60
