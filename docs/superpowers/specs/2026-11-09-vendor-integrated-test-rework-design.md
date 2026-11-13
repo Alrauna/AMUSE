@@ -228,7 +228,7 @@ Then the checks:
 
 - The proving run is the C2 pull request, as section 7.2 says.
 - The first canary run with all four gates records its duration and result. A red canary from vendor drift is the drift signal. It opens a dated admission and never weakens a test.
-- Time budget. The dev suite took 1681 seconds in the dev editor on 2026-11-09. CI duration is unmeasured. Both workflows wait 55 minutes for the product run. A timeout ends with exit code -1. It is neither a pass nor a vendor failure. Record it as a budget fault. Raise the limit only with a measured CI duration.
+- Time budget. The dev suite took 1681 seconds in the dev editor on 2026-11-09. On 2026-11-13 the hosted PR run took about 38 minutes without the Thry gate and 52 minutes with it. The PR step waits 55 minutes and runs without the Thry gate. The canary step runs all four gates and waits 75 minutes, inside a 90 minute step limit. The canary duration is unmeasured. A timeout ends with exit code -1. It is neither a pass nor a vendor failure. Record it as a budget fault. Raise the limit only with a measured CI duration.
 
 ### 7.5 CI documentation
 
