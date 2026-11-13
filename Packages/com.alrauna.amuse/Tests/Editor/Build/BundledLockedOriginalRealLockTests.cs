@@ -418,7 +418,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             for (var index = 0; index < UnityEngine.SceneManagement.SceneManager.sceneCount; index++)
                 dirty |= UnityEngine.SceneManagement.SceneManager.GetSceneAt(index).isDirty;
             Assert.That(EvaluateLockIsolation(snapshot, fixtureExists, dirty),
-                Is.EqualTo(LockIsolationRefusal.None), "Real lock isolation preflight refused.");
+                Is.EqualTo(LockIsolationRefusal.None), "Real lock isolation preflight refused: "
+                + EvaluateLockIsolation(snapshot, fixtureExists, dirty)
+                + ", fixtureExists=" + fixtureExists + ", dirty=" + dirty + ".");
             // The positive guard must belong to this import, not to work queued earlier in the session.
             Assert.That(RecoveryDelayCallQueued(vendorTool), Is.False,
                 "A vendor recovery callback is already queued.");
@@ -776,7 +778,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             for (var index = 0; index < UnityEngine.SceneManagement.SceneManager.sceneCount; index++)
                 dirty |= UnityEngine.SceneManagement.SceneManager.GetSceneAt(index).isDirty;
             Assert.That(EvaluateLockIsolation(snapshot, fixtureExists, dirty),
-                Is.EqualTo(LockIsolationRefusal.None), "Real lock isolation preflight refused.");
+                Is.EqualTo(LockIsolationRefusal.None), "Real lock isolation preflight refused: "
+                + EvaluateLockIsolation(snapshot, fixtureExists, dirty)
+                + ", fixtureExists=" + fixtureExists + ", dirty=" + dirty + ".");
             Assert.That(BuildPipeline.isBuildingPlayer || EditorApplication.isCompiling ||
                 EditorApplication.isUpdating || EditorApplication.isPlayingOrWillChangePlaymode,
                 Is.False, "Another editor operation is active.");
