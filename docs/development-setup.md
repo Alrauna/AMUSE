@@ -139,7 +139,7 @@ The licensed jobs of both workflows share one concurrency group. They queue in o
 
 A test can skip itself for a gate. Its skip text starts with `The opt-in variable NAME is not set to 1.` As of 2026-11-13, the run fails when such a skip names a gate that `-OptIn` set. That skip means the variable did not reach the test. A skip for a gate that the run did not set is normal. The guard reads the skip reasons in `TestResults.xml`. It does not yet check skips from an absent vendor package.
 
-On 2026-11-13, a run of the PR step with `AMUSE_REAL_THRY_LOCK` set took 52 minutes of its 55 minute budget. So the PR gate does not set that gate. The older real-lock suite failed on the hosted runner at first. The cause was the dirty-state check in the test preflight. Two things were dirty on the runner: `ProjectSettings/QualitySettings.asset` and one open scene. The preflight now ignores native files under `ProjectSettings/` and scenes that have no saved file. After that change the suite passed on the hosted runner.
+On 2026-11-13, a run of the PR step with `AMUSE_REAL_THRY_LOCK` set took 52 minutes of its 55 minute budget. So the PR gate does not set that gate. The older real-lock suite failed on the hosted runner at first. The cause was the dirty-state check in the test preflight. Two things were dirty on the runner: `ProjectSettings/QualitySettings.asset` and one open scene. Since 2026-11-13 the preflight ignores native files under `ProjectSettings/` and scenes that have no saved file. After that change the suite passed on the hosted runner.
 
 ### The local gate
 

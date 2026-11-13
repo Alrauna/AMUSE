@@ -47,7 +47,7 @@ The dev project has LAC and CI had none. Until C1 lands, one test can pass in CI
 
 ### 4.1 Ground checks (stage 1)
 
-`RealSourceGroundCheckTests` already covers lilToon and the bundled Poiyomi rows. Stage 1 therefore has a small scope:
+`RealSourceGroundCheckTests` covers lilToon and the bundled Poiyomi rows. Stage 1 therefore has a small scope:
 
 - Add a `LockedOriginalAdmitted` assertion for both bundled Poiyomi rows if the file lacks it. The author checks the file first.
 - Add the LAC ground check. It runs the real pass on one fixture texture. It asserts that the copy attests under production admission. It asserts the whole copy shape: the name suffix, path-less state, the registry pair, and a desktop format. A version match alone proves nothing.
@@ -61,7 +61,7 @@ A ground check that passes on first run is recorded as characterization. It is n
 
 One helper, `RealLacPass`, in `Packages/com.alrauna.amuse/Tests/Editor/Build/`. Its rules:
 
-- It finds the LAC component type by reflection with an assembly-qualified lookup. `MergedConsumptionFixture.cs` already uses this pattern for other vendors. A null result is a named skip.
+- It finds the LAC component type by reflection with an assembly-qualified lookup. `MergedConsumptionFixture.cs` uses this pattern for other vendors. A null result is a named skip.
 - It asserts that the type comes from the LAC assembly and that the installed LAC version equals the pinned version. It asserts the field names it uses. A LAC release that renames a field fails with a named message.
 - It adds the component and sets every field through `SerializedObject`. The fixture texture is larger than the minimum source size, so the pass always processes it.
 - It freezes both LAC backend preferences in `EditorPrefs`: `analysisBackend` and `resizeBackend`. It restores both earlier values in `finally`. The format then does not vary with GPU analysis.
@@ -108,7 +108,7 @@ Then move the Semantics happy paths from stand-in shaders to real materials. Kee
 
 Step 2 adds no new proof for the stand-in tests. Step 4 adds the missing proof on the real path. The first step order is fixed: step 2 before step 3.
 
-Stage 4 starts with a recount. The stage 0 run shows real Poiyomi tests already exist in `AlphaSeparationApplyTests`. The refresh record counts may be too high.
+Stage 4 starts with a recount. The stage 0 run shows real Poiyomi tests exist in `AlphaSeparationApplyTests`. The refresh record counts may be too high.
 
 Real-lock hygiene: cleanup deletes materials before the vendor cache entries. The lock calls a vendor usage counter over the network once per session.
 
@@ -186,8 +186,8 @@ The changes below keep the existing trust model. A maintainer approves each `uni
 
 - Add a `limitex` source to `scripts/ci/sources.json` with the public LAC repository listing. Map `dev.limitex.avatar-compressor` to it.
 - Add the LAC entry and the d4rkAvatarOptimizer 4.7.2 entry to `scripts/ci/lock.json`. Run `scripts/ci/new-lock.ps1` to record the hashes. LAC ships as a GitHub release zip, so the GitHub release digest route applies. That route records the publisher digest. It is the same strength as the route for the other packages. The lock then pins the bytes.
-- No Pester test reads the real lock or sources files. No test update is needed. `check-lock.ps1` already fails when a locked package has no source key.
-- Acceptance: `check-lock.ps1` exits 0. The `scripts` job passes. The `unity` job installs LAC with a verified hash. LAC dependencies are already in the lock.
+- No Pester test reads the real lock or sources files. No test update is needed. `check-lock.ps1` fails when a locked package has no source key.
+- Acceptance: `check-lock.ps1` exits 0. The `scripts` job passes. The `unity` job installs LAC with a verified hash. LAC dependencies are in the lock.
 
 ### 7.2 C2: opt-in gates in CI
 
