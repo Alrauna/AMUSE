@@ -57,6 +57,21 @@ third line is dropped]]></message></failure>
 '@
         $passingXmlPath = Write-FixtureFile 'passing-results.xml' $xmlPassingRun
         $failedXmlPath = Write-FixtureFile 'failed-results.xml' $xmlFailedRun
+        # One passing test and two skipped tests. One skip names the LAC gate.
+        # The other skip has a vendor-absent reason.
+        $xmlSkippedRun = @'
+<test-run total="3" passed="1" failed="0" skipped="2" inconclusive="0">
+  <test-suite type="Assembly" name="Alrauna.Amuse.Tests.Editor.dll" fullname="Alrauna.Amuse.Tests.Editor.dll" />
+  <test-case fullname="Alrauna.Amuse.Tests.Editor.A passing test" result="Passed" />
+  <test-case fullname="Alrauna.Amuse.Tests.Editor.Gated test" result="Skipped" label="Ignored">
+    <reason><message><![CDATA[The opt-in variable AMUSE_REAL_LAC_PASS is not set to 1. It changes vendor state.]]></message></reason>
+  </test-case>
+  <test-case fullname="Alrauna.Amuse.Tests.Editor.Absent vendor test" result="Skipped" label="Ignored">
+    <reason><message><![CDATA[The vendor package is not installed in this project.]]></message></reason>
+  </test-case>
+</test-run>
+'@
+        $skippedXmlPath = Write-FixtureFile 'skipped-results.xml' $xmlSkippedRun
         $greenFacts = @{ Shader = 0; Compile = 0; Licensing = 0 }
     }
 
@@ -138,6 +153,18 @@ third line is dropped]]></message></failure>
         It 'CompleteTestRunThrowsOnShaderErrorLinesWithAllTestsPassing' {
             { Complete-TestRun $passingXmlPath $assembly 0 @{ Shader = 1; Compile = 0; Licensing = 0 } } |
                 Should -Throw '*shader or compile errors*'
+        }
+
+        It 'ASkipForAGateThatTheRunSetFailsTheRun' {
+            Mock Say { }
+            { Complete-TestRun $skippedXmlPath $assembly 0 $greenFacts @('AMUSE_REAL_LAC_PASS') } |
+                Should -Throw '*skipped for a gate that the run set: AMUSE_REAL_LAC_PASS*'
+        }
+
+        It 'ASkipForAGateThatTheRunDidNotSetPasses' {
+            Mock Say { }
+            { Complete-TestRun $skippedXmlPath $assembly 0 $greenFacts @('AMUSE_REAL_THRY_LOCK') } | Should -Not -Throw
+            { Complete-TestRun $skippedXmlPath $assembly 0 $greenFacts } | Should -Not -Throw
         }
 
         It 'CompleteTestRunThrowsOnCompileErrorLinesWithAllTestsPassing' {

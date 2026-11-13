@@ -78,6 +78,11 @@ function Read-NUnitResult([string]$xmlPath) {
     $assemblies = @($xml.SelectNodes("//test-suite[@type='Assembly']") | ForEach-Object {
         (([string]$_.name) -replace '^.*[/\\]', '') -replace '\.dll$', ''
     })
+    # The reason text of every skipped test. The gate guard reads it.
+    $skipReasons = @($xml.SelectNodes("//test-case[@result='Skipped']") | ForEach-Object {
+        $node = $_.SelectSingleNode('reason/message')
+        if ($node) { [string]$node.InnerText } else { '' }
+    })
     return [pscustomobject]@{
         Total = [int]$run.total
         Passed = [int]$run.passed
@@ -86,7 +91,21 @@ function Read-NUnitResult([string]$xmlPath) {
         Inconclusive = [int]$run.inconclusive
         FailedNames = $failed
         FailedMessages = $messages
+        SkipReasons = $skipReasons
         Assemblies = $assemblies
+    }
+}
+
+# Fails a run when a test skipped itself for a gate that the run set. The
+# gate helper in the tests skips with a message that starts with "The opt-in
+# variable NAME is not set to 1." So a skip that names a gate from -OptIn
+# means the variable never reached the test, and the run proved nothing for
+# that gate. A skip for a gate that the run did not set is normal.
+function Assert-GatedTestsRan($result, [string[]]$optIn) {
+    foreach ($reason in @($result.SkipReasons)) {
+        if ($reason -match '^The opt-in variable (\w+) is not set to 1\.' -and @($optIn) -contains $Matches[1]) {
+            throw "A test skipped for a gate that the run set: $($Matches[1])"
+        }
     }
 }
 
@@ -141,8 +160,9 @@ function Get-LogFacts([string]$logPath) {
 # and compile errors fail the run even when every test passed. A missing
 # result file, zero tests, a missing assembly, a failed test, an
 # inconclusive test or a non-zero Editor exit code stops the run through
-# Assert-TestRun.
-function Complete-TestRun([string]$xmlPath, [string]$assembly, [int]$unityExit, $logFacts) {
+# Assert-TestRun. A test that skipped for a gate of -OptIn stops the run
+# through Assert-GatedTestsRan.
+function Complete-TestRun([string]$xmlPath, [string]$assembly, [int]$unityExit, $logFacts, [string[]]$optIn = @()) {
     $result = Read-NUnitResult $xmlPath
     Say "- tests: total $($result.Total), passed $($result.Passed), failed $($result.Failed), skipped $($result.Skipped), inconclusive $($result.Inconclusive)"
     $names = @($result.FailedNames)
@@ -152,6 +172,7 @@ function Complete-TestRun([string]$xmlPath, [string]$assembly, [int]$unityExit, 
         if ($i -lt $messages.Count -and $messages[$i]) { Say (Format-FailedMessageLine $messages[$i]) }
     }
     Assert-TestRun $result $assembly $unityExit
+    Assert-GatedTestsRan $result $optIn
     if ($logFacts.Shader -gt 0 -or $logFacts.Compile -gt 0) { throw 'The log holds shader or compile errors.' }
 }
 

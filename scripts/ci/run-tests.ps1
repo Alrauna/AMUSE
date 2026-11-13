@@ -160,7 +160,7 @@ if ($MyInvocation.InvocationName -ne '.') {
         Say "- shader error lines: $($logFacts.Shader), compile error lines: $($logFacts.Compile)"
         Say "- log lines about licensing: $($logFacts.Licensing)"
         Remove-Item -LiteralPath $logPath -Force -ErrorAction SilentlyContinue
-        Complete-TestRun $resultsPath $Assembly $unityExit $logFacts
+        Complete-TestRun $resultsPath $Assembly $unityExit $logFacts $OptIn
         Say '- runtests: the run is green'
     }
     finally {
