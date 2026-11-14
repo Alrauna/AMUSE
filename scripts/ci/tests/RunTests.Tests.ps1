@@ -72,6 +72,39 @@ third line is dropped]]></message></failure>
 </test-run>
 '@
         $skippedXmlPath = Write-FixtureFile 'skipped-results.xml' $xmlSkippedRun
+        # Three skips, all for gates. LAC twice, DAO once.
+        $xmlGateOnlyRun = @'
+<test-run total="4" passed="1" failed="0" skipped="3" inconclusive="0">
+  <test-suite type="Assembly" name="Alrauna.Amuse.Tests.Editor.dll" fullname="Alrauna.Amuse.Tests.Editor.dll" />
+  <test-case fullname="Alrauna.Amuse.Tests.Editor.A passing test" result="Passed" />
+  <test-case fullname="Alrauna.Amuse.Tests.Editor.Gated one" result="Skipped" label="Ignored">
+    <reason><message><![CDATA[The opt-in variable AMUSE_REAL_LAC_PASS is not set to 1. It changes vendor state.]]></message></reason>
+  </test-case>
+  <test-case fullname="Alrauna.Amuse.Tests.Editor.Gated two" result="Skipped" label="Ignored">
+    <reason><message><![CDATA[The opt-in variable AMUSE_REAL_LAC_PASS is not set to 1. It changes vendor state.]]></message></reason>
+  </test-case>
+  <test-case fullname="Alrauna.Amuse.Tests.Editor.Gated three" result="Skipped" label="Ignored">
+    <reason><message><![CDATA[The opt-in variable AMUSE_DAO_INTEGRATION is not set to 1. It changes vendor state.]]></message></reason>
+  </test-case>
+</test-run>
+'@
+        $gateOnlyXmlPath = Write-FixtureFile 'gate-only-results.xml' $xmlGateOnlyRun
+        $xmlNoReasonRun = @'
+<test-run total="2" passed="1" failed="0" skipped="1" inconclusive="0">
+  <test-suite type="Assembly" name="Alrauna.Amuse.Tests.Editor.dll" fullname="Alrauna.Amuse.Tests.Editor.dll" />
+  <test-case fullname="Alrauna.Amuse.Tests.Editor.A passing test" result="Passed" />
+  <test-case fullname="Alrauna.Amuse.Tests.Editor.Silent skip" result="Skipped" />
+</test-run>
+'@
+        $noReasonXmlPath = Write-FixtureFile 'no-reason-results.xml' $xmlNoReasonRun
+        # The run counts two skips, but the file holds no skipped test case.
+        $xmlInertRun = @'
+<test-run total="3" passed="1" failed="0" skipped="2" inconclusive="0">
+  <test-suite type="Assembly" name="Alrauna.Amuse.Tests.Editor.dll" fullname="Alrauna.Amuse.Tests.Editor.dll" />
+  <test-case fullname="Alrauna.Amuse.Tests.Editor.A passing test" result="Passed" />
+</test-run>
+'@
+        $inertXmlPath = Write-FixtureFile 'inert-results.xml' $xmlInertRun
         $greenFacts = @{ Shader = 0; Compile = 0; Licensing = 0 }
     }
 
@@ -161,10 +194,28 @@ third line is dropped]]></message></failure>
                 Should -Throw '*skipped for a gate that the run set: AMUSE_REAL_LAC_PASS*'
         }
 
-        It 'ASkipForAGateThatTheRunDidNotSetPasses' {
+        It 'AVendorAbsentSkipFailsTheRunWhateverTheGates' {
             Mock Say { }
-            { Complete-TestRun $skippedXmlPath $assembly 0 $greenFacts @('AMUSE_REAL_THRY_LOCK') } | Should -Not -Throw
-            { Complete-TestRun $skippedXmlPath $assembly 0 $greenFacts } | Should -Not -Throw
+            { Complete-TestRun $skippedXmlPath $assembly 0 $greenFacts @('AMUSE_REAL_THRY_LOCK') } |
+                Should -Throw '*no gate explains*not installed*'
+        }
+
+        It 'SkipsForGatesThatTheRunDidNotSetPassAndPrintOneLinePerGate' {
+            $printed = [System.Collections.Generic.List[string]]::new()
+            Mock Say { param($text) $printed.Add([string]$text) }
+            { Complete-TestRun $gateOnlyXmlPath $assembly 0 $greenFacts @('AMUSE_REAL_THRY_LOCK') } | Should -Not -Throw
+            $printed | Should -Contain '- skipped for the unset gate AMUSE_DAO_INTEGRATION: 1'
+            $printed | Should -Contain '- skipped for the unset gate AMUSE_REAL_LAC_PASS: 2'
+        }
+
+        It 'ASkipWithoutAReasonFailsTheRun' {
+            Mock Say { }
+            { Complete-TestRun $noReasonXmlPath $assembly 0 $greenFacts } | Should -Throw '*no gate explains*'
+        }
+
+        It 'AReaderThatFindsFewerSkipsThanTheRunCountsFailsTheRun' {
+            Mock Say { }
+            { Complete-TestRun $inertXmlPath $assembly 0 $greenFacts } | Should -Throw '*found 0 skipped tests, but the run counts 2*'
         }
 
         It 'CompleteTestRunThrowsOnCompileErrorLinesWithAllTestsPassing' {
