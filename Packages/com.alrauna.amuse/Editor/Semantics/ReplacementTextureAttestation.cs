@@ -14,8 +14,15 @@ namespace Alrauna.Amuse.Editor.Semantics
     // It would not retire producer admission: the container basis checks a
     // producer name marker, and a "_compressed" copy carries no admitted
     // marker. A name marker plus a version admission remains either way
-    // (spec 2026-10-04). The same release registering bake pairs would let
-    // AMUSE admit the in-build "_baked" output and retire its refusal.
+    // (spec 2026-10-04). Correction dated 2026-11-10. The installed LAC
+    // 0.9.0 source registers bake pairs. The BakeTexture helper of the
+    // installed LilToonTextureBaker names its output source plus "_baked"
+    // and calls ObjectRegistry.RegisterReplacedObject for the source and
+    // output pair. The 2026-10-04 design says that release registers no
+    // bake pairs. That design is superseded for this fact. The in-build
+    // "_baked" refusal still holds through the suffix gate. A bake output
+    // name never ends with "_compressed", so the shape conjunct refuses
+    // it.
     internal static class ReplacementTextureAttestation
     {
         internal const string ProducerPackageName =
@@ -40,13 +47,13 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// member is addressed directly through this field:
         /// Versions.ReadInstalledPackageVersionOrNull is set by
         /// ReplacementTextureAttestationTests,
-        /// GeneratedTextureAttestationTests, UnityTextureEvidenceTests, and
-        /// UnityAlphaFieldEvidenceTests. Versions.AdmittedVersions is
+        /// GeneratedTextureAttestationTests, UnityTextureEvidenceTests,
+        /// and UnityAlphaFieldEvidenceTests. Versions.AdmittedVersions is
         /// read by ReplacementTextureAttestationTests.
         /// Versions.SetAdmittedVersionsForTests is called by
         /// ReplacementTextureAttestationTests,
-        /// GeneratedTextureAttestationTests, UnityTextureEvidenceTests, and
-        /// UnityAlphaFieldEvidenceTests. Versions.ResetForTests is called
+        /// GeneratedTextureAttestationTests, UnityTextureEvidenceTests,
+        /// and UnityAlphaFieldEvidenceTests. Versions.ResetForTests is called
         /// by ReplacementTextureAttestationTests,
         /// GeneratedTextureAttestationTests, UnityTextureEvidenceTests, and
         /// UnityAlphaFieldEvidenceTests.

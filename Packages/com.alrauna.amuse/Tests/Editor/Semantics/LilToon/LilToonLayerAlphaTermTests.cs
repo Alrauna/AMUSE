@@ -14,6 +14,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
     /// <summary>
     /// Unit tests for sampler assignment and fail-closed checks in layer alpha.
     /// </summary>
+    // Kept stand-in reason: exact falsifier control. The rows pin exact
+    // layer feature and keyword states, such as decal flags, msdf, audio
+    // link, cull, and dissolve modes.
     public sealed class LilToonLayerAlphaTermTests
     {
         [Test]

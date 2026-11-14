@@ -18,11 +18,11 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
     /// <summary>
     /// Frontend selection, and an explicit record of its public-project limit.
     /// <para>
-    /// The public development project installs neither Poiyomi nor lilToon, so
-    /// no material here can pass either frontend's source attestation. These
-    /// tests therefore exercise the real refusal path on real Unity objects and
-    /// make no claim about vendor dispatch, which remains a production
-    /// capability the public suite cannot observe.
+    /// Some rows build name-mimic stand-in sources that no attestation
+    /// verifies, because the exact-control proof needs an unattested source.
+    /// The capture, classification, and routing rows run on the installed
+    /// vendor shaders loaded by the production GUID pins, as the stage 3
+    /// and stage 4 moves recorded them on 2026-11-10.
     /// </para>
     /// </summary>
     public sealed class UnityMaterialSemanticsTests
@@ -81,14 +81,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [Test]
         public void CaptureAlphaMaterialsKeepsFamilyRequestsIsolated()
         {
-            var poiyomi = NewMaterial(
-                "poiyomi.shader",
-                PoiyomiMaterialSemantics.PoiyomiToonShaderName,
-                PoiyomiProperties());
-            var lilToon = NewMaterial(
-                "liltoon.shader",
-                LilToonSourceAttestation.SupportedShaderName,
-                LilToonProperties());
+            var poiyomi = NewRealPoiyomiMaterial(
+                PoiyomiSourceAttestation.CanonicalShaderGuid);
+            poiyomi.SetFloat("_AlphaForceOpaque", 1f);
+            var lilToon = TrackRealLilToon(RealLilToonMaterial.Opaque());
 
             var captured = UnityMaterialSemantics.CaptureAlphaMaterials(
                 new[] { poiyomi, lilToon });
@@ -125,6 +121,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         /// <see cref="ClosedCaptureRevalidatesSourceAttestation"/> is the pass
         /// that refuses it.
         /// </summary>
+        // Kept stand-in on 2026-11-10: selection must succeed on a source no
+        // attestation verifies. The name-mimic stand-in is the exact-control.
         [Test]
         public void SelectionIdentifiesPoiyomiWithoutAttestingSource()
         {
@@ -145,6 +143,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 "selection must hand back the family's existing request");
         }
 
+        // Kept stand-in on 2026-11-10: selection must succeed on a source no
+        // attestation verifies. The name-mimic stand-in is the exact-control.
         [Test]
         public void SelectionIdentifiesLilToonWithoutAttestingSource()
         {
@@ -174,10 +174,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             // the capture schema is that request alone, because conversion
             // never admits this family so there is no conversion request to
             // union.
-            var material = NewMaterial(
-                "selected-two-pass.shader",
-                PoiyomiMaterialSemantics.PoiyomiTwoPassShaderName,
-                PoiyomiTwoPassProperties());
+            var material = NewRealPoiyomiMaterial(
+                PoiyomiSourceAttestation.TwoPassCanonicalShaderGuid);
 
             var selected = UnityMaterialSemantics.TrySelectAlphaMaterialRequests(
                 material, out var family, out var request, out var captureSchema);
@@ -242,10 +240,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [Test]
         public void PlainToon_StillCapturesWithoutSecondFamilyScalars()
         {
-            var material = NewMaterial(
-                "plain-capture-guard.shader",
-                PoiyomiMaterialSemantics.PoiyomiToonShaderName,
-                PoiyomiProperties());
+            var material = NewRealPoiyomiMaterial(
+                PoiyomiSourceAttestation.CanonicalShaderGuid);
 
             var captured = UnityMaterialSemantics.CaptureAlphaMaterials(
                 new[] { material });
@@ -292,6 +288,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         /// like every other thin UsePass wrapper. Falsifies refusing the
         /// variants for their names after S9 pinned them.
         /// </summary>
+        // Kept stand-in on 2026-11-10: the wrapper names are exact-control
+        // name-mimics over an unattested source. The proof is selection on
+        // exact admitted names, and selection must not attest.
         [Test]
         public void SelectionIdentifiesOnePassAndTwoPassTransparentNames()
         {
@@ -332,6 +331,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         /// capture must gather. Poiyomi is the family where they differ,
         /// because conversion reads render state alpha does not depend on.
         /// </summary>
+        // Kept stand-in on 2026-11-10: the assertions pin static request
+        // objects and reference identity. The stand-in keeps the selection
+        // subject unattested and material-independent.
         [Test]
         public void PoiyomiCaptureSchemaCarriesConversionEvidenceAlphaRelevanceDoesNot()
         {
@@ -399,6 +401,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         /// lilToon has no opaque-conversion request, so its two questions have
         /// the same answer and neither may acquire conversion render state.
         /// </summary>
+        // Kept stand-in on 2026-11-10: the assertions pin static request
+        // objects and reference identity. The stand-in keeps the selection
+        // subject unattested and material-independent.
         [Test]
         public void LilToonCaptureSchemaIsExactlyItsAlphaRelevance()
         {
@@ -445,6 +450,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         /// carries the cutout shader name over a stand-in source no
         /// attestation can verify, and selection still succeeds.
         /// </summary>
+        // Kept stand-in on 2026-11-10: selection must succeed on a source no
+        // attestation verifies. The name-mimic stand-in is the exact-control.
         [Test]
         public void SelectionIdentifiesLilToonCutoutWithoutAttestingSource()
         {
@@ -475,6 +482,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         /// the schema, and neither Poiyomi's conversion-only state nor any
         /// new texture acquisition does.
         /// </summary>
+        // Kept stand-in on 2026-11-10: the assertions pin static request
+        // objects and reference identity. The stand-in keeps the selection
+        // subject unattested and material-independent.
         [Test]
         public void CutoutCaptureSchemaCarriesConversionEvidenceAlphaRelevanceDoesNot()
         {
@@ -573,6 +583,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         /// the combination widens in exactly one direction, without the
         /// compiled-out dither toggle.
         /// </summary>
+        // Kept stand-in on 2026-11-10: the assertions pin static request
+        // objects and reference identity. The stand-in keeps the selection
+        // subject unattested and material-independent.
         [Test]
         public void TransparentCaptureSchemaCarriesConversionEvidence()
         {
@@ -658,6 +671,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         /// gain their named refusals at the resolver. The exactness of every
         /// admitted name is guarded by the off-by-one near misses below.
         /// </summary>
+        // Kept stand-in on 2026-11-10: the near-miss and legacy names are
+        // refusal shapes no installed shader asset carries.
         [Test]
         public void SelectionRefusesNearCutoutLilToonShaderNames()
         {
@@ -948,6 +963,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                     refusal, capturedHasPackage, capturedPackageVersion));
         }
 
+        // Kept stand-in on 2026-11-10: the consent rows pin refusal shapes
+        // and ApprovedRangeVendorScope package state over hand-built captured
+        // records. No installed material state produces them.
         [Test]
         public void ApprovedVersionProducesNoSubjectOnTheConsentCore()
         {
@@ -1144,6 +1162,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             Assert.That(consent.AnyApprovedVersions, Is.True);
         }
 
+        // Kept stand-in on 2026-11-10: the legacy 9.0 name is a refusal
+        // shape no installed shader asset carries.
         [Test]
         public void Legacy90ShaderName_SelectsUnsupportedFamily()
         {
@@ -1171,12 +1191,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         public void BundledShaderName_SelectsPoiyomiFamily()
         {
             // The bundled 9.3 main name routes like the 9.3.64 name.
-            const string bundledName =
-                ".poiyomi/Old Versions/9.3/Poiyomi Toon";
-            var material = NewMaterial(
-                "bundled-poiyomi.shader",
-                bundledName,
-                PoiyomiProperties());
+            var material = NewRealPoiyomiMaterial(
+                PoiyomiSourceAttestation.CanonicalShaderGuid);
 
             var selected = UnityMaterialSemantics
                 .TrySelectAlphaMaterialRequests(
@@ -1197,12 +1213,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [Test]
         public void BundledTwoPassShaderName_SelectsPoiyomiTwoPassFamily()
         {
-            const string bundledTwoPassName =
-                ".poiyomi/Old Versions/9.3/Poiyomi Toon Two Pass";
-            var material = NewMaterial(
-                "bundled-two-pass.shader",
-                bundledTwoPassName,
-                PoiyomiTwoPassProperties());
+            var material = NewRealPoiyomiMaterial(
+                PoiyomiSourceAttestation.TwoPassCanonicalShaderGuid);
 
             var selected = UnityMaterialSemantics
                 .TrySelectAlphaMaterialRequests(
@@ -1223,6 +1235,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         }
 
         // Characterization: a bundled name no row admits stays unsupported.
+        // Kept stand-in on 2026-11-10: the World name is a refusal shape no
+        // installed shader asset carries.
         [Test]
         public void BundledWorldShaderName_SelectsUnsupportedFamily()
         {
@@ -1247,6 +1261,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             Assert.That(captureSchema, Is.Null);
         }
 
+        // Kept stand-in on 2026-11-10: the legacy 9.0 name is a refusal
+        // shape no installed shader asset carries.
         [Test]
         public void Legacy90Material_ProducesZeroTransferConsentSubjects()
         {
@@ -1263,6 +1279,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             Assert.That(consent.GrantedShaderNames.Count, Is.EqualTo(0));
         }
 
+        // Kept stand-in on 2026-11-10: the unverified-source consent shape
+        // needs a source no attestation verifies. The stand-in is the
+        // exact-control.
         [Test]
         public void UnverifiedPoiyomi_ProducesZeroTransferConsentSubjects()
         {
@@ -1285,6 +1304,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         /// the opaque lilToon answers — both questions still return the
         /// existing reference-equal request objects.
         /// </summary>
+        // Kept stand-in on 2026-11-10: the assertions pin static request
+        // objects and reference identity. The stand-in keeps the selection
+        // subject unattested and material-independent.
         [Test]
         public void OpaqueLilToonSelectionStaysReferenceStableBesideCutout()
         {
@@ -1313,28 +1335,22 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         /// <summary>
         /// Routing (R4): once captured as cutout-family evidence, the alpha
         /// verdict is the cutout interpreter's verdict on the same evidence —
-        /// never the opaque lilToon or Poiyomi verdict, which would collapse
-        /// gate-off cutout coverage to a complete constant 1. Both rows
-        /// discriminate: a gate-active material and a gate-off one whose
-        /// main texture carries no resolvable source identity on this
-        /// scaffold. AnalyzeAlphaMaterial re-verifies source attestation,
-        /// which no stand-in passes, so the observable surface is
-        /// all-Unknown both before and after the cutout arm exists; the
-        /// equality assertion is the shape discriminator that keeps holding
-        /// when the arm completes.
+        /// never the opaque lilToon or Poiyomi verdict. The two arms run on
+        /// real installed cutout materials loaded by the production GUID
+        /// pin. The dither coverage arm must keep its proof unknown, so a
+        /// routed verdict that collapses the coverage path to any constant
+        /// fails. The gate-off arm carries no assigned main texture, so the
+        /// declared-default theorem answers uniform opaque, and a routed
+        /// verdict that answers all-Unknown there fails. Both arms also pin
+        /// equality with the direct interpreter verdict on the same
+        /// evidence.
         /// </summary>
         [Test]
-        public void RoutedCutoutFamilyAlphaNeverCollapsesToConstantOne()
+        public void RoutedCutoutAlphaIsTheCutoutInterpreterVerdict()
         {
-            var gateActive = NewMaterial(
-                "routed-cutout-gate-active.shader",
-                LilToonSourceAttestation.CutoutShaderName,
-                CutoutProperties());
+            var gateActive = TrackRealLilToon(RealLilToonMaterial.Cutout());
             gateActive.SetFloat("_UseDither", 1f);
-            var gateOff = NewMaterial(
-                "routed-cutout-gate-off.shader",
-                LilToonSourceAttestation.CutoutShaderName,
-                CutoutProperties());
+            var gateOff = TrackRealLilToon(RealLilToonMaterial.Cutout());
 
             var captured = UnityMaterialSemantics.CaptureAlphaMaterials(
                 new[] { gateActive, gateOff });
@@ -1345,25 +1361,41 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 captured[1].Family,
                 Is.EqualTo(CapturedAlphaMaterialFamily.LilToonCutout));
 
-            foreach (var material in captured)
-            {
-                var routed = UnityMaterialSemantics.AnalyzeAlphaMaterial(
-                    material);
-                var cutout = LilToonCutoutMaterialSemantics
-                    .InterpretVerifiedCutoutAlpha(material.Evidence, out _);
+            var routedActive = UnityMaterialSemantics.AnalyzeAlphaMaterial(
+                captured[0]);
+            var cutoutActive = LilToonCutoutMaterialSemantics
+                .InterpretVerifiedCutoutAlpha(
+                    captured[0].Evidence, out _);
+            Assert.That(
+                routedActive.Semantics.Alpha.IsComplete,
+                Is.False,
+                "the active dither coverage gate must keep the routed " +
+                "cutout alpha unknown, never a constant");
+            Assert.That(
+                routedActive.Semantics.Alpha,
+                Is.EqualTo(cutoutActive),
+                "the routed alpha must be the cutout interpreter's " +
+                "verdict on the same evidence");
 
-                Assert.That(
-                    routed.Semantics.Alpha.IsComplete &&
-                        routed.Semantics.Alpha.GetCompleteValue().Kind ==
-                        ScalarSemanticValueKind.Constant,
-                    Is.False,
-                    "routed cutout alpha must never complete as a constant");
-                Assert.That(
-                    routed.Semantics.Alpha,
-                    Is.EqualTo(cutout),
-                    "the routed alpha must be the cutout interpreter's " +
-                    "verdict on the same evidence");
-            }
+            var routedOff = UnityMaterialSemantics.AnalyzeAlphaMaterial(
+                captured[1]);
+            var cutoutOff = LilToonCutoutMaterialSemantics
+                .InterpretVerifiedCutoutAlpha(
+                    captured[1].Evidence, out _);
+            var offAlpha = routedOff.Semantics.Alpha;
+            Assert.That(
+                offAlpha.IsComplete &&
+                    offAlpha.GetCompleteValue().Kind ==
+                    ScalarSemanticValueKind.Constant &&
+                    offAlpha.GetCompleteValue().GetConstantValue() == 1f,
+                Is.True,
+                "the gate-off declared-default material must prove " +
+                "uniform opaque through the cutout interpreter");
+            Assert.That(
+                routedOff.Semantics.Alpha,
+                Is.EqualTo(cutoutOff),
+                "the routed alpha must be the cutout interpreter's " +
+                "verdict on the same evidence");
         }
 
         /// <summary>
@@ -1376,10 +1408,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [Test]
         public void CaptureAlphaMaterialsClassifiesCutoutLikeSelection()
         {
-            var material = NewMaterial(
-                "captured-cutout.shader",
-                LilToonSourceAttestation.CutoutShaderName,
-                CutoutProperties());
+            var material = TrackRealLilToon(RealLilToonMaterial.Cutout());
 
             var selected = UnityMaterialSemantics.TrySelectAlphaMaterialRequests(
                 material, out var family, out var alphaRelevance, out _);
@@ -1454,6 +1483,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         /// transferred member, whose capture is the real recorded evidence and
         /// never the unsupported sentinel.
         /// </summary>
+        // Kept stand-in on 2026-11-10: the batch rows build failing members
+        // no vendor produces, the closed-capture rows pin the revalidation
+        // refusal of an unattested source, and the stale-evidence transferred
+        // rows need captured records no real source supplies.
         [Test]
         public void MixedBatchReportsSurvivorsAndFailingOrdinals()
         {
@@ -1716,6 +1749,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                     .Semantics);
         }
 
+        // Kept stand-in on 2026-11-10: the broken-alpha fixture material is
+        // a schema-lacking source. The clone-identity rows pin
+        // registered-source behavior no installed material state produces.
         [Test]
         public void RegisteredCloneMaterial_ReportsTheSourceAssetPath()
         {
@@ -1864,6 +1900,41 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             var shader = TestShaderWriter.WriteStandInShader(
                 path, shaderName, properties);
             var material = new Material(shader);
+            _batchMaterials.Add(material);
+            return material;
+        }
+
+        /// <summary>
+        /// Mints one material on the installed bundled Poiyomi shader at
+        /// run time. The shader loads by its production GUID pin, because
+        /// a name lookup can answer with a stand-in or a foreign shader
+        /// that shares the vendor name. The material joins the batch
+        /// teardown list.
+        /// </summary>
+        private Material NewRealPoiyomiMaterial(string assetGuid)
+        {
+            var path = AssetDatabase.GUIDToAssetPath(assetGuid);
+            Assert.That(
+                path, Is.Not.Empty,
+                "fixture precondition: the installed bundled Poiyomi " +
+                "shader asset must resolve by its pinned GUID");
+            var shader = AssetDatabase.LoadAssetAtPath<Shader>(path);
+            Assert.That(
+                shader, Is.Not.Null,
+                "fixture precondition: the installed bundled Poiyomi " +
+                "shader asset must load");
+            var material = new Material(shader);
+            _batchMaterials.Add(material);
+            return material;
+        }
+
+        /// <summary>
+        /// Mints one material on the installed lilToon shader at run time
+        /// through the shared GUID-pin helper and joins it to the batch
+        /// teardown list.
+        /// </summary>
+        private Material TrackRealLilToon(Material material)
+        {
             _batchMaterials.Add(material);
             return material;
         }

@@ -19,6 +19,58 @@ namespace Alrauna.Amuse.Tests.Editor.Build
     /// </summary>
     internal static class RealVendorLockTestSupport
     {
+        // The dirty state rule of the two preflights. A lock must never run
+        // beside unsaved user work. Two kinds of dirty state are not user
+        // work. The first is a native project setting file. It lives under
+        // ProjectSettings, outside Assets, and a fresh import dirties it on
+        // a hosted runner. The second is an untitled or preview scene, which
+        // has no file for the vendor recovery pass to touch. The player
+        // settings waiver that the owner approved sits inside the setting
+        // file rule.
+        internal static bool IsBlockingDirtyAsset(UnityEngine.Object asset)
+        {
+            if (asset == null || !EditorUtility.IsPersistent(asset) ||
+                !EditorUtility.IsDirty(asset) || !AssetDatabase.IsNativeAsset(asset))
+                return false;
+            var path = AssetDatabase.GetAssetPath(asset);
+            return !path.StartsWith("ProjectSettings/", StringComparison.Ordinal);
+        }
+
+        internal static bool IsBlockingDirtyScene(UnityEngine.SceneManagement.Scene scene)
+        {
+            return scene.isDirty && !string.IsNullOrEmpty(scene.path) &&
+                !UnityEditor.SceneManagement.EditorSceneManager.IsPreviewScene(scene);
+        }
+
+        internal static bool AnyBlockingDirtyState()
+        {
+            if (System.Linq.Enumerable.Any(
+                    Resources.FindObjectsOfTypeAll<UnityEngine.Object>(), IsBlockingDirtyAsset))
+                return true;
+            for (var index = 0; index < UnityEngine.SceneManagement.SceneManager.sceneCount; index++)
+                if (IsBlockingDirtyScene(UnityEngine.SceneManagement.SceneManager.GetSceneAt(index)))
+                    return true;
+            return false;
+        }
+
+        // Names what is dirty, so a refused preflight on a runner says which
+        // asset path or scene path held the guard.
+        internal static string DescribeDirtyState()
+        {
+            var parts = new List<string>();
+            foreach (var asset in Resources.FindObjectsOfTypeAll<UnityEngine.Object>())
+                if (IsBlockingDirtyAsset(asset) && parts.Count < 8)
+                    parts.Add(asset.GetType().Name + "@" + AssetDatabase.GetAssetPath(asset));
+            for (var index = 0; index < UnityEngine.SceneManagement.SceneManager.sceneCount; index++)
+            {
+                var scene = UnityEngine.SceneManagement.SceneManager.GetSceneAt(index);
+                if (scene.isDirty && parts.Count < 8)
+                    parts.Add("scene:" + (string.IsNullOrEmpty(scene.path) ? "untitled" : scene.path)
+                        + (IsBlockingDirtyScene(scene) ? "" : "(waived)"));
+            }
+            return "dirtyState=[" + string.Join(", ", parts) + "]";
+        }
+
         internal const string VendorToolQualifiedName =
             "Thry.ThryEditor.ShaderOptimizer, ThryAssemblyDefinition";
 

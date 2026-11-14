@@ -45,6 +45,7 @@ The test suites run against the installed vendor packages. The `locked` block of
 | `https://vcc.vrcfury.com/` | VRCFury |
 | `https://redsim.github.io/vpmlisting/index.json` | Red Sim Light Volumes |
 | `https://vpm.pimaker.at/index.json` | LTCGI |
+| `https://vpm.limitex.dev/index.json` | Limitex Avatar Compressor |
 
 These repositories supply third-party vendor packages for local testing. Register only the ones your work needs. The suite treats an absent optional vendor as a recorded fact and a named skip, never as a failure.
 
@@ -86,8 +87,9 @@ The installed vendors act on the project and on the editor. The suites record th
 Some fixtures write project-level vendor state. Each of them sits behind a named opt-in environment variable. An unset gate reports a named skip with its disclosure. Set a gate to 1 only in a disposable project, never in a project whose state matters.
 
 - `AMUSE_DAO_INTEGRATION`: the d4rkAvatarOptimizer combined-sequence tests. They delete project-level d4rkAvatarOptimizer output.
-- `AMUSE_REAL_THRY_LOCK`: the real Thry lock characterization. The lock writes vendor-owned cache data under `Assets/_LockedShaderCache` and calls the vendor usage counter over the network.
+- `AMUSE_REAL_THRY_LOCK`: the real Thry lock characterization and the gated end-to-end unlock-window tests on the two bundled Poiyomi rows. The lock writes vendor-owned cache data under `Assets/_LockedShaderCache` and calls the vendor usage counter over the network.
 - `AMUSE_PRODUCTION_ORDER_DISPATCH`: the production-order fixtures that build through the SDK callback dispatcher. The dispatcher runs VRCFury, and VRCFury writes generated controllers under `Packages/com.vrcfury.temp` during the build.
+- `AMUSE_REAL_LAC_PASS`: the ground check that runs the real Avatar Compressor pass. The pass writes generated build assets and reads the LAC editor preferences. The fixture freezes both preferences for its build and restores them.
 
 ### Duration
 
@@ -130,6 +132,14 @@ A pull request can rewrite `pr.yml` or `scripts/ci/get-change-scope.ps1`. The sk
 `canary.yml` runs once a week and on a manual start. It floats every vendor package to its newest stable release. Unity stays at the version in `ProjectSettings/ProjectVersion.txt`. It skips releases that are younger than 48 hours when the publisher shows a release date. It never gates a merge, holds no write permission, and changes nothing in the repository. A red run is the signal that a vendor moved. The job summary holds one table row per package. The columns are package, old, new, date source, and skipped younger.
 
 The licensed jobs of both workflows share one concurrency group. They queue in order instead of cancelling a waiting run. The gate and the canary never sign in to the one account at the same time.
+
+### Opt-in gates in CI
+
+`scripts/ci/run-tests.ps1` unsets all four opt-in gates before every Editor run. The `-OptIn` parameter then sets only the named gates to 1 for the Editor process. The parameter accepts only the four gate names. The script restores the caller values after the run. As of 2026-11-13, `pr.yml` passes `AMUSE_REAL_LAC_PASS` to the product run. `canary.yml` passes all four. The research run passes none. A Pester test for each workflow fails when a name leaves the step.
+
+A test can skip itself for a gate. Its skip text starts with `The opt-in variable NAME is not set to 1.` As of 2026-11-13, the run fails when such a skip names a gate that `-OptIn` set. That skip means the variable did not reach the test. A skip for a gate that the run did not set is normal. The guard reads the skip reasons in `TestResults.xml`. It does not yet check skips from an absent vendor package.
+
+On 2026-11-13, a run of the PR step with `AMUSE_REAL_THRY_LOCK` set took 52 minutes of its 55 minute budget. So the PR gate does not set that gate. The older real-lock suite failed on the hosted runner at first. The cause was the dirty-state check in the test preflight. Two things were dirty on the runner: `ProjectSettings/QualitySettings.asset` and one open scene. Since 2026-11-13 the preflight ignores native files under `ProjectSettings/` and scenes that have no saved file. After that change the suite passed on the hosted runner.
 
 ### The local gate
 

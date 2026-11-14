@@ -1,3 +1,5 @@
+using System;
+using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
 using NUnit.Framework;
@@ -10,39 +12,107 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
     /// <summary>
     /// Cycle 3-A: the texture-evidence building blocks — asset source identity,
     /// UV/ST mapping, the exact-zero mode gate, and the MainTex-derived sampler.
-    /// These drive the low-level extraction helpers directly with real temporary
-    /// texture assets and the schema-complete test fixture material. No real
-    /// Poiyomi shader is required.
+    /// The moved rows run their states through the production evidence path on
+    /// the installed bundled main shader: material rows read the real material
+    /// directly, and texture import rows ride the production capture over the
+    /// real material's main texture slot.
     /// </summary>
+    // Kept stand-in reasons: the transient textures, the out-of-set and
+    // non-finite UV channels, the missing schema property, and the missing
+    // importer rows need inputs no vendor run produces.
     public sealed class PoiyomiTextureEvidenceTests
         : PoiyomiFixtureTestBase
     {
+        /// <summary>
+        /// A fresh material on the installed bundled main shader loaded by
+        /// its pinned GUID. The caller owns destruction through Track.
+        /// </summary>
+        private Material RealMainMaterial()
+        {
+            return Track(RealPoiyomiMaterial.Main());
+        }
+
+        /// <summary>
+        /// The real main material with one staged texture assigned to
+        /// <c>_MainTex</c>. The caller owns destruction through Track.
+        /// </summary>
+        private Material RealMainMaterialWithTexture(Texture texture)
+        {
+            var material = RealMainMaterial();
+            material.SetTexture("_MainTex", texture);
+            return material;
+        }
+
+        /// <summary>
+        /// Captures the named texture import facts through the production
+        /// capture over one real material's main texture slot. The row
+        /// assigns the texture to <c>_MainTex</c> first. The request asks
+        /// only for the import facts these rows assert, so the capture
+        /// never reads more than the rows name.
+        /// </summary>
+        private static CapturedTextureEvidence CaptureMainTexture(
+            Material material)
+        {
+            var request = new MaterialEvidenceRequest(
+                shaderName: false,
+                activeColorSpace: false,
+                presenceProperties: Array.Empty<string>(),
+                scalarProperties: Array.Empty<string>(),
+                colorProperties: Array.Empty<string>(),
+                vectorProperties: Array.Empty<string>(),
+                textureProperties: new[]
+                {
+                    new TexturePropertyEvidenceRequest(
+                        "_MainTex",
+                        TextureEvidenceKinds.SourceIdentity |
+                        TextureEvidenceKinds.Sampling |
+                        TextureEvidenceKinds.ColorInterpretation |
+                        TextureEvidenceKinds.SampledAlphaIsOne |
+                        TextureEvidenceKinds.CanonicalNormalMap |
+                        TextureEvidenceKinds.AlphaChannel),
+                });
+            var captured = UnityMaterialEvidenceCapture.Capture(new[]
+            {
+                new MaterialEvidenceCaptureInput(material, request),
+            });
+            Assert.That(
+                captured[0].TryGetTexture("_MainTex", out var assignment),
+                Is.True,
+                "fixture precondition: the main texture slot is captured");
+            Assert.That(
+                assignment.IsAssigned && assignment.Texture != null,
+                Is.True,
+                "fixture precondition: the row assigns the main texture");
+            return assignment.Texture;
+        }
 
         [Test]
         public void SourceId_AssignedAsset_MatchesUnityAssetTokenFormat()
         {
             var texture = ImportTexture("identity_format");
+            var captured = CaptureMainTexture(RealMainMaterialWithTexture(texture));
 
-            var ok = UnityTextureEvidence.TryGetSourceId(
-                texture,
-                out var sourceId);
-
-            Assert.That(ok, Is.True);
-            Assert.That(sourceId.Value, Is.EqualTo(ExpectedToken(texture)));
-            Assert.That(sourceId.Value, Does.StartWith("unity-asset:"));
+            Assert.That(captured.HasSourceIdentity, Is.True);
+            Assert.That(
+                captured.SourceIdentity.Value,
+                Is.EqualTo(ExpectedToken(texture)));
+            Assert.That(
+                captured.SourceIdentity.Value,
+                Does.StartWith("unity-asset:"));
         }
 
         [Test]
         public void SourceId_SameAsset_IsStableAcrossCalls()
         {
             var texture = ImportTexture("identity_stable");
+            var material = RealMainMaterialWithTexture(texture);
 
-            UnityTextureEvidence.TryGetSourceId(
-                texture, out var first);
-            UnityTextureEvidence.TryGetSourceId(
-                texture, out var second);
+            var first = CaptureMainTexture(material);
+            var second = CaptureMainTexture(material);
 
-            Assert.That(first, Is.EqualTo(second));
+            Assert.That(
+                first.SourceIdentity.Value,
+                Is.EqualTo(second.SourceIdentity.Value));
         }
 
         [Test]
@@ -51,28 +121,31 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             var a = ImportTexture("identity_a");
             var b = ImportTexture("identity_b");
 
-            UnityTextureEvidence.TryGetSourceId(a, out var idA);
-            UnityTextureEvidence.TryGetSourceId(b, out var idB);
+            var idA = CaptureMainTexture(RealMainMaterialWithTexture(a));
+            var idB = CaptureMainTexture(RealMainMaterialWithTexture(b));
 
-            Assert.That(idA, Is.Not.EqualTo(idB));
+            Assert.That(
+                idA.SourceIdentity.Value,
+                Is.Not.EqualTo(idB.SourceIdentity.Value));
         }
 
         [Test]
         public void SourceId_RenamedAsset_IsUnchanged()
         {
             var texture = ImportTexture("identity_before_rename");
-            UnityTextureEvidence.TryGetSourceId(
-                texture, out var before);
+            var material = RealMainMaterialWithTexture(texture);
+            var before = CaptureMainTexture(material);
 
             var moveError = AssetDatabase.MoveAsset(
                 TempFolder + "/identity_before_rename.png",
                 TempFolder + "/identity_after_rename.png");
             Assert.That(moveError, Is.Empty, "Rename must succeed for this probe.");
 
-            UnityTextureEvidence.TryGetSourceId(
-                texture, out var after);
+            var after = CaptureMainTexture(material);
 
-            Assert.That(after, Is.EqualTo(before));
+            Assert.That(
+                after.SourceIdentity.Value,
+                Is.EqualTo(before.SourceIdentity.Value));
         }
 
         [Test]
@@ -96,7 +169,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         public void Uv_ChannelValues0Through3_MapToChannels(
             [Values(0, 1, 2, 3)] int channel)
         {
-            var material = NewFixtureMaterial();
+            var material = RealMainMaterial();
             material.SetFloat("_MainTexUV", channel);
 
             var ok = PoiyomiMaterialSemantics.TryGetSupportedUvMapping(
@@ -109,7 +182,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void Uv_ScaleAndOffset_AreCaptured()
         {
-            var material = NewFixtureMaterial();
+            var material = RealMainMaterial();
             material.SetTextureScale("_MainTex", new Vector2(2f, 3f));
             material.SetTextureOffset("_MainTex", new Vector2(0.1f, 0.2f));
 
@@ -159,7 +232,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void Uv_NonZeroPan_IsRefused()
         {
-            var material = NewFixtureMaterial();
+            var material = RealMainMaterial();
             material.SetVector("_MainTexPan", new Vector4(0.1f, 0f, 0f, 0f));
 
             var ok = PoiyomiMaterialSemantics.TryGetSupportedUvMapping(
@@ -173,7 +246,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void ModeGate_AllPropertiesZero_IsTrue()
         {
-            var material = NewFixtureMaterial();
+            var material = RealMainMaterial();
 
             var failed = EvidenceGates.FirstFailedZeroGate(
                 material, "_MainTexStochastic", "_MainPixelMode");
@@ -184,7 +257,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void ModeGate_NonZeroStochastic_IsFalse()
         {
-            var material = NewFixtureMaterial();
+            var material = RealMainMaterial();
             material.SetFloat("_MainTexStochastic", 1f);
 
             var failed = EvidenceGates.FirstFailedZeroGate(
@@ -196,7 +269,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void ModeGate_NonZeroPixelMode_IsFalse()
         {
-            var material = NewFixtureMaterial();
+            var material = RealMainMaterial();
             material.SetFloat("_MainPixelMode", 1f);
 
             var failed = EvidenceGates.FirstFailedZeroGate(
@@ -221,7 +294,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void Sampler_BilinearRepeat_IsSupported()
         {
-            var material = NewFixtureMaterial();
+            var material = RealMainMaterial();
             material.SetTexture("_MainTex", ImportTexture("sampler_bilinear", i =>
             {
                 i.filterMode = FilterMode.Bilinear;
@@ -239,7 +312,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void Sampler_PointClamp_IsSupported()
         {
-            var material = NewFixtureMaterial();
+            var material = RealMainMaterial();
             material.SetTexture("_MainTex", ImportTexture("sampler_point", i =>
             {
                 i.filterMode = FilterMode.Point;
@@ -257,7 +330,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void Sampler_MirrorWrap_IsUnsupported()
         {
-            var material = NewFixtureMaterial();
+            var material = RealMainMaterial();
             material.SetTexture("_MainTex", ImportTexture("sampler_mirror", i =>
             {
                 i.filterMode = FilterMode.Bilinear;
@@ -273,7 +346,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void Sampler_PerAxisWrapMismatch_IsUnsupported()
         {
-            var material = NewFixtureMaterial();
+            var material = RealMainMaterial();
             material.SetTexture("_MainTex", ImportTexture("sampler_mismatch", i =>
             {
                 i.filterMode = FilterMode.Bilinear;
@@ -296,7 +369,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void Sampler_Mipmapped_IsSupported()
         {
-            var material = NewFixtureMaterial();
+            var material = RealMainMaterial();
             material.SetTexture("_MainTex", ImportTexture("sampler_mip", i =>
             {
                 i.mipmapEnabled = true;
@@ -317,7 +390,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         {
             // The MainTex sampler is authoritative; an auxiliary texture's own
             // unsupported sampler state must not change the result.
-            var material = NewFixtureMaterial();
+            var material = RealMainMaterial();
             material.SetTexture("_MainTex", ImportTexture("sampler_main_ok", i =>
             {
                 i.filterMode = FilterMode.Bilinear;
@@ -343,7 +416,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         {
             // An assigned auxiliary map cannot borrow a guessed sampler when the
             // MainTex slot is empty.
-            var material = NewFixtureMaterial();
+            var material = RealMainMaterial();
 
             var ok = PoiyomiMaterialSemantics.TryGetMainTextureSampling(
                 material, out _);
@@ -357,13 +430,11 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         public void Color_SrgbImport_IsSrgb()
         {
             var texture = ImportTexture("color_srgb", i => i.sRGBTexture = true);
+            var captured = CaptureMainTexture(RealMainMaterialWithTexture(texture));
 
-            var ok = UnityTextureEvidence.TryGetColorInterpretation(
-                texture, out var interpretation);
-
-            Assert.That(ok, Is.True);
+            Assert.That(captured.HasColorInterpretation, Is.True);
             Assert.That(
-                interpretation,
+                captured.ColorInterpretation,
                 Is.EqualTo(TextureColorInterpretation.Srgb));
         }
 
@@ -371,13 +442,11 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         public void Color_LinearImport_IsLinear()
         {
             var texture = ImportTexture("color_linear", i => i.sRGBTexture = false);
+            var captured = CaptureMainTexture(RealMainMaterialWithTexture(texture));
 
-            var ok = UnityTextureEvidence.TryGetColorInterpretation(
-                texture, out var interpretation);
-
-            Assert.That(ok, Is.True);
+            Assert.That(captured.HasColorInterpretation, Is.True);
             Assert.That(
-                interpretation,
+                captured.ColorInterpretation,
                 Is.EqualTo(TextureColorInterpretation.Linear));
         }
 
@@ -402,11 +471,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 "alpha_none",
                 i => i.alphaSource = TextureImporterAlphaSource.None,
                 sourceHasAlpha: false);
+            var captured = CaptureMainTexture(RealMainMaterialWithTexture(texture));
 
-            var proven =
-                UnityTextureEvidence.TryProveSampledAlphaIsOne(texture);
-
-            Assert.That(proven, Is.True);
+            Assert.That(captured.SampledAlphaIsProvenOne, Is.True);
         }
 
         [Test]
@@ -416,11 +483,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 "alpha_present",
                 i => i.alphaSource = TextureImporterAlphaSource.FromInput,
                 sourceHasAlpha: true);
+            var captured = CaptureMainTexture(RealMainMaterialWithTexture(texture));
 
-            var proven =
-                UnityTextureEvidence.TryProveSampledAlphaIsOne(texture);
-
-            Assert.That(proven, Is.False);
+            Assert.That(captured.SampledAlphaIsProvenOne, Is.False);
         }
 
         [Test]
@@ -445,10 +510,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 i.textureType = TextureImporterType.NormalMap;
                 i.flipGreenChannel = false;
             });
+            var captured = CaptureMainTexture(RealMainMaterialWithTexture(texture));
 
-            var ok = UnityTextureEvidence.IsCanonicalNormalMapImport(texture);
-
-            Assert.That(ok, Is.True);
+            Assert.That(captured.IsCanonicalNormalMap, Is.True);
         }
 
         [Test]
@@ -458,10 +522,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             {
                 i.textureType = TextureImporterType.Default;
             });
+            var captured = CaptureMainTexture(RealMainMaterialWithTexture(texture));
 
-            var ok = UnityTextureEvidence.IsCanonicalNormalMapImport(texture);
-
-            Assert.That(ok, Is.False);
+            Assert.That(captured.IsCanonicalNormalMap, Is.False);
         }
 
         [Test]
@@ -472,10 +535,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 i.textureType = TextureImporterType.NormalMap;
                 i.flipGreenChannel = true;
             });
+            var captured = CaptureMainTexture(RealMainMaterialWithTexture(texture));
 
-            var ok = UnityTextureEvidence.IsCanonicalNormalMapImport(texture);
-
-            Assert.That(ok, Is.False);
+            Assert.That(captured.IsCanonicalNormalMap, Is.False);
         }
 
         [Test]

@@ -15,6 +15,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
     /// difference is a redirected path and never resolves. The temp folder
     /// is the test's own and goes away on teardown.
     /// </summary>
+    // Kept stand-in reason: an independent outcome oracle. The fixture
+    // states its own include tree and its own digest, independent of
+    // Unity.
     public sealed class LilToonIncludeTreeTests
     {
         private static readonly string Root = Path.Combine(

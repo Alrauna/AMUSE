@@ -8,8 +8,27 @@ using UnityEngine;
 
 namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 {
+    // Kept stand-in reasons: the non-finite line color, the non-finite
+    // override alpha, the one-axis pan, the override substitution, and the
+    // replace mask bypass rows need inputs no vendor produces. The moved
+    // rows run on the installed bundled main shader.
     public sealed class PoiyomiOutlineAlphaSemanticsTests : PoiyomiFixtureTestBase
     {
+        /// <summary>
+        /// The outline-enabled state on the installed bundled main shader
+        /// loaded by its pinned GUID. The written state matches the
+        /// stand-in outline builder. The caller owns destruction through
+        /// Track.
+        /// </summary>
+        private Material RealOutlineEnabled()
+        {
+            var material = Track(RealPoiyomiMaterial.Main());
+            material.SetFloat("_AlphaForceOpaque", 0f);
+            material.SetFloat("_EnableOutlines", 1f);
+            material.SetTexture("_MainTex", ImportTexture("outline_main"));
+            return material;
+        }
+
         private Material OutlineEnabled()
         {
             var material = NewFixtureMaterial();
@@ -22,7 +41,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void OutlinesDisabled_HostileState_ChangesNothing()
         {
-            var material = NewFixtureMaterial();
+            var material = Track(RealPoiyomiMaterial.Main());
             material.SetFloat("_OutlineAlphaDistanceFade", 1f);
             material.SetFloat("_OutlineALColorEnabled", 1f);
             material.SetColor("_LineColor", new Color(1f, 1f, 1f, 0.25f));
@@ -38,7 +57,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void OutlinesEnabled_ProvenInputs_AlphaStaysComplete()
         {
-            var material = OutlineEnabled();
+            var material = RealOutlineEnabled();
 
             var result = Interpret(material);
 
@@ -48,7 +67,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void OutlinesEnabled_LineColorAlphaBelowOne_IsUnknownWithDiagnostic()
         {
-            var material = OutlineEnabled();
+            var material = RealOutlineEnabled();
             material.SetColor("_LineColor", new Color(1f, 1f, 1f, 0.5f));
 
             AssertUnsupportedOutput(
@@ -61,7 +80,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void OutlinesEnabled_DistanceFadeEnabled_IsUnknownWithDiagnostic()
         {
-            var material = OutlineEnabled();
+            var material = RealOutlineEnabled();
             material.SetFloat("_OutlineAlphaDistanceFade", 1f);
 
             AssertUnsupportedOutput(
@@ -74,7 +93,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void OutlinesEnabled_AudioLinkColorEnabled_IsUnknownWithDiagnostic()
         {
-            var material = OutlineEnabled();
+            var material = RealOutlineEnabled();
             material.SetFloat("_OutlineALColorEnabled", 1f);
 
             AssertUnsupportedOutput(
@@ -102,7 +121,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void OutlinesEnabled_UnprovenTexture_NonzeroPan_IsUnknownWithDiagnostic()
         {
-            var material = OutlineEnabled();
+            var material = RealOutlineEnabled();
             material.SetVector("_OutlineTexturePan", new Vector4(0f, 0.5f, 0f, 0f));
             material.SetTexture("_OutlineTexture", ImportTexture("outline"));
 
@@ -132,7 +151,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void OutlinesEnabled_WholeTextureProven_AlphaStaysComplete()
         {
-            var material = OutlineEnabled();
+            var material = RealOutlineEnabled();
             material.SetTexture("_OutlineTexture", ImportTexture(
                 "outlineSolid",
                 importer => importer.alphaSource =
@@ -146,7 +165,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void OutlinesEnabled_UnprovenTexture_ChainAdmitted_AlphaIsTheMappedTerm()
         {
-            var material = OutlineEnabled();
+            var material = RealOutlineEnabled();
             material.SetTexture("_OutlineTexture", ImportTexture("outline"));
 
             var result = Interpret(material);
@@ -184,7 +203,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 pixels,
                 importer => importer.mipmapEnabled = false);
 
-            var material = OutlineEnabled();
+            var material = RealOutlineEnabled();
             material.SetTexture("_OutlineTexture", outlineTexture);
 
             var result = Interpret(material);

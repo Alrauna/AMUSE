@@ -13,6 +13,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
     /// entirely by #if LIL_RENDER &gt; 0. Alpha is therefore a constant from
     /// attested shader identity; only fragment-removing mechanisms remain.
     /// </summary>
+    // Kept stand-in reason: the hand-built evidence record is an input no
+    // vendor produces. The material rows run on the installed shader.
     public sealed class LilToonAlphaTests : LilToonFixtureTestBase
     {
         private const string IdMaskOnePropertyName = "_IDMask1";
@@ -20,10 +22,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void OpaqueVariant_IsConstantOne()
         {
-            var material = NewFixtureMaterial();
+            var material = Track(RealLilToonMaterial.Opaque());
 
             var alpha = Interpret(material).Semantics.Alpha;
 
+            // The completeness assert is the not-Unknown guard: a moved
+            // row must prove the real constant, not an accidental Unknown.
             Assert.That(alpha.IsComplete, Is.True);
             var value = alpha.GetCompleteValue();
             Assert.That(value.Kind, Is.EqualTo(ScalarSemanticValueKind.Constant));
@@ -33,7 +37,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void OpaqueVariant_IgnoresColorAlphaAndMainTexAlpha()
         {
-            var material = NewFixtureMaterial();
+            var material = Track(RealLilToonMaterial.Opaque());
             material.SetColor("_Color", new Color(1f, 1f, 1f, 0.25f));
             material.SetTexture("_MainTex", ImportTexture("alphatex"));
 
@@ -47,7 +51,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [TestCase("_UDIMDiscardCompile")]
         public void CoverageMechanism_KeepsAlphaUnknown(string property)
         {
-            var material = NewFixtureMaterial();
+            var material = Track(RealLilToonMaterial.Opaque());
             material.SetFloat(property, 1f);
 
             var result = Interpret(material);
@@ -63,7 +67,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void OpaqueMaterialWithIdMaskValueSetAnswersUnknownNotConstantOpaque()
         {
-            var material = NewFixtureMaterial();          // base-class helper, opaque lilToon
+            var material = Track(RealLilToonMaterial.Opaque());
             material.SetFloat(IdMaskOnePropertyName, 1f); // same property name the cutout suite sets
             var answer = Interpret(material).Semantics.Alpha;
             Assert.That(answer.IsComplete, Is.False,
@@ -73,7 +77,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void NonFiniteCoverageProperty_KeepsAlphaUnknown()
         {
-            var material = NewFixtureMaterial();
+            var material = Track(RealLilToonMaterial.Opaque());
             material.SetFloat("_UDIMDiscardCompile", float.NaN);
 
             var result = Interpret(material);

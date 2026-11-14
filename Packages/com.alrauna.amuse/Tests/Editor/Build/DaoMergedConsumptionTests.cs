@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Runtime;
 using nadena.dev.ndmf;
@@ -95,6 +97,152 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             RunDaoSequence(requireAao: true);
         }
 
+        /// <summary>
+        /// The vendor-absent skip text of this suite must name the
+        /// version that the locked block of the VPM manifest pins, so
+        /// the text cannot go stale against the lock. The test reads
+        /// the lock through its own match, so it cannot pass by reading
+        /// its own comparison source.
+        /// </summary>
+        [Test]
+        public void DaoAbsentSkipPrefixNamesTheLockedVersion()
+        {
+            var manifestPath = Path.Combine(
+                Directory.GetParent(Application.dataPath).FullName,
+                "Packages", "vpm-manifest.json");
+            Assert.That(
+                File.Exists(manifestPath), Is.True,
+                "the committed VPM manifest must exist to pin the"
+                + " vendor versions");
+            var manifest = File.ReadAllText(manifestPath);
+            var lockedAt = manifest.IndexOf(
+                "\"locked\"", StringComparison.Ordinal);
+            Assert.That(
+                lockedAt, Is.GreaterThanOrEqualTo(0),
+                "the committed VPM manifest must carry a locked block");
+            var match = Regex.Match(
+                manifest.Substring(lockedAt),
+                "\"" + DaoPackageName + "\"\\s*:\\s*\\{\\s*\"version\""
+                + "\\s*:\\s*\"(?<version>[^\"]*)\"");
+            Assert.That(
+                match.Success, Is.True,
+                "the locked block must pin " + DaoPackageName);
+            Assert.That(
+                DaoAbsentSkipPrefix,
+                Does.StartWith(
+                    "Vendor package absent: " + DaoPackageName + " "),
+                "the vendor-absent skip prefix must name the package");
+            Assert.That(
+                DaoAbsentSkipPrefix,
+                Does.Contain(match.Groups["version"].Value),
+                "the vendor-absent skip prefix must name the version"
+                + " the locked block pins");
+        }
+
+        private const string DaoPackageName =
+            "d4rkpl4y3r.d4rkavataroptimizer";
+
+        // The version to name when the locked block of the VPM manifest
+        // holds no entry for the package. The committed lock pinned this
+        // version as of 2026-11-10. The locked block stays the first
+        // source, so this literal answers only where the lock carries
+        // no entry.
+        private const string FallbackLockedDaoVersion = "4.7.2";
+
+        // One entry shape of the locked block. The shape follows the
+        // suite start check reader and the RealLacPass reader, so all
+        // three accept the same manifest forms.
+        private static readonly Regex LockedDaoVersionPattern =
+            new Regex(
+                "\"" + DaoPackageName + "\"\\s*:\\s*\\{\\s*\"version\""
+                + "\\s*:\\s*\"(?<version>[^\"]*)\"");
+
+        /// <summary>
+        /// The one fixed prefix of every vendor-absent skip text of this
+        /// suite. It names the package and the version its locked block
+        /// pins, so the text cannot go stale against the lock. The
+        /// prefix follows the RealLacPass vendor-absent prefix format,
+        /// so one skip shape serves both suites.
+        /// </summary>
+        private static string DaoAbsentSkipPrefix
+        {
+            get
+            {
+                return "Vendor package absent: " + DaoPackageName
+                    + " " + (LockedDaoPackageVersion()
+                        ?? FallbackLockedDaoVersion)
+                    + " (locked). ";
+            }
+        }
+
+        /// <summary>
+        /// Reads the locked version of the package from the locked block
+        /// of the VPM manifest. The reader follows the RealLacPass
+        /// locked-block read. A missing manifest, a missing block, or a
+        /// missing entry answers null, and the prefix falls back to the
+        /// pinned literal.
+        /// </summary>
+        private static string LockedDaoPackageVersion()
+        {
+            var manifestPath = Path.Combine(
+                Directory.GetParent(Application.dataPath).FullName,
+                "Packages", "vpm-manifest.json");
+            if (!File.Exists(manifestPath))
+            {
+                return null;
+            }
+
+            var lockedBlock = LockedBlockOf(
+                File.ReadAllText(manifestPath));
+            if (lockedBlock.Length == 0)
+            {
+                return null;
+            }
+
+            var match = LockedDaoVersionPattern.Match(lockedBlock);
+            return match.Success ? match.Groups["version"].Value : null;
+        }
+
+        /// <summary>
+        /// Extracts the balanced locked object of the manifest. The
+        /// extraction follows the RealLacPass reader, so both readers
+        /// accept the same manifest forms.
+        /// </summary>
+        private static string LockedBlockOf(string manifest)
+        {
+            var lockedAt = manifest.IndexOf(
+                "\"locked\"", StringComparison.Ordinal);
+            if (lockedAt < 0)
+            {
+                return string.Empty;
+            }
+
+            var openAt = manifest.IndexOf('{', lockedAt);
+            if (openAt < 0)
+            {
+                return string.Empty;
+            }
+
+            var depth = 0;
+            for (var i = openAt; i < manifest.Length; i++)
+            {
+                if (manifest[i] == '{')
+                {
+                    depth++;
+                }
+                else if (manifest[i] == '}')
+                {
+                    depth--;
+                    if (depth == 0)
+                    {
+                        return manifest.Substring(
+                            openAt, i - openAt + 1);
+                    }
+                }
+            }
+            return string.Empty;
+        }
+
         private void RunDaoSequence(bool requireAao)
         {
             // The disposable-project guard: these tests mutate and delete
@@ -111,9 +259,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             if (daoType == null)
             {
                 Assert.Ignore(
-                    "the d4rkpl4y3r.d4rkavataroptimizer package 4.7.1 is"
-                    + " not installed in this project; install it to run"
-                    + " them.");
+                    DaoAbsentSkipPrefix
+                    + "The d4rkAvatarOptimizer component type does not"
+                    + " resolve. Install the package to run these"
+                    + " tests.");
             }
             RequireLilToonEnvironment(out var transparentShader,
                 out var cutoutShader);

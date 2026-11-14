@@ -20,6 +20,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
     /// implementation it falsifies, and the rows marked "copy detector" are
     /// the ones a verbatim copy of the cutout suite would fail.
     /// </summary>
+    // Kept stand-in reason: exact falsifier control. The adversarial value,
+    // evidence-failure, and keyword rows need inputs no vendor write
+    // produces. The moved rows run on the installed transparent shader.
     public sealed class LilToonTransparentAlphaTests : LilToonFixtureTestBase
     {
         private const string MainTextureProperty = "_MainTex";
@@ -582,7 +585,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void CutoutFamily_ComposesTheReplaceLayerIdentically()
         {
-            var material = Track(CreateCutoutConversionMaterial());
+            var material = Track(RealLilToonMaterial.Cutout());
             material.SetTexture(
                 MainTextureProperty,
                 ImportMipmapTexture(
@@ -795,7 +798,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void NoAlphaSourceImport_CollapsesTheTextureArmToTheTintConstant()
         {
-            var material = NewTransparentFixtureMaterial();
+            var material = Track(RealLilToonMaterial.Transparent());
             material.SetTexture(
                 MainTextureProperty,
                 ImportTexture(
@@ -918,13 +921,13 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void PointProvesAndBilinearRefusesTheHalfTexelOutsideHull()
         {
-            var pointMaterial = NewTransparentFixtureMaterial();
+            var pointMaterial = Track(RealLilToonMaterial.Transparent());
             pointMaterial.SetTexture(
                 MainTextureProperty,
                 ImportMipmapTexture(
                     "t_point", 4, 4, SolidGrid(4, 4, 255),
                     FilterMode.Point, TextureWrapMode.Clamp));
-            var bilinearMaterial = NewTransparentFixtureMaterial();
+            var bilinearMaterial = Track(RealLilToonMaterial.Transparent());
             bilinearMaterial.SetTexture(
                 MainTextureProperty,
                 ImportMipmapTexture(
@@ -955,13 +958,13 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void RepeatWrapsIntoTheTransparentTexelAndClampDoesNot()
         {
-            var repeatMaterial = NewTransparentFixtureMaterial();
+            var repeatMaterial = Track(RealLilToonMaterial.Transparent());
             repeatMaterial.SetTexture(
                 MainTextureProperty,
                 ImportMipmapTexture(
                     "t_repeat", 4, 4, SolidGrid(4, 4, 255),
                     FilterMode.Point, TextureWrapMode.Repeat));
-            var clampMaterial = NewTransparentFixtureMaterial();
+            var clampMaterial = Track(RealLilToonMaterial.Transparent());
             clampMaterial.SetTexture(
                 MainTextureProperty,
                 ImportMipmapTexture(
@@ -1523,7 +1526,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void AlphaMaskMode1_IgnoresTheMainTextureAlphaChannel()
         {
-            var material = NewTransparentFixtureMaterial();
+            var material = Track(RealLilToonMaterial.Transparent());
             material.SetTexture(
                 MainTextureProperty,
                 ImportMipmapTexture(
@@ -1586,7 +1589,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void AlphaMaskUnassigned_Mode1_Scale1Value0_IsUniformProvenOpaque()
         {
-            var material = NewTransparentFixtureMaterial();
+            var material = Track(RealLilToonMaterial.Transparent());
             material.SetFloat("_AlphaMaskMode", 1f);
             material.SetFloat("_AlphaMaskScale", 1f);
             material.SetFloat("_AlphaMaskValue", 0f);
@@ -1603,7 +1606,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void AlphaMaskUnassigned_Mode1_Scale0ValueHalf_IsUniformMustRemainTransparent()
         {
-            var material = NewTransparentFixtureMaterial();
+            var material = Track(RealLilToonMaterial.Transparent());
             material.SetFloat("_AlphaMaskMode", 1f);
             material.SetFloat("_AlphaMaskScale", 0f);
             material.SetFloat("_AlphaMaskValue", 0.5f);
@@ -1741,7 +1744,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void MissingMainChain_Mode2SaturatedValue_IsUnknownAndNeverProvesTheHole()
         {
-            var material = NewTransparentFixtureMaterial();
+            var material = Track(RealLilToonMaterial.Transparent());
             material.SetTexture(
                 MainTextureProperty,
                 ImportMipmapTexture(
@@ -1788,7 +1791,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void MissingMainChain_Mode2SampledValue_IsUnknownAndNeverProvesTheHole()
         {
-            var material = NewTransparentFixtureMaterial();
+            var material = Track(RealLilToonMaterial.Transparent());
             material.SetTexture(
                 MainTextureProperty,
                 ImportMipmapTexture(
@@ -2146,7 +2149,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void UnassignedMainTex_AtUnitTint_ProvesTheCornerTriangleOpaque()
         {
-            var material = NewTransparentFixtureMaterial();
+            var material = Track(RealLilToonMaterial.Transparent());
 
             var resolution = ResolveThroughUnassignedTransparent(material);
 
@@ -2162,7 +2165,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         [Test]
         public void UnassignedMainTex_SubUnitTint_IsUniformMustRemainTransparent()
         {
-            var material = NewTransparentFixtureMaterial();
+            var material = Track(RealLilToonMaterial.Transparent());
             material.SetColor(ColorProperty, new Color(1f, 1f, 1f, 0.8f));
 
             var resolution = ResolveThroughUnassignedTransparent(material);

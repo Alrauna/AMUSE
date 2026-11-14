@@ -29,6 +29,11 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
     /// with the chain unchanged and folds an admitted bound term into the
     /// running chain through the exact product machinery.
     /// </summary>
+    // Kept stand-in reason: the marked falsifier rows ride hand-shaped
+    // hole, wrap-seam, and non-identity affine evidence that no vendor run
+    // produces. The non-finite and out-of-set rows build inputs the vendor
+    // never writes. The three feature-label leaves pin refusal sentences.
+    // Every other row runs on the installed bundled main shader.
     public sealed class PoiyomiAlphaMaskTests : PoiyomiFixtureTestBase
     {
         private const string MaskMode = "_MainAlphaMaskMode";
@@ -62,6 +67,36 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             return material;
         }
 
+        /// <summary>Tracks one material on the installed bundled main shader.</summary>
+        private Material NewRealMaterial()
+        {
+            return Track(RealPoiyomiMaterial.Main());
+        }
+
+        /// <summary>
+        /// Real non-forced material in Replace mode with no mask assigned.
+        /// Writes the same state as the stand-in Replace builder.
+        /// </summary>
+        private Material RealReplaceMaterial()
+        {
+            var material = NewRealMaterial();
+            material.SetFloat("_AlphaForceOpaque", 0f);
+            material.SetFloat(MaskMode, 1f);
+            return material;
+        }
+
+        /// <summary>
+        /// Real non-forced material with the mask mode proven off. Writes
+        /// the same state as the stand-in mask-off builder.
+        /// </summary>
+        private Material RealMaskOffMaterial()
+        {
+            var material = NewRealMaterial();
+            material.SetFloat("_AlphaForceOpaque", 0f);
+            material.SetFloat(MaskMode, 0f);
+            return material;
+        }
+
         private static void AssertConstant(
             PoiyomiSemanticResult result, float expected)
         {
@@ -77,13 +112,13 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         public void ReplaceNoMask_Defaults_IsConstantOne()
         {
             // saturate(1 * 1 + 0) = 1
-            AssertConstant(Interpret(ReplaceMaterial()), 1f);
+            AssertConstant(Interpret(RealReplaceMaterial()), 1f);
         }
 
         [Test]
         public void ReplaceNoMask_RepresentableStrength_IsThatConstant()
         {
-            var material = ReplaceMaterial();
+            var material = RealReplaceMaterial();
             material.SetFloat(BlendStrength, 0.5f);
 
             // saturate(1 * 0.5 + 0) = 0.5
@@ -93,7 +128,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void ReplaceNoMask_RepresentableValue_IsThatConstant()
         {
-            var material = ReplaceMaterial();
+            var material = RealReplaceMaterial();
             material.SetFloat(BlendStrength, 0.25f);
             material.SetFloat(MaskValue, 0.5f);
 
@@ -104,7 +139,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void ReplaceNoMask_SaturatesAtFloor()
         {
-            var material = ReplaceMaterial();
+            var material = RealReplaceMaterial();
             material.SetFloat(MaskValue, -2f);
 
             // saturate(1 * 1 + -2) = saturate(-1) = 0
@@ -114,7 +149,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void ReplaceNoMask_SaturatesAtCeiling()
         {
-            var material = ReplaceMaterial();
+            var material = RealReplaceMaterial();
             material.SetFloat(BlendStrength, 2f);
 
             // saturate(1 * 2 + 0) = saturate(2) = 1
@@ -124,7 +159,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void ReplaceNoMask_Inverted_IsInvertedConstant()
         {
-            var material = ReplaceMaterial();
+            var material = RealReplaceMaterial();
             material.SetFloat(BlendStrength, 0.25f);
             material.SetFloat(Invert, 1f);
 
@@ -135,7 +170,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void ReplaceNoMask_InvertedNegatesValue()
         {
-            var material = ReplaceMaterial();
+            var material = RealReplaceMaterial();
             material.SetFloat(MaskValue, 0.25f);
             material.SetFloat(Invert, 1f);
 
@@ -151,7 +186,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // _Color.a, and a _MainTex whose sampling state is unsupported would
             // each refuse on the mask-off path, yet none of them can reach the
             // Replace result. Pins that the shortcut reads only mask inputs.
-            var material = ReplaceMaterial();
+            var material = RealReplaceMaterial();
             material.SetFloat("_MainIgnoreTexAlpha", 0.5f);
             material.SetColor("_Color", new Color(1f, 1f, 1f, float.NaN));
             material.SetTexture("_MainTex", ImportTexture("replace_unused"));
@@ -169,7 +204,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // The existing alpha writers are proven off before the mask is
             // interpreted. _AlphaMod adds to the alpha term downstream of the
             // mask, so a Replace constant must not short-circuit past it.
-            var material = ReplaceMaterial();
+            var material = RealReplaceMaterial();
             material.SetFloat("_AlphaMod", 1f);
 
             AssertUnsupportedOutput(
@@ -190,9 +225,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // the minimal end-to-end row of the same behavior. The main
             // texture is assigned because the mask sample rides the main
             // sampler, whose state is a required fact on the bound route.
-            var material = ReplaceMaterial();
+            var material = RealReplaceMaterial();
             material.SetTexture("_MainTex", ImportTexture("replace_main"));
-            material.SetTexture(Mask, ImportTexture("replace_mask"));
+            RealPoiyomiMaterial.BindMask(material, ImportTexture("replace_mask"));
 
             var value = Alpha(Interpret(material));
 
@@ -296,7 +331,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void MaskModeOff_PreservesConstantAlpha()
         {
-            var material = MaskOffMaterial();
+            var material = RealMaskOffMaterial();
             material.SetColor("_Color", new Color(1f, 1f, 1f, 0.5f));
 
             AssertConstant(Interpret(material), 0.5f);
@@ -305,7 +340,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void MaskModeOff_PreservesTextureBackedAlpha()
         {
-            var material = MaskOffMaterial();
+            var material = RealMaskOffMaterial();
             material.SetTexture("_MainTex", ImportTexture("mask_off_alpha"));
             material.SetColor("_Color", Color.white);
 
@@ -321,8 +356,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         {
             // The mask is never sampled when the mode is off, so an assigned
             // mask must not refuse a mode-0 material.
-            var material = MaskOffMaterial();
-            material.SetTexture(Mask, ImportTexture("unused_mask"));
+            var material = RealMaskOffMaterial();
+            RealPoiyomiMaterial.BindMask(material, ImportTexture("unused_mask"));
             material.SetColor("_Color", new Color(1f, 1f, 1f, 0.25f));
 
             AssertConstant(Interpret(material), 0.25f);
@@ -336,7 +371,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // applyParallax overwrites poiMesh.uv[_ParallaxUV] before the
             // _MainTex sample, so a texture-backed alpha claim would describe a
             // view-dependent sampling domain.
-            var material = MaskOffMaterial();
+            var material = RealMaskOffMaterial();
             material.SetTexture("_MainTex", ImportTexture("parallax_alpha"));
             material.SetColor("_Color", Color.white);
             material.SetFloat(Parallax, 1f);
@@ -351,7 +386,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void Parallax_LeavesConstantAlphaComplete()
         {
-            var material = MaskOffMaterial();
+            var material = RealMaskOffMaterial();
             material.SetColor("_Color", new Color(1f, 1f, 1f, 0.5f));
             material.SetFloat(Parallax, 1f);
 
@@ -361,7 +396,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void Parallax_LeavesIgnoredMainTexAlphaComplete()
         {
-            var material = MaskOffMaterial();
+            var material = RealMaskOffMaterial();
             material.SetTexture("_MainTex", ImportTexture("parallax_ignored"));
             material.SetFloat("_MainIgnoreTexAlpha", 1f);
             material.SetColor("_Color", new Color(1f, 1f, 1f, 0.25f));
@@ -373,7 +408,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void Parallax_LeavesForcedOpaqueComplete()
         {
-            var material = NewFixtureMaterial();
+            var material = NewRealMaterial();
             material.SetTexture("_MainTex", ImportTexture("parallax_forced"));
             material.SetFloat(Parallax, 1f);
 
@@ -383,7 +418,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void Parallax_LeavesReplaceNoMaskConstantComplete()
         {
-            var material = ReplaceMaterial();
+            var material = RealReplaceMaterial();
             material.SetTexture("_MainTex", ImportTexture("parallax_replace"));
             material.SetFloat(Parallax, 1f);
 
@@ -409,6 +444,24 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             material.SetFloat(MaskMode, 1f);
             material.SetColor("_Color", new Color(1f, 1f, 1f, 0.5f));
             material.SetTexture("_MainTex", ImportTexture("bound_mask_main"));
+            return material;
+        }
+
+        /// <summary>
+        /// Real Replace-mode material with a mask bound. Writes the same
+        /// state as the stand-in bound builder: the vendor mask block
+        /// samples the mask through the main sampler, so the fixture
+        /// assigns _MainTex too. The color alpha sits below one on
+        /// purpose, so a wrong implementation that proves the term from
+        /// the base chain can never prove the fixture triangle.
+        /// </summary>
+        private Material RealBoundMaskMaterial()
+        {
+            var material = NewRealMaterial();
+            material.SetFloat("_AlphaForceOpaque", 0f);
+            material.SetFloat(MaskMode, 1f);
+            material.SetColor("_Color", new Color(1f, 1f, 1f, 0.5f));
+            material.SetTexture("_MainTex", ImportTexture("real_bound_mask_main"));
             return material;
         }
 
@@ -516,10 +569,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // fails on the missing completion, and one that proves the term
             // from the base chain fails on the channel: the color alpha is
             // one half here, so the base chain can never prove anything.
-            var material = BoundMaskMaterial();
+            var material = RealBoundMaskMaterial();
             var mask = ImportTexture(
                 "bound_mask_admitted", i => i.filterMode = FilterMode.Point);
-            material.SetTexture(Mask, mask);
+            RealPoiyomiMaterial.BindMask(material, mask);
 
             var value = Alpha(Interpret(material));
 
@@ -653,13 +706,15 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         {
             // No-op guard: the exact zero pan proves, so the refusals below
             // come from the pan vector alone.
-            var guard = BoundMaskMaterial();
-            guard.SetTexture(Mask, ImportTexture("bound_mask_pan_guard"));
+            var guard = RealBoundMaskMaterial();
+            RealPoiyomiMaterial.BindMask(
+                guard, ImportTexture("bound_mask_pan_guard"));
             AssertOutputComplete(
                 Interpret(guard), PoiyomiSemanticOutput.Alpha);
 
-            var material = BoundMaskMaterial();
-            material.SetTexture(Mask, ImportTexture("bound_mask_pan_bad"));
+            var material = RealBoundMaskMaterial();
+            RealPoiyomiMaterial.BindMask(
+                material, ImportTexture("bound_mask_pan_bad"));
             var pan = Vector4.zero;
             pan[component] = 0.25f;
             material.SetVector(MaskPan, pan);
@@ -674,9 +729,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void ReplaceBoundMask_InvertOnValueZero_ProvesTheInvertedField()
         {
-            var material = BoundMaskMaterial();
+            var material = RealBoundMaskMaterial();
             var mask = ImportTexture("bound_mask_invert");
-            material.SetTexture(Mask, mask);
+            RealPoiyomiMaterial.BindMask(material, mask);
             material.SetFloat(Invert, 1f);
 
             var value = Alpha(Interpret(material));
@@ -718,8 +773,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         public void ReplaceBoundMask_SaturatedPair_ProvesConstantOne(
             [Values(0f, 1f)] float invert)
         {
-            var material = BoundMaskMaterial();
-            material.SetTexture(Mask, ImportTexture("bound_mask_saturated"));
+            var material = RealBoundMaskMaterial();
+            RealPoiyomiMaterial.BindMask(
+                material, ImportTexture("bound_mask_saturated"));
             material.SetFloat(MaskValue, 1f);
             material.SetFloat(Invert, invert);
 
@@ -756,8 +812,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         public void ReplaceBoundMask_OtherStrengthValuePairs_RefuseNamingTheProperty(
             float strength, float value, string expectedDetail)
         {
-            var material = BoundMaskMaterial();
-            material.SetTexture(Mask, ImportTexture("bound_mask_offpair"));
+            var material = RealBoundMaskMaterial();
+            RealPoiyomiMaterial.BindMask(
+                material, ImportTexture("bound_mask_offpair"));
             material.SetFloat(BlendStrength, strength);
             material.SetFloat(MaskValue, value);
 
@@ -779,8 +836,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void ReplaceBoundMask_InvertOnValueUnderOne_RefusesNamingValue()
         {
-            var material = BoundMaskMaterial();
-            material.SetTexture(Mask, ImportTexture("bound_mask_invert_mapped"));
+            var material = RealBoundMaskMaterial();
+            RealPoiyomiMaterial.BindMask(
+                material, ImportTexture("bound_mask_invert_mapped"));
             material.SetFloat(MaskValue, 0.4f);
             material.SetFloat(Invert, 1f);
 
@@ -813,9 +871,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         {
             // The (1, 0) arm reads a texel, so a refused red capture must
             // refuse and name the mask.
-            var material = BoundMaskMaterial();
-            material.SetTexture(
-                Mask,
+            var material = RealBoundMaskMaterial();
+            RealPoiyomiMaterial.BindMask(
+                material,
                 ImportTexture(
                     "bound_mask_refused_red",
                     ImportRefusedRedFormat));
@@ -832,11 +890,11 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         {
             // The affine arm also reads a texel, so a refused red capture
             // refuses there too and names the mask.
-            var material = BoundMaskMaterial();
+            var material = RealBoundMaskMaterial();
             material.SetFloat(BlendStrength, 1f);
             material.SetFloat(MaskValue, 0.5f);
-            material.SetTexture(
-                Mask,
+            RealPoiyomiMaterial.BindMask(
+                material,
                 ImportTexture(
                     "bound_mask_affine_refused_red",
                     ImportRefusedRedFormat));
@@ -853,11 +911,11 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         {
             // The saturated pair consults no texel of the mask. The refused
             // red capture cannot stop the proof, so alpha stays complete.
-            var material = BoundMaskMaterial();
+            var material = RealBoundMaskMaterial();
             material.SetFloat(BlendStrength, 1f);
             material.SetFloat(MaskValue, 1f);
-            material.SetTexture(
-                Mask,
+            RealPoiyomiMaterial.BindMask(
+                material,
                 ImportTexture(
                     "bound_mask_saturated_refused_red",
                     ImportRefusedRedFormat));
@@ -898,9 +956,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // transparent mode. The vendor term is saturate(r + 0.4). The
             // proven value is the mapped red field under the mask's own
             // plain affine of UV0 riding the main sampler.
-            var material = BoundMaskMaterial();
+            var material = RealBoundMaskMaterial();
             var mask = ImportTexture("bound_mask_mapped");
-            material.SetTexture(Mask, mask);
+            RealPoiyomiMaterial.BindMask(material, mask);
             material.SetFloat(MaskValue, 0.4f);
             var value = Alpha(Interpret(material));
 
@@ -959,8 +1017,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // TryGetUniformOutcome assertion is the texel-free pin: a
             // classified resolution exposes no uniform outcome even when
             // one triangle's verdict agrees with it.
-            var material = BoundMaskMaterial();
-            material.SetTexture(Mask, ImportTexture("bound_mask_negative"));
+            var material = RealBoundMaskMaterial();
+            RealPoiyomiMaterial.BindMask(
+                material, ImportTexture("bound_mask_negative"));
             material.SetFloat(MaskValue, -0.25f);
 
             var value = Alpha(Interpret(material));
@@ -995,10 +1054,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // sampling and fail the equality; and a non-identity mask ST
             // must survive into the mapped term's own affine, exactly like
             // the (1, 0) twin proves.
-            var material = BoundMaskMaterial();
+            var material = RealBoundMaskMaterial();
             var mask = ImportTexture(
                 "bound_mask_mapped_st", i => i.filterMode = FilterMode.Point);
-            material.SetTexture(Mask, mask);
+            RealPoiyomiMaterial.BindMask(material, mask);
             material.SetFloat(MaskValue, 0.4f);
             material.SetTextureScale(Mask, new Vector2(2f, 1f));
 
@@ -1029,8 +1088,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // triangle, and one witnessing texel anywhere in the chain
             // keeps the outcome Unknown. MustRemainTransparent stays
             // absorbing and Unknown never exits early.
-            var material = BoundMaskMaterial();
-            material.SetTexture(Mask, ImportTexture("bound_mask_mapped_mip"));
+            var material = RealBoundMaskMaterial();
+            RealPoiyomiMaterial.BindMask(
+                material, ImportTexture("bound_mask_mapped_mip"));
             material.SetFloat(MaskValue, 0.4f);
 
             var value = Alpha(Interpret(material));
@@ -1077,12 +1137,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // carry the map per factor.
             var main = ImportTexture("multiply_mapped_main");
             var mask = ImportTexture("multiply_mapped_mask");
-            var material = NewFixtureMaterial();
+            var material = NewRealMaterial();
             material.SetFloat("_AlphaForceOpaque", 0f);
             material.SetFloat(MaskMode, 2f);
             material.SetColor("_Color", new Color(1f, 1f, 1f, 1f));
             material.SetTexture("_MainTex", main);
-            material.SetTexture(Mask, mask);
+            RealPoiyomiMaterial.BindMask(material, mask);
             material.SetFloat(MaskValue, 0.4f);
 
             var value = Alpha(Interpret(material));
@@ -1129,14 +1189,14 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         // --- Task 4: mask multiply with the declared default ---------------
 
         /// <summary>
-        /// Non-forced material left at the vendor's declared mask defaults:
-        /// mode 2, no mask bound, strength 1, value 0, invert off. The vendor
-        /// declares mode 2 as the default, so a material that never touched
-        /// the mask section carries it.
+        /// Non-forced material on the installed bundled main shader left at
+        /// the vendor's declared mask defaults: mode 2, no mask bound,
+        /// strength 1, value 0, invert off. The vendor declares mode 2 as
+        /// the default, so a fresh real material carries it.
         /// </summary>
         private Material DefaultShapedMaterial()
         {
-            var material = NewFixtureMaterial();
+            var material = NewRealMaterial();
             material.SetFloat("_AlphaForceOpaque", 0f);
             return material;
         }
@@ -1173,7 +1233,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 
             var value = Alpha(Interpret(material));
 
-            var twin = NewFixtureMaterial();
+            var twin = NewRealMaterial();
             twin.SetFloat("_AlphaForceOpaque", 0f);
             twin.SetFloat(MaskMode, 0f);
             twin.SetColor("_Color", new Color(1f, 1f, 1f, 0.5f));

@@ -168,18 +168,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             bool optimizeTexture,
             bool allowShuffleMaterialSlots = false)
         {
-            ConfigureTraceAndOptimize(
-                traceAndOptimize, mergeSkinnedMesh, optimizeTexture,
-                allowShuffleMaterialSlots, includeDao: false);
-        }
-
-        protected void ConfigureTraceAndOptimize(
-            Component traceAndOptimize,
-            bool mergeSkinnedMesh,
-            bool optimizeTexture,
-            bool allowShuffleMaterialSlots,
-            bool includeDao)
-        {
             // The component type is public, but the vendor does not
             // promise a scripting configuration API, so the fixture goes
             // through serialized fields and pins them: a missing field is
@@ -199,17 +187,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             shuffle.boolValue = allowShuffleMaterialSlots;
             merge.boolValue = mergeSkinnedMesh;
             texture.boolValue = optimizeTexture;
-            if (includeDao)
-            {
-                // d4rkAvatarOptimizer's defaults match the observed real
-                // avatar configuration: mesh merging on, static property
-                // writes off, different-property material merging off,
-                // same-dimension texture merging off.
-                var daoType = Type.GetType(DaoComponentTypeName);
-                Assert.That(daoType, Is.Not.Null,
-                    "d4rkAvatarOptimizer component (version pin)");
-                traceAndOptimize.gameObject.AddComponent(daoType);
-            }
 
             serialized.ApplyModifiedPropertiesWithoutUndo();
         }

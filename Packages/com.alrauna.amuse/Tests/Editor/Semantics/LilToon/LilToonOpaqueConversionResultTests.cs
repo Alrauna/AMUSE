@@ -9,6 +9,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
     /// two members and the seventeen-member refusal lattice, stated literally
     /// so a silently added or removed member fails a test.
     /// </summary>
+    // Kept stand-in reason: an independent outcome oracle. The rows state
+    // the outcome and refusal vocabularies literally, so a silent member
+    // change fails a test.
     public sealed class LilToonOpaqueConversionResultTests
     {
         /// <summary>

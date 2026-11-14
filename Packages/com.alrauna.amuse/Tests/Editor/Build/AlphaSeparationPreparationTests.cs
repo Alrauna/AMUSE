@@ -36,6 +36,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
     /// through an earlier refusal.
     /// </para>
     /// </summary>
+    // Kept stand-in reason: exact falsifier control. The Multi schema rows
+    // inject keyword and container states no vendor write produces, the
+    // approved-range rows swap the pinned install, the name-mimic rows
+    // carry a near-miss identity, and the mixed Poiyomi rows keep stage
+    // 4's sibling fixtures. The moved rows run on the installed shaders.
     public sealed class AlphaSeparationPreparationTests
     {
         private AnisotropicFilteringPin _filteringPin;
@@ -1261,13 +1266,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 FixtureProofScope.PinAllSizes(root);
                 var opaqueTexture = fixtures.ImportFullyOpaqueMipmap(
                     "all_fail_last_record");
-                firstRefused = LilToonFixtureTestBase
-                    .CreateTransparentConversionMaterial();
+                firstRefused = new Material(LoadInstalledLilToonShader(
+                    LilToonSourceAttestation.TransparentShaderGuid,
+                    "lilToon transparent shader"));
                 firstRefused.name = "AMUSE all-fail first refusing";
                 firstRefused.SetTexture("_MainTex", opaqueTexture);
                 firstRefused.SetFloat("_ZTest", 8f);
-                lastRefused = LilToonFixtureTestBase
-                    .CreateTransparentConversionMaterial();
+                lastRefused = new Material(LoadInstalledLilToonShader(
+                    LilToonSourceAttestation.TransparentShaderGuid,
+                    "lilToon transparent shader"));
                 lastRefused.name = "AMUSE all-fail last refusing";
                 lastRefused.SetTexture("_MainTex", opaqueTexture);
                 lastRefused.SetFloat("_ZTest", 8f);
@@ -1281,8 +1288,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     root, "AMUSE all-fail graph", clip);
 
                 var reports = ErrorReport.CaptureErrors(
-                    () => amuse = RunBarrier(
-                        root, lilToonConversion: VerifiedFamilyConversion));
+                    () => amuse = RunProductionBarrier(root));
 
                 Assert.That(amuse.AvatarRefusal,
                     Is.EqualTo(AvatarAnimationRefusal.None));
@@ -3079,6 +3085,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// through the LilToonMultiSourceEligibilityTests matrix.
         /// </summary>
         // --- Falsifier: a selection that nulls the Multi capture request and sentinels the material before resolution fails this fixture at its first assertion. ---
+        // Kept stand-in reason (stage 3 part D, 2026-11-10): exact falsifier
+        // control. The row needs a synthesized Multi container with an exact
+        // keyword set and an unattested row-table state. No installed vendor
+        // material produces that state.
         [Test]
         public void ModeOneMultiMaterialReachesResolutionAndRefusesClosedUntilRowsLand()
         {
@@ -3178,6 +3188,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// fixture; the falsifier and the coverage map are stated there.
         /// </summary>
         // --- Falsifier: a selection that nulls the Multi capture request and sentinels the material before resolution fails this fixture at its first assertion. ---
+        // Kept stand-in reason (stage 3 part D, 2026-11-10): exact falsifier
+        // control. The row needs a synthesized Multi container with the empty
+        // keyword set and an unattested row-table state. No installed vendor
+        // material produces that state.
         [Test]
         public void ModeZeroMultiMaterialReachesResolutionAndRefusesClosedUntilRowsLand()
         {
@@ -3341,6 +3355,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// capture arm admits the member, and the real conversion boundary
         /// passes it without any SourceIdentity refusal.
         /// </summary>
+        // Kept stand-in reason (stage 3 part D, 2026-11-10): a source the
+        // pinned environment cannot supply. The row needs an approved
+        // in-range lilToon version whose bytes no vendor ships. Only the
+        // embedded vendor package installs it.
         [UnityTest]
         public IEnumerator ByteChangedInRangeInstallSeparatesSilentlyThroughTheRealPipeline()
         {
@@ -3496,6 +3514,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// consent ask survives, so the presenter is called exactly once.
         /// With the ask declined, nothing separates.
         /// </summary>
+        // Kept stand-in reason (stage 3 part D, 2026-11-10): a source the
+        // pinned environment cannot supply. The row needs an out-of-range
+        // lilToon version at the approval boundary. Only the embedded
+        // vendor package installs it.
         [UnityTest]
         public IEnumerator OutOfRangeInstallStillAsksThroughTheRealPipeline()
         {
@@ -3707,6 +3729,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// member into the analysis, and the transport answers the Multi
         /// state refusal with nothing prepared.
         /// </summary>
+        // Kept stand-in reason (stage 3 part D, 2026-11-10): exact falsifier
+        // control. The row needs a synthesized Multi container with an exact
+        // keyword set plus an injected version-keyed capture arm. No
+        // installed vendor material produces that state.
         [Test]
         public void ByteChangedInRangeMultiKeepsItsRowsAndNeverSeparates()
         {
@@ -3826,6 +3852,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// shader can pass the real row verify.
         /// </remarks>
         // --- Falsifier: a Multi transport that answers the retained state as an unsupported feature, or that names any property but _DistanceFade, fails this fixture. ---
+        // Kept stand-in reason (stage 3 part D, 2026-11-10): exact falsifier
+        // control. The row needs a synthesized Multi container with the
+        // exact derived keyword set and an injected digest row. No installed
+        // vendor material produces that state.
         [Test]
         public void ModeTwoMultiMaterialWithDistanceFadeStrengthRetainsThroughDelegation()
         {
@@ -5071,7 +5101,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             try
             {
                 fixtures.BaseSetUp();
-                material = LilToonFixtureTestBase.CreateCutoutConversionMaterial();
+                material = new Material(LoadInstalledLilToonShader(
+                    LilToonSourceAttestation.CutoutShaderGuid,
+                    "lilToon cutout shader"));
                 material.SetTexture(
                     "_MainTex",
                     fixtures.ImportFullyOpaqueMipmap("layer_main"));
@@ -5088,14 +5120,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     new Vector2(0.25f, 0.75f),
                 };
 
-                amuse = RunBarrier(
-                    root,
-                    selectRequest: VerifiedLilToonTestSeams
-                        .SelectVerifiedFixtureRequest,
-                    capturer: VerifiedLilToonTestSeams
-                        .CaptureVerifiedFixtureMaterials,
-                    resolveSemantics: VerifiedLilToonTestSeams
-                        .VerifiedAlphaOnly);
+                amuse = RunProductionBarrier(root);
 
                 Assert.That(
                     amuse.SemanticallyRefusedRendererCount, Is.Zero,
@@ -5156,7 +5181,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             try
             {
                 fixtures.BaseSetUp();
-                material = LilToonFixtureTestBase.CreateCutoutConversionMaterial();
+                material = new Material(LoadInstalledLilToonShader(
+                    LilToonSourceAttestation.CutoutShaderGuid,
+                    "lilToon cutout shader"));
                 material.SetTexture(
                     "_MainTex",
                     fixtures.ImportFullyOpaqueMipmap("uv_mode_proof_main"));
@@ -5209,14 +5236,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     "allocated on the mesh");
 
                 Application.logMessageReceived += CaptureUvMode;
-                amuse = RunBarrier(
-                    root,
-                    selectRequest: VerifiedLilToonTestSeams
-                        .SelectVerifiedFixtureRequest,
-                    capturer: VerifiedLilToonTestSeams
-                        .CaptureVerifiedFixtureMaterials,
-                    resolveSemantics: VerifiedLilToonTestSeams
-                        .VerifiedAlphaOnly);
+                amuse = RunProductionBarrier(root);
 
                 Assert.That(
                     amuse.SemanticallyRefusedRendererCount, Is.Zero,
@@ -5276,7 +5296,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             try
             {
                 fixtures.BaseSetUp();
-                material = LilToonFixtureTestBase.CreateCutoutConversionMaterial();
+                material = new Material(LoadInstalledLilToonShader(
+                    LilToonSourceAttestation.CutoutShaderGuid,
+                    "lilToon cutout shader"));
                 material.SetTexture(
                     "_MainTex",
                     fixtures.ImportNoAlphaSourceTexture("report_main"));
@@ -5289,14 +5311,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 };
                 Application.logMessageReceived += Capture;
 
-                amuse = RunBarrier(
-                    root,
-                    selectRequest: VerifiedLilToonTestSeams
-                        .SelectVerifiedFixtureRequest,
-                    capturer: VerifiedLilToonTestSeams
-                        .CaptureVerifiedFixtureMaterials,
-                    resolveSemantics: VerifiedLilToonTestSeams
-                        .VerifiedAlphaOnly);
+                amuse = RunProductionBarrier(root);
 
                 Assert.That(
                     amuse.SemanticallyRefusedRendererCount, Is.Zero,
@@ -5340,7 +5355,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             try
             {
                 fixtures.BaseSetUp();
-                material = LilToonFixtureTestBase.CreateCutoutConversionMaterial();
+                material = new Material(LoadInstalledLilToonShader(
+                    LilToonSourceAttestation.CutoutShaderGuid,
+                    "lilToon cutout shader"));
                 material.SetTexture(
                     "_MainTex",
                     fixtures.ImportStreamingMipmap("cutout_streaming"));
@@ -5352,14 +5369,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     new Vector2(0.25f, 0.75f),
                 };
 
-                amuse = RunBarrier(
-                    root,
-                    selectRequest: VerifiedLilToonTestSeams
-                        .SelectVerifiedFixtureRequest,
-                    capturer: VerifiedLilToonTestSeams
-                        .CaptureVerifiedFixtureMaterials,
-                    resolveSemantics: VerifiedLilToonTestSeams
-                        .VerifiedAlphaOnly);
+                amuse = RunProductionBarrier(root);
 
                 Assert.That(
                     amuse.SemanticallyRefusedRendererCount, Is.Zero,
@@ -5434,7 +5444,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     generatedTex.streamingMipmaps,
                     Is.True,
                     "fixture precondition: texture must have streaming mipmaps enabled");
-                material = LilToonFixtureTestBase.CreateCutoutConversionMaterial();
+                material = new Material(LoadInstalledLilToonShader(
+                    LilToonSourceAttestation.CutoutShaderGuid,
+                    "lilToon cutout shader"));
                 material.mainTexture = generatedTex;
                 material.SetFloat("_Cutoff", 0.5f);
 
@@ -5446,7 +5458,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     new Vector2(0.1f, 0.2f)
                 };
 
-                state = RunBarrier(root);
+                state = RunProductionBarrier(root);
                 Assert.That(state.SemanticallyRefusedRendererCount, Is.Zero);
                 Assert.That(state.OpaqueCandidateTriangleCount, Is.EqualTo(1));
                 Assert.That(state.Separation, Is.Not.Null);
@@ -5791,9 +5803,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// fixture texture it imports when the caller gives no main
         /// texture, the serialized hook writes the arm's optimizer field
         /// assignments before the shared apply, and the barrier runs
-        /// through the production entry over the verified seams. Arms with
-        /// the fixture scope also run under the temporary-directory
-        /// override and tear the fixtures down with the arm.
+        /// through the production entry with no injected seam. The
+        /// material rides the installed lilToon shader loaded by the
+        /// production GUID pin. Arms with the fixture scope also run under
+        /// the temporary-directory override and tear the fixtures down
+        /// with the arm. The fixtures stay for texture staging only.
         /// <para>
         /// The serialized writes must land before the acceptance helper
         /// runs. This SerializedObject caches the component as it was
@@ -5821,9 +5835,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     {
                         var texture = fixtures.ImportStrayTexelTexture(
                             "cutout_policy_stray_" + armName);
-                        var material =
-                            LilToonFixtureTestBase
-                                .CreateCutoutConversionMaterial();
+                        var material = new Material(LoadInstalledLilToonShader(
+                            LilToonSourceAttestation.CutoutShaderGuid,
+                            "lilToon cutout shader"));
                         material.SetTexture("_MainTex", texture);
                         return material;
                     };
@@ -5832,9 +5846,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     rootName = "AMUSE mip policy " + armName;
                     createMaterial = _ =>
                     {
-                        var material =
-                            LilToonFixtureTestBase
-                                .CreateCutoutConversionMaterial();
+                        var material = new Material(LoadInstalledLilToonShader(
+                            LilToonSourceAttestation.CutoutShaderGuid,
+                            "lilToon cutout shader"));
                         material.SetTexture("_MainTex", mainTex);
                         return material;
                     };
@@ -5849,9 +5863,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                                 uniformAlpha.Value)
                             : fixtures.ImportStrayTexelTexture(
                                 "alpha_policy_stray_" + armName);
-                        var material =
-                            LilToonFixtureTestBase
-                                .CreateTransparentConversionMaterial();
+                        var material = new Material(LoadInstalledLilToonShader(
+                            LilToonSourceAttestation.TransparentShaderGuid,
+                            "lilToon transparent shader"));
                         material.SetTexture("_MainTex", texture);
                         return material;
                     };
@@ -5901,17 +5915,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     new Vector2(0.25f, 0.75f),
                 };
 
-                amuse = RunBarrier(
-                    root,
-                    selectRequest: VerifiedLilToonTestSeams
-                        .SelectVerifiedFixtureRequest,
-                    capturer: VerifiedLilToonTestSeams
-                        .CaptureVerifiedFixtureMaterials,
-                    resolveSemantics: VerifiedLilToonTestSeams
-                        .VerifiedAlphaOnly,
-                    lilToonConversion: kind == PolicyArmKind.Alpha
-                        ? VerifiedFamilyConversion
-                        : null);
+                amuse = RunProductionBarrier(root);
             }
             finally
             {
@@ -6172,41 +6176,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         // --- Task 6: the transparent family end to end -----------------------
-
-        /// <summary>
-        /// Routes the family-agnostic lilToon conversion seam parameter to
-        /// the family-specific verified seam function by fixture shader
-        /// reference — the transparent stand-in to
-        /// <see cref="VerifiedLilToonTestSeams.VerifiedTransparentConversionStep"/>,
-        /// everything else (the cutout stand-in first of all) to
-        /// <see cref="VerifiedLilToonTestSeams.VerifiedConversion"/>, whose
-        /// behavior for those materials is unchanged. Preparation dispatches
-        /// on the closed family enum internally and passes one seam function
-        /// through; the fixtures are distinguished by shader reference,
-        /// never by name, matching the seams file's own rule.
-        /// </summary>
-        private static bool VerifiedFamilyConversion(
-            Material live,
-            CapturedMaterialEvidence derived,
-            bool allowDepthTestChange,
-            Material preparedOpaque,
-            out Material opaque,
-            out LilToonOpaqueConversionRefusal refusal,
-            out bool depthTestDivergence)
-        {
-            if (live != null && live.shader == Shader.Find(
-                    LilToonFixtureTestBase.TransparentConversionShaderName))
-            {
-                return VerifiedLilToonTestSeams
-                    .VerifiedTransparentConversionStep(
-                        live, derived, allowDepthTestChange, preparedOpaque,
-                        out opaque, out refusal, out depthTestDivergence);
-            }
-
-            return VerifiedLilToonTestSeams.VerifiedConversion(
-                live, derived, allowDepthTestChange, preparedOpaque,
-                out opaque, out refusal, out depthTestDivergence);
-        }
 
         /// <summary>
         /// Replaces TransparentFixtureSlotPreparesAndCarriesTheOpaqueClone
@@ -6686,10 +6655,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     Assert.That(unbound.CloneCount,
                         Is.EqualTo(bound.CloneCount));
 
+                    var installedTarget = LoadInstalledLilToonShader(
+                        LilToonSourceAttestation.SupportedShaderGuid,
+                        "lilToon main shader");
                     Assert.That(bound.CloneShaderName,
-                        Is.EqualTo(LilToonFixtureTestBase.OpaqueConversionShaderName),
+                        Is.EqualTo(installedTarget.name),
                         "the bound scenario's clone must carry the " +
-                        "attested opaque target stand-in");
+                        "attested installed opaque target");
                     Assert.That(unbound.CloneShaderName,
                         Is.EqualTo(bound.CloneShaderName));
 
@@ -6774,8 +6746,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// One transparent-only dither scenario: a single-triangle renderer
         /// over the fully-opaque chain, optionally carrying one clip that
         /// animates <c>material._UseDither</c> to 1 against the serialized
-        /// default 0, run through the real capture and preparation path
-        /// with the family-routing conversion seam.
+        /// default 0. The source sits on the installed transparent shader
+        /// loaded by the production GUID pin, and the run is the
+        /// production entry with no seams.
         /// </summary>
         private sealed class TransparentDitherScenario : IDisposable
         {
@@ -6807,8 +6780,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     root = new GameObject(
                         "AMUSE transparent dither " +
                         (withBinding ? "bound" : "unbound")),
-                    Source = LilToonFixtureTestBase
-                        .CreateTransparentConversionMaterial(),
+                    Source = new Material(LoadInstalledLilToonShader(
+                        LilToonSourceAttestation.TransparentShaderGuid,
+                        "lilToon transparent shader")),
                 };
                 scenario.Source.SetTexture("_MainTex", texture);
                 scenario.root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
@@ -6845,15 +6819,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 scenario.SourceDigestBefore =
                     TransparentSourceDigest(scenario.Source);
 
-                scenario.amuse = RunBarrier(
-                    scenario.root,
-                    selectRequest: VerifiedLilToonTestSeams
-                        .SelectVerifiedFixtureRequest,
-                    capturer: VerifiedLilToonTestSeams
-                        .CaptureVerifiedFixtureMaterials,
-                    resolveSemantics: VerifiedLilToonTestSeams
-                        .VerifiedAlphaOnly,
-                    lilToonConversion: VerifiedFamilyConversion);
+                scenario.amuse = RunProductionBarrier(scenario.root);
 
                 scenario.SourceDigest =
                     TransparentSourceDigest(scenario.Source);
@@ -7161,7 +7127,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// captured finish state, the one barrier run every arm uses, and
         /// the create skeleton the arm fixtures build on. Subclasses add
         /// only their own materials, policy writes, mesh shape, and
-        /// cleanup.
+        /// cleanup. Every arm material sits on the installed shader,
+        /// so the one run is the production entry with no seams.
         /// </summary>
         private abstract class ArmFixture : IDisposable
         {
@@ -7216,15 +7183,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             internal AmusePlatformFinishState Run()
             {
-                amuse = RunBarrier(
-                    root,
-                    selectRequest: VerifiedLilToonTestSeams
-                        .SelectVerifiedFixtureRequest,
-                    capturer: VerifiedLilToonTestSeams
-                        .CaptureVerifiedFixtureMaterials,
-                    resolveSemantics: VerifiedLilToonTestSeams
-                        .VerifiedAlphaOnly,
-                    lilToonConversion: VerifiedFamilyConversion);
+                amuse = RunProductionBarrier(root);
                 return amuse;
             }
 
@@ -7234,8 +7193,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// <summary>
         /// One three-slot locality arm: a Poiyomi slot, a lilToon-cutout
         /// slot and a configurable transparent slot over one mesh, run
-        /// through the real barrier with the family-routing conversion
-        /// seam.
+        /// through the production entry with no seams. All three slots sit
+        /// on installed shaders loaded by the production GUID pins.
         /// </summary>
         private sealed class LocalityArmFixture : ArmFixture
         {
@@ -7258,12 +7217,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 var arm = new LocalityArmFixture(fixtures);
                 arm.CreateArmRoot("AMUSE transparent locality");
-                arm.PoiyomiMaterial = PoiyomiFixtureTestBase.CreateVerifiedOpaqueMaterial();
-                arm.CutoutMaterial =
-                    LilToonFixtureTestBase.CreateCutoutConversionMaterial();
-                arm.TransparentMaterial =
-                    LilToonFixtureTestBase
-                        .CreateTransparentConversionMaterial();
+                arm.PoiyomiMaterial = NewRealPoiyomiOpaqueMaterial();
+                arm.CutoutMaterial = new Material(LoadInstalledLilToonShader(
+                    LilToonSourceAttestation.CutoutShaderGuid,
+                    "lilToon cutout shader"));
+                arm.TransparentMaterial = new Material(
+                    LoadInstalledLilToonShader(
+                        LilToonSourceAttestation.TransparentShaderGuid,
+                        "lilToon transparent shader"));
                 FixtureProofScope.PinAllSizes(arm.root);
                 arm.CutoutMaterial.SetTexture("_MainTex", opaqueTexture);
                 arm.TransparentMaterial.SetTexture(
@@ -7395,24 +7356,16 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     AmusePlatformFinishState amuse = null;
                     try
                     {
-                        material =
-                            LilToonFixtureTestBase
-                                .CreateTransparentConversionMaterial();
+                        material = new Material(LoadInstalledLilToonShader(
+                            LilToonSourceAttestation.TransparentShaderGuid,
+                            "lilToon transparent shader"));
                         material.SetTexture("_MainTex", unknownCase.Texture);
                         var renderer = AddSingleTriangleRenderer(
                             root, material, out mesh);
                         FillInBoundsUvs(mesh);
                         unknownCase.ConfigureMesh?.Invoke(mesh);
 
-                        amuse = RunBarrier(
-                            root,
-                            selectRequest: VerifiedLilToonTestSeams
-                                .SelectVerifiedFixtureRequest,
-                            capturer: VerifiedLilToonTestSeams
-                                .CaptureVerifiedFixtureMaterials,
-                            resolveSemantics: VerifiedLilToonTestSeams
-                                .VerifiedAlphaOnly,
-                            lilToonConversion: VerifiedFamilyConversion);
+                        amuse = RunProductionBarrier(root);
 
                         Assert.That(
                             amuse.OpaqueCandidateTriangleCount, Is.Zero,
@@ -7469,7 +7422,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
-        /// A transparent fixture material whose <c>_DistanceFade</c>
+        /// The installed transparent material whose <c>_DistanceFade</c>
         /// strength is finite and non-zero resolves to the named retention
         /// refusal, not the generic unknown-semantics destination. The
         /// slot refusal carries the frontend's FeatureRetention reason,
@@ -7478,13 +7431,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// moves.
         /// </summary>
         /// <remarks>
-        /// Slot level runs the production resolver over the captured
+        /// Slot level runs the production selection, the production closed
+        /// capture, and the production resolver over the captured
         /// evidence, mirroring the mode-2 retention falsifier's verified
-        /// capture seam; the same fixture then drives the preparation
-        /// pass end to end. Only the vendor digest row is injected, both
-        /// at capture and at alpha resolution, because no stand-in
-        /// shader can pass the real row verify; the refusal mapping and
-        /// the reason carried into the slot are the production ones.
+        /// capture; the same fixture then drives the preparation pass end
+        /// to end with no seams. Nothing is injected.
         /// </remarks>
         // --- Falsifier: a slot resolution that lands the retained state in the generic unknown bucket, drops the frontend reason, or converts any part of the retained material, fails this fixture. ---
         [Test]
@@ -7507,29 +7458,37 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     null,
                     null);
 
-                // Slot level: the production resolver on the captured
-                // evidence, exactly as the renderer path consumes it.
+                // Slot level: the production selection and closed capture
+                // over the installed transparent material, then the
+                // production resolver on the captured evidence, exactly as
+                // the renderer path consumes it.
                 Assert.That(
-                    VerifiedLilToonTestSeams.SelectVerifiedFixtureRequest(
+                    UnityMaterialSemantics.TrySelectAlphaMaterialRequests(
                         arm.Material,
                         out var family,
                         out var alphaRelevance,
-                        out var captureSchema),
+                        out var captureRequest),
                     Is.True,
-                    "fixture precondition: the transparent stand-in " +
-                    "must select at the verified seam");
+                    "fixture precondition: the installed transparent " +
+                    "material must select at the production selection");
                 Assert.That(
                     family,
                     Is.EqualTo(
                         CapturedAlphaMaterialFamily.LilToonTransparent));
-                VerifiedLilToonTestSeams.CaptureVerifiedFixtureMaterials(
-                    new[] { arm.Material },
-                    new[] { family },
-                    captureSchema,
-                    AlphaPolicyBounds.Inert,
-                    int.MaxValue,
-                    int.MaxValue,
-                    out var captured);
+                Assert.That(
+                    UnityMaterialSemantics.TryCaptureClosedAlphaMaterials(
+                        new[] { arm.Material },
+                        new[] { family },
+                        captureRequest,
+                        AlphaPolicyBounds.Inert,
+                        out var captured,
+                        RegisteredSourceIdentity.Resolve,
+                        int.MaxValue,
+                        int.MaxValue),
+                    Is.True,
+                    "fixture precondition: the installed transparent " +
+                    "material must pass the production source " +
+                    "attestation");
                 Assert.That(captured.Captured.Count, Is.EqualTo(1));
 
                 var result = AdmittedMaterialStates.ResolveSlot(
@@ -7543,7 +7502,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     AlphaSamplingPolicy.ConservativeDesktop,
                     0,
                     UnityAnimationEvidenceCapture.TextureScaleOffsetSuffix,
-                    VerifiedLilToonTestSeams.VerifiedAlphaOnly);
+                    UnityMaterialSemantics.AnalyzeAlphaMaterial);
 
                 Assert.That(result.IsResolved, Is.False);
                 Assert.That(
@@ -7896,12 +7855,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 AnimatorController swapController = null;
                 try
                 {
-                    divergent = LilToonFixtureTestBase
-                        .CreateTransparentConversionMaterial();
+                    divergent = new Material(LoadInstalledLilToonShader(
+                        LilToonSourceAttestation.TransparentShaderGuid,
+                        "lilToon transparent shader"));
                     divergent.SetTexture("_MainTex", swapTexture);
                     divergent.SetFloat("_ZTest", 2f);
-                    convertible = LilToonFixtureTestBase
-                        .CreateTransparentConversionMaterial();
+                    convertible = new Material(LoadInstalledLilToonShader(
+                        LilToonSourceAttestation.TransparentShaderGuid,
+                        "lilToon transparent shader"));
                     convertible.SetTexture("_MainTex", swapTexture);
                     convertible.SetFloat("_ZTest", 4f);
 
@@ -7948,15 +7909,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
                     AmusePlatformFinishState swapState = null;
                     var swapReports = ErrorReport.CaptureErrors(
-                        () => swapState = RunBarrier(
-                            swapRoot,
-                            selectRequest: VerifiedLilToonTestSeams
-                                .SelectVerifiedFixtureRequest,
-                            capturer: VerifiedLilToonTestSeams
-                                .CaptureVerifiedFixtureMaterials,
-                            resolveSemantics: VerifiedLilToonTestSeams
-                                .VerifiedAlphaOnly,
-                            lilToonConversion: VerifiedFamilyConversion));
+                        () => swapState = RunProductionBarrier(swapRoot));
 
                     Assert.That(
                         swapState.AvatarRefusal,
@@ -8077,8 +8030,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     Is.EqualTo(TextureFormat.DXT1),
                     "fixture precondition: the mask must import compressed");
 
-                material = LilToonFixtureTestBase
-                    .CreateTransparentConversionMaterial();
+                material = new Material(LoadInstalledLilToonShader(
+                    LilToonSourceAttestation.TransparentShaderGuid,
+                    "lilToon transparent shader"));
                 material.SetTexture("_MainTex", mainTexture);
                 material.SetTexture("_AlphaMask", mask);
                 material.SetFloat("_AlphaMaskMode", 1f);
@@ -8120,14 +8074,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
                 AmusePlatformFinishState amuse = null;
                 var reports = ErrorReport.CaptureErrors(
-                    () => amuse = RunBarrier(
-                        root,
-                        selectRequest: VerifiedLilToonTestSeams
-                            .SelectVerifiedFixtureRequest,
-                        capturer: VerifiedLilToonTestSeams
-                            .CaptureVerifiedFixtureMaterials,
-                        resolveSemantics: VerifiedLilToonTestSeams
-                            .VerifiedAlphaOnly));
+                    () => amuse = RunProductionBarrier(root));
 
                 Assert.That(
                     amuse.AvatarRefusal,
@@ -8215,8 +8162,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     Is.EqualTo(TextureFormat.DXT1),
                     "fixture precondition: the mask must import compressed");
 
-                material = LilToonFixtureTestBase
-                    .CreateTransparentConversionMaterial();
+                material = new Material(LoadInstalledLilToonShader(
+                    LilToonSourceAttestation.TransparentShaderGuid,
+                    "lilToon transparent shader"));
                 material.SetTexture("_MainTex", mainTexture);
                 material.SetTexture("_AlphaMask", mask);
                 material.SetFloat("_AlphaMaskMode", 1f);
@@ -8254,14 +8202,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
                 AmusePlatformFinishState amuse = null;
                 var reports = ErrorReport.CaptureErrors(
-                    () => amuse = RunBarrier(
-                        root,
-                        selectRequest: VerifiedLilToonTestSeams
-                            .SelectVerifiedFixtureRequest,
-                        capturer: VerifiedLilToonTestSeams
-                            .CaptureVerifiedFixtureMaterials,
-                        resolveSemantics: VerifiedLilToonTestSeams
-                            .VerifiedAlphaOnly));
+                    () => amuse = RunProductionBarrier(root));
 
                 Assert.That(
                     amuse.AvatarRefusal,
@@ -8455,9 +8396,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// <summary>
         /// One transparent conversion arm: a transient single-triangle
         /// renderer fixture over a caller-owned texture plus the barrier
-        /// run over it, mirroring <see cref="CutoutArmFixture"/> with the
-        /// transparent stand-in material and the family-routing conversion
-        /// seam.
+        /// run over it, mirroring <see cref="CutoutArmFixture"/>. The arm
+        /// material sits on the installed transparent shader loaded by the
+        /// production GUID pin, and the run is the production entry with
+        /// no seams.
         /// </summary>
         private sealed class TransparentArmFixture : ArmFixture
         {
@@ -8479,8 +8421,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 var fixture = new TransparentArmFixture
                 {
-                    Material = LilToonFixtureTestBase
-                        .CreateTransparentConversionMaterial(),
+                    Material = new Material(LoadInstalledLilToonShader(
+                        LilToonSourceAttestation.TransparentShaderGuid,
+                        "lilToon transparent shader")),
                 };
                 fixture.CreateArmRoot(rootName);
                 FixtureProofScope.PinAllSizes(fixture.root);
@@ -8573,9 +8516,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// <summary>
         /// One transparent conversion arm for the depth-test policy: a
         /// caller-owned texture and mesh shape over one transparent slot,
-        /// the policy set through the component's serialized field, run
-        /// through the real barrier with the family-routing conversion
-        /// seam.
+        /// the policy set through the component's serialized field. The
+        /// arm material sits on the installed transparent shader loaded
+        /// by the production GUID pin, and the run is the production
+        /// entry with no seams.
         /// </summary>
         private sealed class DepthTestPolicyArmFixture : ArmFixture
         {
@@ -8591,8 +8535,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 var fixture = new DepthTestPolicyArmFixture
                 {
-                    Material = LilToonFixtureTestBase
-                        .CreateTransparentConversionMaterial(),
+                    Material = new Material(LoadInstalledLilToonShader(
+                        LilToonSourceAttestation.TransparentShaderGuid,
+                        "lilToon transparent shader")),
                 };
                 var component = fixture.CreateArmRoot(rootName);
                 if (!allowDepthTestChange)
@@ -8809,9 +8754,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// Falsifies: a cutout routing that skips the overwrite rule (a
         /// clone would be prepared for a recipe provably overwritten at
         /// runtime), an ordering that runs the conversion before the rule
-        /// (the counting seam must never be invoked on the refusing arm),
-        /// and an admission that reads the live _ZWrite instead of the
-        /// captured serialized value (which would misjudge every arm).
+        /// (the refusing arm then carries the conversion refusal instead
+        /// of the named overwrite refusal), and an admission that reads
+        /// the live _ZWrite instead of the captured serialized value
+        /// (which would misjudge every arm).
         /// </para>
         /// </summary>
         [Test]
@@ -8829,6 +8775,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 // (a) Serialized away from canonical and animated at that
                 // serialized value: admission succeeds, but the recipe
                 // AMUSE would write is provably overwritten at runtime.
+                // The production route carries the ordering proof through
+                // the named refusal member: the overwrite rule fires
+                // before the conversion step, so the slot refusal names
+                // the overwrite rule and never the conversion refusal a
+                // conversion-first ordering would produce.
                 using (var arm = CutoutArmFixture.Create(
                            texture,
                            "AMUSE cutout zwrite overwritten",
@@ -8842,21 +8793,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         "default must be 0, so animating it to 0 admits " +
                         "while violating the canonical 1");
 
-                    var conversionInvocations = 0;
-                    var amuse = arm.Run(
-                        (Material live, CapturedMaterialEvidence derived,
-                         bool allowDepthTestChange,
-                         Material preparedOpaque, out Material opaque,
-                         out LilToonOpaqueConversionRefusal refusal,
-                         out bool depthTestDivergence) =>
-                        {
-                            conversionInvocations++;
-                            opaque = null;
-                            refusal =
-                                LilToonOpaqueConversionRefusal.None;
-                            depthTestDivergence = false;
-                            return false;
-                        });
+                    var amuse = arm.Run();
 
                     Assert.That(amuse.AvatarRefusal,
                         Is.EqualTo(AvatarAnimationRefusal.None));
@@ -8874,11 +8811,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         Is.EqualTo(1),
                         "a recipe property animated at a non-canonical " +
                         "serialized value must refuse the slot");
-                    Assert.That(conversionInvocations, Is.Zero,
+                    Assert.That(
+                        amuse.SlotRefusalCount(
+                            AlphaSeparationSlotRefusal
+                                .OpaqueConversionRefused),
+                        Is.Zero,
                         "the overwrite rule must be validated before the " +
-                        "conversion step runs, so no conversion boundary " +
-                        "call may happen for a slot already known to " +
-                        "violate the recipe");
+                        "conversion step runs, so no conversion refusal " +
+                        "may fire for a slot known to violate the recipe " +
+                        "before that step");
                     Assert.That(amuse.Separation, Is.Null,
                         "the only candidate slot was refused, so nothing " +
                         "is retained");
@@ -9111,21 +9052,24 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 var texture =
                     fixtures.ImportFullyOpaqueMipmap("cutout_refusal");
 
-                convertible = LilToonFixtureTestBase.CreateCutoutConversionMaterial();
+                convertible = new Material(LoadInstalledLilToonShader(
+                    LilToonSourceAttestation.CutoutShaderGuid,
+                    "lilToon cutout shader"));
                 convertible.SetTexture("_MainTex", texture);
                 AddNamedChildRenderer(
                     root, "convertible", convertible, out convertibleMesh);
                 FillInBoundsUvs(convertibleMesh);
 
-                bareCutout = LilToonFixtureTestBase
-                    .CreateCutoutConversionMaterial();
+                bareCutout = new Material(LoadInstalledLilToonShader(
+                    LilToonSourceAttestation.CutoutShaderGuid,
+                    "lilToon cutout shader"));
                 bareCutout.SetTexture("_MainTex", texture);
                 bareCutout.SetFloat("_ZWrite", 0f);
                 AddNamedChildRenderer(
                     root, "bare", bareCutout, out bareMesh);
                 FillInBoundsUvs(bareMesh);
 
-                amuse = RunBarrier(root);
+                amuse = RunProductionBarrier(root);
 
                 Assert.That(amuse.AvatarRefusal,
                     Is.EqualTo(AvatarAnimationRefusal.None));
@@ -9210,6 +9154,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// the " (AMUSE Opaque n)" numbering.
         /// </para>
         /// </summary>
+        // Kept stand-in reason (stage 3 part D, 2026-11-10): stage 4 scope
+        // coupling. The Poiyomi sibling runs on the verified Poiyomi seam.
+        // A real Poiyomi material and the verified fixture seams cannot
+        // mix, so this row moves with the stage 4 Poiyomi cutover, not
+        // with stage 3.
         [Test]
         public void
             CutoutSlotPreparesBesideAPoiyomiSlotWithIndependentClones()
@@ -9317,6 +9266,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// mixed set now that both families convert.
         /// </para>
         /// </summary>
+        // Kept stand-in reason (stage 3 part D, 2026-11-10): stage 4 scope
+        // coupling. The Poiyomi value runs on the verified Poiyomi seam.
+        // A real Poiyomi material and the verified fixture seams cannot
+        // mix, so this row moves with the stage 4 Poiyomi cutover, not
+        // with stage 3.
         [Test]
         public void
             MixedPoiyomiAndCutoutAdmittedSetMapsThroughEachOwnConversion()
@@ -9426,6 +9380,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// prepares.
         /// </para>
         /// </summary>
+        // Kept stand-in reason (stage 3 part D, 2026-11-10): an input no
+        // vendor produces. The row needs a shader that mimics the vendor
+        // name and fails attestation. No vendor ships such a shader.
         [Test]
         public void
             UnsupportedLilToonFamilyRefusesOnlyItsOwnSlot()
@@ -10069,10 +10026,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// <summary>
         /// One cutout conversion arm: a transient single-triangle renderer
         /// fixture over a caller-owned texture plus the barrier run over it,
-        /// with everything the arm created destroyed on disposal. An arm
-        /// that animates a material binding carries one constant float clip;
-        /// an arm that varies the serialized state configures the material
-        /// before the build.
+        /// with everything the arm created destroyed on disposal. The arm
+        /// material sits on the installed cutout shader loaded by the
+        /// production GUID pin, and the run is the production entry with
+        /// no seams. An arm that animates a material binding carries one
+        /// constant float clip. An arm that varies the serialized state
+        /// configures the material before the build.
         /// </summary>
         private sealed class CutoutArmFixture : IDisposable
         {
@@ -10096,7 +10055,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 var fixture = new CutoutArmFixture
                 {
                     root = new GameObject(rootName),
-                    Material = LilToonFixtureTestBase.CreateCutoutConversionMaterial(),
+                    Material = new Material(LoadInstalledLilToonShader(
+                        LilToonSourceAttestation.CutoutShaderGuid,
+                        "lilToon cutout shader")),
                 };
                 fixture.root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
                 FixtureProofScope.PinAllSizes(fixture.root);
@@ -10131,11 +10092,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 return fixture;
             }
 
-            internal AmusePlatformFinishState Run(
-                VerifiedLilToonConversion lilToonConversion = null)
+            internal AmusePlatformFinishState Run()
             {
-                amuse = RunBarrier(
-                    root, lilToonConversion: lilToonConversion);
+                amuse = RunProductionBarrier(root);
                 return amuse;
             }
 
@@ -12704,6 +12663,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// control over which clips count as special motions. The live
         /// marker route is exercised by the survival audit of stage 1b.
         /// </summary>
+        // Kept stand-in reason (stage 5, 2026-11-10): the stub gives the
+        // suite exact special-clip control. No vendor binding reports a
+        // chosen clip as a special motion.
         private sealed class MarkerStubBindings : IPlatformAnimatorBindings
         {
             private readonly string[] specialClipNames;

@@ -414,11 +414,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var fixtureExists = Directory.Exists(FixtureFolder) ||
                 File.Exists(FixtureFolder) ||
                 File.Exists(FixtureFolder + ".meta");
-            var dirty = Resources.FindObjectsOfTypeAll<UnityEngine.Object>().Any(IsBlockingDirtyAsset);
-            for (var index = 0; index < UnityEngine.SceneManagement.SceneManager.sceneCount; index++)
-                dirty |= UnityEngine.SceneManagement.SceneManager.GetSceneAt(index).isDirty;
+            var dirty = RealVendorLockTestSupport.AnyBlockingDirtyState();
             Assert.That(EvaluateLockIsolation(snapshot, fixtureExists, dirty),
-                Is.EqualTo(LockIsolationRefusal.None), "Real lock isolation preflight refused.");
+                Is.EqualTo(LockIsolationRefusal.None), "Real lock isolation preflight refused: "
+                + EvaluateLockIsolation(snapshot, fixtureExists, dirty)
+                + ", fixtureExists=" + fixtureExists + ", dirty=" + dirty + ", " + RealVendorLockTestSupport.DescribeDirtyState() + ".");
             // The positive guard must belong to this import, not to work queued earlier in the session.
             Assert.That(RecoveryDelayCallQueued(vendorTool), Is.False,
                 "A vendor recovery callback is already queued.");
@@ -772,11 +772,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var snapshot = CaptureLockIsolation();
             var fixtureExists = Directory.Exists(FixtureFolder) ||
                 File.Exists(FixtureFolder) || File.Exists(FixtureFolder + ".meta");
-            var dirty = Resources.FindObjectsOfTypeAll<UnityEngine.Object>().Any(IsBlockingDirtyAsset);
-            for (var index = 0; index < UnityEngine.SceneManagement.SceneManager.sceneCount; index++)
-                dirty |= UnityEngine.SceneManagement.SceneManager.GetSceneAt(index).isDirty;
+            var dirty = RealVendorLockTestSupport.AnyBlockingDirtyState();
             Assert.That(EvaluateLockIsolation(snapshot, fixtureExists, dirty),
-                Is.EqualTo(LockIsolationRefusal.None), "Real lock isolation preflight refused.");
+                Is.EqualTo(LockIsolationRefusal.None), "Real lock isolation preflight refused: "
+                + EvaluateLockIsolation(snapshot, fixtureExists, dirty)
+                + ", fixtureExists=" + fixtureExists + ", dirty=" + dirty + ", " + RealVendorLockTestSupport.DescribeDirtyState() + ".");
             Assert.That(BuildPipeline.isBuildingPlayer || EditorApplication.isCompiling ||
                 EditorApplication.isUpdating || EditorApplication.isPlayingOrWillChangePlaymode,
                 Is.False, "Another editor operation is active.");
@@ -1248,19 +1248,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         + " fired, and this case expects no refusal",
                         runDate, null));
             }
-        }
-
-        private static bool BlocksDirtyAsset(bool persistent, bool dirty, bool native, Type type)
-        {
-            // The owner approved this narrow waiver for the dev editor only.
-            return persistent && dirty && native && type != typeof(PlayerSettings);
-        }
-
-        private static bool IsBlockingDirtyAsset(UnityEngine.Object asset)
-        {
-            return asset != null && BlocksDirtyAsset(
-                EditorUtility.IsPersistent(asset), EditorUtility.IsDirty(asset),
-                AssetDatabase.IsNativeAsset(asset), asset.GetType());
         }
 
         private static int EffectiveTeardownTimeout()

@@ -12,7 +12,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
     /// override-alpha mode proven zero is an alpha identity. The audio
     /// link decal module writes the chain alpha through its own weight
     /// (vendor line 24833), so the weight is proven exactly zero on every
-    /// non-forced alpha path.
+    /// non-forced alpha path. Every row runs on the installed bundled
+    /// main shader.
     /// </summary>
     public sealed class PoiyomiDecalSlotAlphaTests : PoiyomiFixtureTestBase
     {
@@ -28,10 +29,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             { 1, 2, 3, 4, 5, 6 };
 
         // A material on the non-forced alpha path with the mask mode off,
-        // so alpha is proven from _MainTex.a and/or _Color.a.
+        // so alpha is proven from _MainTex.a and/or _Color.a. The material
+        // sits on the installed bundled main shader loaded by its pinned
+        // GUID. The caller owns destruction through Track.
         private Material NonForcedMaterial()
         {
-            var material = NewFixtureMaterial();
+            var material = Track(RealPoiyomiMaterial.Main());
             material.SetFloat("_AlphaForceOpaque", 0f);
             material.SetFloat("_MainAlphaMaskMode", 0f);
             return material;

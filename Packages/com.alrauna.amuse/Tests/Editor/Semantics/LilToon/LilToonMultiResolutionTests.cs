@@ -27,6 +27,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
     /// stand-in shader defaults.
     /// </para>
     /// </summary>
+    // Kept stand-in reason: an input no vendor produces. The rows inject
+    // Multi keyword sets and container states no vendor write produces.
     public sealed class LilToonMultiResolutionTests
     {
         // Synthetic container identity vocabulary, the same test-only values

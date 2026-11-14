@@ -1,14 +1,25 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using nadena.dev.ndmf;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
 using Alrauna.Amuse.Editor.Semantics;
+using Alrauna.Amuse.Tests.Editor.Build;
 using Alrauna.Amuse.Tests.Editor.Shared;
 
 namespace Alrauna.Amuse.Tests.Editor.Semantics
 {
+    // Falsifier header, dated 2026-11-10. The refusal tests and the
+    // seam-mechanics tests of this class stay synthetic. No producer
+    // delivers an unregistered copy, an unsuffixed copy, a chained
+    // source, an unreadable install, or a replaced admitted set. Those
+    // tests inject the version provider or the admitted set, and the
+    // per-test reset restores the production state after each of them.
+    // The admitted happy path drops the version seam. It reads the
+    // installed producer version through production admission and
+    // skips by name when the package is absent.
     public sealed class ReplacementTextureAttestationTests
     {
         private const string FixtureFolder = "Assets/AmuseTests_LacAttestation";
@@ -133,26 +144,76 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 ReplacementTextureAttestation.Versions.AdmittedVersions,
                 Is.EqualTo(new[] { "0.9.0" }),
                 "the reset restores the characterized production set");
-            // With the production provider restored, the delegate no
-            // longer answers "9.9.9" for every name. A plan-conformant
-            // environment never installs LAC, so the restored provider
-            // refuses the read outright.
+            // The reset restores the production provider. The delegate
+            // no longer answers "9.9.9" for every name. The independent
+            // read parses the installed package manifest from disk. It
+            // never trusts the seam under test. An absent manifest means
+            // an absent package. Then the production read must refuse.
+            // A present manifest pins the production answer to the
+            // installed version.
+            var manifestVersion = InstalledLacManifestVersion();
+            if (manifestVersion == null)
+            {
+                Assert.That(
+                    ReplacementTextureAttestation.Versions
+                        .TryReadInstalledProducerVersion(out _),
+                    Is.False,
+                    "an absent package manifest refuses the " +
+                    "production read");
+                return;
+            }
             Assert.That(
-                ReplacementTextureAttestation.Versions.TryReadInstalledProducerVersion(
-                    out var version),
-                Is.False);
-            Assert.That(version, Is.Null);
+                ReplacementTextureAttestation.Versions
+                    .TryReadInstalledProducerVersion(out var version),
+                Is.True,
+                "an installed package answers the production read");
+            Assert.That(version, Is.EqualTo(manifestVersion),
+                "the restored provider answers the installed " +
+                "version, not the injected 9.9.9");
+        }
+
+        /// <summary>
+        /// Reads the installed producer manifest from disk through
+        /// System.IO and JsonUtility. The read is independent of the
+        /// version seam the test exercises, so the assertion compares
+        /// two routes and never a value with itself. Null means the
+        /// manifest file is absent or carries no version. The test
+        /// reads that as an absent package.
+        /// </summary>
+        private static string InstalledLacManifestVersion()
+        {
+            var manifestPath = Path.Combine(
+                Path.GetDirectoryName(Application.dataPath),
+                "Packages",
+                ReplacementTextureAttestation.ProducerPackageName,
+                "package.json");
+            if (!File.Exists(manifestPath))
+            {
+                return null;
+            }
+            var manifest = JsonUtility.FromJson<InstalledPackageManifest>(
+                File.ReadAllText(manifestPath));
+            return string.IsNullOrEmpty(manifest.version)
+                ? null
+                : manifest.version;
+        }
+
+        [Serializable]
+        private sealed class InstalledPackageManifest
+        {
+            public string version;
         }
 
         [Test]
         public void RegisteredSuffixedPathlessCopyWithAdmittedVersionIsAdmitted()
         {
-            // The shipped-empty admitted set refuses every copy, so this
-            // fixture admits one version and points the provider at it,
-            // matching the test's "with admitted version" premise.
-            ReplacementTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
-                _ => "0.9.0";
-            ReplacementTextureAttestation.Versions.SetAdmittedVersionsForTests("0.9.0");
+            // The version conjunct reads the installed producer version
+            // through production admission. No provider injection
+            // remains, so the test answers for the real install or
+            // skips by name when the package is absent.
+            RealLacPass.SkipWhenComponentAbsent(
+                "the admission route reads the installed producer"
+                + " version.");
             var source = ReplacementTextureIdentityTests.ImportSourceAsset("admitted", FixtureFolder);
             var copy = MakeAdmittedCopy(source);
             try

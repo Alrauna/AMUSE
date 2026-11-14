@@ -5,6 +5,9 @@ using UnityEngine;
 
 namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 {
+    // Kept stand-in reason: the non-finite apply alpha row needs an input
+    // no vendor produces. The moved rows run on the installed bundled
+    // shaders, main and Two Pass.
     public sealed class PoiyomiRimLightingAlphaTests : PoiyomiFixtureTestBase
     {
         // A material on the non-forced alpha path with the mask mode off, so
@@ -17,10 +20,29 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             return material;
         }
 
-        // A non-forced material on the Two Pass stand-in shader.
-        private Material NonForcedTwoPassMaterial()
+        /// <summary>
+        /// The non-forced state on the installed bundled main shader
+        /// loaded by its pinned GUID. The written state matches the
+        /// stand-in non-forced builder. The caller owns destruction
+        /// through Track.
+        /// </summary>
+        private Material RealNonForcedMaterial()
         {
-            var material = NewTwoPassFixtureMaterial();
+            var material = Track(RealPoiyomiMaterial.Main());
+            material.SetFloat("_AlphaForceOpaque", 0f);
+            material.SetFloat("_MainAlphaMaskMode", 0f);
+            return material;
+        }
+
+        /// <summary>
+        /// The non-forced state on the installed bundled Two Pass shader
+        /// loaded by its pinned GUID. The written state matches the
+        /// former stand-in Two Pass builder. The caller owns destruction
+        /// through Track.
+        /// </summary>
+        private Material RealNonForcedTwoPassMaterial()
+        {
+            var material = Track(RealPoiyomiMaterial.TwoPass());
             material.SetFloat("_AlphaForceOpaque", 0f);
             material.SetFloat("_MainAlphaMaskMode", 0f);
             return material;
@@ -33,7 +55,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // --- Falsifier 1: a plausible wrong implementation keeps the
             // committed enable gates and refuses every enabled rim slot by
             // name. It fails this case.
-            var material = NonForcedMaterial();
+            var material = RealNonForcedMaterial();
             material.SetFloat("_EnableRimLighting", 1f);
             material.SetFloat("_RimApplyAlpha", 0f);
 
@@ -47,7 +69,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         {
             // --- Falsifier 2: a plausible wrong implementation admits slot
             // one only, or reads only slot one's enable float.
-            var material = NonForcedMaterial();
+            var material = RealNonForcedMaterial();
             material.SetFloat("_EnableRimLighting", 1f);
             material.SetFloat("_EnableRim2Lighting", 1f);
             material.SetFloat("_RimApplyAlpha", 0f);
@@ -63,7 +85,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // --- Falsifier 3: a plausible wrong implementation refuses the
             // rim family but names the enable float instead of the scalar
             // that carries the alpha decision.
-            var material = NonForcedMaterial();
+            var material = RealNonForcedMaterial();
             material.SetFloat("_EnableRimLighting", 1f);
             material.SetFloat("_RimApplyAlpha", 1f);
 
@@ -82,7 +104,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // add mode only and treats the multiply mode as inert, claiming
             // an alpha the vendor rescales (pinned 9.3.64 source, vendor
             // line 25843).
-            var material = NonForcedMaterial();
+            var material = RealNonForcedMaterial();
             material.SetFloat("_EnableRimLighting", 1f);
             material.SetFloat("_RimApplyAlpha", 2f);
 
@@ -102,7 +124,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // on the enable keywords, not on the floats, so the gate must
             // bind whatever the floats say. This case closes the
             // float-keyword soundness hole the design names in section 8.
-            var material = NonForcedMaterial();
+            var material = RealNonForcedMaterial();
             material.SetFloat("_EnableRimLighting", 0f);
             material.SetFloat("_EnableRim2Lighting", 0f);
             material.SetFloat("_RimApplyAlpha", 1f);
@@ -138,7 +160,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // No-op guard: the forced short-circuit precedes the gate check,
             // matching the vendor order where the forcing runs after every
             // rim write. It must pass before and after the change.
-            var material = NonForcedMaterial();
+            var material = RealNonForcedMaterial();
             material.SetFloat("_EnableRimLighting", 1f);
             material.SetFloat("_RimApplyAlpha", 1f);
             material.SetFloat("_AlphaForceOpaque", 1f);
@@ -154,7 +176,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // Design case 8 no-op guard. The gate walk precedes mask
             // interpretation, so an admitted rim must not disturb the
             // mask proof.
-            var material = NewFixtureMaterial();
+            var material = Track(RealPoiyomiMaterial.Main());
             material.SetFloat("_AlphaForceOpaque", 0f);
             material.SetFloat("_MainAlphaMaskMode", 1f);
             material.SetFloat("_EnableRimLighting", 1f);
@@ -172,7 +194,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // plain family only. The Two Pass source carries the same rim
             // mechanism (pinned source, vendor lines 25933 to 25940), so the
             // contract covers both families.
-            var material = NonForcedTwoPassMaterial();
+            var material = RealNonForcedTwoPassMaterial();
             material.SetFloat("_EnableRimLighting", 1f);
             material.SetFloat("_RimApplyAlpha", 0f);
 
@@ -186,7 +208,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         {
             // --- Falsifier 8: a plausible wrong implementation gates the
             // scalar on the plain family only.
-            var material = NonForcedTwoPassMaterial();
+            var material = RealNonForcedTwoPassMaterial();
             material.SetFloat("_EnableRimLighting", 1f);
             material.SetFloat("_RimApplyAlpha", 1f);
 

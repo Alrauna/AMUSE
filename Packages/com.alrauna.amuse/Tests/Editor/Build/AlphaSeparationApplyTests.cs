@@ -45,6 +45,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
     /// <c>AnimatorServicesReactivationCharacterizationTests</c> establishes.
     /// </para>
     /// </summary>
+    /// <remarks>
+    /// The one stand-in locked pair row stays by design (2026-11-10). It
+    /// proves unlock window mechanics, not the identity of the original.
+    /// That row sets
+    /// <see cref="TransientUnlockTestKnobs.OriginalAttestation"/> to an
+    /// explicit always-true stub. The gated real-lock tests prove identity.
+    /// </remarks>
     public sealed class AlphaSeparationApplyTests
     {
         private readonly TestTransientScope _scope =
@@ -65,12 +72,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         [SetUp]
         public void PinPerTextureAnisotropicFiltering()
         {
+            TransientUnlockTestKnobs.Reset();
             _filteringPin = new AnisotropicFilteringPin();
         }
 
         [TearDown]
         public void TearDown()
         {
+            TransientUnlockTestKnobs.Reset();
             _filteringPin.Dispose();
             AlphaSeparationSplitTests.DeleteSplitFolder();
             AmusePlatformFinishPluginTests.DeleteSamplingPolicyFolder();
@@ -404,7 +413,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 VerifiedFamilyConversion,
                 consentPresenter: subjects => true,
                 lockedOriginalAttestation: TransientUnlockTestKnobs
-                    .OriginalAttestation ?? (_ => true));
+                    .OriginalAttestation);
         }
 
         /// <summary>
@@ -542,6 +551,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        // Kept stand-in reason (stage 5, 2026-11-10): the stub gives the
+        // suite exact special-clip control. No vendor binding reports a
+        // chosen clip as a special motion.
         private sealed class MarkerStubBindings : IPlatformAnimatorBindings
         {
             public bool IsSpecialMotion(Motion motion)
@@ -714,13 +726,16 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// <summary>
         /// A non-forced Poiyomi material whose alpha proof is genuinely
         /// texture-backed with a non-identity <c>_MainTex</c> ST, mirroring
-        /// the preparation suite's helper of the same shape. Every gate
-        /// the attested source requires proven zero is set explicitly.
+        /// the preparation suite's helper of the same shape. The shader is
+        /// the installed bundled Poiyomi Toon shader loaded by the
+        /// production GUID pin, because a name lookup can answer with a
+        /// stand-in or a foreign shader that shares the vendor name. Every
+        /// gate the attested source requires proven zero is set explicitly.
         /// </summary>
         private static Material TextureBackedNonIdentityStMaterial(
             Texture texture, Vector2 scale, Vector2 offset)
         {
-            var material = PoiyomiFixtureTestBase.CreateVerifiedMaterial();
+            var material = NewRealPoiyomiOpaqueMaterial();
             material.SetFloat("_AlphaForceOpaque", 0f);
             material.SetFloat("_MainAlphaMaskMode", 0f);
             material.SetColor("_Color", Color.white);
@@ -988,6 +1003,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         [Test]
         public void PropertyBlockAddedAfterSwapInRefusesAtApply()
         {
+            // Stand-in pair. Proves window mechanics, not original identity. (2026-11-10)
+            TransientUnlockTestKnobs.OriginalAttestation = _ => true;
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
             var root = new GameObject("AMUSE late property block");
@@ -1181,6 +1198,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// rewrites the committed curve.
         /// </para>
         /// </summary>
+        // Kept stand-in on 2026-11-10: the stale-guard rows inject mid-build
+        // state changes through the probe pass. The refusal shape, not the
+        // material, is the exact-control.
         [Test]
         public void
             DesktopAcceptanceRevokedBetweenPrepareAndApplyRefusesEveryPreparedSlot()
@@ -1393,6 +1413,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// rewrites the committed curve.
         /// </para>
         /// </summary>
+        // Kept stand-in on 2026-11-10: the stale-guard rows inject mid-build
+        // state changes through the probe pass. The refusal shape, not the
+        // material, is the exact-control.
         [Test]
         public void
             ACapturedTargetMismatchBetweenPrepareAndApplyRefusesEveryPreparedSlot()
@@ -1592,6 +1615,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// rewrites the committed curve.
         /// </para>
         /// </summary>
+        // Kept stand-in on 2026-11-10: the stale-guard rows inject mid-build
+        // state changes through the probe pass. The refusal shape, not the
+        // material, is the exact-control.
         [Test]
         public void TheApplyStalePolicyGuardHonorsThePinnedBuildTarget()
         {
@@ -2523,6 +2549,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
         // --- Falsifier 17: every slot validated before any mutation ---------
 
+        // Kept stand-in on 2026-11-10: the stale-guard rows inject mid-build
+        // state changes through the probe pass. The refusal shape, not the
+        // material, is the exact-control.
         [Test]
         public void
             EverySlotIsValidatedBeforePrepareReturnsAndEveryDistinctReasonIsRecorded()
@@ -4155,9 +4184,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         AlphaSeparationSplitTests.ImportSplitAlphaTexture(
                             "cutout_full_artifact_split");
                     var wholeMaterial = Track(
-                        NewCutoutConversionMaterial(mipTexture));
+                        NewRealCutoutConversionMaterial(mipTexture));
                     var splitMaterial = Track(
-                        NewCutoutSplitMaterial(splitTexture));
+                        NewRealCutoutSplitMaterial(splitTexture));
                     var sourceMesh = Track(
                         AlphaSeparationSplitTests
                             .CreateOpaqueAndSplitSourceMesh());
@@ -4169,8 +4198,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     var splitDigestBefore = DigestMaterial(splitMaterial);
                     var meshDigestBefore = DigestMesh(sourceMesh);
 
-                    var context = AvatarProcessor.ProcessAvatar(
-                        root, ApplyTestPlatform.Instance);
+                    BuildContext context;
+                    using (new ProductionCaptureScope())
+                    {
+                        context = AvatarProcessor.ProcessAvatar(
+                            root, ApplyTestPlatform.Instance);
+                    }
                     state = context.GetState<AmusePlatformFinishState>();
 
                     Assert.That(context.Successful, Is.True,
@@ -4209,8 +4242,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         state.Separation.OpaqueBySource[splitMaterial];
                     Assert.That(wholeClone, Is.Not.SameAs(splitClone),
                         "two sources convert to two distinct clones");
-                    AssertCanonicalOpaqueRecipe(wholeClone);
-                    AssertCanonicalOpaqueRecipe(splitClone);
+                    AssertCanonicalOpaqueRecipe(
+                        wholeClone, RealOpaqueCloneTarget());
+                    AssertCanonicalOpaqueRecipe(
+                        splitClone, RealOpaqueCloneTarget());
                     Assert.That(wholeClone.name,
                         Is.EqualTo(wholeMaterial.name + " (AMUSE Opaque 0)"),
                         "the first registered clone must carry the " +
@@ -4376,10 +4411,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         AlphaSeparationSplitTests.ImportSplitAlphaTexture(
                             "cutout_appended");
                     var cutout = Track(
-                        NewCutoutSplitMaterial(splitTexture));
-                    var swap = Track(
-                        LilToonFixtureTestBase.CreateVerifiedMaterial());
-                    var transparent = Track(PoiyomiFixtureTestBase.CreateVerifiedTransparentMaterial());
+                        NewRealCutoutSplitMaterial(splitTexture));
+                    var swap = Track(new Material(
+                        LoadInstalledLilToonShader(
+                            LilToonSourceAttestation.SupportedShaderGuid,
+                            "lilToon main shader")));
+                    var transparent = Track(
+                        NewRealPoiyomiTransparentRetainedMaterial());
                     var sourceMesh = Track(
                         AlphaSeparationSplitTests.CreateSplitSourceMesh());
                     var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(
@@ -4393,8 +4431,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     var authoredOwn = CurveDescription.DescribeAuthoredCurve(
                         clip, "split", "m_Materials.Array.data[0]");
 
-                    var context = AvatarProcessor.ProcessAvatar(
-                        root, ApplyTestPlatform.Instance);
+                    BuildContext context;
+                    using (new ProductionCaptureScope())
+                    {
+                        context = AvatarProcessor.ProcessAvatar(
+                            root, ApplyTestPlatform.Instance);
+                    }
                     state = context.GetState<AmusePlatformFinishState>();
 
                     Assert.That(state.AnalyzedRendererCount, Is.EqualTo(1),
@@ -4667,6 +4709,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// observable facts only, never object references.
         /// </para>
         /// </summary>
+        // Kept stand-in on 2026-11-10: the byte-parity digest pins
+        // conversion determinism across paired builds on the fixture pair.
+        // The digest control, not the material, is the exact-control.
         [Test]
         public void TransparentSiblingKeepsPoiyomiAndCutoutResultsByteIdentical()
         {
@@ -4829,12 +4874,16 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
-        /// Runs one real apply lifecycle build with the verified lilToon
-        /// seams over a caller-built source. The quality pin restores in
-        /// the runner's finally, and the fixture folder import happens
-        /// inside the same try, so a failed build cannot leak either.
-        /// Both acceptance states keep every other optimizer policy at
-        /// its default, so the two builds differ only in acceptance.
+        /// Runs one real apply lifecycle build with the production capture
+        /// delegates over a caller-built source: the production selection,
+        /// closed capture with real source attestation, resolution, and
+        /// conversion steps over installed vendor materials, with the
+        /// consent presenter asserting the installed attestation raises no
+        /// subjects. The quality pin restores in the runner's finally, and
+        /// the fixture folder import happens inside the same try, so a
+        /// failed build cannot leak either. Both acceptance states keep
+        /// every other optimizer policy at its default, so the two builds
+        /// differ only in acceptance.
         /// </summary>
         private ConversionRun RunConversionBuild(
             string rootName,
@@ -4865,8 +4914,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 run.Renderer = AlphaSeparationTestLifecycle.AddRendererPadded(
                     run.Root, "body", run.SourceMesh, run.SourceMaterial);
 
-                var context = AvatarProcessor.ProcessAvatar(
-                    run.Root, ApplyTestPlatform.Instance);
+                BuildContext context;
+                using (new ProductionCaptureScope())
+                {
+                    context = AvatarProcessor.ProcessAvatar(
+                        run.Root, ApplyTestPlatform.Instance);
+                }
                 run.State = context.GetState<AmusePlatformFinishState>();
                 run.BuildSucceeded = context.Successful;
             }
@@ -4877,6 +4930,19 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
 
             return run;
+        }
+
+        /// <summary>
+        /// Loads the installed plain lilToon shader by the production GUID
+        /// pin. The production conversion targets this shader for the
+        /// lilToon families, so the real-material asserters pass it as the
+        /// expected clone shader.
+        /// </summary>
+        private static Shader RealOpaqueCloneTarget()
+        {
+            return LoadInstalledLilToonShader(
+                LilToonSourceAttestation.SupportedShaderGuid,
+                "lilToon main shader");
         }
 
         /// <summary>
@@ -4903,7 +4969,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// appended material slot, and the transparent-half triangle kept
         /// its original material and its place in the source submesh.
         /// </summary>
-        private static void AssertMixedHalfSplitApplied(ConversionRun run)
+        private static void AssertMixedHalfSplitApplied(
+            ConversionRun run,
+            Shader expectedCloneShader)
         {
             Assert.That(run.State.Separation, Is.Not.Null,
                 "the accepted policy must prepare the mixed-half " +
@@ -4917,7 +4985,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Is.True,
                 "the source material must convert to the canonical " +
                 "opaque clone");
-            AssertCanonicalOpaqueRecipe(clone);
+            AssertCanonicalOpaqueRecipe(clone, expectedCloneShader);
 
             var builtMesh = run.Renderer.sharedMesh;
             Assert.That(builtMesh, Is.Not.SameAs(run.SourceMesh),
@@ -4995,7 +5063,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         "cutout_mixed_conservative",
                         AmusePlatformFinishPluginTests
                             .MixedHalfAlphaPixels()),
-                newSourceMaterial: NewCutoutSplitMaterial,
+                newSourceMaterial: NewRealCutoutSplitMaterial,
                 newMesh: AmusePlatformFinishPluginTests.MixedHalfMesh,
                 assertTexturePreconditions:
                     AmusePlatformFinishPluginTests.AssertMixedHalfTexturePreconditions);
@@ -5047,7 +5115,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         "cutout_mixed_accepted",
                         AmusePlatformFinishPluginTests
                             .MixedHalfAlphaPixels()),
-                newSourceMaterial: NewCutoutSplitMaterial,
+                newSourceMaterial: NewRealCutoutSplitMaterial,
                 newMesh: AmusePlatformFinishPluginTests.MixedHalfMesh,
                 assertTexturePreconditions:
                     AmusePlatformFinishPluginTests.AssertMixedHalfTexturePreconditions);
@@ -5059,7 +5127,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     Is.EqualTo(AlphaSamplingPolicy.AcceptedNonAnisotropic),
                     "stored desktop acceptance must select the accepted " +
                     "policy");
-                AssertMixedHalfSplitApplied(run);
+                AssertMixedHalfSplitApplied(run, RealOpaqueCloneTarget());
             }
             finally
             {
@@ -5070,7 +5138,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
         /// <summary>
         /// The same conservative refusal for the transparent source
-        /// family: the transparent stand-in keeps its mesh, its submesh,
+        /// family: the transparent material on the installed shader
+        /// keeps its mesh, its submesh,
         /// and its material, so acceptance is what changes the proof
         /// scope, not the family.
         /// </summary>
@@ -5088,7 +5157,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         "transparent_mixed_conservative",
                         AmusePlatformFinishPluginTests
                             .MixedHalfAlphaPixels()),
-                newSourceMaterial: NewTransparentConversionMaterial,
+                newSourceMaterial: NewRealTransparentConversionMaterial,
                 newMesh: AmusePlatformFinishPluginTests.MixedHalfMesh,
                 assertTexturePreconditions:
                     AmusePlatformFinishPluginTests.AssertMixedHalfTexturePreconditions);
@@ -5132,7 +5201,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         "transparent_mixed_accepted",
                         AmusePlatformFinishPluginTests
                             .MixedHalfAlphaPixels()),
-                newSourceMaterial: NewTransparentConversionMaterial,
+                newSourceMaterial: NewRealTransparentConversionMaterial,
                 newMesh: AmusePlatformFinishPluginTests.MixedHalfMesh,
                 assertTexturePreconditions:
                     AmusePlatformFinishPluginTests.AssertMixedHalfTexturePreconditions);
@@ -5144,7 +5213,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     Is.EqualTo(AlphaSamplingPolicy.AcceptedNonAnisotropic),
                     "stored desktop acceptance must select the accepted " +
                     "policy");
-                AssertMixedHalfSplitApplied(run);
+                AssertMixedHalfSplitApplied(run, RealOpaqueCloneTarget());
             }
             finally
             {
@@ -5187,7 +5256,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 AmusePlatformFinishPluginTests
                     .AssertMixedHalfTexturePreconditions(texture);
                 var sourceMaterial = Track(
-                    NewTransparentConversionMaterial(texture));
+                    NewRealTransparentConversionMaterial(texture));
                 var originalMesh = Track(
                     AmusePlatformFinishPluginTests.MixedHalfMesh());
                 var body = new GameObject("body");
@@ -5197,8 +5266,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 var renderer = body.AddComponent<MeshRenderer>();
                 renderer.sharedMaterials = new[] { sourceMaterial };
 
-                var context = AvatarProcessor.ProcessAvatar(
-                    root, ApplyTestPlatform.Instance);
+                BuildContext context;
+                using (new ProductionCaptureScope())
+                {
+                    context = AvatarProcessor.ProcessAvatar(
+                        root, ApplyTestPlatform.Instance);
+                }
                 state = context.GetState<AmusePlatformFinishState>();
 
                 Assert.That(context.Successful, Is.True,
@@ -5271,7 +5344,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     importTexture: () => fixtures
                         .ImportFullyOpaqueMipmap(
                             "fully_opaque_cutout_conservative"),
-                    newSourceMaterial: NewCutoutConversionMaterial,
+                    newSourceMaterial: NewRealCutoutConversionMaterial,
                     newMesh: TexturedSingleTriangleMesh);
                 try
                 {
@@ -5282,7 +5355,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         "fixture precondition: the conservative policy " +
                         "must hold, or the conversion without acceptance " +
                         "proves nothing");
-                    AssertWholeConversionApplied(conservative);
+                    AssertWholeConversionApplied(conservative, RealOpaqueCloneTarget());
                 }
                 finally
                 {
@@ -5295,7 +5368,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     importTexture: () => fixtures
                         .ImportFullyOpaqueMipmap(
                             "fully_opaque_cutout_accepted"),
-                    newSourceMaterial: NewCutoutConversionMaterial,
+                    newSourceMaterial: NewRealCutoutConversionMaterial,
                     newMesh: TexturedSingleTriangleMesh);
                 try
                 {
@@ -5306,7 +5379,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         "fixture precondition: the accepted policy must " +
                         "hold, or the paired builds prove nothing about " +
                         "policy independence");
-                    AssertWholeConversionApplied(accepted);
+                    AssertWholeConversionApplied(accepted, RealOpaqueCloneTarget());
                 }
                 finally
                 {
@@ -5338,7 +5411,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     importTexture: () => fixtures
                         .ImportFullyOpaqueMipmap(
                             "fully_opaque_transparent_conservative"),
-                    newSourceMaterial: NewTransparentConversionMaterial,
+                    newSourceMaterial: NewRealTransparentConversionMaterial,
                     newMesh: TexturedSingleTriangleMesh);
                 try
                 {
@@ -5349,7 +5422,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         "fixture precondition: the conservative policy " +
                         "must hold, or the conversion without acceptance " +
                         "proves nothing");
-                    AssertWholeConversionApplied(conservative);
+                    AssertWholeConversionApplied(conservative, RealOpaqueCloneTarget());
                 }
                 finally
                 {
@@ -5362,7 +5435,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     importTexture: () => fixtures
                         .ImportFullyOpaqueMipmap(
                             "fully_opaque_transparent_accepted"),
-                    newSourceMaterial: NewTransparentConversionMaterial,
+                    newSourceMaterial: NewRealTransparentConversionMaterial,
                     newMesh: TexturedSingleTriangleMesh);
                 try
                 {
@@ -5373,7 +5446,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         "fixture precondition: the accepted policy must " +
                         "hold, or the paired builds prove nothing about " +
                         "policy independence");
-                    AssertWholeConversionApplied(accepted);
+                    AssertWholeConversionApplied(accepted, RealOpaqueCloneTarget());
                 }
                 finally
                 {
@@ -5408,7 +5481,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         AmusePlatformFinishPluginTests
                             .MixedHalfAlphaPixels(),
                         withMipmaps: true),
-                newSourceMaterial: NewCutoutSplitMaterial,
+                newSourceMaterial: NewRealCutoutSplitMaterial,
                 newMesh: AmusePlatformFinishPluginTests.MixedHalfMesh,
                 assertTexturePreconditions: mixed =>
                 {
@@ -5443,7 +5516,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// indices instead.
         /// </summary>
         private static void AssertWholeConversionApplied(
-            ConversionRun run)
+            ConversionRun run,
+            Shader expectedCloneShader)
         {
             Assert.That(run.State.Separation, Is.Not.Null,
                 "the fully opaque evidence must prepare a candidate");
@@ -5456,7 +5530,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Is.True,
                 "the source material must convert to the canonical " +
                 "opaque clone");
-            AssertCanonicalOpaqueRecipe(clone);
+            AssertCanonicalOpaqueRecipe(clone, expectedCloneShader);
             Assert.That(
                 run.Renderer.sharedMesh, Is.SameAs(run.SourceMesh),
                 "a wholly opaque slot must not rewrite the mesh");
@@ -5532,8 +5606,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(
                     root, "body", mesh, refusedMaterial, convertedMaterial);
 
-                var context = AvatarProcessor.ProcessAvatar(
-                    root, ApplyTestPlatform.Instance);
+                BuildContext context;
+                using (new ProductionCaptureScope())
+                {
+                    context = AvatarProcessor.ProcessAvatar(
+                        root, ApplyTestPlatform.Instance);
+                }
                 state = context.GetState<AmusePlatformFinishState>();
 
                 Assert.That(context.Successful, Is.True,
@@ -5703,8 +5781,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 controller = Track(AlphaSeparationTestLifecycle.NewController(
                     root, "AMUSE refused swap graph", clip));
 
-                var context = AvatarProcessor.ProcessAvatar(
-                    root, ApplyTestPlatform.Instance);
+                BuildContext context;
+                using (new ProductionCaptureScope())
+                {
+                    context = AvatarProcessor.ProcessAvatar(
+                        root, ApplyTestPlatform.Instance);
+                }
                 state = context.GetState<AmusePlatformFinishState>();
 
                 Assert.That(context.Successful, Is.True,
@@ -6212,6 +6294,22 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
+        /// A material on the GUID-loaded bundled Poiyomi 9.3 shader whose
+        /// tint alpha is zero and whose force-opaque flag is off, so the
+        /// whole material answers uniform must-remain-transparent and stays
+        /// original. The caller owns destruction.
+        /// </summary>
+        private static Material NewRealPoiyomiTransparentRetainedMaterial()
+        {
+            var material = NewRealPoiyomiOpaqueMaterial();
+            material.SetFloat("_AlphaForceOpaque", 0f);
+            var tint = material.GetColor("_Color");
+            tint.a = 0f;
+            material.SetColor("_Color", tint);
+            return material;
+        }
+
+        /// <summary>
         /// The convertible cutout fixture material over a fully-opaque
         /// mipmap chain: cutout schema plus the full canonical tuple at
         /// canonical defaults.
@@ -6221,6 +6319,50 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             var material =
                 LilToonFixtureTestBase.CreateCutoutConversionMaterial();
+            material.SetTexture("_MainTex", mipTexture);
+            return material;
+        }
+
+        /// <summary>
+        /// A material on the installed cutout shader loaded by the
+        /// production GUID pin, over the caller's texture. The vendor
+        /// defaults on the fresh material are the canonical conversion
+        /// defaults the production eligibility reads. The caller owns
+        /// destruction through the tracker.
+        /// </summary>
+        private static Material NewRealCutoutConversionMaterial(
+            Texture2D mipTexture)
+        {
+            var material = new Material(LoadInstalledLilToonShader(
+                LilToonSourceAttestation.CutoutShaderGuid,
+                "lilToon cutout shader"));
+            material.SetTexture("_MainTex", mipTexture);
+            return material;
+        }
+
+        /// <summary>
+        /// The real-cutout shape of the split source: the installed cutout
+        /// shader over the mip-free split alpha texture, so one submesh can
+        /// carry one proven-opaque and one unproven triangle. The caller
+        /// owns destruction through the tracker.
+        /// </summary>
+        private static Material NewRealCutoutSplitMaterial(
+            Texture2D splitTexture)
+        {
+            return NewRealCutoutConversionMaterial(splitTexture);
+        }
+
+        /// <summary>
+        /// A material on the installed transparent shader loaded by the
+        /// production GUID pin, over the caller's texture. The caller owns
+        /// destruction through the tracker.
+        /// </summary>
+        private static Material NewRealTransparentConversionMaterial(
+            Texture2D mipTexture)
+        {
+            var material = new Material(LoadInstalledLilToonShader(
+                LilToonSourceAttestation.TransparentShaderGuid,
+                "lilToon transparent shader"));
             material.SetTexture("_MainTex", mipTexture);
             return material;
         }
@@ -6247,6 +6389,21 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// </summary>
         private static void AssertCanonicalOpaqueRecipe(Material clone)
         {
+            AssertCanonicalOpaqueRecipe(
+                clone,
+                Shader.Find(
+                    LilToonFixtureTestBase.OpaqueConversionShaderName));
+        }
+
+        /// <summary>
+        /// The overload the real-material rows use: the same canonical facts
+        /// beside the expected clone shader the caller names, normally the
+        /// installed plain lilToon shader the production conversion targets.
+        /// </summary>
+        private static void AssertCanonicalOpaqueRecipe(
+            Material clone,
+            Shader expectedCloneShader)
+        {
             foreach (var (property, value) in
                          LilToonOpaqueTarget.CanonicalOpaqueProperties)
             {
@@ -6268,10 +6425,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Is.False,
                 "every canonical fact must read back on the clone");
             Assert.That(clone.shader,
-                Is.SameAs(Shader.Find(
-                    LilToonFixtureTestBase.OpaqueConversionShaderName)),
-                "the clone must carry the attested opaque stand-in " +
-                "target");
+                Is.SameAs(expectedCloneShader),
+                "the clone must carry the expected opaque target");
         }
 
         /// <summary>

@@ -8,6 +8,12 @@ using Alrauna.Amuse.Tests.Editor.Shared;
 
 namespace Alrauna.Amuse.Tests.Editor.Semantics
 {
+    // Synthetic-copy header, dated 2026-11-10. The identity mechanics
+    // need controlled pairs. A stand-in copy is the only way to pin
+    // the mint form, the remint answer, the two-claimant poison, and
+    // the session clear. No version seam serves this class, so no
+    // provider injection exists here. The real output pair shape is
+    // owned by the gated ground check of the Build suite.
     public sealed class ReplacementTextureIdentityTests
     {
         private const string FixtureFolder = "Assets/AmuseTests_LacIdentity";
@@ -59,6 +65,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [Test]
         public void SameCopyRemintingOneSourceStaysUsable()
         {
+            // Synthetic copy: the remint answer needs a controlled pair.
             var source = ImportSourceAsset("remint", FixtureFolder);
             var copy = new Texture2D(4, 4, TextureFormat.RGBA32, false);
             copy.name = source.name + "_compressed";
@@ -119,6 +126,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [Test]
         public void ClearSessionDropsEveryMintedClaim()
         {
+            // Synthetic copy: the session clear needs a controlled pair.
             var source = ImportSourceAsset("cleared", FixtureFolder);
             var copy = new Texture2D(4, 4, TextureFormat.RGBA32, false);
             copy.name = source.name + "_compressed";

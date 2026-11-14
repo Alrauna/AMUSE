@@ -42,6 +42,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
     /// queue row, or earlier on the mode-1 dither scalar row.
     /// </para>
     /// </summary>
+    // Kept stand-in reason: an input no vendor produces. The rows inject
+    // Multi keyword sets and eligibility states no vendor write produces.
     public sealed class LilToonMultiSourceEligibilityTests : LilToonFixtureTestBase
     {
         // The fixtures run on the installed vendor containers, loaded by

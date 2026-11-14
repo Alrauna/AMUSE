@@ -27,6 +27,19 @@ using UnityEngine;
 
 namespace Alrauna.Amuse.Tests.Editor.Build
 {
+    /// <summary>
+    /// The platform finish pass: lifecycle, consent, renderer analysis,
+    /// and the unlock window on the production entry.
+    /// </summary>
+    /// <remarks>
+    /// The one stand-in locked pair row stays by design (2026-11-10). It
+    /// proves unlock window mechanics, not the identity of the original.
+    /// That row sets
+    /// <see cref="TransientUnlockTestKnobs.OriginalAttestation"/> to an
+    /// explicit always-true stub and passes the knob to the pass. The rows
+    /// that pin production attestation refusals keep the production
+    /// attestation. The gated real-lock tests prove identity.
+    /// </remarks>
     public sealed class AmusePlatformFinishPluginTests
     {
         private AnisotropicFilteringPin _filteringPin;
@@ -34,12 +47,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         [SetUp]
         public void PinPerTextureAnisotropicFiltering()
         {
+            TransientUnlockTestKnobs.Reset();
             _filteringPin = new AnisotropicFilteringPin();
         }
 
         [TearDown]
         public void RestoreAnisotropicFiltering()
         {
+            TransientUnlockTestKnobs.Reset();
             _filteringPin.Dispose();
 
             // The locked source fixture folder must not outlive the
@@ -611,6 +626,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// so only the widened pre-scan can offer and grant it. The unmoved
         /// gates stay: every refusal remains per slot.
         /// </summary>
+        // Kept stand-in on 2026-11-10: the consent rows pin grant and refusal
+        // mechanics over unverified vendor-named sources. A real attested
+        // material raises no consent subject, so the name-mimic stand-in is
+        // the exact-control the subject needs.
         [Test]
         public void AGrantedSwapOnlyShaderNameAdmitsTheSwapMaterialThroughTheTransferredCapture()
         {
@@ -737,6 +756,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// attestation and reports its own ordinal, never a batch-wide
         /// silence.
         /// </summary>
+        // Kept stand-in on 2026-11-10: the consent rows pin grant and refusal
+        // mechanics over unverified vendor-named sources. A real attested
+        // material raises no consent subject, so the name-mimic stand-in is
+        // the exact-control the subject needs.
         [Test]
         public void ADeclinedBuildGrantsNothingAndTheSwapOnlyMaterialRefusesWithTheNamedCause()
         {
@@ -839,6 +862,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        // Kept stand-in on 2026-11-10: the legacy 9.0 name is a refusal shape
+        // no installed shader asset carries. The stand-in pins the zero-subject
+        // consent answer for an unverified Poiyomi source.
         [Test]
         public void PoiyomiMaterials_NeverProduceTransferConsentSubjects()
         {
@@ -3447,6 +3473,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             try
             {
                 TransientUnlockTestKnobs.DisableAaoForFixture();
+                // Stand-in pair. Proves window mechanics, not original identity. (2026-11-10)
+                TransientUnlockTestKnobs.OriginalAttestation = _ => true;
                 fixture = AddAnalyzableRenderer(root);
                 locked = TransientUnlockTestLifecycle
                     .LockedMaterialWithOriginal(
@@ -3481,7 +3509,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                             consentSubjects.AddRange(subjects);
                             return true;
                         },
-                        lockedOriginalAttestation: _ => true);
+                        lockedOriginalAttestation: TransientUnlockTestKnobs
+                            .OriginalAttestation);
 
                     // The production shape: the close runs on the same
                     // build, after the barrier, so the clone never

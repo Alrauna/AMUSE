@@ -19,6 +19,15 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
     /// test itself.
     /// </para>
     /// </summary>
+    // Kept stand-in reason: the non-finite and beyond-range rows build
+    // inputs no vendor produces. The non-binary flag row and the two
+    // cutoff-above-one gate rows refuse on those same inputs. The schema,
+    // request, evidence, and digest pins read no material state. The two
+    // foreign shader rows need a schema the bundle does not ship. The
+    // render state row predates this batch and runs on the installed
+    // shader. The two source evidence rows and the two fixture guard rows
+    // read the stand-in fixture shader on purpose. Every other row runs on
+    // the installed bundled main shader.
     public sealed class PoiyomiOpaqueConversionTests : PoiyomiFixtureTestBase
     {
         /// <summary>
@@ -247,7 +256,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void PreparedClone_CarriesEveryCanonicalFact()
         {
-            var source = ConvertibleFade();
+            var source = RealConvertibleFade();
 
             var clone = Track(PoiyomiOpaqueConversion.PrepareCanonicalOpaqueClone(source));
 
@@ -275,7 +284,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             foreach (var (property, value) in ExpectedCanonicalTuple)
             {
                 var clone = Track(
-                    PoiyomiOpaqueConversion.PrepareCanonicalOpaqueClone(ConvertibleFade()));
+                    PoiyomiOpaqueConversion.PrepareCanonicalOpaqueClone(RealConvertibleFade()));
                 clone.SetFloat(property, value + 1f);
 
                 var found = PoiyomiOpaqueConversion.TryFindNonCanonicalFact(
@@ -290,7 +299,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         public void TryFindNonCanonicalFact_DetectsAndNamesAPerturbedRenderQueue()
         {
             var clone = Track(
-                PoiyomiOpaqueConversion.PrepareCanonicalOpaqueClone(ConvertibleFade()));
+                PoiyomiOpaqueConversion.PrepareCanonicalOpaqueClone(RealConvertibleFade()));
             clone.renderQueue = 3000;
 
             var found = PoiyomiOpaqueConversion.TryFindNonCanonicalFact(
@@ -304,7 +313,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         public void TryFindNonCanonicalFact_DetectsAndNamesAPerturbedRenderTypeTag()
         {
             var clone = Track(
-                PoiyomiOpaqueConversion.PrepareCanonicalOpaqueClone(ConvertibleFade()));
+                PoiyomiOpaqueConversion.PrepareCanonicalOpaqueClone(RealConvertibleFade()));
             clone.SetOverrideTag("RenderType", "Transparent");
 
             var found = PoiyomiOpaqueConversion.TryFindNonCanonicalFact(
@@ -317,7 +326,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void Preparation_LeavesTheSourceMaterialUntouched()
         {
-            var source = ConvertibleFade();
+            var source = RealConvertibleFade();
             var before = PropertySnapshot.SnapshotFloats(source);
             var queueBefore = source.renderQueue;
             var tagBefore = source.GetTag("RenderType", false);
@@ -330,7 +339,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void RefusedEvaluation_LeavesTheSourceMaterialUntouched()
         {
-            var source = ConvertibleFade();
+            var source = RealConvertibleFade();
             source.SetFloat("_AlphaToCoverage", 1f);
             var before = PropertySnapshot.SnapshotFloats(source);
             var queueBefore = source.renderQueue;
@@ -346,7 +355,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void PreparedClone_IsADistinctMaterialSharingTheSourceShader()
         {
-            var source = ConvertibleFade();
+            var source = RealConvertibleFade();
 
             var clone = Track(PoiyomiOpaqueConversion.PrepareCanonicalOpaqueClone(source));
 
@@ -365,7 +374,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         public void PreparedClone_IsNotPersisted()
         {
             var clone = Track(
-                PoiyomiOpaqueConversion.PrepareCanonicalOpaqueClone(ConvertibleFade()));
+                PoiyomiOpaqueConversion.PrepareCanonicalOpaqueClone(RealConvertibleFade()));
 
             Assert.That(AssetDatabase.Contains(clone), Is.False);
             Assert.That(AssetDatabase.GetAssetPath(clone), Is.Empty);
@@ -373,15 +382,42 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 
         // --- Transformation gates -------------------------------------------
 
+        /// <summary>Tracks one material on the installed bundled main shader.</summary>
+        private Material NewRealMaterial()
+        {
+            return Track(RealPoiyomiMaterial.Main());
+        }
+
         /// <summary>
-        /// A Fade-derived tuple: eligible, and deliberately NOT canonical
-        /// (queue 3000, SrcAlpha/OneMinusSrcAlpha blend, depth write off,
-        /// non-zero cutoff). Every gate test starts here so the row exercises
-        /// its gate rather than the AlreadyOpaque classification.
+        /// The stand-in Fade tuple. The non-finite and beyond-range rows
+        /// build inputs no vendor produces, so those rows keep this builder.
         /// </summary>
         private Material ConvertibleFade()
         {
             var material = MakeCanonical(NewFixtureMaterial());
+            material.SetFloat("_Mode", 2f);
+            material.SetFloat("_AlphaForceOpaque", 0f);
+            material.SetFloat("_Cutoff", 0.002f);
+            material.SetFloat("_SrcBlend", 5f);
+            material.SetFloat("_DstBlend", 10f);
+            material.SetFloat("_ZWrite", 0f);
+            material.SetFloat("_AddSrcBlend", 5f);
+            material.SetFloat("_EnableOutlines", 0f);
+            material.renderQueue = 3000;
+            material.SetOverrideTag("RenderType", "Transparent");
+            return material;
+        }
+
+        /// <summary>
+        /// A Fade-derived tuple on the installed bundled main shader:
+        /// eligible, and deliberately NOT canonical (queue 3000,
+        /// SrcAlpha/OneMinusSrcAlpha blend, depth write off, non-zero
+        /// cutoff). Every moved gate row starts here so the row exercises
+        /// its gate rather than the AlreadyOpaque classification.
+        /// </summary>
+        private Material RealConvertibleFade()
+        {
+            var material = MakeCanonical(NewRealMaterial());
             material.SetFloat("_Mode", 2f);
             material.SetFloat("_AlphaForceOpaque", 0f);
             material.SetFloat("_Cutoff", 0.002f);
@@ -417,7 +453,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void ConvertibleFadeBaseline_IsConvertible()
         {
-            AssertConvertible(EvaluateFor(ConvertibleFade()));
+            AssertConvertible(EvaluateFor(RealConvertibleFade()));
         }
 
         /// <summary>
@@ -466,7 +502,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void DisabledOutlines_AreConvertible()
         {
-            var material = ConvertibleFade();
+            var material = RealConvertibleFade();
             material.SetFloat("_EnableOutlines", 0f);
 
             AssertConvertible(EvaluateFor(material));
@@ -489,9 +525,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // No-op guard: the same material without the feature converts
             // and carries no depth divergence. The refusal below can only
             // come from the premultiply gate.
-            AssertConvertible(EvaluateFor(ConvertibleFade()));
+            AssertConvertible(EvaluateFor(RealConvertibleFade()));
 
-            var material = ConvertibleFade();
+            var material = RealConvertibleFade();
             material.SetFloat("_AlphaPremultiply", 1f);
 
             var eligibility = EvaluateFor(material);
@@ -512,7 +548,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void PremultiplyNormalization_IsReportedOnTheConvertibleRow()
         {
-            var material = ConvertibleFade();
+            var material = RealConvertibleFade();
             material.SetFloat("_AlphaPremultiply", 1f);
 
             var eligibility = EvaluateFor(material);
@@ -534,7 +570,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void PremultiplyNormalization_IsClearOnTheRefusedRow()
         {
-            var material = ConvertibleFade();
+            var material = RealConvertibleFade();
             material.SetFloat("_AlphaPremultiply", 1f);
             material.SetFloat("_AlphaToCoverage", 1f);
 
@@ -556,7 +592,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void PremultiplyNormalization_IsClearOnTheAlreadyOpaqueRow()
         {
-            var material = MakeCanonical(NewFixtureMaterial());
+            var material = MakeCanonical(NewRealMaterial());
             material.SetFloat("_EnableOutlines", 0f);
 
             var eligibility = EvaluateFor(material);
@@ -577,7 +613,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void AlphaToCoverage_Refuses()
         {
-            var material = ConvertibleFade();
+            var material = RealConvertibleFade();
             material.SetFloat("_AlphaToCoverage", 1f);
 
             AssertRefusal(
@@ -594,7 +630,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [TestCase(8f)]
         public void NonLEqualDepthComparison_Refuses(float zTest)
         {
-            var material = ConvertibleFade();
+            var material = RealConvertibleFade();
             material.SetFloat("_ZTest", zTest);
 
             AssertRefusal(
@@ -605,7 +641,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void LEqualDepthComparison_IsConvertible()
         {
-            var material = ConvertibleFade();
+            var material = RealConvertibleFade();
             material.SetFloat("_ZTest", 4f);
 
             AssertConvertible(EvaluateFor(material));
@@ -615,7 +651,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         public void DepthTestLessWithPolicyConvertsAndFlagsDivergence()
         {
             var eligibility = EvaluateWithPolicy(
-                ConvertibleFade(), "_ZTest", 2f, true);
+                RealConvertibleFade(), "_ZTest", 2f, true);
             AssertConvertible(eligibility);
             Assert.That(eligibility.DepthTestDivergence, Is.True);
         }
@@ -624,7 +660,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         public void DepthTestLessWithoutPolicyStillRefuses()
         {
             AssertRefusal(
-                EvaluateWithPolicy(ConvertibleFade(), "_ZTest", 2f, false),
+                EvaluateWithPolicy(RealConvertibleFade(), "_ZTest", 2f, false),
                 PoiyomiOpaqueConversionRefusal.UnsupportedDepthComparison);
         }
 
@@ -632,7 +668,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         public void DepthTestGreaterWithPolicyStillRefuses()
         {
             AssertRefusal(
-                EvaluateWithPolicy(ConvertibleFade(), "_ZTest", 5f, true),
+                EvaluateWithPolicy(RealConvertibleFade(), "_ZTest", 5f, true),
                 PoiyomiOpaqueConversionRefusal.UnsupportedDepthComparison);
         }
 
@@ -640,7 +676,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         public void DepthTestLEqualWithPolicyCarriesNoDivergence()
         {
             var eligibility = EvaluateWithPolicy(
-                ConvertibleFade(), "_ZTest", 4f, true);
+                RealConvertibleFade(), "_ZTest", 4f, true);
             AssertConvertible(eligibility);
             Assert.That(eligibility.DepthTestDivergence, Is.False);
         }
@@ -652,7 +688,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         public void OpaqueEquivalentBaseBlend_IsConvertible(
             float blendOp, float srcBlend, float dstBlend)
         {
-            var material = ConvertibleFade();
+            var material = RealConvertibleFade();
             material.SetFloat("_BlendOp", blendOp);
             material.SetFloat("_SrcBlend", srcBlend);
             material.SetFloat("_DstBlend", dstBlend);
@@ -670,7 +706,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         public void NonOpaqueEquivalentBaseBlend_Refuses(
             float blendOp, float srcBlend, float dstBlend)
         {
-            var material = ConvertibleFade();
+            var material = RealConvertibleFade();
             material.SetFloat("_BlendOp", blendOp);
             material.SetFloat("_SrcBlend", srcBlend);
             material.SetFloat("_DstBlend", dstBlend);
@@ -684,7 +720,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [TestCase(5f)]
         public void AcceptedForwardAddSourceFactor_IsConvertible(float addSrcBlend)
         {
-            var material = ConvertibleFade();
+            var material = RealConvertibleFade();
             material.SetFloat("_AddSrcBlend", addSrcBlend);
 
             AssertConvertible(EvaluateFor(material));
@@ -696,7 +732,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [TestCase(10f)]
         public void OtherForwardAddSourceFactor_Refuses(float addSrcBlend)
         {
-            var material = ConvertibleFade();
+            var material = RealConvertibleFade();
             material.SetFloat("_AddSrcBlend", addSrcBlend);
 
             AssertRefusal(
@@ -709,7 +745,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [TestCase(10f)]
         public void NonOneForwardAddDestinationFactor_Refuses(float addDstBlend)
         {
-            var material = ConvertibleFade();
+            var material = RealConvertibleFade();
             material.SetFloat("_AddDstBlend", addDstBlend);
 
             AssertRefusal(
@@ -720,7 +756,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void AdditiveOutlineRgbPair_RefusesWithNamedRefusal()
         {
-            var material = ConvertibleFade();
+            var material = RealConvertibleFade();
             material.SetFloat("_OutlineSrcBlend", 1f);
             material.SetFloat("_OutlineDstBlend", 1f);
 
@@ -732,7 +768,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void AdditiveOutlineAlphaPair_RefusesWithNamedRefusal()
         {
-            var material = ConvertibleFade();
+            var material = RealConvertibleFade();
             material.SetFloat("_OutlineSrcBlendAlpha", 0f);
             material.SetFloat("_OutlineDstBlendAlpha", 1f);
 
@@ -746,7 +782,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             [Values(1f, 5f)] float srcBlend,
             [Values(0f, 10f)] float dstBlend)
         {
-            var material = ConvertibleFade();
+            var material = RealConvertibleFade();
             material.SetFloat("_OutlineBlendOp", 0f);
             material.SetFloat("_OutlineSrcBlend", srcBlend);
             material.SetFloat("_OutlineDstBlend", dstBlend);
@@ -759,7 +795,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             [Values(0f, 1f, 10f)] float dstBlendAlpha,
             [Values(0f, 4f)] float blendOpAlpha)
         {
-            var material = ConvertibleFade();
+            var material = RealConvertibleFade();
             material.SetFloat("_OutlineSrcBlendAlpha", 1f);
             material.SetFloat("_OutlineDstBlendAlpha", dstBlendAlpha);
             material.SetFloat("_OutlineBlendOpAlpha", blendOpAlpha);
@@ -781,7 +817,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [TestCase(4f)]
         public void AddBlendOp_DoesNotAffectEligibility(float addBlendOp)
         {
-            var material = ConvertibleFade();
+            var material = RealConvertibleFade();
 
             // Fixture precondition: this shader declares _AddBlendOp so the
             // variation below is real, and the schema deliberately omits it.
@@ -799,7 +835,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [TestCase(-0.5f)]
         public void ClipThresholdThatKeepsAlphaOne_IsConvertible(float cutoff)
         {
-            var material = ConvertibleFade();
+            var material = RealConvertibleFade();
             material.SetFloat("_Cutoff", cutoff);
 
             AssertConvertible(EvaluateFor(material));
@@ -873,12 +909,15 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 
         // --- Effective state beats _Mode -------------------------------------
 
+        /// <summary>
+        /// One vendor preset state on the installed bundled main shader.
+        /// </summary>
         private Material Preset(
             float mode, int queue, string renderType, float forceOpaque,
             float cutoff, float srcBlend, float dstBlend, float zWrite,
             float premultiply, float addSrcBlend)
         {
-            var material = MakeCanonical(NewFixtureMaterial());
+            var material = MakeCanonical(NewRealMaterial());
             material.SetFloat("_Mode", mode);
             material.SetFloat("_AlphaForceOpaque", forceOpaque);
             material.SetFloat("_Cutoff", cutoff);
@@ -899,7 +938,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void PresetOpaque_IsAlreadyOpaque()
         {
-            var material = MakeCanonical(NewFixtureMaterial());
+            var material = MakeCanonical(NewRealMaterial());
             material.SetFloat("_EnableOutlines", 0f);
 
             Assert.That(
@@ -979,7 +1018,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void ModeOpaqueWithAdditiveBlend_StillRefuses()
         {
-            var material = ConvertibleFade();
+            var material = RealConvertibleFade();
             material.SetFloat("_Mode", 0f);
             material.SetFloat("_SrcBlend", 1f);
             material.SetFloat("_DstBlend", 1f);
@@ -992,7 +1031,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void ModeAdditiveWithOpaqueEquivalentState_IsConvertible()
         {
-            var material = ConvertibleFade();
+            var material = RealConvertibleFade();
             material.SetFloat("_Mode", 4f);
             material.SetFloat("_SrcBlend", 1f);
             material.SetFloat("_DstBlend", 0f);
@@ -1049,7 +1088,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void AlreadyOpaque_WhenEveryCanonicalFactMatches()
         {
-            var material = MakeCanonical(NewFixtureMaterial());
+            var material = MakeCanonical(NewRealMaterial());
             material.SetFloat("_EnableOutlines", 0f);
 
             Assert.That(
@@ -1082,7 +1121,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void AlreadyOpaque_EvenWithOutlinesEnabled()
         {
-            var material = MakeCanonical(NewFixtureMaterial());
+            var material = MakeCanonical(NewRealMaterial());
             material.SetFloat("_EnableOutlines", 1f);
 
             Assert.That(
@@ -1110,7 +1149,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void AuthoredOpaqueMaterialWithShaderDefaults_EvaluatesToAlreadyOpaque()
         {
-            var material = MakeCanonical(NewFixtureMaterial());
+            var material = MakeCanonical(NewRealMaterial());
             material.SetFloat("_EnableOutlines", 0f);
             material.SetFloat("_Mode", 0f);
             material.SetFloat("_Cutoff", 0.5f);
@@ -1135,7 +1174,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void AuthoredOpaqueMaterialWithForcedAlpha_EvaluatesToAlreadyOpaque()
         {
-            var material = MakeCanonical(NewFixtureMaterial());
+            var material = MakeCanonical(NewRealMaterial());
             material.SetFloat("_EnableOutlines", 0f);
             material.SetFloat("_Mode", 1f);
             material.SetFloat("_AlphaForceOpaque", 1f);
@@ -1219,7 +1258,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         {
             foreach (var (property, perturbedValue) in EssentialOpaquePropertyPerturbations)
             {
-                var material = MakeCanonical(NewFixtureMaterial());
+                var material = MakeCanonical(NewRealMaterial());
                 material.SetFloat("_EnableOutlines", 0f);
                 material.SetFloat(property, perturbedValue);
 
@@ -1232,7 +1271,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             }
 
             {
-                var material = MakeCanonical(NewFixtureMaterial());
+                var material = MakeCanonical(NewRealMaterial());
                 material.SetFloat("_EnableOutlines", 0f);
                 material.SetFloat("_Mode", 1f);
                 material.SetFloat("_AlphaForceOpaque", 0f);
@@ -1246,7 +1285,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             }
 
             {
-                var material = MakeCanonical(NewFixtureMaterial());
+                var material = MakeCanonical(NewRealMaterial());
                 material.SetFloat("_EnableOutlines", 0f);
                 material.renderQueue = 3000;
 
@@ -1257,7 +1296,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             }
 
             {
-                var material = MakeCanonical(NewFixtureMaterial());
+                var material = MakeCanonical(NewRealMaterial());
                 material.SetFloat("_EnableOutlines", 0f);
                 material.SetOverrideTag("RenderType", "Transparent");
 
@@ -1286,7 +1325,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         {
             foreach (var (property, perturbedValue) in InactiveOpaquePropertyPerturbations)
             {
-                var material = MakeCanonical(NewFixtureMaterial());
+                var material = MakeCanonical(NewRealMaterial());
                 material.SetFloat("_EnableOutlines", 0f);
                 material.SetFloat(property, perturbedValue);
 
@@ -1302,7 +1341,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void PerturbingTheEffectiveRenderQueue_PreventsAlreadyOpaque()
         {
-            var material = MakeCanonical(NewFixtureMaterial());
+            var material = MakeCanonical(NewRealMaterial());
             material.SetFloat("_EnableOutlines", 0f);
             material.renderQueue = 3000;
 
@@ -1314,7 +1353,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void PerturbingTheRenderTypeTag_PreventsAlreadyOpaque()
         {
-            var material = MakeCanonical(NewFixtureMaterial());
+            var material = MakeCanonical(NewRealMaterial());
             material.SetFloat("_EnableOutlines", 0f);
             material.SetOverrideTag("RenderType", "Transparent");
 
@@ -1389,7 +1428,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void TryFindNonCanonicalFact_CanonicalMaterialHasNoDisagreement()
         {
-            var material = MakeCanonical(NewFixtureMaterial());
+            var material = MakeCanonical(NewRealMaterial());
 
             var found = PoiyomiOpaqueConversion.TryFindNonCanonicalFact(
                 material, out var fact);

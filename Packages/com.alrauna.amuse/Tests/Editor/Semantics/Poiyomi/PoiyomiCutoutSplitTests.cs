@@ -26,6 +26,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
     /// exact-one rule, and a cutout preset without a usable cutoff refuses
     /// naming <c>_Cutoff</c>.
     /// </summary>
+    // Kept stand-in reason: the non-finite cutoff row needs an input no
+    // vendor produces. The request pin and the cutoff-missing shader are
+    // exact control. The preset chain rows run on the installed shader.
     public sealed class PoiyomiCutoutSplitTests : PoiyomiFixtureTestBase
     {
         private const string MainTextureProperty = "_MainTex";
@@ -165,10 +168,11 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // too, so the at-the-cutoff proof below comes from the split
             // route and not from the harness.
             AssertProven(
-                CutoutMaterial(UniformTexture("cutout_at_one", ByteAtOne)));
+                RealCutoutMaterial(
+                    UniformTexture("cutout_at_one", ByteAtOne)));
 
             AssertProven(
-                CutoutMaterial(
+                RealCutoutMaterial(
                     UniformTexture("cutout_at_cutoff", ByteAtCutoff)));
         }
 
@@ -185,14 +189,14 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         public void CutoutPreset_ChainBelowCutoff_NeverMoves()
         {
             AssertTransparent(
-                CutoutMaterial(
+                RealCutoutMaterial(
                     UniformTexture("cutout_below_cutoff", ByteBelowCutoff)));
 
             // No-op guard: an at-one chain under the same preset still
             // proves, so the transparent verdict above comes from the
             // cutoff relation and not from the preset alone.
             AssertProven(
-                CutoutMaterial(
+                RealCutoutMaterial(
                     UniformTexture("cutout_guard_at_one", ByteAtOne)));
         }
 
@@ -212,7 +216,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void BlendingPreset_SameChain_StaysSubjectToExactOneRule()
         {
-            var material = FadeMaterial(
+            var material = RealFadeMaterial(
                 UniformTexture(
                     "blend_between_cutoff_and_one",
                     ByteBetweenCutoffAndOne));
@@ -312,9 +316,32 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             return material;
         }
 
-        private Material FadeMaterial(Texture2D texture)
+        /// <summary>
+        /// A cutout preset material on the installed bundled shader loaded
+        /// by its pinned GUID. The written state matches the stand-in
+        /// cutout builder, so the moved rows prove the same states on the
+        /// vendor shader. The caller owns destruction through Track.
+        /// </summary>
+        private Material RealCutoutMaterial(Texture2D texture)
         {
-            var material = NewFixtureMaterial();
+            var material = Track(RealPoiyomiMaterial.Main());
+            material.SetTexture(MainTextureProperty, texture);
+            material.SetFloat(ModeProperty, 1f);
+            material.SetFloat(CutoffProperty, AtCutoff);
+            material.SetFloat("_AlphaForceOpaque", 0f);
+            material.SetFloat("_MainAlphaMaskMode", 0f);
+            return material;
+        }
+
+        /// <summary>
+        /// A fade preset material on the installed bundled shader loaded
+        /// by its pinned GUID. The written state matches the former
+        /// stand-in fade builder. The caller owns destruction through
+        /// Track.
+        /// </summary>
+        private Material RealFadeMaterial(Texture2D texture)
+        {
+            var material = Track(RealPoiyomiMaterial.Main());
             material.SetTexture(MainTextureProperty, texture);
             material.SetFloat(ModeProperty, 2f);
             material.SetFloat(CutoffProperty, AtCutoff);

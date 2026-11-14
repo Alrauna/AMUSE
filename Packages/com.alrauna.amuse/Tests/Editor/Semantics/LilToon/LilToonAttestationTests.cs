@@ -19,6 +19,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
     /// version comparison, and the verification conjunction. Every case is
     /// deterministic and needs no installed lilToon package.
     /// </summary>
+    // Kept stand-in reason: exact falsifier control. The rows pin exact
+    // keyword grants, exact ifex condition text, canonical digests, GUID
+    // pins, and version rows.
     public sealed class LilToonAttestationTests
     {
 

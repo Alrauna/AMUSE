@@ -35,8 +35,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         internal static AmuseBuildPath BuildPath =
             AmuseBuildPath.NonPlayNdmfBuild;
 
-        /// <summary>The injected original-shader attestation, or null for
-        /// the always-attested stand-in.</summary>
+        /// <summary>The injected original-shader attestation. Null runs
+        /// the production attestation,
+        /// <see cref="LockedMaterialIdentity.OriginalShaderAttested"/>.</summary>
         internal static Func<Material, bool> OriginalAttestation;
 
         /// <summary>A restore delegate a test injects over the production
@@ -218,8 +219,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         context,
                         window,
                         restore,
-                        TransientUnlockTestKnobs.OriginalAttestation ??
-                            (_ => true));
+                        TransientUnlockTestKnobs.OriginalAttestation);
                 TransientUnlockTestKnobs.Window = window;
             }
             catch (Exception exception)

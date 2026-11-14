@@ -159,6 +159,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 VendorOptInGate.RealThryLock,
                 VendorOptInGate.DaoIntegration,
                 VendorOptInGate.ProductionOrderDispatch,
+                VendorOptInGate.RealLacPass,
             };
             var saved = new string[variables.Length];
             for (var i = 0; i < variables.Length; i++)
@@ -185,6 +186,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     "every mapped gated fixture must be named");
                 Assert.That(report,
                     Does.Contain("VendorProductionOrderTests"),
+                    "every mapped gated fixture must be named");
+                Assert.That(report,
+                    Does.Contain("RealLacPassGroundCheckTests"),
                     "every mapped gated fixture must be named");
                 foreach (var variable in variables)
                 {
@@ -267,6 +271,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 VendorOptInGate.RealThryLock,
                 VendorOptInGate.DaoIntegration,
                 VendorOptInGate.ProductionOrderDispatch,
+                VendorOptInGate.RealLacPass,
             };
             var saved = new string[variables.Length];
             for (var i = 0; i < variables.Length; i++)
@@ -299,6 +304,53 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     Environment.SetEnvironmentVariable(
                         variables[i], saved[i]);
                 }
+            }
+        }
+
+        [Test]
+        public void BuildReportListsTheRealLacPassGateItselfWhenSet()
+        {
+            var otherVariables = new[]
+            {
+                VendorOptInGate.RealThryLock,
+                VendorOptInGate.DaoIntegration,
+                VendorOptInGate.ProductionOrderDispatch,
+            };
+            var savedOthers = new string[otherVariables.Length];
+            var savedGate = Environment.GetEnvironmentVariable(
+                VendorOptInGate.RealLacPass);
+            Environment.SetEnvironmentVariable(
+                VendorOptInGate.RealLacPass, "1");
+            for (var i = 0; i < otherVariables.Length; i++)
+            {
+                savedOthers[i] = Environment.GetEnvironmentVariable(
+                    otherVariables[i]);
+                Environment.SetEnvironmentVariable(otherVariables[i], null);
+            }
+            try
+            {
+                var report = VendorRunRecord.BuildReport(
+                    1, 1, 1, 0, 0, 0,
+                    TimeSpan.Zero, TimeSpan.Zero,
+                    new string[0],
+                    new VendorVersionEntry[0]);
+
+                Assert.That(report,
+                    Does.Contain(
+                        "opt-in gates set: "
+                        + VendorOptInGate.RealLacPass),
+                    "a set real LAC pass gate must be listed on the"
+                    + " gates line by its variable name");
+            }
+            finally
+            {
+                for (var i = 0; i < otherVariables.Length; i++)
+                {
+                    Environment.SetEnvironmentVariable(
+                        otherVariables[i], savedOthers[i]);
+                }
+                Environment.SetEnvironmentVariable(
+                    VendorOptInGate.RealLacPass, savedGate);
             }
         }
 

@@ -14,11 +14,24 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
     /// passes: with alpha proven 1 on the whole domain, the replace, standard
     /// alpha, and premultiply pairs render the source unchanged, while the
     /// additive and multiplicative pairs add to or scale what is behind and
-    /// are never visually opaque. These tests pin that gate through the real
-    /// capture-and-interpret path on the verified stand-in.
+    /// are never visually opaque. The pass blend rows pin that gate through
+    /// the real capture-and-interpret path on the installed bundled Two Pass
+    /// shader. The two identity pin rows stay exact-control: they compare
+    /// hand-measured digest and constants against the attestation data.
     /// </summary>
     public sealed class PoiyomiMultipassRuleTests : PoiyomiFixtureTestBase
     {
+        /// <summary>
+        /// A fresh material on the installed bundled Two Pass shader
+        /// loaded by its pinned GUID. The shader declares the second pass
+        /// blend pair, so the gate rows exercise the real second-pass
+        /// gate. The caller owns destruction through Track.
+        /// </summary>
+        private Material RealTwoPassMaterial()
+        {
+            return Track(RealPoiyomiMaterial.TwoPass());
+        }
+
         private SemanticOutput<ScalarSemanticValue> Interpret(
             Material material)
         {
@@ -44,7 +57,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void AdditivePrimaryBlendRefusesCompleteAlpha()
         {
-            var material = NewFixtureMaterial();
+            var material = RealTwoPassMaterial();
             material.SetFloat("_AlphaForceOpaque", 1f);
             material.SetFloat("_SrcBlend", 1f);
             material.SetFloat("_DstBlend", 1f);
@@ -64,7 +77,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void AdditiveSecondPassRefusesCompleteAlpha()
         {
-            var material = NewFixtureMaterial();
+            var material = RealTwoPassMaterial();
             material.SetFloat("_AlphaForceOpaque", 1f);
             material.SetFloat("_SrcBlend2", 1f);
             material.SetFloat("_DstBlend2", 1f);
@@ -84,7 +97,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void DivergentSecondFamilyAlphaPair_RefusesCompleteAlpha()
         {
-            var material = NewFixtureMaterial();
+            var material = RealTwoPassMaterial();
             material.SetFloat("_AlphaForceOpaque", 1f);
             material.SetFloat("_SrcBlend2", 5f);
             material.SetFloat("_DstBlend2", 10f);
@@ -105,7 +118,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         [Test]
         public void StandardAlphaPairsOnBothPassesStayComplete()
         {
-            var material = NewFixtureMaterial();
+            var material = RealTwoPassMaterial();
             material.SetFloat("_AlphaForceOpaque", 1f);
             material.SetFloat("_SrcBlend", 5f);
             material.SetFloat("_DstBlend", 10f);

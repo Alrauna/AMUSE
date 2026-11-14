@@ -8,7 +8,8 @@
     "d4rk": "https://d4rkc0d3r.github.io/vpm-repos/main.json",
     "vrcfury": "https://vcc.vrcfury.com/",
     "redsim": "https://redsim.github.io/vpmlisting/index.json",
-    "ltcgi": "https://vpm.pimaker.at/index.json"
+    "ltcgi": "https://vpm.pimaker.at/index.json",
+    "limitex": "https://vpm.limitex.dev/index.json"
   },
   "packages": {
     "nadena.dev.ndmf": "nadena",
@@ -22,6 +23,7 @@
     "d4rkpl4y3r.d4rkavataroptimizer": "d4rk",
     "com.vrcfury.vrcfury": "vrcfury",
     "red.sim.lightvolumes": "redsim",
-    "at.pimaker.ltcgi": "ltcgi"
+    "at.pimaker.ltcgi": "ltcgi",
+    "dev.limitex.avatar-compressor": "limitex"
   }
 }

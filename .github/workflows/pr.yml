@@ -214,10 +214,14 @@ jobs:
         shell: pwsh
         run: ${{ runner.temp }}/admin-scripts/isolation-probe.ps1
 
+      # The two gates run the real LAC pass and the real Thry lock tests on
+      # the code that a pull request changes. AMUSE_DAO_INTEGRATION and
+      # AMUSE_PRODUCTION_ORDER_DISPATCH stay canary only. The research
+      # assembly holds no gated test, so its step passes no -OptIn.
       - name: Run the product tests
         timeout-minutes: 60
         shell: pwsh
-        run: ${{ runner.temp }}/admin-scripts/run-tests.ps1 -AsLowUser -Assembly Alrauna.Amuse.Tests.Editor -TimeoutMinutes 55
+        run: ${{ runner.temp }}/admin-scripts/run-tests.ps1 -AsLowUser -Assembly Alrauna.Amuse.Tests.Editor -OptIn AMUSE_REAL_LAC_PASS -TimeoutMinutes 55
 
       - name: Run the research tests
         timeout-minutes: 60

@@ -17,6 +17,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         internal const string DaoIntegration = "AMUSE_DAO_INTEGRATION";
         internal const string ProductionOrderDispatch =
             "AMUSE_PRODUCTION_ORDER_DISPATCH";
+        internal const string RealLacPass = "AMUSE_REAL_LAC_PASS";
 
         internal static void Require(string variable, string disclosure)
         {

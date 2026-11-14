@@ -8,6 +8,7 @@ using nadena.dev.ndmf;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
+using Alrauna.Amuse.Tests.Editor.Build;
 using Alrauna.Amuse.Tests.Editor.Shared;
 
 namespace Alrauna.Amuse.Tests.Editor.Semantics
@@ -17,6 +18,16 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
     /// both the Poiyomi and lilToon frontends consume. Each fact is a refusal
     /// predicate: unprovable import state must fail, never pass.
     /// </summary>
+    // Falsifier header, dated 2026-11-10. The form-crossing guard and
+    // the pathless refusal of this class stay synthetic. No producer
+    // delivers those states. Two oracle tests, the replacement-form
+    // identity and the copy color interpretation, inject an admitted
+    // version and restore the production state in their scope guards,
+    // because their real-output proofs run gated in
+    // RealLacPassGroundCheckTests. The remaining admitted-copy tests
+    // read the installed producer version through production admission
+    // and skip by name when the package is absent. The SetUp reset
+    // restores the production state before every test.
     public sealed class UnityTextureEvidenceTests
     {
         private const string TempFolder = "Assets/AmuseTests_TexEvidence";
@@ -36,14 +47,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             _container = ScriptableObject.CreateInstance<nadena.dev.ndmf.runtime.SubAssetContainer>();
             AssetDatabase.CreateAsset(_container, TestContainerPath);
 
-            // Shared fixture seam: admission requires an injected admitted
-            // version and an isolated registry, so every test starts from the
-            // same admitted-session shape and nothing leaks between tests.
+            // The reset restores the production provider and the
+            // production admitted set. The class injects no provider,
+            // so the admitted-copy tests read the installed producer
+            // version, and nothing leaks between tests.
             ReplacementTextureAttestation.Versions.ResetForTests();
             registryGuard = new ObjectRegistryGuard();
-            ReplacementTextureAttestation.Versions.SetAdmittedVersionsForTests("0.9.0");
-            ReplacementTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
-                _ => "0.9.0";
         }
 
         [TearDown]
@@ -158,6 +167,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [Test]
         public void AdmittedCopyCarriesTheReplacementFormThroughTryGetSourceId()
         {
+            // Oracle test, reclassified on 2026-11-10. The real-output
+            // identity proof runs gated in
+            // RealLacPassGroundCheckTests. This test pins the mint
+            // logic on a controlled pair with an injected admitted
+            // version, so it runs in every environment without the
+            // vendor.
             var registryGuard = new ObjectRegistryGuard();
             var previousVersion =
                 ReplacementTextureAttestation.Versions.ReadInstalledPackageVersionOrNull;
@@ -309,9 +324,11 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [Test]
         public void PersistedCompressedCopyResolvesOrdinaryAssetIdentityForm()
         {
-            ReplacementTextureAttestation.Versions.ResetForTests();
-            ReplacementTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
-                _ => "0.9.0";
+            // The persisted-copy route reads the installed producer
+            // version. No provider injection remains.
+            RealLacPass.SkipWhenComponentAbsent(
+                "the persisted-copy route reads the installed"
+                + " producer version.");
             var copy = new Texture2D(8, 8, TextureFormat.RGBA32, true);
             copy.name = "MainTex_compressed";
             AssetDatabase.AddObjectToAsset(copy, TestContainerPath);
@@ -706,33 +723,54 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [Test]
         public void AdmittedCopyReadsColorInterpretationFromItsGraphicsFormat()
         {
-            // Fixture mirrors AdmittedCopyCarriesTheReplacementForm's setup:
-            // registered copy, admitted version injected. The copy keeps the
-            // source's sRGB flag because LAC re-encodes with the source color
-            // space.
-            var copy = MakeRegisteredAdmittedCopy("colorspace");
+            // Oracle test, reclassified on 2026-11-10. The real-output
+            // color proof runs gated in RealLacPassGroundCheckTests.
+            // This test pins the graphics-format route on a controlled
+            // pair with an injected admitted version, so it runs in
+            // every environment without the vendor. The copy keeps the
+            // source's sRGB flag because LAC re-encodes with the
+            // source color space.
+            var registryGuard = new ObjectRegistryGuard();
+            var previousVersion =
+                ReplacementTextureAttestation.Versions.ReadInstalledPackageVersionOrNull;
             try
             {
-                Assert.That(
-                    UnityTextureEvidence.TryGetColorInterpretation(
-                        copy, out var interpretation),
-                    Is.True);
-                Assert.That(
-                    interpretation,
-                    Is.EqualTo(TextureColorInterpretation.Srgb));
+                ReplacementTextureAttestation.Versions.SetAdmittedVersionsForTests("0.9.0");
+                ReplacementTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
+                    _ => "0.9.0";
+                var copy = MakeRegisteredAdmittedCopy("colorspace");
+                try
+                {
+                    Assert.That(
+                        UnityTextureEvidence.TryGetColorInterpretation(
+                            copy, out var interpretation),
+                        Is.True);
+                    Assert.That(
+                        interpretation,
+                        Is.EqualTo(TextureColorInterpretation.Srgb));
+                }
+                finally
+                {
+                    UnityEngine.Object.DestroyImmediate(copy);
+                }
             }
             finally
             {
-                UnityEngine.Object.DestroyImmediate(copy);
+                ReplacementTextureAttestation.Versions.ResetForTests();
+                ReplacementTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
+                    previousVersion;
+                registryGuard.Dispose();
             }
         }
 
         [Test]
         public void PersistedCompressedCopyColorInterpretation_ReadsTheGraphicsFormat()
         {
-            ReplacementTextureAttestation.Versions.ResetForTests();
-            ReplacementTextureAttestation.Versions.ReadInstalledPackageVersionOrNull =
-                _ => "0.9.0";
+            // The persisted-copy route reads the installed producer
+            // version. No provider injection remains.
+            RealLacPass.SkipWhenComponentAbsent(
+                "the persisted-copy route reads the installed"
+                + " producer version.");
             var copy = new Texture2D(8, 8, TextureFormat.RGBA32, true, true);
             copy.name = "MainTex_compressed";
             EditorUtility.CompressTexture(copy, TextureFormat.DXT5, TextureCompressionQuality.Normal);
@@ -809,6 +847,13 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [Test]
         public void NoAlphaCopyProvesSampledAlphaExactlyOne()
         {
+            // The version conjunct reads the installed producer
+            // version. The synthetic copy stays, because the proof
+            // needs exact format control. The real pass chooses the
+            // output format itself.
+            RealLacPass.SkipWhenComponentAbsent(
+                "the identity route reads the installed producer"
+                + " version.");
             var copy = MakeRegisteredAdmittedCopy("noalpha", TextureFormat.DXT1);
             try
             {
@@ -849,6 +894,13 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         [Test]
         public void AlphaBearingCopyStaysUnprovenForSampledAlphaOne()
         {
+            // The version conjunct reads the installed producer
+            // version. The synthetic copy stays, because the proof
+            // needs exact format control. The real pass chooses the
+            // output format itself.
+            RealLacPass.SkipWhenComponentAbsent(
+                "the identity route reads the installed producer"
+                + " version.");
             var copy = MakeRegisteredAdmittedCopy("withalpha", TextureFormat.BC7);
             try
             {

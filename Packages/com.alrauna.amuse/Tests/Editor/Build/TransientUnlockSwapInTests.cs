@@ -18,6 +18,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
     /// vendor never installs: the stand-in vendor type mirrors the
     /// verified signatures and scripts each outcome.
     /// </summary>
+    /// <remarks>
+    /// Stand-in locked pairs stay by design (2026-11-10). These tests prove
+    /// the unlock window mechanics, not the identity of the original. Every
+    /// test that keeps a stand-in pair sets
+    /// <see cref="TransientUnlockTestKnobs.OriginalAttestation"/> to an
+    /// explicit always-true stub. The gated real-lock tests prove identity.
+    /// </remarks>
     public sealed class TransientUnlockSwapInTests
     {
         private readonly TestTransientScope _scope =
@@ -65,6 +72,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         [Test]
         public void NoOpRestoreIsCaughtByTheVerificationContract()
         {
+            // Stand-in pair. Proves window mechanics, not original identity. (2026-11-10)
+            TransientUnlockTestKnobs.OriginalAttestation = _ => true;
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
             TransientUnlockTestKnobs.SkipClose = true;
@@ -119,6 +128,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         [Test]
         public void PartialRestoreProducesTheNamedRefusal()
         {
+            // Stand-in pair. Proves window mechanics, not original identity. (2026-11-10)
+            TransientUnlockTestKnobs.OriginalAttestation = _ => true;
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
             TransientUnlockTestKnobs.SkipClose = true;
@@ -173,6 +184,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         [Test]
         public void NoCycleStepDeletesOrMutatesTheLockedOriginal()
         {
+            // Stand-in pair. Proves window mechanics, not original identity. (2026-11-10)
+            TransientUnlockTestKnobs.OriginalAttestation = _ => true;
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
 
@@ -306,6 +319,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         [Test]
         public void TheRestoreConsumesAPersistedClone()
         {
+            // Stand-in pair. Proves window mechanics, not original identity. (2026-11-10)
+            TransientUnlockTestKnobs.OriginalAttestation = _ => true;
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
             TransientUnlockTestKnobs.SkipClose = true;
@@ -342,6 +357,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         [Test]
         public void CloneKeepsTheExactNameOfTheOriginal()
         {
+            // Stand-in pair. Proves window mechanics, not original identity. (2026-11-10)
+            TransientUnlockTestKnobs.OriginalAttestation = _ => true;
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
             TransientUnlockTestKnobs.SkipClose = true;
@@ -369,6 +386,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         [Test]
         public void OneCloneServesEverySlotHoldingTheSameLockedMaterial()
         {
+            // Stand-in pair. Proves window mechanics, not original identity. (2026-11-10)
+            TransientUnlockTestKnobs.OriginalAttestation = _ => true;
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
 
@@ -425,6 +444,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         [Test]
         public void WindowWithoutConsentGrantNeverOpens()
         {
+            // Stand-in pair. Proves window mechanics, not original identity. (2026-11-10)
+            TransientUnlockTestKnobs.OriginalAttestation = _ => true;
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
             TransientUnlockTestKnobs.ConsentGranted = false;
@@ -465,6 +486,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         [Test]
         public void AlignmentRefusalDetailReachesTheSlotRefusal()
         {
+            // Stand-in pair. Proves window mechanics, not original identity. (2026-11-10)
+            TransientUnlockTestKnobs.OriginalAttestation = _ => true;
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
             TransientUnlockTestKnobs.SkipClose = true;
@@ -518,6 +541,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         [Test]
         public void SeventhFactCatchesAConsistencyBreakAfterRestore()
         {
+            // Stand-in pair. Proves window mechanics, not original identity. (2026-11-10)
+            TransientUnlockTestKnobs.OriginalAttestation = _ => true;
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
             TransientUnlockTestKnobs.SkipClose = true;
@@ -587,6 +612,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         public void
             PropertyBlockOnOneRendererRefusesEverySlotOfThatLockedMaterial()
         {
+            // Stand-in pair. Proves window mechanics, not original identity. (2026-11-10)
+            TransientUnlockTestKnobs.OriginalAttestation = _ => true;
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
             TransientUnlockTestKnobs.SkipClose = true;
@@ -683,6 +710,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         [Test]
         public void AnimationMismatchRecordsTheRefusalOnEverySlot()
         {
+            // Stand-in pair. Proves window mechanics, not original identity. (2026-11-10)
+            TransientUnlockTestKnobs.OriginalAttestation = _ => true;
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
             TransientUnlockTestKnobs.SkipClose = true;
@@ -811,6 +840,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         [Test]
         public void ABindingOnAnotherRendererPathDoesNotRefuseThisLockedMaterial()
         {
+            // Stand-in pair. Proves window mechanics, not original identity. (2026-11-10)
+            TransientUnlockTestKnobs.OriginalAttestation = _ => true;
             using var assets = new OverrideTemporaryDirectoryScope(
                 TransientUnlockTestLifecycle.TempFolder);
             TransientUnlockTestKnobs.SkipClose = true;
