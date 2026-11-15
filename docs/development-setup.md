@@ -131,6 +131,8 @@ A pull request can rewrite `pr.yml` or `scripts/ci/get-change-scope.ps1`. The sk
 
 `canary.yml` runs once a week and on a manual start. It floats every vendor package to its newest stable release. Unity stays at the version in `ProjectSettings/ProjectVersion.txt`. It skips releases that are younger than 48 hours when the publisher shows a release date. It never gates a merge, holds no write permission, and changes nothing in the repository. A red run is the signal that a vendor moved. The job summary holds one table row per package. The columns are package, old, new, date source, and skipped younger.
 
+Canary time as of 2026-11-14: the first passing run took 71 minutes, and the product step took 64.5 of its 75 minutes. A second run after the strict skip check took 59 minutes. The floating vendor versions can make a later run longer.
+
 The licensed jobs of both workflows share one concurrency group. They queue in order instead of cancelling a waiting run. The gate and the canary never sign in to the one account at the same time.
 
 ### Opt-in gates in CI
