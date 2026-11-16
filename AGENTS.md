@@ -64,8 +64,9 @@ vpm resolve project .                             # restores Packages/nadena.dev
 
 `vpm resolve` can exit 0 without resolving. Confirm `Packages/nadena.dev.ndmf/package.json` exists afterward. Any NDMF 1.14.x or newer 1.x version inside the package range works. The VRChat SDK supplies the Harmony and immutable-collection assemblies, so NDMF needs no extra bootstrap step.
 
-- Tests run through the Unity Test Runner, EditMode mode. No CLI test script and no CI test job exists. In-repo practice: refresh Unity after new files, run a focused EditMode filter, then the full `Alrauna.Amuse.Tests.Editor` and `Alrauna.Amuse.Research.Tests.Editor` assemblies.
-- Release: `.github/workflows/release.yml` (manual dispatch) zips the single package named by the repo variable `vars.PACKAGE_NAME`, excludes `Tests/`, and fails the release if test content re-enters. `build-listing.yml` publishes the VPM listing to GitHub Pages. `pr.yml` is a deliberate no-op branch-protection gate.
+- Tests run through the Unity Test Runner, EditMode mode. In-repo practice: refresh Unity after new files, run a focused EditMode filter, then the full `Alrauna.Amuse.Tests.Editor` and `Alrauna.Amuse.Research.Tests.Editor` assemblies. The same assemblies run in CI through `scripts/ci/run-tests.ps1` on Windows runners.
+- Release: `.github/workflows/release.yml` (manual dispatch) zips the single package named by the repo variable `vars.PACKAGE_NAME`, excludes `Tests/`, and fails the release if test content re-enters. `build-listing.yml` publishes the VPM listing to GitHub Pages.
+- CI: `pr.yml` is the merge gate. A maintainer approves every `unity` run before it starts. That approval is the trust boundary of the gate. The unity job tests the vendor set pinned in `scripts/ci/lock.json`. The lock must match `Packages/vpm-manifest.json`. `canary.yml` runs every vendor package at its newest stable release, hence the name. A red canary run is the signal that a vendor moved. It runs weekly and on demand. It never gates a merge.
 - No lint or formatter is configured. Use `git diff --check` for whitespace.
 
 ## Code Conventions & Common Patterns
