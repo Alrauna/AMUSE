@@ -27,11 +27,11 @@
       "sha256": "90f8bed7cdd7435f4904bca3d885a81a1811bd25036d712f21942c531d940247"
     },
     "com.anatawa12.avatar-optimizer": {
-      "version": "1.9.21",
-      "sha256": "ee48b616d7f7249229cf8dd72607bf104eb13be66c4b5f650d07c4191c3dcbf3"
+      "version": "1.9.22",
+      "sha256": "4472eddb48b75682fa9f7545f0877651b66b6d5d287a9a29482e429351f22692"
     },
     "com.vrcfury.vrcfury": {
-      "version": "1.1442.0",
+      "version": "1.1470.0",
       "sha256": null,
       "unhashedReason": "no hash route"
     },
