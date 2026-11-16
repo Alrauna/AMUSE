@@ -63,14 +63,14 @@
       "dependencies": {}
     },
     "com.anatawa12.avatar-optimizer": {
-      "version": "1.9.21",
+      "version": "1.9.22",
       "dependencies": {
         "com.vrchat.avatars": ">=3.7.0 <3.11.0",
         "nadena.dev.ndmf": ">=1.8.0 <2.0.0"
       }
     },
     "com.vrcfury.vrcfury": {
-      "version": "1.1442.0",
+      "version": "1.1470.0",
       "dependencies": {}
     },
     "nadena.dev.modular-avatar": {

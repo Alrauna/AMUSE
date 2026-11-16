@@ -2,7 +2,7 @@
 
 All notable changes to AMUSE are documented in this file.
 
-## [Unreleased] - 2026-10-21
+## [0.1.0] - 2026-11-15
 
 ### Added
 - Support for the 9.3 main and Two Pass shaders that Poiyomi 10.x packages bundle. The support covers unlocked materials and locked materials whose recorded original is a 9.3.64 release shader or one of the two bundled 9.3 rows. The bundled locked rows follow the same reconstruction contract as the release rows.
