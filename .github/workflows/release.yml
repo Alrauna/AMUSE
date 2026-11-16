@@ -39,15 +39,21 @@ jobs:
   build:
     needs: config
     runs-on: ubuntu-latest
-    # Limited to the main branch in repository settings. A manual start from
-    # another branch then fails before this job can get the write token.
-    environment: release
     permissions:
       contents: write
     env:
       packagePath: Packages/${{ vars.PACKAGE_NAME }}
     if: needs.config.outputs.config_package == 'true'
     steps:
+
+      # The release job publishes only from main. A dispatch from another
+      # branch fails here. This guard replaced the release environment policy.
+      - name: Refuse dispatch from a branch other than main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "The release workflow dispatches only from main."
+          echo "This run started on ${{ github.ref }}."
+          exit 1
 
       # Checkout Local Repository
       - name: Checkout
