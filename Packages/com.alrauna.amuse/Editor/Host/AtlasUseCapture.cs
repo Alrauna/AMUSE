@@ -358,6 +358,12 @@ namespace Alrauna.Amuse.Editor.Host
                 return;
             }
 
+            if (mesh.GetIndexCount(submeshIndex) == 0)
+            {
+                refusal = AtlasUseRefusal.EmptySubmesh;
+                return;
+            }
+
             if (!TryCaptureUvRect(
                     mesh, submeshIndex, channel, out var uvRect))
             {
@@ -414,13 +420,6 @@ namespace Alrauna.Amuse.Editor.Host
         {
             uvRect = default;
             var triangles = mesh.GetTriangles(submeshIndex);
-            if (triangles.Length == 0)
-            {
-                // A submesh without triangles has no region to move.
-                // The zero rectangle keeps the record total and makes
-                // the placement treat the use as empty.
-                return true;
-            }
 
             double minU = 1, minV = 1, maxU = 0, maxV = 0;
             foreach (var vertexIndex in triangles)

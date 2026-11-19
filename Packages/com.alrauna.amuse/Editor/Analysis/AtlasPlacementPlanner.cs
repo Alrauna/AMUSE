@@ -285,6 +285,13 @@ namespace Alrauna.Amuse.Editor.Analysis
                     pageEntries.Add(page.ToEntry(Key.SourceFormat, grid));
                 }
 
+                // The lists grow placement by placement, so uses of
+                // two sources can interleave. Capture order is the
+                // contract of both lists.
+                admitted.Sort();
+                refused.Sort((left, right) =>
+                    left.UseIndex.CompareTo(right.UseIndex));
+
                 return new AtlasGroupPlan(Key, pageEntries, admitted, refused);
             }
 

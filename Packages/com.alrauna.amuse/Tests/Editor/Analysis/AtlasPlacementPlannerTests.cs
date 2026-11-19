@@ -437,6 +437,165 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
             AssertPlansEqual(first, third);
         }
 
+        [Test]
+        public void AdmittedAndRefusedUsesAreInCaptureOrder()
+        {
+            var uses = new[]
+            {
+                WholeSource(1203, GraphicsFormat.R8G8B8A8_SRGB, 4096, 0),
+                WholeSource(1202, GraphicsFormat.R8G8B8A8_SRGB, 1024, 1),
+                WholeSource(1201, GraphicsFormat.R8G8B8A8_SRGB, 1024, 2),
+                WholeSource(1202, GraphicsFormat.R8G8B8A8_SRGB, 1024, 3),
+                WholeSource(1201, GraphicsFormat.R8G8B8A8_SRGB, 1024, 4),
+            };
+
+            var plans = AtlasPlacementPlanner.Plan(uses, 4096, 1);
+
+            Assert.That(plans.Count, Is.EqualTo(1));
+            CollectionAssert.AreEqual(
+                new[] { 1, 2, 3, 4 },
+                plans[0].AdmittedUseIndices);
+            Assert.That(plans[0].RefusedUses.Count, Is.EqualTo(1));
+            Assert.That(plans[0].RefusedUses[0].UseIndex, Is.EqualTo(0));
+            Assert.That(
+                plans[0].RefusedUses[0].Refusal,
+                Is.EqualTo(AtlasPlacementRefusal.PlacementTooLarge));
+        }
+
+        [Test]
+        public void NegativeOriginAlignsDownOnTheGrid()
+        {
+            var uses = new[]
+            {
+                Region(
+                    1301,
+                    GraphicsFormat.RGBA_DXT1_SRGB,
+                    1024,
+                    0.01,
+                    0.01,
+                    0.5,
+                    0.5,
+                    0),
+            };
+
+            var plans = AtlasPlacementPlanner.Plan(uses, 8192, 2);
+
+            var placement = plans[0].Pages[0].Placements.Single();
+            Assert.That(placement.SourceX, Is.EqualTo(-24));
+            Assert.That(placement.SourceY, Is.EqualTo(-24));
+            Assert.That(placement.SourceX < 0, Is.True);
+            Assert.That(placement.SourceX % 8, Is.Zero);
+            Assert.That(placement.SourceY % 8, Is.Zero);
+            Assert.That(placement.Width, Is.EqualTo(568));
+            Assert.That(placement.Height, Is.EqualTo(568));
+        }
+
+        [Test]
+        public void TallPlacementMidShelfStartsANewPage()
+        {
+            var uses = new[]
+            {
+                WholeRectSource(
+                    1401,
+                    GraphicsFormat.RGBA_DXT1_SRGB,
+                    4068,
+                    1268,
+                    0),
+                WholeRectSource(
+                    1402,
+                    GraphicsFormat.RGBA_DXT1_SRGB,
+                    2968,
+                    68,
+                    1),
+                WholeRectSource(
+                    1403,
+                    GraphicsFormat.RGBA_DXT1_SRGB,
+                    68,
+                    2968,
+                    2),
+            };
+
+            var plans = AtlasPlacementPlanner.Plan(uses, 4160, 1);
+
+            var pages = plans[0].Pages;
+            Assert.That(pages.Count, Is.EqualTo(2));
+            Assert.That(pages[0].Placements.Count, Is.EqualTo(2));
+            Assert.That(pages[0].Width, Is.EqualTo(4100));
+            Assert.That(pages[0].Height, Is.EqualTo(1400));
+            Assert.That(pages[1].Placements.Count, Is.EqualTo(1));
+            Assert.That(
+                pages[1].Placements[0].SourceTextureInstanceId,
+                Is.EqualTo(1403));
+            Assert.That(pages[1].Placements[0].PageX, Is.EqualTo(0));
+            Assert.That(pages[1].Placements[0].PageY, Is.EqualTo(0));
+            Assert.That(pages[1].Width, Is.EqualTo(100));
+            Assert.That(pages[1].Height, Is.EqualTo(3000));
+        }
+
+        [Test]
+        public void PlacementsSortByLongestSideThenAreaThenCaptureOrder()
+        {
+            var uses = new[]
+            {
+                WholeSource(1501, GraphicsFormat.R8G8B8A8_SRGB, 1024, 0),
+                Region(
+                    1502,
+                    GraphicsFormat.R8G8B8A8_SRGB,
+                    1024,
+                    0.0,
+                    0.0,
+                    1.0,
+                    0.45,
+                    1),
+                WholeSource(1503, GraphicsFormat.R8G8B8A8_SRGB, 1024, 2),
+                WholeSource(1504, GraphicsFormat.R8G8B8A8_SRGB, 2048, 3),
+                WholeSource(1505, GraphicsFormat.R8G8B8A8_SRGB, 512, 4),
+                WholeSource(1506, GraphicsFormat.R8G8B8A8_SRGB, 512, 5),
+            };
+
+            var plans = AtlasPlacementPlanner.Plan(uses, 8192, 1);
+
+            var page = plans[0].Pages.Single();
+            Assert.That(page.Width, Is.EqualTo(6336));
+            Assert.That(page.Height, Is.EqualTo(2080));
+            var positions = page.Placements.ToDictionary(
+                placement => placement.SourceTextureInstanceId);
+            Assert.That(positions[1504].PageX, Is.EqualTo(0));
+            Assert.That(positions[1501].PageX, Is.EqualTo(2080));
+            Assert.That(positions[1503].PageX, Is.EqualTo(3136));
+            Assert.That(positions[1502].PageX, Is.EqualTo(4192));
+            Assert.That(positions[1505].PageX, Is.EqualTo(5248));
+            Assert.That(positions[1506].PageX, Is.EqualTo(5792));
+            foreach (var placement in page.Placements)
+            {
+                Assert.That(placement.PageY, Is.EqualTo(0));
+            }
+        }
+
+        private static CapturedAtlasUse WholeRectSource(
+            int instanceId,
+            GraphicsFormat format,
+            int width,
+            int height,
+            int captureOrder)
+        {
+            return new CapturedAtlasUse(
+                0,
+                0,
+                0,
+                "Poiyomi 9.3 release main",
+                instanceId,
+                format,
+                width,
+                height,
+                1,
+                RepeatAnisoSampler,
+                new AtlasUvRect(0.0, 0.0, 1.0, 1.0),
+                "material",
+                Array.Empty<string>(),
+                captureOrder);
+        }
+
         private static void AssertPlansEqual(
             IReadOnlyList<AtlasGroupPlan> expected,
             IReadOnlyList<AtlasGroupPlan> actual)

@@ -756,6 +756,20 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         [Test]
+        public void EmptySubmeshRefuses()
+        {
+            var root = Track(new GameObject("empty submesh root"));
+            var material = NewAdmittedMaterial("empty submesh main");
+            var mesh = Track(NewQuadMesh());
+            mesh.SetTriangles(new int[0], 0);
+            AddSkinnedRenderer(root, "Body", mesh, new[] { material });
+
+            var outcome = SingleOutcome(CaptureUses(root));
+
+            AssertRefused(outcome, AtlasUseRefusal.EmptySubmesh);
+        }
+
+        [Test]
         public void ExtraSlotsRefuseTheLastSubmeshUses()
         {
             var root = Track(new GameObject("extra slots root"));

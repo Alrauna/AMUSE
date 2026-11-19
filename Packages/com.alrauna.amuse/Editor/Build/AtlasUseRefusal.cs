@@ -115,5 +115,8 @@ namespace Alrauna.Amuse.Editor.Build
 
         /// <summary>The submesh of the use is not made of triangles.</summary>
         NonTriangleTopology,
+
+        /// <summary>The submesh of the use has no triangles.</summary>
+        EmptySubmesh,
     }
 }

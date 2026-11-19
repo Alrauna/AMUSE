@@ -1140,6 +1140,17 @@ namespace Alrauna.Amuse.Editor.Build
             ["amuse.atlas.NonTriangleTopology:hint"] =
                 "Convert the mesh part to triangles if you want " +
                 "AMUSE to atlas this slot.",
+
+            ["amuse.atlas.EmptySubmesh"] =
+                "AMUSE did not atlas this material slot.",
+            ["amuse.atlas.EmptySubmesh:description"] =
+                "The mesh part of this slot has no triangles. The " +
+                "route moves triangles, so an empty part has no " +
+                "region to move. The slot keeps its original " +
+                "bindings.",
+            ["amuse.atlas.EmptySubmesh:hint"] =
+                "Remove the empty mesh part if you want AMUSE to " +
+                "atlas this slot.",
         };
 
 
