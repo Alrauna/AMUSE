@@ -39,10 +39,20 @@ namespace Alrauna.Amuse.Tests.Editor.Build
     {
         private readonly TestTransientScope _scope =
             new TestTransientScope(allowDestroyingAssets: true);
+        private Func<BuildTarget> _originalBuildTarget;
 
         [SetUp]
         public void SetUp()
         {
+            // The mirror runs the atlas pass behind the barrier, and
+            // atlasing defaults on. The exact-count assertions below
+            // hold only when the atlas target gate stays quiet, so
+            // every test pins the Windows desktop target. The editor
+            // active target differs between machines.
+            _originalBuildTarget =
+                AmusePlatformFinishPlugin.ActiveBuildTargetForTests;
+            AmusePlatformFinishPlugin.ActiveBuildTargetForTests =
+                () => BuildTarget.StandaloneWindows64;
             TransientUnlockTestKnobs.Reset();
             TransientUnlockTransformationTestPlugin.ResetProbeState();
             TransientUnlockTestLifecycle.DeleteTempFolder();
@@ -54,6 +64,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         [TearDown]
         public void TearDown()
         {
+            AmusePlatformFinishPlugin.ActiveBuildTargetForTests =
+                _originalBuildTarget;
             TransientUnlockTestKnobs.RestoreAaoAfterFixture();
             _scope.TearDown();
             TransientUnlockTestLifecycle.DiscardFixtureScene();
@@ -1563,7 +1575,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// The full production pass sequence: structural check, then one
         /// animator scope over the bindings capture, the real barrier
         /// (whose swap-in now opens before capture), and the real apply,
-        /// then the extension-free window close ordered last. The seams
+        /// then the extension-free window close and the atlas pass. The
+        /// seams
         /// substitute the verified fixture family, the consent dialog,
         /// and the original-shader attestation.
         /// </summary>
@@ -1616,6 +1629,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 // extension-free pass after the animator scope has closed.
                 sequence.Run(
                     TransientUnlockWindowClose.PassName, ClosePass);
+
+                // Production pass six. The atlas pass runs extension
+                // free after the window close.
+                sequence.Run(
+                    AtlasPass.PassName,
+                    AtlasPass.Execute);
             }
 
             private static void BarrierPass(BuildContext context)

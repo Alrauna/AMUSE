@@ -91,6 +91,50 @@ namespace Alrauna.Amuse.Tests.Editor
             }
         }
 
+        // Characterization, not RED: the preset schema stays at five,
+        // so PresetApplier never reads or writes the atlas fields.
+        [Test]
+        public void ApplyingAPresetKeepsTheAtlasFields()
+        {
+            var go = new GameObject("Root");
+            try
+            {
+                var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
+
+                var serialized = new UnityEditor.SerializedObject(optimizer);
+                serialized.FindProperty("_atlasingEnabled")
+                    .boolValue = false;
+                serialized.FindProperty("_maximumAtlasPageSize")
+                    .intValue = 4096;
+                serialized.FindProperty("_protectedMipLevelCount")
+                    .intValue = 2;
+                serialized.ApplyModifiedProperties();
+
+                Assert.That(PresetFileStore.TryLoadAll(
+                        out var presets, out var failedFile,
+                        out var refusal),
+                    Is.True, failedFile + ": " + refusal);
+                var safe = presets.Single(
+                    preset => preset.Name == "Safe");
+
+                serialized.Update();
+                PresetApplier.Apply(safe, serialized);
+
+                Assert.That(optimizer.AtlasingEnabled, Is.False,
+                    "a preset must not touch the atlas switch");
+                Assert.That(optimizer.MaximumAtlasPageSize,
+                    Is.EqualTo(4096),
+                    "a preset must not touch the page size");
+                Assert.That(optimizer.ProtectedMipLevelCount,
+                    Is.EqualTo(2),
+                    "a preset must not touch the protected mip count");
+            }
+            finally
+            {
+                Object.DestroyImmediate(go);
+            }
+        }
+
         [Test]
         public void ApplyingEachShippedPresetWritesItsCutoutValues()
         {

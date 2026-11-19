@@ -15,6 +15,14 @@ namespace Alrauna.Amuse.Editor.Build
     /// </summary>
     internal static class PlatformAlphaSamplingPolicy
     {
+        /// <summary>
+        /// The one desktop target the policy admits. Atlasing in
+        /// 0.2.0 runs only on it, and the sampling policy selects it
+        /// through this constant, so the two reads cannot drift.
+        /// </summary>
+        internal const BuildTarget DesktopTarget =
+            BuildTarget.StandaloneWindows64;
+
         internal static bool TrySelect(
             BuildTarget target,
             bool acceptDesktopDifferences,
@@ -24,7 +32,7 @@ namespace Alrauna.Amuse.Editor.Build
             policy = AlphaSamplingPolicy.ConservativeMobile;
             switch (target)
             {
-                case BuildTarget.StandaloneWindows64:
+                case DesktopTarget:
                     policy = acceptDesktopDifferences
                         ? AlphaSamplingPolicy.AcceptedNonAnisotropic
                         : AlphaSamplingPolicy.ConservativeDesktop;

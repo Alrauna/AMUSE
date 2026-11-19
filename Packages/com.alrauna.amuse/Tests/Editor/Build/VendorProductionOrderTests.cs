@@ -124,7 +124,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// The tier B twin of the Modular Avatar merge animator fixture.
         /// The swap controller input is injected by hand on the root
         /// Animator, and the build runs on the dedicated platform
-        /// through the mirrored five pass topology. No vendor component
+        /// through the mirrored six pass topology. No vendor component
         /// and no VRChat SDK take part.
         /// </summary>
         [Test]
@@ -214,7 +214,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// holder active state on the VRChat platform, so the twin
         /// injects the equivalent animation input by hand: one holder
         /// active state clip on the root Animator. The build runs on
-        /// the dedicated platform through the mirrored five pass
+        /// the dedicated platform through the mirrored six pass
         /// topology. No vendor component and no VRChat SDK take part.
         /// </summary>
         [Test]

@@ -2,6 +2,15 @@
 
 All notable changes to AMUSE are documented in this file.
 
+## [Unreleased]
+
+### Added
+- 2026-11-19. Atlasing Milestone 1. `AmuseAvatarOptimizer` has three atlas settings: an atlasing switch, a maximum atlas page size, and a protected mip level count. The defaults are on, 8192, and 1. Reset restores them. Presets do not read or write them. The inspector does not show them yet.
+- 2026-11-19. A sixth build pass, the atlas pass, runs after the unlock window closes. It refuses with one named console entry when the build target is not Windows, when the page size is not from 1 to 8192, or when the protected mip level count is not from 1 to 14. The pass does not change the avatar yet.
+
+### Changed
+- 2026-11-19. The shared build gates run when alpha separation or atlasing is on. Atlasing is on by default. So an avatar with alpha separation off can now get the consent dialog for an unverified host version, and it can get the structural graph refusal. One dialog serves both features. An atlas-only build collects no shader consent subjects and opens no unlock window. When both switches are off, AMUSE analyzes, changes, and reports nothing.
+
 ## [0.1.0] - 2026-11-15
 
 ### Added

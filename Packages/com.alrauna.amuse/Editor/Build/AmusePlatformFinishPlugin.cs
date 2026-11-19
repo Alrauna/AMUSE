@@ -26,6 +26,34 @@ namespace Alrauna.Amuse.Editor.Build
         /// builds the barrier actually analyzed.</summary>
         internal bool ReachedRendererAnalysis { get; set; }
 
+        /// <summary>True once the atlas pass ran for this build. The
+        /// pass throws on a second run, so the flag is the once-only
+        /// guard of the sixth pass.</summary>
+        internal bool HasAtlasExecuted { get; set; }
+
+        /// <summary>
+        /// The avatar-scope atlas refusal, or
+        /// <see cref="AtlasUseRefusal.None"/> while no atlas gate has
+        /// refused. Milestone 2 appends use-scope members beside
+        /// these.
+        /// </summary>
+        internal AtlasUseRefusal AtlasRefusal { get; set; }
+
+        /// <summary>True when the atlas pass passed every avatar-scope
+        /// gate and reached its analysis point. Milestone 2 continues
+        /// the atlas path from this flag.</summary>
+        internal bool ReachedAtlasAnalysis { get; set; }
+
+        /// <summary>
+        /// True when the barrier passed every shared avatar-scope
+        /// gate: the lifecycle verdict, the opt-in component on the
+        /// avatar root, at least one feature switch on, the structural
+        /// graph, and the consent decision. The atlas pass runs only
+        /// behind this flag, so it never repeats those gates and never
+        /// repeats their reports.
+        /// </summary>
+        internal bool SharedGatesPassed { get; set; }
+
         /// <summary>True when the avatar's alpha policy deviates from its
         /// inert defaults, so moved triangles may rest on policy-widened
         /// evidence rather than on exact proof. The apply pass consumes
@@ -297,7 +325,7 @@ namespace Alrauna.Amuse.Editor.Build
                         ctx => AlphaSeparationApply.Execute(ctx));
                 });
 
-            // The window close is the fifth and last pass, extension-free
+            // The window close is the fifth pass, extension-free
             // and after the animator scope has closed. NDMF commits the
             // virtual animator graph when the scope deactivates, and that
             // commit's controller assignment makes the editor animator
@@ -311,13 +339,20 @@ namespace Alrauna.Amuse.Editor.Build
             sequence.Run(
                 TransientUnlockWindowClose.PassName,
                 ctx => TransientUnlockWindowClose.Execute(ctx));
+
+            // The atlas pass is the sixth pass, extension-free and
+            // after the window close: the window close writes the
+            // final references of alpha separation, and the atlas
+            // pass reads them. It runs behind the shared gate verdict
+            // the barrier recorded, so it repeats no shared gate.
+            sequence.Run(AtlasPass.PassName, AtlasPass.Execute);
         }
 
         /// <summary>
         /// Test-only override for the shared build-target read. Null in
-        /// production. The barrier pass and the apply staleness guard
-        /// are the consumers; every other editor read site keeps the
-        /// real setting.
+        /// production. The barrier pass, the atlas pass, and the apply
+        /// staleness guard are the consumers; every other editor read
+        /// site keeps the real setting.
         /// </summary>
         internal static Func<BuildTarget> ActiveBuildTargetForTests = null;
 
@@ -327,8 +362,9 @@ namespace Alrauna.Amuse.Editor.Build
         /// otherwise the real active build target. Tests set and
         /// restore the override so EditMode runs never switch the
         /// editor's own build target. Internal because the barrier
-        /// pass captures through it and the apply staleness guard
-        /// re-selects through it, both across the class boundary.
+        /// pass and the atlas pass capture through it and the apply
+        /// staleness guard re-selects through it, all across the
+        /// class boundary.
         /// </summary>
         internal static BuildTarget ActiveBuildTarget()
         {

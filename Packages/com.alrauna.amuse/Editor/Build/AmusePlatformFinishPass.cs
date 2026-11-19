@@ -256,12 +256,16 @@ namespace Alrauna.Amuse.Editor.Build
                 return;
             }
 
-            // Feature switch: the alpha separator runs only with its
-            // toggle on. The component stays present for later sibling
-            // features. Off mirrors the Disable AMUSE contract for this
-            // one feature: nothing analyzed, nothing mutated, nothing
-            // reported, and the consent layer below never asks.
-            if (!activated.AlphaSeparatorEnabled)
+            // Shared feature gates: the bindings invariant, the
+            // structural graph gate, and the consent layer below
+            // serve both features, so they run when at least one
+            // switch is on. Both switches off mirrors the Disable
+            // AMUSE contract: nothing analyzed, nothing mutated,
+            // nothing reported, and the consent layer below never
+            // asks. The component stays present for later sibling
+            // features.
+            if (!activated.AlphaSeparatorEnabled
+                && !activated.AtlasingEnabled)
             {
                 return;
             }
@@ -297,7 +301,7 @@ namespace Alrauna.Amuse.Editor.Build
                 // no per-renderer accounting can survive. This gate names the
                 // cause exactly once, and only for avatars the gates above it
                 // admitted: positive lifecycle, the opt-in component on the
-                // avatar root, and the feature switch on.
+                // avatar root, and at least one feature switch on.
                 state.AvatarRefusal = graph.Refusal;
                 AmuseReports.AvatarRefusal(
                     context.AvatarRootObject, graph.Refusal);
@@ -321,13 +325,45 @@ namespace Alrauna.Amuse.Editor.Build
             // covers host versions beyond the attested maxima and shader
             // names collected from the avatar's assigned materials and
             // swap-reachable materials whose source is not a verified
-            // version. The block sits after the committed-graph gate, so
-            // an avatar that refuses avatar-wide is never asked. Batch
-            // mode has no user to ask and refuses. Declining is a total
-            // no-op after the trigger: an opted-out avatar never asks.
-            var shaderTransfer = UnityMaterialSemantics
-                .CollectTransferConsent(
-                    AssignedAndSwapCurvedMaterials(context, graph));
+            // version. The host subjects always join the dialog, for
+            // either feature. The block sits after the committed-graph
+            // gate, so an avatar that refuses avatar-wide is never
+            // asked. Batch mode has no user to ask and refuses.
+            // Declining is a total no-op after the trigger: an
+            // opted-out avatar never asks.
+            // Shader transfer subjects concern alpha separation alone,
+            // so the barrier collects them, and the window
+            // eligibility, only when alpha separation is on. An
+            // atlas-only build asks about the host versions only and
+            // no window can open.
+            var alphaOn = activated.AlphaSeparatorEnabled;
+            (IReadOnlyList<string> Subjects,
+                IReadOnlyCollection<string> GrantedShaderNames,
+                bool AnyApprovedVersions) shaderTransfer;
+            var windowEligible = false;
+            if (alphaOn)
+            {
+                shaderTransfer = UnityMaterialSemantics
+                    .CollectTransferConsent(
+                        AssignedAndSwapCurvedMaterials(context, graph));
+                // The unlock window no longer carries its own per-build
+                // consent subject. V2 and V4 passed live observation on
+                // 2026-09-21, so per spec section 12 the gate moved to
+                // the D8 pattern: an eligible build opens the window
+                // without asking. Eligibility is the attestation gate
+                // alone: a locked material whose original shader passes
+                // attestation opens the window.
+                windowEligible =
+                    TransientUnlockAvailability.WindowEligibleForConsent(
+                        AssignedAndSwapCurvedMaterials(context, graph),
+                        lockedOriginalAttestation);
+            }
+            else
+            {
+                shaderTransfer = (Array.Empty<string>(),
+                    Array.Empty<string>(), false);
+            }
+
             var subjects = new List<string>(lifecycle.ConsentSubjects);
             subjects.AddRange(shaderTransfer.Subjects);
             // The granted transfer names compose into every gate that
@@ -343,18 +379,6 @@ namespace Alrauna.Amuse.Editor.Build
                 shaderTransfer.GrantedShaderNames.Count > 0
                     ? shaderTransfer.GrantedShaderNames
                     : null;
-            // The unlock window no longer carries its own per-build
-            // consent subject. V2 and V4 passed live observation on
-            // 2026-09-21, so per spec section 12 the gate moved to the
-            // D8 pattern: an eligible build opens the window without
-            // asking. Eligibility is the attestation gate alone: a
-            // locked material whose original shader passes attestation
-            // opens the window.
-            var windowEligible =
-                TransientUnlockAvailability.WindowEligibleForConsent(
-                    AssignedAndSwapCurvedMaterials(context, graph),
-                    lockedOriginalAttestation);
-
             if (subjects.Count > 0
                 && !VersionConsentDialog.ShouldProceed(
                     subjects,
@@ -371,6 +395,19 @@ namespace Alrauna.Amuse.Editor.Build
                     });
                     PlayModeBuildStore.SaveOutcome(context, state);
                 }
+                return;
+            }
+
+            // Every shared gate has passed. The atlas pass runs only
+            // behind this flag, so it never repeats the lifecycle,
+            // structural graph, or consent checks (D2).
+            state.SharedGatesPassed = true;
+
+            // Atlasing alone needs nothing below: no window note, no
+            // swap-in, and no alpha work. The barrier stops here and
+            // the atlas pass continues behind the shared verdict.
+            if (!alphaOn)
+            {
                 return;
             }
 
@@ -1019,7 +1056,13 @@ namespace Alrauna.Amuse.Editor.Build
             };
         }
 
-        private static Alrauna.Amuse.Runtime.AmuseAvatarOptimizer
+        /// <summary>
+        /// The avatar-root optimizer that activated this build, or
+        /// null when the root carries no enabled opt-in component.
+        /// Internal because the atlas pass reads the same activation
+        /// rule behind the barrier.
+        /// </summary>
+        internal static Alrauna.Amuse.Runtime.AmuseAvatarOptimizer
             ActivatedOptimizer(BuildContext context)
         {
             var root = context.AvatarRootObject;

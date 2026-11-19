@@ -161,6 +161,10 @@ namespace Alrauna.Amuse.Tests.Editor
                 "_transparentSeparatorEnabled", true, false,
                 new Func<AmuseAvatarOptimizer, bool>(o =>
                     o.TransparentSeparatorEnabled));
+            yield return new TestCaseData(
+                "_atlasingEnabled", true, false,
+                new Func<AmuseAvatarOptimizer, bool>(o =>
+                    o.AtlasingEnabled));
         }
 
         [TestCaseSource(nameof(SwitchFieldRows))]
@@ -201,6 +205,96 @@ namespace Alrauna.Amuse.Tests.Editor
             finally
             {
                 UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void DefaultAtlasPageSettingsAre8192And1()
+        {
+            var go = new GameObject("Root");
+            try
+            {
+                var optimizer = go.AddComponent<AmuseAvatarOptimizer>();
+                Assert.That(optimizer.MaximumAtlasPageSize,
+                    Is.EqualTo(8192));
+                Assert.That(optimizer.ProtectedMipLevelCount,
+                    Is.EqualTo(1));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
+        public void ResetRestoresTheAtlasDefaults()
+        {
+            var root = new GameObject("Root");
+            try
+            {
+                var component = root.AddComponent<AmuseAvatarOptimizer>();
+                var serializedObject = new SerializedObject(component);
+                serializedObject.FindProperty("_atlasingEnabled")
+                    .boolValue = false;
+                serializedObject.FindProperty("_maximumAtlasPageSize")
+                    .intValue = 4096;
+                serializedObject.FindProperty("_protectedMipLevelCount")
+                    .intValue = 2;
+                serializedObject.ApplyModifiedProperties();
+                Assert.That(component.AtlasingEnabled, Is.False);
+                Assert.That(component.MaximumAtlasPageSize,
+                    Is.EqualTo(4096));
+                Assert.That(component.ProtectedMipLevelCount,
+                    Is.EqualTo(2));
+
+                // Unity's context-menu Reset is a private magic method. The
+                // test calls it through reflection like the inspector does.
+                var reset = typeof(AmuseAvatarOptimizer).GetMethod(
+                    "Reset", BindingFlags.Instance | BindingFlags.NonPublic);
+                Assert.That(reset, Is.Not.Null,
+                    "AmuseAvatarOptimizer.Reset method pin");
+                reset.Invoke(component, null);
+
+                Assert.That(component.AtlasingEnabled, Is.True);
+                Assert.That(component.MaximumAtlasPageSize,
+                    Is.EqualTo(8192));
+                Assert.That(component.ProtectedMipLevelCount,
+                    Is.EqualTo(1));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        public void ExplicitAtlasingOffSurvivesAJsonRoundTrip()
+        {
+            var source = new GameObject("Source");
+            var target = new GameObject("Target");
+            try
+            {
+                var sourceComponent =
+                    source.AddComponent<AmuseAvatarOptimizer>();
+                var serializedObject =
+                    new SerializedObject(sourceComponent);
+                serializedObject.FindProperty("_atlasingEnabled")
+                    .boolValue = false;
+                serializedObject.ApplyModifiedProperties();
+                Assert.That(sourceComponent.AtlasingEnabled, Is.False);
+
+                var payload = EditorJsonUtility.ToJson(sourceComponent);
+                var targetComponent =
+                    target.AddComponent<AmuseAvatarOptimizer>();
+                EditorJsonUtility.FromJsonOverwrite(payload, targetComponent);
+
+                Assert.That(targetComponent.AtlasingEnabled, Is.False,
+                    "an explicit off must survive serialization");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(source);
+                UnityEngine.Object.DestroyImmediate(target);
             }
         }
 

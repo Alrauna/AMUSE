@@ -221,6 +221,33 @@ namespace Alrauna.Amuse.Runtime
         private bool _ignoreOutOfRangeMaterialSlots = true;
 
         /// <summary>
+        /// The atlasing master switch. Off stops atlasing only: nothing
+        /// is analyzed, mutated, or reported for it. The default of true
+        /// opts every saved avatar in, because Unity fills a missing
+        /// serialized field from the initializer. Design section 11.
+        /// </summary>
+        [ToggleLeft]
+        [SerializeField]
+        private bool _atlasingEnabled = true;
+
+        /// <summary>
+        /// The largest page edge an atlas page may use, in texels. The
+        /// default of 8192 matches the VRChat SDK texture limit. A value
+        /// above 8192 is not accepted. Design section 11.
+        /// </summary>
+        [SerializeField]
+        private int _maximumAtlasPageSize = 8192;
+
+        /// <summary>
+        /// The number of largest mip levels an atlas page copies from
+        /// the source without resampling. The default of 1 protects the
+        /// level the GPU samples at normal avatar distances. Design
+        /// section 11.
+        /// </summary>
+        [SerializeField]
+        private int _protectedMipLevelCount = 1;
+
+        /// <summary>
         /// True when the user opened the advanced options. This is
         /// inspector-only state: the build never reads it. It is
         /// serialized so Reset and Undo treat it like every other
@@ -261,6 +288,9 @@ namespace Alrauna.Amuse.Runtime
             _acceptDesktopAnisotropyDifferences = true;
             _acceptMobileAnisotropyDifferences = true;
             _ignoreOutOfRangeMaterialSlots = true;
+            _atlasingEnabled = true;
+            _maximumAtlasPageSize = 8192;
+            _protectedMipLevelCount = 1;
             _advancedSettingsRevealed = false;
         }
 
@@ -414,6 +444,41 @@ namespace Alrauna.Amuse.Runtime
         /// </summary>
         public bool AcceptMobileAnisotropyDifferences =>
             _acceptMobileAnisotropyDifferences;
+
+        /// <summary>
+        /// The largest page edge the atlas pass accepts, in texels. The
+        /// VRChat SDK texture limit sets it. Design section 11.
+        /// </summary>
+        public const int MaximumAtlasPageSizeLimit = 8192;
+
+        /// <summary>
+        /// The most protected mip levels an atlas page accepts. An
+        /// 8192 page has 14 mip levels, so no page can protect more.
+        /// Plan decision D4. Design section 11.
+        /// </summary>
+        public const int MaximumProtectedMipLevelCount = 14;
+
+        /// <summary>
+        /// True when build-time atlasing runs for this component. The
+        /// default of true keeps every avatar saved before this field
+        /// opting in.
+        /// </summary>
+        public bool AtlasingEnabled => _atlasingEnabled;
+
+        /// <summary>
+        /// The largest page edge an atlas page may use, in texels, as
+        /// stored. Valid values run from 1 to 8192. The atlas pass
+        /// refuses a larger value with a named refusal. Design
+        /// section 11.
+        /// </summary>
+        public int MaximumAtlasPageSize => _maximumAtlasPageSize;
+
+        /// <summary>
+        /// The number of largest mip levels an atlas page copies from
+        /// the source without resampling, as stored. Valid values run
+        /// from 1 to 14. Design section 11.
+        /// </summary>
+        public int ProtectedMipLevelCount => _protectedMipLevelCount;
 
         /// <summary>
         /// An upgraded component must keep proofing every source with the

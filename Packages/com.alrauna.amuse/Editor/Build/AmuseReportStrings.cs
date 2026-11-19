@@ -782,6 +782,31 @@ namespace Alrauna.Amuse.Editor.Build
                 "Remove the animation curves that drive the baked or " +
                 "renamed properties of this locked material, then run " +
                 "the build again.",
+
+            // --- Atlas refusals ---
+            ["amuse.atlas.UnsupportedBuildTarget"] =
+                "AMUSE did not atlas this avatar.",
+            ["amuse.atlas.UnsupportedBuildTarget:description"] =
+                "Atlasing runs only for Windows builds. Every " +
+                "material keeps its textures.",
+            ["amuse.atlas.UnsupportedBuildTarget:hint"] =
+                "Build for Windows to use atlasing.",
+
+            ["amuse.atlas.MaximumPageSizeOutOfRange"] =
+                "AMUSE did not atlas this avatar.",
+            ["amuse.atlas.MaximumPageSizeOutOfRange:description"] =
+                "The maximum atlas page size must be from 1 to 8192. " +
+                "VRChat does not accept a larger texture.",
+            ["amuse.atlas.MaximumPageSizeOutOfRange:hint"] =
+                "Set the maximum page size to 8192 or less.",
+
+            ["amuse.atlas.ProtectedMipLevelCountOutOfRange"] =
+                "AMUSE did not atlas this avatar.",
+            ["amuse.atlas.ProtectedMipLevelCountOutOfRange:description"] =
+                "The protected mip level count must be from 1 to 14.",
+            ["amuse.atlas.ProtectedMipLevelCountOutOfRange:hint"] =
+                "Set the protected mip level count to a value from " +
+                "1 to 14.",
         };
 
 
@@ -838,6 +863,17 @@ namespace Alrauna.Amuse.Editor.Build
         internal static string HostKey(HostLifecycleRefusal cause)
         {
             return Prefix + "host." + cause;
+        }
+
+        /// <summary>
+        /// The report key for one avatar-scope atlas refusal. The
+        /// refusal vocabulary maps one-to-one, and
+        /// <see cref="AtlasUseRefusal.None"/> never names a fact
+        /// because the report helper rejects it outright.
+        /// </summary>
+        internal static string AtlasKey(AtlasUseRefusal cause)
+        {
+            return Prefix + "atlas." + cause;
         }
         /// <summary>
         /// The report key for one texture capture refusal family. The slot

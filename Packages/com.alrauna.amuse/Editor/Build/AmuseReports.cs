@@ -676,6 +676,32 @@ namespace Alrauna.Amuse.Editor.Build
             }
         }
 
+        /// <summary>
+        /// One Information entry per avatar-scope atlas refusal, with
+        /// the avatar root as its clickable context. The entry states
+        /// what stopped and what the avatar keeps, so a refusal is a
+        /// normal outcome and never a build failure. A
+        /// <see cref="AtlasUseRefusal.None"/> is not a refusal, so it
+        /// throws.
+        /// </summary>
+        internal static void AtlasRefusal(
+            GameObject avatarRoot, AtlasUseRefusal cause)
+        {
+            if (cause == AtlasUseRefusal.None)
+            {
+                throw new InvalidOperationException(
+                    "AtlasUseRefusal.None is not a refusal.");
+            }
+
+            using (ErrorReport.WithContextObject(avatarRoot))
+            {
+                ErrorReport.ReportError(
+                    Localizer,
+                    ErrorSeverity.Information,
+                    AmuseReportStrings.AtlasKey(cause));
+            }
+        }
+
         internal static void AvatarRefusal(
             GameObject avatarRoot, AvatarAnimationRefusal cause)
         {

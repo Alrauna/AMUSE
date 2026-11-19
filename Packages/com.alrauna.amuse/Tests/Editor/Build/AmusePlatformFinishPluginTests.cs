@@ -85,6 +85,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(amuse.AnalyzedRendererCount, Is.Zero);
                 Assert.That(amuse.SemanticallyRefusedRendererCount, Is.Zero);
                 Assert.That(amuse.OpaqueCandidateTriangleCount, Is.Zero);
+                Assert.That(amuse.HasAtlasExecuted, Is.True,
+                    "the atlas pass must run inside the platform finish" +
+                    " phase");
                 Assert.That(context.GetState<ObserverProbe>().SawProducerAndAmuse, Is.True);
             }
             finally
@@ -283,19 +286,24 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         private static IEnumerable<TestCaseData> GateSwitchRows()
         {
             yield return new TestCaseData(
-                "_amuseDisabled", true, "a disabled component",
+                "_amuseDisabled", true, null, "a disabled component",
                 false)
                 .SetName("DisabledComponentDoesNotActivateThePipeline");
+            // Atlasing defaults on, so this row must switch it off
+            // too. The row contract is that both switches off keep
+            // the whole pipeline idle.
             yield return new TestCaseData(
-                "_alphaSeparatorEnabled", false,
-                "a switched-off alpha separator",
+                "_alphaSeparatorEnabled", false, "_atlasingEnabled",
+                "a switched-off alpha separator with atlasing off",
                 true)
-                .SetName("AlphaSeparatorSwitchedOffDoesNotActivateThePipeline");
+                .SetName(
+                    "AlphaSeparatorAndAtlasingOffDoNotActivateThePipeline");
         }
 
         [TestCaseSource(nameof(GateSwitchRows))]
         public void SwitchedGateKeepsThePipelineIdle(
-            string propertyName, bool flippedValue, string subject,
+            string propertyName, bool flippedValue,
+            string secondPropertyName, string subject,
             bool expectRendererLoopStop)
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
@@ -313,6 +321,16 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(switchProperty, Is.Not.Null,
                     "AmuseAvatarOptimizer." + propertyName + " field pin");
                 switchProperty.boolValue = flippedValue;
+                if (secondPropertyName != null)
+                {
+                    var secondSwitch =
+                        serialized.FindProperty(secondPropertyName);
+                    Assert.That(secondSwitch, Is.Not.Null,
+                        "AmuseAvatarOptimizer." + secondPropertyName +
+                        " field pin");
+                    secondSwitch.boolValue = false;
+                }
+
                 serialized.ApplyModifiedProperties();
 
                 var context = AvatarProcessor.ProcessAvatar(
@@ -1602,8 +1620,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// The barrier captures the separator switch facts only after
         /// the reach gate. A build that stopped before analysis keeps
         /// the defaults, so its state cannot claim a disabled switch.
-        /// The summary stays silent even though the component's cutout
-        /// separator switch was off.
+        /// The summary stays silent even though the cutout separator
+        /// switch was off. Atlasing is also off, because
+        /// this contract needs a run that stops with no feature on.
         /// </summary>
         [Test]
         public void
@@ -1623,6 +1642,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             {
                 var serialized = new UnityEditor.SerializedObject(component);
                 serialized.FindProperty("_alphaSeparatorEnabled")
+                    .boolValue = false;
+                serialized.FindProperty("_atlasingEnabled")
                     .boolValue = false;
                 serialized.FindProperty("_cutoutSeparatorEnabled")
                     .boolValue = false;
@@ -2679,6 +2700,83 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        /// <summary>
+        /// The direct-drive test above stops after the barrier, so the
+        /// atlas pass never runs in it. The mirror plugin cannot fill
+        /// that gap: its real lifecycle refuses the tier B platform
+        /// by design, so the barrier stops at the lifecycle gate.
+        /// This twin keeps the direct-drive shape and runs the atlas
+        /// pass after the barrier. One structural refusal stays
+        /// exactly one console entry with both features on, and the
+        /// atlas pass adds none.
+        /// </summary>
+        [Test]
+        public void AvatarAnimationRefusalWithBothFeaturesReportsOnceWithTheAtlasPassRunning()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root =
+                new GameObject("AMUSE avatar refusal atlas fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            var controller = new AnimatorController { name = "unallowlisted" };
+            var fixture = default(AnalyzableRendererFixture);
+
+            try
+            {
+                controller.AddLayer("L0");
+                var state = controller.layers[0].stateMachine.AddState("S0");
+                var behaviour = AttachProbeBehaviour(state);
+                Assert.That(behaviour, Is.Not.Null,
+                    "fixture precondition: Unity did not attach the probe behaviour");
+
+                root.AddComponent<Animator>().runtimeAnimatorController =
+                    controller;
+                fixture = AddAnalyzableRenderer(root);
+
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+                AmuseStructuralGraphCheck.Execute(context);
+
+                var reports = new List<ErrorContext>();
+                reports.AddRange(ErrorReport.CaptureErrors(
+                    () => AmusePlatformFinishPass.Execute(
+                        context, SupportedFacts())));
+                reports.AddRange(ErrorReport.CaptureErrors(
+                    () => AtlasPass.Execute(context)));
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(amuse.AvatarRefusal, Is.EqualTo(
+                        AvatarAnimationRefusal.UnrecognizedStateMachineBehaviour),
+                    "fixture precondition: the unallowlisted behaviour must " +
+                    "refuse the avatar");
+                Assert.That(amuse.HasAtlasExecuted, Is.True,
+                    "the atlas pass runs behind the barrier");
+                Assert.That(CountAvatarEntries(reports), Is.EqualTo(1),
+                    "one avatar refusal is one console entry with both " +
+                    "features on, never two");
+                foreach (var entry in reports)
+                {
+                    if (entry.TheError is SimpleError simple &&
+                        simple.TitleKey.StartsWith("amuse.atlas."))
+                    {
+                        Assert.Fail(
+                            "the atlas pass must stay silent behind the " +
+                            "barrier report. It reported " +
+                            simple.TitleKey + ".");
+                    }
+                }
+            }
+            finally
+            {
+                DisposeAnalyzableRenderer(fixture);
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(root, controller);
+                Object.DestroyImmediate(root);
+                DestroyControllerGraph(controller);
+            }
+        }
+
         private static int CountAvatarEntries(List<ErrorContext> reports)
         {
             var avatarEntries = 0;
@@ -2736,12 +2834,85 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        /// <summary>
+        /// Both feature switches are off. The structural pass still
+        /// stores its refusal, but the barrier never runs a shared
+        /// gate, so the refusal never reaches the console.
+        /// </summary>
         [Test]
         public void ASwitchedOffAvatarWithARefusingGraphStaysSilentButStoresTheRefusal()
         {
             using var assets = new OverrideTemporaryDirectoryScope(null);
             var root =
                 new GameObject("AMUSE switched-off refusing graph fixture");
+            FixtureAvatarIdentity.AttachVrcDescriptor(root);
+            var component =
+                root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            root.AddComponent<LineRenderer>();
+            var controller = new AnimatorController { name = "unallowlisted" };
+
+            try
+            {
+                var serialized = new UnityEditor.SerializedObject(component);
+                var switchProperty =
+                    serialized.FindProperty("_alphaSeparatorEnabled");
+                Assert.That(switchProperty, Is.Not.Null,
+                    "AmuseAvatarOptimizer._alphaSeparatorEnabled field pin");
+                switchProperty.boolValue = false;
+                var atlasSwitch =
+                    serialized.FindProperty("_atlasingEnabled");
+                Assert.That(atlasSwitch, Is.Not.Null,
+                    "AmuseAvatarOptimizer._atlasingEnabled field pin");
+                atlasSwitch.boolValue = false;
+                serialized.ApplyModifiedProperties();
+
+                controller.AddLayer("L0");
+                var state = controller.layers[0].stateMachine.AddState("S0");
+                var behaviour = AttachProbeBehaviour(state);
+                Assert.That(behaviour, Is.Not.Null,
+                    "fixture precondition: Unity did not attach the probe behaviour");
+
+                root.AddComponent<Animator>().runtimeAnimatorController =
+                    controller;
+
+                BuildContext context = null;
+                var reports = ErrorReport.CaptureErrors(
+                    () => context = AvatarProcessor.ProcessAvatar(
+                        root, PlatformFinishTestPlatform.Instance));
+
+                var amuse = context.GetState<AmusePlatformFinishState>();
+                Assert.That(amuse.AvatarRefusal, Is.EqualTo(
+                        AvatarAnimationRefusal.UnrecognizedStateMachineBehaviour),
+                    "the structural pass must keep storing the refusal for " +
+                    "the gated path");
+                Assert.That(CountAvatarEntries(reports), Is.Zero,
+                    "an avatar with both feature switches off gets no " +
+                    "structural console entry");
+            }
+            finally
+            {
+                AlphaSeparationTestLifecycle.DestroyCommittedCloneRecursive(root, controller);
+                Object.DestroyImmediate(root);
+                DestroyControllerGraph(controller);
+            }
+        }
+
+        /// <summary>
+        /// Only alpha separation is off, so atlasing keeps the shared
+        /// gates open. The barrier reports the stored structural
+        /// refusal once. The atlas pass runs behind the barrier and
+        /// stays silent, because the shared gates did not pass. The
+        /// mirror plugin cannot drive this: its real lifecycle
+        /// refuses the tier B platform, so the direct drive injects
+        /// supported facts instead.
+        /// </summary>
+        [Test]
+        public void AnAtlasOnlyAvatarWithARefusingGraphReportsTheRefusalOnce()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root =
+                new GameObject("AMUSE atlas-only refusing graph fixture");
             FixtureAvatarIdentity.AttachVrcDescriptor(root);
             var component =
                 root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
@@ -2768,19 +2939,41 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 root.AddComponent<Animator>().runtimeAnimatorController =
                     controller;
 
-                BuildContext context = null;
-                var reports = ErrorReport.CaptureErrors(
-                    () => context = AvatarProcessor.ProcessAvatar(
-                        root, PlatformFinishTestPlatform.Instance));
+                var context = AvatarProcessor.ProcessAvatar(
+                    root, TestGenericPlatform.Instance);
+                SeedRetainedHostBindings(context);
+                AmuseStructuralGraphCheck.Execute(context);
+
+                var reports = new List<ErrorContext>();
+                reports.AddRange(ErrorReport.CaptureErrors(
+                    () => AmusePlatformFinishPass.Execute(
+                        context, SupportedFacts())));
+                reports.AddRange(ErrorReport.CaptureErrors(
+                    () => AtlasPass.Execute(context)));
 
                 var amuse = context.GetState<AmusePlatformFinishState>();
                 Assert.That(amuse.AvatarRefusal, Is.EqualTo(
                         AvatarAnimationRefusal.UnrecognizedStateMachineBehaviour),
                     "the structural pass must keep storing the refusal for " +
                     "the gated path");
-                Assert.That(CountAvatarEntries(reports), Is.Zero,
-                    "an avatar with the feature switch off gets no " +
-                    "structural console entry");
+                Assert.That(amuse.SharedGatesPassed, Is.False,
+                    "a refusing graph must not pass the shared gates");
+                Assert.That(amuse.HasAtlasExecuted, Is.True,
+                    "the atlas pass runs behind the barrier");
+                Assert.That(CountAvatarEntries(reports), Is.EqualTo(1),
+                    "an atlas-only avatar with a refusing graph gets " +
+                    "exactly one structural console entry");
+                foreach (var entry in reports)
+                {
+                    if (entry.TheError is SimpleError simple &&
+                        simple.TitleKey.StartsWith("amuse.atlas."))
+                    {
+                        Assert.Fail(
+                            "the atlas pass must stay silent behind the " +
+                            "barrier report. It reported " +
+                            simple.TitleKey + ".");
+                    }
+                }
             }
             finally
             {
@@ -2833,6 +3026,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         .HasExecuted,
                     Is.True,
                     "the AMUSE barrier did not run after the producer");
+                Assert.That(
+                    context.GetState<AmusePlatformFinishState>()
+                        .HasAtlasExecuted,
+                    Is.True,
+                    "the production plugin registers the atlas pass, so" +
+                    " it must run on the vendor VRChat platform");
             }
             finally
             {
@@ -3087,6 +3286,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(switchProperty, Is.Not.Null,
                     "AmuseAvatarOptimizer._alphaSeparatorEnabled field pin");
                 switchProperty.boolValue = false;
+                var atlasSwitch =
+                    serialized.FindProperty("_atlasingEnabled");
+                Assert.That(atlasSwitch, Is.Not.Null,
+                    "AmuseAvatarOptimizer._atlasingEnabled field pin");
+                atlasSwitch.boolValue = false;
                 serialized.ApplyModifiedProperties();
 
                 controller.AddLayer("L0");
@@ -3112,7 +3316,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     "the structural pass must keep storing the refusal"
                     + " under the vendor passes");
                 Assert.That(CountAvatarEntries(reports), Is.Zero,
-                    "an avatar with the feature switch off gets no"
+                    "an avatar with both feature switches off gets no"
                     + " structural console entry under the vendor"
                     + " passes");
             }
@@ -9199,12 +9403,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// The tier B mirror of the production platform finish plugin.
         /// The production plugin runs on the VRChat platform name only,
         /// so on the dedicated platform of this suite it never selects.
-        /// This plugin runs the five production pass bodies in the
+        /// This plugin runs the six production pass bodies in the
         /// production order, mirroring
         /// <see cref="AmusePlatformFinishPlugin.Configure"/>: the
         /// structural graph check extension-free, one animator scope
         /// for the bindings capture, the barrier, and the apply, then
-        /// the window close extension-free. Vendor VRChat passes never
+        /// the window close extension-free, then the atlas pass
+        /// extension-free. Vendor VRChat passes never
         /// select on this platform, so tier B compiles and runs without
         /// the VRChat SDK.
         /// </summary>
@@ -9252,6 +9457,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 sequence.Run(
                     TransientUnlockWindowClose.PassName,
                     ctx => TransientUnlockWindowClose.Execute(ctx));
+
+                // Production pass six: the atlas pass reads the final
+                // references the window close wrote.
+                sequence.Run(
+                    AtlasPass.PassName,
+                    AtlasPass.Execute);
             }
         }
 
