@@ -89,11 +89,13 @@ namespace Alrauna.Amuse.Editor.Build
                 TextureFormat.RGBA32,
                 page.MipCount,
                 !srgb);
-            ledger.Add(composeBytes);
             var buffer = new Color32[page.Width * page.Height];
-            ledger.Add(bufferBytes);
             try
             {
+                // The adds sit inside the try, so a ledger that
+                // throws cannot leak the texture this method created.
+                ledger.Add(composeBytes);
+                ledger.Add(bufferBytes);
                 ComposeLevel0(page, sources, buffer);
                 pageTexture.SetPixels32(buffer, 0);
                 pageTexture.Apply(true, false);
@@ -138,16 +140,16 @@ namespace Alrauna.Amuse.Editor.Build
                     serialized.ApplyModifiedPropertiesWithoutUndo();
                 }
 
+                ledger.Release(bufferBytes);
                 return pageTexture;
             }
             catch
             {
+                // The pass ends the ledger on a throw, so the balance
+                // it leaves behind does not matter here. The texture
+                // this method created must still go away.
                 UnityEngine.Object.DestroyImmediate(pageTexture);
                 throw;
-            }
-            finally
-            {
-                ledger.Release(bufferBytes);
             }
         }
 
@@ -592,10 +594,13 @@ namespace Alrauna.Amuse.Editor.Build
                 pageOffset,
                 blockIsBc3 ? 16 : 8);
 
-            // BC1 color indices sit in the last four bytes of the
-            // block. BC3 alpha indices sit in bytes two to seven.
+            // A BC1 block holds its color indices in bytes four to
+            // seven. A BC3 block holds eight bytes of alpha first, so
+            // its color indices sit in bytes twelve to fifteen and
+            // its alpha indices sit in bytes two to seven.
+            var colorBase = blockIsBc3 ? 8 : 0;
             ulong colorIndices = ReadBits(
-                sourceLevel, sourceBlockOffset + 4, 32);
+                sourceLevel, sourceBlockOffset + colorBase + 4, 32);
             ulong alphaIndices = blockIsBc3
                 ? ReadBits(sourceLevel, sourceBlockOffset + 2, 48)
                 : 0;
@@ -620,7 +625,8 @@ namespace Alrauna.Amuse.Editor.Build
                 }
             }
 
-            WriteBits(newColor, pageData, pageOffset + 4, 32);
+            WriteBits(
+                newColor, pageData, pageOffset + colorBase + 4, 32);
             if (blockIsBc3)
             {
                 WriteBits(newAlpha, pageData, pageOffset + 2, 48);

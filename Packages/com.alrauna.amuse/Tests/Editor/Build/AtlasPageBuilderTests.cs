@@ -480,6 +480,156 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
+        public void Bc3ClampEdgeBorderIsExact()
+        {
+            var source = ImportSource(
+                "bc3_clamp_edge",
+                64,
+                TextureImporterCompression.Compressed,
+                true,
+                true);
+            Texture2D page = null;
+            try
+            {
+                Assert.That(
+                    source.format, Is.EqualTo(TextureFormat.DXT5),
+                    "fixture precondition: the import must land on DXT5");
+                var image = Acquire(source, 1);
+                var clampSampler = new AtlasSamplerFacts(
+                    FilterMode.Bilinear,
+                    UnityEngine.TextureWrapMode.Clamp,
+                    UnityEngine.TextureWrapMode.Clamp,
+                    0,
+                    0f);
+                // The region covers the top right quarter of the
+                // source and extends eight texels past both edges.
+                // The fixture noise varies color and alpha per texel,
+                // so a border block that moves the wrong index bits
+                // fails the check in either channel.
+                var placement = PlacementOf(
+                    source,
+                    clampSampler,
+                    32,
+                    32,
+                    40,
+                    40,
+                    0,
+                    0);
+                var plan = new AtlasPagePlanEntry(
+                    40,
+                    40,
+                    source.graphicsFormat,
+                    FullMipCount(40, 40),
+                    new[] { placement });
+                var sources = SourcesOf(source, image);
+
+                page = AtlasPageBuilder.Build(
+                    plan,
+                    clampSampler,
+                    sources,
+                    1,
+                    new AtlasByteLedger(long.MaxValue));
+                AtlasPageCheck.Verify(page, plan, sources, 1);
+
+                var pageColors = page.GetPixels32(0);
+                var corner = pageColors[36 * 40 + 36];
+                var expectedCorner = image.Level0[63 * 64 + 63];
+                Assert.That(
+                    corner.r + "|" + corner.g + "|" + corner.b + "|" +
+                    corner.a,
+                    Is.EqualTo(
+                        expectedCorner.r + "|" + expectedCorner.g + "|" +
+                        expectedCorner.b + "|" + expectedCorner.a),
+                    "the clamp corner border must repeat the edge texel");
+            }
+            finally
+            {
+                if (page != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(page);
+                }
+                AssetDatabase.DeleteAsset(AssetDatabase.GetAssetPath(source));
+            }
+        }
+
+        [Test]
+        public void Bc1ClampBorderWithNegativeOriginIsExact()
+        {
+            const int p = 2;
+            var source = ImportSource(
+                "bc1_clamp_negative_origin",
+                64,
+                TextureImporterCompression.Compressed,
+                true,
+                false);
+            Texture2D page = null;
+            try
+            {
+                Assert.That(
+                    source.format, Is.EqualTo(TextureFormat.DXT1),
+                    "fixture precondition: the import must land on DXT1");
+                var image = Acquire(source, p);
+                var clampSampler = new AtlasSamplerFacts(
+                    FilterMode.Bilinear,
+                    UnityEngine.TextureWrapMode.Clamp,
+                    UnityEngine.TextureWrapMode.Clamp,
+                    0,
+                    0f);
+                // The region starts eight texels left of and below
+                // the image and ends eight texels past the top right
+                // corner. The border blocks outside the left and the
+                // bottom run the zero edge map and the ones outside
+                // the right and the top run the three edge map.
+                var placement = PlacementOf(
+                    source,
+                    clampSampler,
+                    -8,
+                    -8,
+                    80,
+                    80,
+                    0,
+                    0);
+                var plan = new AtlasPagePlanEntry(
+                    80,
+                    80,
+                    source.graphicsFormat,
+                    FullMipCount(80, 80),
+                    new[] { placement });
+                var sources = SourcesOf(source, image);
+
+                page = AtlasPageBuilder.Build(
+                    plan,
+                    clampSampler,
+                    sources,
+                    p,
+                    new AtlasByteLedger(long.MaxValue));
+                AtlasPageCheck.Verify(page, plan, sources, p);
+
+                var pageColors = page.GetPixels32(0);
+                // The bottom left corner texel of the border clamps
+                // to source texel zero on both axes.
+                var corner = pageColors[0 * 80 + 0];
+                var expectedCorner = image.Level0[0 * 64 + 0];
+                Assert.That(
+                    corner.r + "|" + corner.g + "|" + corner.b + "|" +
+                    corner.a,
+                    Is.EqualTo(
+                        expectedCorner.r + "|" + expectedCorner.g + "|" +
+                        expectedCorner.b + "|" + expectedCorner.a),
+                    "the clamp corner outside the origin must repeat " +
+                    "the edge texel");
+            }
+            finally
+            {
+                if (page != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(page);
+                }
+                AssetDatabase.DeleteAsset(AssetDatabase.GetAssetPath(source));
+            }
+        }
+
+        [Test]
         public void RepeatBorderCopiesTheOppositeEdge()
         {
             var source = ImportSource(
