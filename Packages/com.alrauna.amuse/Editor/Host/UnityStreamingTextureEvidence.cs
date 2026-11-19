@@ -231,6 +231,129 @@ namespace Alrauna.Amuse.Editor.Host
                 return false;
             }
 
+            AlphaMipChain built = null;
+            if (!TryWithReadableClone(
+                    source, path, ReadAlphaChain, out refusal))
+            {
+                return false;
+            }
+
+            chain = built;
+            // The red field contract runs at fill, once per unique
+            // inert red chain; a cache hit above already passed it.
+            if (channel == TextureChannel.Red &&
+                bounds.Equals(AlphaPolicyBounds.Inert))
+            {
+                UnityMaterialEvidenceCapture.AssertRedFieldContract(chain);
+            }
+            Cache[key] = chain;
+            return true;
+
+            bool ReadAlphaChain(
+                Texture2D clone,
+                out TextureCaptureRefusalReason readRefusal)
+            {
+                readRefusal =
+                    TextureCaptureRefusalReason.UnavailableCapture;
+
+                // Published-chain limitation: the clone's coarser
+                // levels arrive pre-averaged, so masked re-averaging is
+                // not available here and each texel resolves at its own
+                // level. The loop honors the bounds rather than
+                // refusing the capture, so the evidence always matches
+                // the bounds in the cache key, and a policy-active
+                // texture whose only route is this clone keeps a
+                // capture route.
+                var threshold = cutoff;
+                var levels = new AlphaTextureData[clone.mipmapCount];
+                for (var mip = 0; mip < levels.Length; mip++)
+                {
+                    var width = Mathf.Max(1, clone.width >> mip);
+                    var height = Mathf.Max(1, clone.height >> mip);
+
+                    // GetPixels returns decoded texels bottom-to-top, the row
+                    // order AlphaTextureData takes. A float alpha reaches 1f
+                    // exactly when the decoded byte is 255, which is the same
+                    // test the GPU predicate's 'alpha == 1.0' performs.
+                    // GetPixels is the one call in this arm the platform
+                    // may refuse: a crunched clone decodes through no CPU
+                    // path here, and the platform answers with this
+                    // exception. The catch is scoped to this single call
+                    // because the exception names a platform decode
+                    // limitation, not an AMUSE invariant failure, and a
+                    // wider catch would fold real defects into a format
+                    // refusal.
+                    Color[] pixels;
+                    try
+                    {
+                        pixels = clone.GetPixels(mip);
+                    }
+                    catch (ArgumentException)
+                    {
+                        readRefusal =
+                            TextureCaptureRefusalReason.UnsupportedFormat;
+                        return false;
+                    }
+
+                    if (pixels.Length != width * height)
+                    {
+                        return false;
+                    }
+
+                    var flags = new byte[pixels.Length];
+                    for (var index = 0; index < pixels.Length; index++)
+                    {
+                        // The channel selector matches the pinned lilToon
+                        // sampling: masks read .r, alpha reads .a. Both are
+                        // held to the same predicate — the decoded float is
+                        // exactly one iff the stored byte is 255 — whether
+                        // or not GetPixels applies the sRGB transfer,
+                        // because the transfer is monotone and fixes 1.0.
+                        var value = channel == TextureChannel.Red
+                            ? pixels[index].r
+                            : pixels[index].a;
+                        var decoded = SourceImageMaskedChain.DecodeByte(value);
+                        var isErased = threshold >= 1.0f &&
+                            bounds.NoiseBound > 0 &&
+                            decoded < bounds.NoiseBound;
+                        var isOpaque = threshold >= 1.0f
+                            ? decoded >= bounds.OpaqueBound
+                            : value >= threshold;
+                        flags[index] = isErased
+                            ? AlphaTextureData.ErasedFlag
+                            : isOpaque ? byte.MaxValue : (byte)0;
+                    }
+
+                    levels[mip] = new AlphaTextureData(width, height, flags);
+                }
+
+                built = new AlphaMipChain(levels);
+                return true;
+            }
+        }
+
+        /// <summary>The read one consumer runs on the readable clone.</summary>
+        private delegate bool CloneRead(
+            Texture2D clone,
+            out TextureCaptureRefusalReason refusal);
+
+        /// <summary>
+        /// The clone route's shared steps: the fail-closed gates that
+        /// name a clonable source, the stale sweep, the copy, the two
+        /// importer flags, the size checks, and the cleanup. The read
+        /// callback receives the readable clone and answers from it.
+        /// The cleanup deletes through the asset database and also
+        /// removes the pinned folder when this call created it and
+        /// nothing else moved in.
+        /// </summary>
+        private static bool TryWithReadableClone(
+            Texture2D source,
+            string path,
+            CloneRead read,
+            out TextureCaptureRefusalReason refusal)
+        {
+            refusal = TextureCaptureRefusalReason.UnavailableCapture;
+
             // A texture that is not its file's main asset (a sub-asset, or a
             // texture inside a scene or model file) has no source the
             // importer reproduces, so it cannot be cloned into evidence.
@@ -308,87 +431,7 @@ namespace Alrauna.Amuse.Editor.Host
                     return false;
                 }
 
-                // Published-chain limitation: the clone's coarser
-                // levels arrive pre-averaged, so masked re-averaging is
-                // not available here and each texel resolves at its own
-                // level. The loop honors the bounds rather than
-                // refusing the capture, so the evidence always matches
-                // the bounds in the cache key, and a policy-active
-                // texture whose only route is this clone keeps a
-                // capture route.
-                var threshold = cutoff;
-                var levels = new AlphaTextureData[clone.mipmapCount];
-                for (var mip = 0; mip < levels.Length; mip++)
-                {
-                    var width = Mathf.Max(1, clone.width >> mip);
-                    var height = Mathf.Max(1, clone.height >> mip);
-
-                    // GetPixels returns decoded texels bottom-to-top, the row
-                    // order AlphaTextureData takes. A float alpha reaches 1f
-                    // exactly when the decoded byte is 255, which is the same
-                    // test the GPU predicate's 'alpha == 1.0' performs.
-                    // GetPixels is the one call in this arm the platform
-                    // may refuse: a crunched clone decodes through no CPU
-                    // path here, and the platform answers with this
-                    // exception. The catch is scoped to this single call
-                    // because the exception names a platform decode
-                    // limitation, not an AMUSE invariant failure, and a
-                    // wider catch would fold real defects into a format
-                    // refusal.
-                    Color[] pixels;
-                    try
-                    {
-                        pixels = clone.GetPixels(mip);
-                    }
-                    catch (ArgumentException)
-                    {
-                        refusal =
-                            TextureCaptureRefusalReason.UnsupportedFormat;
-                        return false;
-                    }
-
-                    if (pixels.Length != width * height)
-                    {
-                        return false;
-                    }
-
-                    var flags = new byte[pixels.Length];
-                    for (var index = 0; index < pixels.Length; index++)
-                    {
-                        // The channel selector matches the pinned lilToon
-                        // sampling: masks read .r, alpha reads .a. Both are
-                        // held to the same predicate — the decoded float is
-                        // exactly one iff the stored byte is 255 — whether
-                        // or not GetPixels applies the sRGB transfer,
-                        // because the transfer is monotone and fixes 1.0.
-                        var value = channel == TextureChannel.Red
-                            ? pixels[index].r
-                            : pixels[index].a;
-                        var decoded = SourceImageMaskedChain.DecodeByte(value);
-                        var isErased = threshold >= 1.0f &&
-                            bounds.NoiseBound > 0 &&
-                            decoded < bounds.NoiseBound;
-                        var isOpaque = threshold >= 1.0f
-                            ? decoded >= bounds.OpaqueBound
-                            : value >= threshold;
-                        flags[index] = isErased
-                            ? AlphaTextureData.ErasedFlag
-                            : isOpaque ? byte.MaxValue : (byte)0;
-                    }
-
-                    levels[mip] = new AlphaTextureData(width, height, flags);
-                }
-
-                chain = new AlphaMipChain(levels);
-                // The red field contract runs at fill, once per unique
-                // inert red chain; a cache hit above already passed it.
-                if (channel == TextureChannel.Red &&
-                    bounds.Equals(AlphaPolicyBounds.Inert))
-                {
-                    UnityMaterialEvidenceCapture.AssertRedFieldContract(chain);
-                }
-                Cache[key] = chain;
-                return true;
+                return read(clone, out refusal);
             }
             finally
             {
@@ -400,6 +443,100 @@ namespace Alrauna.Amuse.Editor.Host
                 {
                     AssetDatabase.DeleteAsset(TempFolder);
                 }
+            }
+        }
+
+        /// <summary>
+        /// Acquires the atlas source evidence of one texture: the raw
+        /// bytes of its protected mip levels and its decoded level 0
+        /// texels. The acquisition rides the same clone steps as
+        /// <see cref="TryCapture"/>. It bypasses the chain cache and
+        /// the direct disk arm, because the atlas needs the imported
+        /// representation itself, not a binarized chain and not the
+        /// authoring bytes.
+        /// </summary>
+        internal static bool TryAcquireAtlasSource(
+            Texture2D source,
+            int protectedMipLevelCount,
+            out AtlasSourceImage image,
+            out TextureCaptureRefusalReason refusal)
+        {
+            if (source == null)
+            {
+                throw new ArgumentNullException(nameof(source));
+            }
+
+            image = null;
+            var path = AssetDatabase.GetAssetPath(source);
+            if (string.IsNullOrEmpty(path))
+            {
+                refusal = TextureCaptureRefusalReason.UnavailableCapture;
+                return false;
+            }
+
+            AtlasSourceImage acquired = null;
+            if (!TryWithReadableClone(
+                    source, path, ReadAtlasSource, out refusal))
+            {
+                return false;
+            }
+
+            image = acquired;
+            return true;
+
+            bool ReadAtlasSource(
+                Texture2D clone,
+                out TextureCaptureRefusalReason readRefusal)
+            {
+                readRefusal =
+                    TextureCaptureRefusalReason.UnavailableCapture;
+
+                // The clone comes from the same source file under the
+                // same settings, so its format must match the source
+                // format. A difference means the import pipeline
+                // answered with something else, which no caller can
+                // plan around.
+                if (clone.graphicsFormat != source.graphicsFormat)
+                {
+                    throw new InvalidOperationException(
+                        "The readable clone of source texture instance " +
+                        source.GetInstanceID() + " imported as format " +
+                        clone.graphicsFormat + " while the source holds " +
+                        source.graphicsFormat + ". The atlas route cannot " +
+                        "copy between the two.");
+                }
+
+                if (protectedMipLevelCount < 1 ||
+                    protectedMipLevelCount > clone.mipmapCount)
+                {
+                    return false;
+                }
+
+                var rawLevels =
+                    new byte[protectedMipLevelCount][];
+                for (var level = 0; level < rawLevels.Length; level++)
+                {
+                    rawLevels[level] =
+                        clone.GetPixelData<byte>(level).ToArray();
+                    var width = Mathf.Max(1, clone.width >> level);
+                    var height = Mathf.Max(1, clone.height >> level);
+                    if (rawLevels[level].Length !=
+                        AtlasSourceImage.LevelBytes(
+                            width, height, clone.graphicsFormat))
+                    {
+                        return false;
+                    }
+                }
+
+                acquired = new AtlasSourceImage(
+                    clone.width,
+                    clone.height,
+                    clone.graphicsFormat,
+                    clone.mipmapCount,
+                    rawLevels,
+                    clone.GetPixels32());
+                readRefusal = TextureCaptureRefusalReason.None;
+                return true;
             }
         }
     }
