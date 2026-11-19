@@ -81,9 +81,9 @@ namespace Alrauna.Amuse.Editor.Host
         private const string MeshPropertyName = "m_Mesh";
         private const string SlotCountPropertyName =
             "m_Materials.Array.size";
-        private const string TexEnvNameSuffix = ".first";
+        private const string TexEnvStringNameSuffix = ".first";
+        private const string TexEnvStructNameSuffix = ".first.name";
         private const string TexEnvTextureSuffix = ".second.m_Texture";
-        private const string TexEnvElementSuffix = ".data[";
         private const string MaterialNamePath = "m_Name";
 
         /// <summary>
@@ -113,17 +113,14 @@ namespace Alrauna.Amuse.Editor.Host
                 throw new ArgumentNullException(nameof(avatarRoot));
             }
 
-            if (bindings == null)
-            {
-                throw new ArgumentNullException(nameof(bindings));
-            }
-
-            // A null graph or a refused graph names the same fact: the
-            // capture cannot prove what animation does to any use, so
-            // every use refuses. No slot check may run before this.
+            // A null binding capability names the same fact as a refused
+            // graph: the capture cannot observe animation, so every use
+            // refuses. A null avatar root is a caller defect and throws.
             var graphReady =
+                bindings != null &&
                 graph != null &&
                 graph.Refusal == AvatarAnimationRefusal.None;
+
             var observations =
                 graphReady ? ObserveGraph(graph, bindings) : null;
             var declaredKeywords = new Dictionary<Shader, HashSet<string>>();
@@ -200,7 +197,10 @@ namespace Alrauna.Amuse.Editor.Host
                 return;
             }
 
-            if (mesh == null)
+            // A mesh without submeshes has no part any slot can draw,
+            // and the clamped submesh read below would leave the valid
+            // range, so both shapes refuse the same way.
+            if (mesh == null || mesh.subMeshCount == 0)
             {
                 refusal = AtlasUseRefusal.MissingMesh;
                 return;
@@ -941,7 +941,8 @@ namespace Alrauna.Amuse.Editor.Host
             private readonly string memberProperty;
             private readonly StringBuilder builder =
                 new StringBuilder(4096);
-            private string currentTexEnvName;
+            private readonly Dictionary<string, string> texEnvNames =
+                new Dictionary<string, string>(StringComparer.Ordinal);
 
             internal MaterialKeyWalker(string memberProperty)
             {
@@ -974,24 +975,11 @@ namespace Alrauna.Amuse.Editor.Host
                 switch (property.propertyType)
                 {
                     case SerializedPropertyType.Generic:
-                        if (property.propertyPath.Contains(
-                                TexEnvElementSuffix,
-                                StringComparison.Ordinal))
-                        {
-                            currentTexEnvName = null;
-                        }
-
                         builder.Append(property.propertyPath).Append("={");
                         return true;
                     case SerializedPropertyType.ObjectReference:
                         builder.Append(property.propertyPath).Append('=');
-                        if (property.propertyPath.EndsWith(
-                                TexEnvTextureSuffix,
-                                StringComparison.Ordinal) &&
-                            string.Equals(
-                                currentTexEnvName,
-                                memberProperty,
-                                StringComparison.Ordinal))
+                        if (IsMemberTextureReference(property.propertyPath))
                         {
                             builder.Append("member");
                         }
@@ -1007,13 +995,8 @@ namespace Alrauna.Amuse.Editor.Host
                         builder.Append(';');
                         return false;
                     case SerializedPropertyType.String:
-                        if (property.propertyPath.EndsWith(
-                                TexEnvNameSuffix,
-                                StringComparison.Ordinal))
-                        {
-                            currentTexEnvName = property.stringValue;
-                        }
-
+                        RecordTexEnvName(
+                            property.propertyPath, property.stringValue);
                         builder.Append(property.propertyPath)
                             .Append("=s")
                             .Append(property.stringValue ?? string.Empty)
@@ -1107,6 +1090,63 @@ namespace Alrauna.Amuse.Editor.Host
             private void AppendPath(SerializedProperty property)
             {
                 builder.Append(property.propertyPath).Append('=');
+            }
+
+            /// <summary>
+            /// Records the property name of one texture environment
+            /// element. The serialized pair stores the name either as
+            /// a plain string under <c>.first</c> or, in the struct
+            /// shape, as <c>.first.name</c>. Both shapes are recorded
+            /// under the element path prefix, so the texture reference
+            /// of that element can be matched later.
+            /// </summary>
+            private void RecordTexEnvName(string path, string name)
+            {
+                if (path.EndsWith(
+                        TexEnvStringNameSuffix, StringComparison.Ordinal))
+                {
+                    texEnvNames[PathPrefix(
+                        path, TexEnvStringNameSuffix.Length)] =
+                        name ?? string.Empty;
+                }
+                else if (path.EndsWith(
+                             TexEnvStructNameSuffix,
+                             StringComparison.Ordinal))
+                {
+                    texEnvNames[PathPrefix(
+                        path, TexEnvStructNameSuffix.Length)] =
+                        name ?? string.Empty;
+                }
+            }
+
+            /// <summary>
+            /// Whether one object reference property is the texture
+            /// reference of the member texture environment. The
+            /// element prefix of the reference path names the element,
+            /// and the recorded name must equal the member property.
+            /// </summary>
+            private bool IsMemberTextureReference(string path)
+            {
+                if (!path.EndsWith(
+                        TexEnvTextureSuffix, StringComparison.Ordinal))
+                {
+                    return false;
+                }
+
+                return texEnvNames.TryGetValue(
+                    PathPrefix(path, TexEnvTextureSuffix.Length),
+                    out var elementName) &&
+                    string.Equals(
+                        elementName,
+                        memberProperty,
+                        StringComparison.Ordinal);
+            }
+
+            private static string PathPrefix(
+                string path,
+                int suffixLength)
+            {
+                return path.Substring(0, path.Length - suffixLength);
             }
 
             private static string Bits(float value)

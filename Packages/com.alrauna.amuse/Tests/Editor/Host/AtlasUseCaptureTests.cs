@@ -111,11 +111,16 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             return shader;
         }
 
-        private Material NewAdmittedMaterial(string textureName)
+        private Material NewAdmittedMaterial(Texture2D mainTexture)
         {
             var material = Track(new Material(LoadInstalledPoiyomiShader()));
-            material.SetTexture("_MainTex", ImportMainTexture(textureName));
+            material.SetTexture("_MainTex", mainTexture);
             return material;
+        }
+
+        private Material NewAdmittedMaterial(string textureName)
+        {
+            return NewAdmittedMaterial(ImportMainTexture(textureName));
         }
 
         private static Texture2D ImportMainTexture(
@@ -955,6 +960,40 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 AtlasUseRefusal.AnimationGraphUnavailable);
         }
 
+        [Test]
+        public void NullBindingsAndNullGraphRefuseEveryUse()
+        {
+            var fixture = NewDefaultFixture();
+
+            var outcomes = AtlasUseCapture.Capture(
+                fixture.Root, null, null, 1);
+
+            AssertRefused(SingleOutcome(outcomes),
+                AtlasUseRefusal.AnimationGraphUnavailable);
+        }
+
+        [Test]
+        public void ZeroSubmeshMeshRefuses()
+        {
+            var root = Track(new GameObject("empty mesh root"));
+            var material = NewAdmittedMaterial("empty mesh main");
+            var mesh = Track(new Mesh
+            {
+                vertices = new[]
+                {
+                    Vector3.zero,
+                    Vector3.right,
+                    Vector3.up,
+                },
+            });
+            mesh.subMeshCount = 0;
+            AddSkinnedRenderer(root, "Body", mesh, new[] { material });
+
+            var outcome = SingleOutcome(CaptureUses(root));
+
+            AssertRefused(outcome, AtlasUseRefusal.MissingMesh);
+        }
+
         // --- the shader row -------------------------------------------------
 
         [Test]
@@ -1116,10 +1155,11 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         public void TransparentSlotAndItsOpaqueCloneHaveDifferentMaterialKeys()
         {
             var root = Track(new GameObject("key root"));
-            var transparent = NewAdmittedMaterial("key transparent");
+            var mainTexture = ImportMainTexture("key main");
+            var transparent = NewAdmittedMaterial(mainTexture);
             transparent.renderQueue = 3000;
             transparent.SetOverrideTag("RenderType", "Transparent");
-            var opaque = NewAdmittedMaterial("key opaque");
+            var opaque = NewAdmittedMaterial(mainTexture);
             opaque.renderQueue = 2000;
             opaque.SetOverrideTag("RenderType", "Opaque");
             var mesh = Track(NewTriangleMesh(2));
@@ -1136,6 +1176,53 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 Is.Not.EqualTo(outcomes[1].Use.MaterialKey),
                 "render queue and RenderType are material facts, so " +
                 "the keys must differ");
+        }
+
+        [Test]
+        public void MaterialsThatDifferOnlyInMainTextureShareAKey()
+        {
+            // The member texture moves into the page, so its reference
+            // stays out of the key. A falsifier that kept the reference
+            // would split these two uses for no reason.
+            var root = Track(new GameObject("member key root"));
+            var first = NewAdmittedMaterial("member key a");
+            var second = NewAdmittedMaterial("member key b");
+            var mesh = Track(NewTriangleMesh(2));
+            AddSkinnedRenderer(
+                root, "Body", mesh, new[] { first, second });
+
+            var outcomes = CaptureUses(root);
+
+            Assert.That(outcomes, Has.Count.EqualTo(2));
+            AssertAdmitted(outcomes[0]);
+            AssertAdmitted(outcomes[1]);
+            Assert.That(
+                outcomes[0].Use.MaterialKey,
+                Is.EqualTo(outcomes[1].Use.MaterialKey),
+                "the member texture reference must not enter the key");
+        }
+
+        [Test]
+        public void IdenticalMaterialsShareAKey()
+        {
+            var root = Track(new GameObject("identical key root"));
+            var mainTexture = ImportMainTexture("identical key main");
+            var first = NewAdmittedMaterial(mainTexture);
+            var second = NewAdmittedMaterial(mainTexture);
+            var mesh = Track(NewTriangleMesh(2));
+            AddSkinnedRenderer(
+                root, "Body", mesh, new[] { first, second });
+
+            var outcomes = CaptureUses(root);
+
+            Assert.That(outcomes, Has.Count.EqualTo(2));
+            AssertAdmitted(outcomes[0]);
+            AssertAdmitted(outcomes[1]);
+            Assert.That(
+                outcomes[0].Use.MaterialKey,
+                Is.EqualTo(outcomes[1].Use.MaterialKey),
+                "two materials with the same serialized facts share " +
+                "one key");
         }
     }
 }
