@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using UnityEditor;
 
 namespace Alrauna.Amuse.Tests.Editor.Build
 {
@@ -79,7 +80,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// delete would follow it and remove content outside the
         /// generated root. Then every prefixed file outside the
         /// deleted directories goes on its own. Nothing else is
-        /// touched.
+        /// touched. When the root is inside the asset database, one
+        /// refresh then removes the deleted entries from it.
         /// </summary>
         internal static void Delete(string generatedRoot)
         {
@@ -131,6 +133,17 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 {
                     File.Delete(file);
                 }
+            }
+
+            // The asset database still holds the deleted containers. A
+            // dirty loaded container then stays persistent at a path that
+            // is gone, and a later save raises a modal dialog that blocks
+            // the editor. The refresh drops the deleted entries. A root
+            // outside the asset database needs no refresh.
+            if (AssetDatabase.IsValidFolder(
+                    generatedRoot.Replace('\\', '/')))
+            {
+                AssetDatabase.Refresh();
             }
         }
 

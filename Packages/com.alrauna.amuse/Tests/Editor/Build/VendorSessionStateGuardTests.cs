@@ -9,9 +9,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
     /// Pins the session-state guard of the vendor suite. A fixture that
     /// disables an NDMF plugin must restore the prior key value even
     /// when its own assertions throw, and the suite teardown must name
-    /// every key a fixture left off its entry value. The cleanup test
-    /// pins the generated-output delete set: only the two pinned name
-    /// prefixes go, and every other file survives.
+    /// every key a fixture left off its entry value. The cleanup tests
+    /// pin the generated-output delete set: only the two pinned name
+    /// prefixes go, and every other file survives. A deleted container
+    /// also leaves the asset database.
     /// </summary>
     public sealed class VendorSessionStateGuardTests
     {
@@ -308,6 +309,76 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
                 Directory.Delete(root, true);
                 Directory.Delete(outside, true);
+            }
+        }
+
+        /// <summary>
+        /// A container that the asset database holds must leave the
+        /// database with its files. A file-system delete alone keeps a
+        /// dirty loaded container persistent at a path that no longer
+        /// exists. A later AssetDatabase.SaveAssets in the same editor
+        /// session then tries to write it, and Unity raises a modal
+        /// "Moving file failed" dialog that blocks the editor.
+        /// </summary>
+        [Test]
+        public void GeneratedOutputCleanupRemovesAContainerFromTheAssetDatabase()
+        {
+            var root = AmuseGeneratedOutputCleanup.DefaultGeneratedRoot;
+            if (!AssetDatabase.IsValidFolder(root))
+            {
+                AssetDatabase.CreateFolder(
+                    Path.GetDirectoryName(root).Replace('\\', '/'),
+                    Path.GetFileName(root));
+            }
+
+            var folderName =
+                "AMUSE cleanup probe " + Guid.NewGuid().ToString("N");
+            var folder = root + "/" + folderName;
+            var assetPath = folder + "/probe.mat";
+            AssetDatabase.CreateFolder(root, folderName);
+            var material = new UnityEngine.Material(
+                UnityEngine.Shader.Find("Standard"));
+            AssetDatabase.CreateAsset(material, assetPath);
+
+            // NDMF leaves its container loaded and dirty. The probe
+            // matches that state.
+            material.color = UnityEngine.Color.red;
+            EditorUtility.SetDirty(material);
+
+            try
+            {
+                AmuseGeneratedOutputCleanup.Delete(root);
+
+                Assert.That(
+                    Directory.Exists(folder), Is.False,
+                    "the prefixed container must be gone from disk");
+                Assert.That(
+                    AssetDatabase.AssetPathToGUID(
+                        assetPath,
+                        AssetPathToGUIDOptions.OnlyExistingAssets),
+                    Is.Empty,
+                    "the asset database must not keep the deleted"
+                    + " container asset");
+                Assert.That(
+                    material == null || !EditorUtility.IsPersistent(material),
+                    Is.True,
+                    "the loaded container must not stay persistent at a"
+                    + " deleted path");
+            }
+            finally
+            {
+                // A failed run must not leave the stale asset for a
+                // later save to trip over.
+                if (AssetDatabase.IsValidFolder(folder))
+                {
+                    AssetDatabase.DeleteAsset(folder);
+                }
+
+                AssetDatabase.Refresh();
+                if (material != null && EditorUtility.IsPersistent(material))
+                {
+                    UnityEngine.Object.DestroyImmediate(material, true);
+                }
             }
         }
 
