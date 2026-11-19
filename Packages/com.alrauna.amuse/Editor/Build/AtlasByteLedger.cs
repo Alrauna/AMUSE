@@ -23,6 +23,12 @@ namespace Alrauna.Amuse.Editor.Build
 
         internal void Add(long bytes)
         {
+            if (bytes < 0)
+            {
+                throw new InvalidOperationException(
+                    "A ledger allocation must be zero or positive.");
+            }
+
             checked
             {
                 long next = Current + bytes;
@@ -43,8 +49,22 @@ namespace Alrauna.Amuse.Editor.Build
 
         internal void Release(long bytes)
         {
+            if (bytes < 0)
+            {
+                throw new InvalidOperationException(
+                    "A ledger release must be zero or positive.");
+            }
+
             checked
             {
+                if (Current - bytes < 0)
+                {
+                    throw new InvalidOperationException(
+                        "A ledger release would take the held bytes"
+                        + " below zero. A release without its"
+                        + " allocation is a leak in the pass.");
+                }
+
                 Current -= bytes;
             }
         }

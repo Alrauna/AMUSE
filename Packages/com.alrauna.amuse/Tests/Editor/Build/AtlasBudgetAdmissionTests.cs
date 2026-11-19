@@ -224,6 +224,43 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
+        public void AvatarLimitComparesTheRunningSumOfAdmittedGroups()
+        {
+            var plans = new[]
+            {
+                R8Group("sixty", 910, 60, 60, 0),
+                R8Group("fifty", 911, 50, 50, 1),
+                R8Group("forty", 912, 40, 40, 2),
+            };
+            var uses = new[]
+            {
+                R8Use(910, 60, 1, 0),
+                R8Use(911, 50, 1, 1),
+                R8Use(912, 40, 1, 2),
+            };
+            var limits = new AtlasBudgetLimits(1000, 1, 100, long.MaxValue);
+
+            var results = AtlasBudgetAdmission.Admit(plans, uses, 1, limits);
+
+            Assert.That(
+                results[0],
+                Is.EqualTo(AtlasUseRefusal.None),
+                "the first group of 60 bytes fits the limit of 100"
+                + " bytes on its own");
+            Assert.That(
+                results[1],
+                Is.EqualTo(AtlasUseRefusal.AvatarBudget),
+                "the second group would raise the running sum to 110"
+                + " bytes, above the limit");
+            Assert.That(
+                results[2],
+                Is.EqualTo(AtlasUseRefusal.None),
+                "the refused 50 bytes stayed out of the sum, so 60"
+                + " plus 40 reaches the limit exactly and the third"
+                + " group stays admitted");
+        }
+
+        [Test]
         public void AGroupThatFailsTwoChecksNamesTheFirstCheck()
         {
             var plans = new[] { BoundaryPlan() };
