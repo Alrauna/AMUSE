@@ -150,6 +150,45 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
+        public void ComputePolicyFingerprintChangesWithEachAtlasField()
+        {
+            var go = new GameObject("Avatar");
+            try
+            {
+                var component = go.AddComponent<AmuseAvatarOptimizer>();
+                var baseline = PlayModeBuildStore.ComputePolicyFingerprint(
+                    component, BuildTarget.StandaloneWindows64);
+
+                SetStoredBool(component, "_atlasingEnabled", false);
+                var atlasingOffFingerprint =
+                    PlayModeBuildStore.ComputePolicyFingerprint(
+                        component, BuildTarget.StandaloneWindows64);
+                Assert.That(atlasingOffFingerprint,
+                    Is.Not.EqualTo(baseline));
+
+                SetStoredBool(component, "_atlasingEnabled", true);
+                SetStoredInt(component, "_maximumAtlasPageSize", 4096);
+                var pageSizeFingerprint =
+                    PlayModeBuildStore.ComputePolicyFingerprint(
+                        component, BuildTarget.StandaloneWindows64);
+                Assert.That(pageSizeFingerprint,
+                    Is.Not.EqualTo(baseline));
+
+                SetStoredInt(component, "_maximumAtlasPageSize", 8192);
+                SetStoredInt(component, "_protectedMipLevelCount", 2);
+                var protectedCountFingerprint =
+                    PlayModeBuildStore.ComputePolicyFingerprint(
+                        component, BuildTarget.StandaloneWindows64);
+                Assert.That(protectedCountFingerprint,
+                    Is.Not.EqualTo(baseline));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(go);
+            }
+        }
+
+        [Test]
         public void SaveAndTryLoadRoundtripsThroughSessionState()
         {
             var record = new PlayModeBuildRecord

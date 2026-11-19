@@ -432,7 +432,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
         /// <summary>
         /// The mirrored production pass list of the platform finish
-        /// plugin, plus the window close. The production plugin runs on
+        /// plugin, plus the window close and the atlas pass. The
+        /// production plugin runs on
         /// the VRChat platform name only, so on this dedicated platform
         /// this plugin is the whole PlatformFinish phase. Vendor passes
         /// never select on it. The barrier passes fixture facts and an
@@ -484,6 +485,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 sequence.Run(
                     TransientUnlockWindowClose.PassName,
                     ctx => TransientUnlockWindowClose.Execute(ctx));
+
+                // Production pass six. The atlas pass runs extension
+                // free after the window close.
+                sequence.Run(
+                    AtlasPass.PassName,
+                    AtlasPass.Execute);
             }
 
             private static void BarrierPass(BuildContext context)

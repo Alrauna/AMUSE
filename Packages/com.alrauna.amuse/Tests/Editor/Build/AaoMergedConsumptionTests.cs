@@ -1130,9 +1130,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
         /// <summary>
         /// The serialized alpha separator switch, set off before
-        /// processing. The barrier gates the feature after the pass
-        /// records execution, and every authored triangle stays on its
-        /// original material.
+        /// processing. Atlasing is also off, because this contract
+        /// needs a build where no feature runs. The barrier gates the
+        /// features after the pass records execution, and every
+        /// authored triangle stays on its original material.
         /// </summary>
         [Test]
         public void SerializedAlphaSeparatorSwitchKeepsTheBuildUntouched()
@@ -1141,6 +1142,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 CreateGatedSwitchFixture(
                     "_alphaSeparatorEnabled", false, "alpha-switch",
                     "banded_alpha_switch", "AMUSE alpha switch");
+            var atlasSwitch = new SerializedObject(
+                root.GetComponent<AmuseAvatarOptimizer>())
+                .FindProperty("_atlasingEnabled");
+            Assert.That(atlasSwitch, Is.Not.Null,
+                "AmuseAvatarOptimizer._atlasingEnabled field pin");
+            atlasSwitch.boolValue = false;
+            atlasSwitch.serializedObject.ApplyModifiedProperties();
             try
             {
                 var context = AvatarProcessor.ProcessAvatar(

@@ -11,7 +11,7 @@ using UnityEngine;
 namespace Alrauna.Amuse.Editor.Build
 {
     /// <summary>
-    /// Closes the transient unlock window: the fifth and last
+    /// Closes the transient unlock window: the fifth
     /// PlatformFinish pass, ordered after the apply pass. The close
     /// outcome is reference reversion on every build path: every open
     /// pair returns from its unlocked clone U to its untouched locked

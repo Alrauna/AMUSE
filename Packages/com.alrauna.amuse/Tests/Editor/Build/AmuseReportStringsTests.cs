@@ -41,6 +41,41 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
+        public void EveryAtlasUseRefusalCauseHasPlainEnglishStrings()
+        {
+            foreach (AtlasUseRefusal cause in
+                Enum.GetValues(typeof(AtlasUseRefusal)))
+            {
+                if (cause == AtlasUseRefusal.None)
+                {
+                    continue;
+                }
+
+                var key = AmuseReportStrings.AtlasKey(cause);
+                Assert.That(
+                    AmuseReportStrings.Has(key), Is.True,
+                    "missing title for " + cause);
+                Assert.That(
+                    AmuseReportStrings.Has(key + ":description"), Is.True,
+                    "missing description for " + cause);
+                Assert.That(
+                    AmuseReportStrings.Has(key + ":hint"), Is.True,
+                    "missing hint for " + cause);
+            }
+        }
+
+        [Test]
+        public void AtlasRefusalThrowsOnNone()
+        {
+            Assert.That(
+                () => AmuseReports.AtlasRefusal(
+                    null, AtlasUseRefusal.None),
+                Throws.InvalidOperationException,
+                "None is not a refusal, so the report helper must" +
+                " reject it");
+        }
+
+        [Test]
         public void EveryAlphaUnknownKindHasPlainEnglishSentence()
         {
             var reasons = new[]

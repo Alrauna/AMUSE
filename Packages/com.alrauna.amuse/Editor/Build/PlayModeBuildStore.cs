@@ -330,7 +330,10 @@ namespace Alrauna.Amuse.Editor.Build
                 component.AcceptDesktopAnisotropyDifferences ? "1" : "0",
                 component.AcceptMobileAnisotropyDifferences ? "1" : "0",
                 component.IgnoreOutOfRangeMaterialSlots ? "1" : "0",
-                component.AllowDepthTestChange ? "1" : "0");
+                component.AllowDepthTestChange ? "1" : "0",
+                component.AtlasingEnabled ? "1" : "0",
+                component.MaximumAtlasPageSize,
+                component.ProtectedMipLevelCount);
         }
 
         public static void Save(PlayModeBuildRecord record)

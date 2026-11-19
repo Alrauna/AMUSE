@@ -12,13 +12,14 @@ Public fixtures must be minimal, deterministic, redistributable, and legally pub
 
 ## Architecture & Data Flow
 
-One NDMF plugin, `AmusePlatformFinishPlugin` (`Packages/com.alrauna.amuse/Editor/Build/AmusePlatformFinishPlugin.cs`), registers five passes in `BuildPhase.PlatformFinish`:
+One NDMF plugin, `AmusePlatformFinishPlugin` (`Packages/com.alrauna.amuse/Editor/Build/AmusePlatformFinishPlugin.cs`), registers six passes in `BuildPhase.PlatformFinish`:
 
 1. `AmuseStructuralGraphCheck` runs extension-free before the animator virtualization scope opens. It reads the committed controller graph. Its event scan resolves authored clip originals through the NDMF object registry, so an event that a plugin clone dropped still refuses the build. This read is decision V3 of the 2026-10-25 vendor-integrated tests design. The pass stores the enumerated graph and its structural refusal in state, and reports nothing itself.
 2. `AmuseAnimatorBindingsCapture` retains `IPlatformAnimatorBindings` from the active `AnimatorServicesContext` into build state before the extension deactivates.
-3. `AmusePlatformFinishPass` runs extension-free, so NDMF commits the animator graph first. It gates on `HostLifecycleCapability.Evaluate` (versions, platform, build path, build services). Per renderer it captures closed animation and material evidence, resolves per-slot runtime states, classifies triangle alpha exactly, plans mesh separation, and retains `PreparedAlphaSeparation`.
+3. `AmusePlatformFinishPass` runs extension-free, so NDMF commits the animator graph first. It gates on `HostLifecycleCapability.Evaluate` (versions, platform, build path, build services). It runs the shared gates and the one consent dialog when at least one feature is on. Per renderer it captures closed animation and material evidence, resolves per-slot runtime states, classifies triangle alpha exactly, plans mesh separation, and retains `PreparedAlphaSeparation`.
 4. `AlphaSeparationApply` revalidates every candidate against live state, finalizes, sweeps unreferenced AMUSE-owned clones, and performs the single mutation: animation curves, then `sharedMesh`, then `sharedMaterials`.
 5. `TransientUnlockWindowClose` runs extension-free after the animator scope closes, reverts every open pair to its locked original, re-asserts apply's recorded writes, and destroys the unlocked clone last.
+6. `AtlasPass` runs extension-free after the window close. It reads `SharedGatesPassed` from the barrier state, so it repeats no shared gate. It reports only its own named refusals.
 
 Module layering and dependency direction:
 
@@ -38,7 +39,7 @@ Correctness policy: a false positive violates the declared transformation contra
 |Path|Purpose|
 |---|---|
 |`Packages/com.alrauna.amuse/Editor/`|Production editor code. Two production assemblies total, this one plus `Runtime/`.|
-|`Packages/com.alrauna.amuse/Editor/Build/`|NDMF plugin, five passes, lifecycle gate, consent, prepare and apply, reports|
+|`Packages/com.alrauna.amuse/Editor/Build/`|NDMF plugin, six passes, lifecycle gate, consent, prepare and apply, reports|
 |`Packages/com.alrauna.amuse/Editor/Host/`|Unity evidence capture. `Host/Shaders/` holds the alpha predicate shader.|
 |`Packages/com.alrauna.amuse/Editor/Analysis/`|Pure classification and planning|
 |`Packages/com.alrauna.amuse/Editor/Semantics/`|Value algebra plus `Poiyomi/` and `LilToon/` frontends|
@@ -74,7 +75,7 @@ vpm resolve project .                             # restores Packages/nadena.dev
 - C# against Unity 2022.3 APIs. Editor-only except the runtime component. Assemblies: `Alrauna.Amuse.Editor`, `Alrauna.Amuse.Runtime`.
 - File name equals type name. One public type per file. A few grouped files such as `MaterialSemantics.cs` are intentional exceptions. Production types are `internal` where possible. `Editor/AssemblyInfo.cs` grants `InternalsVisibleTo` to the test and research assemblies.
 - Namespaces mirror folders: `Alrauna.Amuse.Editor.Build`, `.Host`, `.Analysis`, `.Semantics`, `.Semantics.LilToon`, `.Semantics.Poiyomi`, `.DryRun`. The runtime namespace is `Alrauna.Amuse.Runtime`.
-- Closed refusal enums per scope: `HostLifecycleRefusal`, `AvatarAnimationRefusal`, `RendererAnalysisRefusal`, `AlphaSeparationSlotRefusal`, `PreparationRefusal`, `TextureCaptureRefusalReason`, `AlphaUnknownKind`. Unsupported means a named refusal value. `None` is not a refusal. Recorders throw on it.
+- Closed refusal enums per scope: `HostLifecycleRefusal`, `AvatarAnimationRefusal`, `AtlasUseRefusal`, `RendererAnalysisRefusal`, `AlphaSeparationSlotRefusal`, `PreparationRefusal`, `TextureCaptureRefusalReason`, `AlphaUnknownKind`. Unsupported means a named refusal value. `None` is not a refusal. Recorders throw on it.
 - Fail closed. Parsers reject unknown input. `TriangleAlphaOutcome.Unknown` never proves opacity. `MustRemainTransparent` is absorbing. Classification never exits early on Unknown. Degenerate triangles and missing UV0 classify as Unknown.
 - Evidence discipline. Capture immutable records such as `CapturedAnimationEvidence` and `CapturedMaterialEvidence` close to their consumer. Immutable evidence never holds live Unity references. Live capabilities stay separate on `AmusePlatformFinishState`. Revalidate live state immediately before mutation.
 - Attestation is pinned data. Shader GUIDs, exact names, package versions, and measured SHA-256 digests live in `LilToonSourceAttestation.cs`, `PoiyomiSourceAttestation.cs`, and sibling attestation files. Never re-derive digests from vendor repositories. Unattested materials answer all-Unknown.
@@ -95,7 +96,7 @@ vpm resolve project .                             # restores Packages/nadena.dev
 
 |File|Role|
 |---|---|
-|`Packages/com.alrauna.amuse/Editor/Build/AmusePlatformFinishPlugin.cs`|NDMF entry point, the five passes, shared build state|
+|`Packages/com.alrauna.amuse/Editor/Build/AmusePlatformFinishPlugin.cs`|NDMF entry point, the six passes, shared build state|
 |`Packages/com.alrauna.amuse/Editor/Build/HostLifecycleCapability.cs`|Version, platform, build-path, and services gate|
 |`Packages/com.alrauna.amuse/Editor/Build/AlphaSeparationPreparation.cs`|Evidence-gated preparation, no avatar mutation|
 |`Packages/com.alrauna.amuse/Editor/Build/AlphaSeparationApply.cs`|Revalidation and the single mutation|
