@@ -410,10 +410,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
-        public void SkinnedSourceWithVanishedBoneWeightRowsRefuses()
+        public void BindPosesWithoutBoneWeightsBuild()
         {
             var mesh = new Mesh();
-            mesh.name = "AmuseWeightlessFixture";
+            mesh.name = "AmuseBindPoseOnlyFixture";
             mesh.vertices = new[]
             {
                 new Vector3(0f, 0f, 0f),
@@ -427,6 +427,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 new Vector2(0.5f, 0.6f),
             };
             mesh.triangles = new[] { 0, 1, 2 };
+
+            // Bind poses without weights are a valid authored mesh.
+            // Unity skins it to the root bone.
             mesh.bindposes = new[]
             {
                 Matrix4x4.identity,
@@ -434,10 +437,47 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             };
             Track(mesh);
 
-            Assert.Throws<InvalidOperationException>(
-                () => AtlasMeshBuilder.Build(
-                    mesh, new List<AtlasSubmeshRemap> { new AtlasSubmeshRemap(0) }),
-                "a mesh that claims bone data must not lose its weights");
+            var built = Track(AtlasMeshBuilder.Build(
+                mesh, new List<AtlasSubmeshRemap> { new AtlasSubmeshRemap(0) }));
+
+            Assert.AreEqual(3, built.vertexCount, "the mesh builds");
+            CollectionAssert.AreEqual(mesh.GetTriangles(0), built.GetTriangles(0));
+            Assert.AreEqual(
+                0, built.GetBonesPerVertex().Length,
+                "a mesh without weights copies no weight rows");
+            Assert.AreEqual(
+                0, built.GetAllBoneWeights().Length,
+                "a mesh without weights copies no weights");
+            AssertBindPosesMatch(mesh.bindposes, built.bindposes);
+        }
+
+        [Test]
+        public void SkinnedSourceWithVanishedBoneWeightRowsRefuses()
+        {
+            // The Mesh API keeps the rows and the weights together. A
+            // probe on 2026-11-19 found no authoring route that yields
+            // weights without rows, so the guard is proven through its
+            // seam.
+            var rows = new NativeArray<byte>(0, Allocator.Temp);
+            var weights = new NativeArray<BoneWeight1>(2, Allocator.Temp);
+            weights[0] = new BoneWeight1 { boneIndex = 0, weight = 1f };
+            weights[1] = new BoneWeight1 { boneIndex = 1, weight = 0.5f };
+            var emptyWeights = new NativeArray<BoneWeight1>(0, Allocator.Temp);
+            try
+            {
+                Assert.Throws<InvalidOperationException>(
+                    () => AtlasMeshBuilder.CheckBoneWeightRows(rows, weights),
+                    "weights without rows must refuse");
+                Assert.DoesNotThrow(
+                    () => AtlasMeshBuilder.CheckBoneWeightRows(rows, emptyWeights),
+                    "a mesh with no weights at all must not refuse");
+            }
+            finally
+            {
+                rows.Dispose();
+                weights.Dispose();
+                emptyWeights.Dispose();
+            }
         }
 
         [Test]

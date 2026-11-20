@@ -593,16 +593,9 @@ namespace Alrauna.Amuse.Editor.Build
         {
             var bonesPerVertex = source.GetBonesPerVertex();
             var sourceWeights = source.GetAllBoneWeights();
+            CheckBoneWeightRows(bonesPerVertex, sourceWeights);
             if (bonesPerVertex.Length == 0)
             {
-                if (sourceWeights.Length > 0 || source.bindposes.Length > 0)
-                {
-                    throw new InvalidOperationException(
-                        "The source mesh carries bone data but no per " +
-                        "vertex bone weight rows. The mesh output refuses " +
-                        "to drop them.");
-                }
-
                 return;
             }
 
@@ -644,6 +637,26 @@ namespace Alrauna.Amuse.Editor.Build
             {
                 targetCounts.Dispose();
                 targetWeights.Dispose();
+            }
+        }
+
+        /// <summary>
+        /// Refuses a source that carries bone weights but no per vertex
+        /// rows. The Mesh API keeps both sides together, so only a
+        /// broken reader can produce the state. Bind poses without
+        /// weights stay valid, because Unity skins such a mesh to the
+        /// root bone.
+        /// </summary>
+        internal static void CheckBoneWeightRows(
+            Unity.Collections.NativeArray<byte> bonesPerVertex,
+            Unity.Collections.NativeArray<BoneWeight1> weights)
+        {
+            if (bonesPerVertex.Length == 0 && weights.Length > 0)
+            {
+                throw new InvalidOperationException(
+                    "The source mesh carries bone weights but no per " +
+                    "vertex bone weight rows. The mesh output refuses " +
+                    "to drop them.");
             }
         }
 
