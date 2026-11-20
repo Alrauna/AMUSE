@@ -830,12 +830,12 @@ namespace Alrauna.Amuse.Editor.Build
             ["amuse.atlas.MissingMesh"] =
                 "AMUSE did not atlas this material slot.",
             ["amuse.atlas.MissingMesh:description"] =
-                "The renderer has no mesh. There are no triangles " +
-                "to move into a page. The slot keeps its original " +
-                "bindings.",
+                "The renderer has no mesh, or its mesh has no parts. " +
+                "There are no triangles to move into a page. The " +
+                "slot keeps its original bindings.",
             ["amuse.atlas.MissingMesh:hint"] =
-                "Assign a mesh to the renderer, or delete the " +
-                "renderer.",
+                "Assign a mesh with at least one part to the " +
+                "renderer, or delete the renderer.",
 
             ["amuse.atlas.MissingMaterial"] =
                 "AMUSE did not atlas this material slot.",
@@ -1075,8 +1075,8 @@ namespace Alrauna.Amuse.Editor.Build
                 "maximum page size. The slot keeps its original " +
                 "bindings.",
             ["amuse.atlas.PlacementTooLarge:hint"] =
-                "Raise the maximum page size, or use a smaller " +
-                "source texture.",
+                "Raise the maximum page size, use a smaller source " +
+                "texture, or shrink the UV area the mesh uses.",
 
             ["amuse.atlas.GroupBudget"] =
                 "AMUSE did not atlas this material slot.",
@@ -1116,8 +1116,8 @@ namespace Alrauna.Amuse.Editor.Build
                 "texture of this group. Every use of the group " +
                 "keeps its original bindings.",
             ["amuse.atlas.SourceAcquisitionFailed:hint"] =
-                "Check the console for the import error of the " +
-                "texture, then build again.",
+                "AMUSE could not read a copy of the texture. " +
+                "Reimport the texture, then build again.",
 
             ["amuse.atlas.SlotSharesSubmesh"] =
                 "AMUSE did not atlas this material slot.",

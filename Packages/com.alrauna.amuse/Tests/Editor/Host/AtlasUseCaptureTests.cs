@@ -125,10 +125,13 @@ namespace Alrauna.Amuse.Tests.Editor.Host
 
         private static Texture2D ImportMainTexture(
             string name,
+            int width = 64,
+            int height = 64,
             Action<TextureImporter> configure = null)
         {
-            var staging = new Texture2D(64, 64, TextureFormat.RGBA32, false);
-            var pixels = new Color32[64 * 64];
+            var staging = new Texture2D(
+                width, height, TextureFormat.RGBA32, false);
+            var pixels = new Color32[width * height];
             for (var index = 0; index < pixels.Length; index++)
             {
                 pixels[index] = new Color32(110, 80, 60, 255);
@@ -576,6 +579,23 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var fixture = NewDefaultFixture();
             fixture.Material.SetTextureScale(
                 "_MainTex", new Vector2(2f, 1f));
+
+            var outcome = SingleOutcome(CaptureUses(fixture.Root));
+
+            AssertRefused(outcome, AtlasUseRefusal.NonIdentityTransform);
+        }
+
+        [Test]
+        public void ScaleOneFloatStepOffUnityRefuses()
+        {
+            // The literal 1.0000001f is the next representable float
+            // above 1f. Unity's Vector4 equality calls it equal to
+            // the identity, and the scale setter collapses it, so the
+            // row writes the transform vector and only an exact
+            // component compare refuses it.
+            var fixture = NewDefaultFixture();
+            fixture.Material.SetVector(
+                "_MainTex_ST", new Vector4(1.0000001f, 1f, 0f, 0f));
 
             var outcome = SingleOutcome(CaptureUses(fixture.Root));
 
@@ -1059,7 +1079,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 "_MainTex",
                 ImportMainTexture(
                     "mirror main",
-                    importer => importer.wrapMode =
+                    configure: importer => importer.wrapMode =
                         TextureWrapMode.Mirror));
             var mesh = Track(NewQuadMesh());
             AddSkinnedRenderer(root, "Body", mesh, new[] { material });
@@ -1078,7 +1098,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 "_MainTex",
                 ImportMainTexture(
                     "crunch main",
-                    importer =>
+                    configure: importer =>
                     {
                         importer.textureCompression =
                             TextureImporterCompression.Compressed;
@@ -1093,13 +1113,16 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         [Test]
-        public void R8SourceRefuses()
+        public void SingleChannelSourceRefuses()
         {
-            var root = Track(new GameObject("r8 root"));
+            var root = Track(new GameObject("single channel root"));
             var material = Track(new Material(LoadInstalledPoiyomiShader()));
-            var texture = NewNativeTextureAsset(
-                "r8 main", new Texture2D(4, 4, TextureFormat.R8, true));
-            material.SetTexture("_MainTex", texture);
+            material.SetTexture(
+                "_MainTex",
+                ImportMainTexture(
+                    "single channel main",
+                    configure: importer => importer.textureType =
+                        TextureImporterType.SingleChannel));
             var mesh = Track(NewQuadMesh());
             AddSkinnedRenderer(root, "Body", mesh, new[] { material });
 
@@ -1125,6 +1148,50 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         [Test]
+        public void NativeAssetTextureSourceRefuses()
+        {
+            var root = Track(new GameObject("native asset root"));
+            var material = Track(new Material(LoadInstalledPoiyomiShader()));
+            var texture = NewNativeTextureAsset(
+                "native asset main",
+                new Texture2D(64, 64, TextureFormat.RGBA32, true));
+            material.SetTexture("_MainTex", texture);
+            var mesh = Track(NewQuadMesh());
+            AddSkinnedRenderer(root, "Body", mesh, new[] { material });
+
+            var outcome = SingleOutcome(CaptureUses(root));
+
+            AssertRefused(outcome, AtlasUseRefusal.SourceNotAnAsset);
+        }
+
+        [Test]
+        public void SubAssetTextureSourceRefuses()
+        {
+            var root = Track(new GameObject("sub asset root"));
+            var material = Track(new Material(LoadInstalledPoiyomiShader()));
+            // The texture is a sub-asset of a native material asset,
+            // so its path names a file no texture importer owns.
+            var container = new Material(LoadInstalledPoiyomiShader());
+            var containerPath = TempFolder + "/sub asset container.asset";
+            AssetDatabase.CreateAsset(container, containerPath);
+            var texture = new Texture2D(
+                64, 64, TextureFormat.RGBA32, true)
+            {
+                name = "sub asset main",
+            };
+            AssetDatabase.AddObjectToAsset(texture, containerPath);
+            AssetDatabase.ImportAsset(
+                containerPath, ImportAssetOptions.ForceSynchronousImport);
+            material.SetTexture("_MainTex", texture);
+            var mesh = Track(NewQuadMesh());
+            AddSkinnedRenderer(root, "Body", mesh, new[] { material });
+
+            var outcome = SingleOutcome(CaptureUses(root));
+
+            AssertRefused(outcome, AtlasUseRefusal.SourceNotAnAsset);
+        }
+
+        [Test]
         public void SourceWithFewerLevelsThanProtectedRefuses()
         {
             var root = Track(new GameObject("short mips root"));
@@ -1133,7 +1200,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 "_MainTex",
                 ImportMainTexture(
                     "short mips main",
-                    importer => importer.mipmapEnabled = false));
+                    configure: importer => importer.mipmapEnabled =
+                        false));
             var mesh = Track(NewQuadMesh());
             AddSkinnedRenderer(root, "Body", mesh, new[] { material });
 
@@ -1142,28 +1210,6 @@ namespace Alrauna.Amuse.Tests.Editor.Host
 
             AssertRefused(outcome, AtlasUseRefusal.SourceMipChainTooShort);
         }
-
-        [Test]
-        public void CompressedSourceNotOnTheBlockGridRefuses()
-        {
-            var root = Track(new GameObject("off grid root"));
-            var material = Track(new Material(LoadInstalledPoiyomiShader()));
-            // A 68 by 64 DXT1 chain: level 1 is 34 texels wide, which is
-            // not a multiple of the block size 4.
-            var texture = NewNativeTextureAsset(
-                "off grid main",
-                new Texture2D(68, 64, TextureFormat.DXT1, true));
-            material.SetTexture("_MainTex", texture);
-            var mesh = Track(NewQuadMesh());
-            AddSkinnedRenderer(root, "Body", mesh, new[] { material });
-
-            var outcome = SingleOutcome(
-                CaptureUses(root, protectedMipLevelCount: 2));
-
-            AssertRefused(outcome, AtlasUseRefusal.SourceNotAligned);
-        }
-
-        // --- the material key ---------------------------------------------
 
         [Test]
         public void TransparentSlotAndItsOpaqueCloneHaveDifferentMaterialKeys()

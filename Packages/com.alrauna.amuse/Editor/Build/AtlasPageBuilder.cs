@@ -115,6 +115,19 @@ namespace Alrauna.Amuse.Editor.Build
                         "plan disagree.");
                 }
 
+                if (pageTexture.width != page.Width ||
+                    pageTexture.height != page.Height ||
+                    pageTexture.mipmapCount != page.MipCount)
+                {
+                    throw new InvalidOperationException(
+                        "The encoded page landed on size " +
+                        pageTexture.width + " by " + pageTexture.height +
+                        " with " + pageTexture.mipmapCount + " levels " +
+                        "while the plan names " + page.Width + " by " +
+                        page.Height + " with " + page.MipCount +
+                        " levels. The encoder and the plan disagree.");
+                }
+
                 // The encode replaced the RGBA32 chain with the page
                 // format, so the ledger follows the change.
                 ledger.Release(composeBytes);

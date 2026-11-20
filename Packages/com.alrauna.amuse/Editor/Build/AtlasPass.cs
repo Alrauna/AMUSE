@@ -14,8 +14,9 @@ namespace Alrauna.Amuse.Editor.Build
     /// naming each refusal. The pass never reads
     /// <see cref="AmusePlatformFinishState.Separation"/>, because an
     /// atlas page reads materials, not the alpha proof plan.
-    /// Milestone 1 stops at the analysis point. Milestone 2 adds the
-    /// first atlas path there.
+    /// Behind the gates it runs the atlas path of Milestone 2: it
+    /// captures one use per renderer slot, builds one page per
+    /// admitted group, and writes the outputs it changed.
     /// <para>
     /// The check order below is part of the contract. The settings
     /// gates run before the target gate, so a wrong setting names
@@ -37,6 +38,29 @@ namespace Alrauna.Amuse.Editor.Build
         internal static Action<Texture2D, AtlasPagePlanEntry,
             IReadOnlyDictionary<int, AtlasSourceImage>, int,
             AtlasByteLedger> PageCheck = AtlasPageCheck.Verify;
+
+        /// <summary>
+        /// The acquisition step of each distinct source. Production
+        /// runs <see cref="AcquireThroughStreamingEvidence"/>. The
+        /// pass calls this seam, so a test can inject a failure and
+        /// restore the default in its teardown.
+        /// </summary>
+        internal static AtlasSourceAcquisition AcquireSource =
+            AcquireThroughStreamingEvidence;
+
+        internal delegate bool AtlasSourceAcquisition(
+            Texture2D source,
+            int protectedMipLevelCount,
+            out AtlasSourceImage image);
+
+        internal static bool AcquireThroughStreamingEvidence(
+            Texture2D source,
+            int protectedMipLevelCount,
+            out AtlasSourceImage image)
+        {
+            return UnityStreamingTextureEvidence.TryAcquireAtlasSource(
+                source, protectedMipLevelCount, out image, out _);
+        }
 
         internal static void Execute(BuildContext context)
         {
@@ -259,6 +283,7 @@ namespace Alrauna.Amuse.Editor.Build
                     uses,
                     admittedOutcomes,
                     outcomeBySource,
+                    group,
                     plans[group],
                     optimizer.ProtectedMipLevelCount,
                     pageMaterialByUse,
@@ -330,6 +355,7 @@ namespace Alrauna.Amuse.Editor.Build
             IReadOnlyList<CapturedAtlasUse> uses,
             IReadOnlyList<AtlasUseOutcome> admittedOutcomes,
             Dictionary<int, AtlasUseOutcome> outcomeBySource,
+            int groupIndex,
             AtlasGroupPlan plan,
             int protectedMipLevelCount,
             Dictionary<int, Material> pageMaterialByUse,
@@ -354,8 +380,11 @@ namespace Alrauna.Amuse.Editor.Build
                 var firstMaterial =
                     firstOutcome.Renderer.sharedMaterials[
                         firstOutcome.SlotIndex];
-                foreach (var page in plan.Pages)
+                for (var pageIndex = 0;
+                    pageIndex < plan.Pages.Count;
+                    pageIndex++)
                 {
+                    var page = plan.Pages[pageIndex];
                     var ledger = new AtlasByteLedger(
                         AtlasBudget.PredictPagePeakBytes(
                             page, uses, protectedMipLevelCount));
@@ -380,12 +409,17 @@ namespace Alrauna.Amuse.Editor.Build
                             return;
                         }
 
+                        // The names follow the plan order, so two runs
+                        // of the same avatar name the same page.
                         var texture = AtlasPageBuilder.Build(
                             page,
                             plan.Key.Sampler,
                             sources,
                             protectedMipLevelCount,
                             ledger);
+                        texture.name =
+                            "AMUSE atlas page " + groupIndex + "-" +
+                            pageIndex;
                         // The texture joins the built list at once, so
                         // a check or ledger failure below cannot leak
                         // it.
@@ -398,6 +432,9 @@ namespace Alrauna.Amuse.Editor.Build
 
                         var pageMaterial =
                             NewPageMaterial(firstMaterial, texture);
+                        pageMaterial.name =
+                            "AMUSE atlas material " + groupIndex + "-" +
+                            pageIndex;
                         built.Add(pageMaterial);
                         state.AmuseOwnedObjects.Add(pageMaterial);
                         state.AtlasPageCount++;
@@ -529,11 +566,8 @@ namespace Alrauna.Amuse.Editor.Build
                     return false;
                 }
 
-                if (!UnityStreamingTextureEvidence.TryAcquireAtlasSource(
-                        texture,
-                        protectedMipLevelCount,
-                        out var image,
-                        out _))
+                if (!AcquireSource(
+                        texture, protectedMipLevelCount, out var image))
                 {
                     return false;
                 }

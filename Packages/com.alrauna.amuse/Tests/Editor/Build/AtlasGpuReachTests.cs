@@ -312,7 +312,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         continue;
                     }
 
-
                     var dx = (x - half) * TexelsPerProbeStep;
                     var dy = (y - half) * TexelsPerProbeStep;
                     var distance = Mathf.Sqrt(dx * dx + dy * dy);

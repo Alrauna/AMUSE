@@ -60,8 +60,11 @@ namespace Alrauna.Amuse.Editor.Build
     /// object the state owns and no renderer references.
     /// The registry step runs before any destroy, because NDMF
     /// resolves an error reference through the replaced object. A
-    /// registration that fails keeps the replaced object alive
-    /// instead, so a later report can still name it.
+    /// registry without resolve support keeps the replaced object
+    /// alive instead, so a later report can still name it.
+    /// <para>
+    /// The destroyed set leaves out every object a renderer or a
+    /// committed object reference curve still names.
     /// </para>
     /// </summary>
     internal static class AtlasWrite
@@ -85,7 +88,6 @@ namespace Alrauna.Amuse.Editor.Build
             {
                 throw new ArgumentNullException(nameof(curveReferenced));
             }
-
 
             var replaced = new List<UnityEngine.Object>();
             foreach (var output in outputs)
@@ -204,10 +206,11 @@ namespace Alrauna.Amuse.Editor.Build
         }
 
         /// <summary>
-        /// Registers one replacement. E9: a registration that throws
-        /// or leaves the registry unable to resolve the new object
-        /// keeps the replaced owned object alive, so a later error
-        /// report can still name it.
+        /// Registers one replacement. A registry without resolve
+        /// support returns no reference for the new object. That
+        /// capability gap keeps the replaced owned object alive, so a
+        /// later error report can still name it. A registry that
+        /// throws is a defect and reaches the build uncaught.
         /// </summary>
         private static void Register(
             IObjectRegistry registry,
@@ -216,19 +219,12 @@ namespace Alrauna.Amuse.Editor.Build
             UnityEngine.Object newObject,
             HashSet<UnityEngine.Object> keepAlive)
         {
-            try
-            {
-                ObjectRegistry.RegisterReplacedObject(
-                    oldObject, newObject);
-                var resolved = registry != null
-                    ? registry.GetReference(newObject, false)
-                    : ObjectRegistry.GetReference(newObject);
-                if (resolved == null)
-                {
-                    keepAlive.Add(oldObject);
-                }
-            }
-            catch (Exception)
+            ObjectRegistry.RegisterReplacedObject(
+                oldObject, newObject);
+            var resolved = registry != null
+                ? registry.GetReference(newObject, false)
+                : ObjectRegistry.GetReference(newObject);
+            if (resolved == null)
             {
                 keepAlive.Add(oldObject);
             }

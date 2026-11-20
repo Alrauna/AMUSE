@@ -272,6 +272,68 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        [Test]
+        public void PlanAboveTheBuiltChainFailsTheBuild()
+        {
+            var source = ImportSource(
+                "plan_chain_mismatch",
+                32,
+                TextureImporterCompression.Uncompressed,
+                true,
+                true);
+            Texture2D page = null;
+            try
+            {
+                var image = Acquire(source, 1);
+                var border = BorderOf(false, 1);
+                var region = 32 + 2 * border;
+                var placement = PlacementOf(
+                    source,
+                    RepeatSampler,
+                    -border,
+                    -border,
+                    region,
+                    region,
+                    0,
+                    0);
+                // A 34 by 34 page holds six levels. The plan claims
+                // three more. The texture constructor refuses the
+                // chain, and a clamping runtime would hit the post
+                // encode size check, so a mismatched plan can never
+                // return a page.
+                var plan = new AtlasPagePlanEntry(
+                    region,
+                    region,
+                    source.graphicsFormat,
+                    FullMipCount(region, region) + 3,
+                    new[] { placement });
+
+                UnityEngine.TestTools.LogAssert.Expect(
+                    LogType.Error,
+                    new System.Text.RegularExpressions.Regex(
+                        "Invalid mip count"));
+                Assert.That(
+                    () => page = AtlasPageBuilder.Build(
+                        plan,
+                        RepeatSampler,
+                        SourcesOf(source, image),
+                        1,
+                        new AtlasByteLedger(long.MaxValue)),
+                    Throws.Exception,
+                    "a plan the built page cannot realize must fail the" +
+                    " build, never return a page that disagrees with" +
+                    " the plan");
+            }
+            finally
+            {
+                if (page != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(page);
+                }
+                AssetDatabase.DeleteAsset(AssetDatabase.GetAssetPath(source));
+            }
+        }
+
         [TestCase(TextureFormat.BC7)]
         [TestCase(TextureFormat.DXT1)]
         public void ProtectedLevelsCopyExactly(TextureFormat sourceFormat)

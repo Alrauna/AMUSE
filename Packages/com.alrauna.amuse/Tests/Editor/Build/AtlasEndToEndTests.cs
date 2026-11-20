@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Alrauna.Amuse.Editor.Build;
+using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
 using Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi;
 using Alrauna.Amuse.Tests.Editor.Shared;
@@ -10,6 +11,7 @@ using nadena.dev.ndmf.animator;
 using nadena.dev.ndmf.platform;
 using NUnit.Framework;
 using UnityEditor;
+using UnityEditor.Animations;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -57,6 +59,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             AmusePlatformFinishPlugin.ActiveBuildTargetForTests =
                 _originalTarget;
             AtlasPass.PageCheck = AtlasPageCheck.Verify;
+            AtlasPass.AcquireSource =
+                AtlasPass.AcquireThroughStreamingEvidence;
+            AtlasEndToEndPlugin.PreAtlasHook = null;
             _scope.TearDown();
             if (AssetDatabase.IsValidFolder(TempFolder))
             {
@@ -115,7 +120,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             internal Mesh AtlasMeshAfter;
 
             internal UnityEngine.Object AtlasMeshReferenceObject;
+
+            internal UnityEngine.Object CurveReferencedObject;
         }
+
 
         /// <summary>
         /// The production pass sequence on the dedicated platform: the
@@ -131,6 +139,16 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         {
             public override string QualifiedName =>
                 "com.alrauna.amuse.tests.atlas-end-to-end-plugin";
+
+            /// <summary>
+            /// A hook the pre atlas probe runs after it recorded the
+            /// alpha separation outputs. A test uses it to change the
+            /// committed graph between the window close and the atlas
+            /// pass. It stays null outside that test.
+            /// </summary>
+            internal static Action<GameObject,
+                AmusePlatformFinishState, AtlasEndToEndProbe>
+                PreAtlasHook;
 
             protected override void Configure()
             {
@@ -181,7 +199,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 probe.OpaqueCloneBeforeAtlas =
                     state.Separation.CreatedClones.FirstOrDefault(
                         clone => clone != null);
+                PreAtlasHook?.Invoke(
+                    context.AvatarRootObject, state, probe);
             }
+
 
             private static void ProbeAfterAtlas(BuildContext context)
             {
@@ -256,7 +277,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         private Texture2D ImportPatternTexture(
             string name,
             Color32 even,
-            Color32 odd)
+            Color32 odd,
+            FilterMode filter = FilterMode.Bilinear)
         {
             var pixels = new Color32[64 * 64];
             for (var y = 0; y < 64; y++)
@@ -280,7 +302,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     importer.mipmapEnabled = true;
                     importer.textureCompression =
                         TextureImporterCompression.Uncompressed;
-                    importer.filterMode = FilterMode.Bilinear;
+                    importer.filterMode = filter;
                     importer.anisoLevel = 0;
                 });
         }
@@ -288,11 +310,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         private Material NewAdmittedMaterial(
             string name,
             Color32 even,
-            Color32 odd)
+            Color32 odd,
+            FilterMode filter = FilterMode.Bilinear)
         {
             var material = Track(new Material(LoadInstalledPoiyomiShader()));
             material.SetTexture(
-                "_MainTex", ImportPatternTexture(name, even, odd));
+                "_MainTex",
+                ImportPatternTexture(name, even, odd, filter));
             return material;
         }
 
@@ -597,6 +621,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     "the page material must carry the page texture");
                 Assert.That(page.isReadable, Is.False,
                     "the shipped page must not stay readable");
+                Assert.That(pageMaterial.name,
+                    Is.EqualTo("AMUSE atlas material 0-0"),
+                    "the page material must carry its deterministic" +
+                    " plan name");
+                Assert.That(page.name,
+                    Is.EqualTo("AMUSE atlas page 0-0"),
+                    "the page texture must carry its deterministic" +
+                    " plan name");
 
                 Assert.That(firstMaterial.GetTexture("_MainTex"),
                     Is.SameAs(firstTexture),
@@ -1194,6 +1226,120 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        /// <summary>
+        /// An owned object a committed object reference curve names
+        /// survives the atlas build. The curve rides a clip of the
+        /// committed controller graph on a second renderer. Alpha
+        /// apply pairs every clone it writes into a curve with a live
+        /// slot on the same renderer, so a production written curve
+        /// cannot leave a clone renderer unreferenced. The pre atlas
+        /// hook therefore writes the keyframe the way apply writes
+        /// mapped curves, and the atlas pass must honor it.
+        /// </summary>
+        [Test]
+        public void CurveReferencedOwnedCloneSurvivesTheAtlasBuild()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = NewBothFeaturesRoot(
+                "AMUSE atlas curve keep");
+            AmusePlatformFinishState state = null;
+            AnimatorController controller = null;
+            try
+            {
+                var (renderer, sourceMesh, transparent, texture) =
+                    NewSplitFixture(root);
+                var retained = NewRealPoiyomiRetainedMaterial();
+                AlphaSeparationTestLifecycle.AddRenderer(
+                    root,
+                    "curved",
+                    Track(AlphaSeparationTestLifecycle
+                        .SingleTriangleMesh()),
+                    retained);
+                var swapClip = AlphaSeparationTestLifecycle.NewSwapClip(
+                    "AMUSE atlas curve keep", "curved", 0,
+                    (0f, retained));
+                controller = AlphaSeparationTestLifecycle.NewController(
+                    root, "AMUSE atlas curve keep graph", swapClip);
+
+                AtlasEndToEndPlugin.PreAtlasHook =
+                    (avatarRoot, hookState, probe) =>
+                    {
+                        var clip = AlphaSeparationTestLifecycle
+                            .CommittedClipWithObjectBinding(
+                                avatarRoot,
+                                "curved",
+                                "m_Materials.Array.data[0]");
+                        if (clip == null || probe.OpaqueCloneBeforeAtlas ==
+                            null)
+                        {
+                            throw new InvalidOperationException(
+                                "fixture precondition: the committed" +
+                                " swap clip and the opaque clone must" +
+                                " exist before the atlas pass.");
+                        }
+
+                        probe.CurveReferencedObject =
+                            probe.OpaqueCloneBeforeAtlas;
+                        AnimationUtility.SetObjectReferenceCurve(
+                            clip,
+                            EditorCurveBinding.PPtrCurve(
+                                "curved",
+                                typeof(SkinnedMeshRenderer),
+                                "m_Materials.Array.data[0]"),
+                            new[]
+                            {
+                                new ObjectReferenceKeyframe
+                                {
+                                    time = 0f,
+                                    value = probe.OpaqueCloneBeforeAtlas,
+                                },
+                            });
+                    };
+
+                var context = Build(root);
+                state = context.GetState<AmusePlatformFinishState>();
+                var probe = context.GetState<AtlasEndToEndProbe>();
+
+                Assert.That(context.Successful, Is.True,
+                    "fixture precondition: the build must complete");
+                var clone = probe.OpaqueCloneBeforeAtlas;
+                Assert.That(clone, Is.Not.Null,
+                    "fixture precondition: alpha separation must" +
+                    " create the opaque clone");
+                Assert.That(renderer.sharedMaterials[2],
+                    Is.Not.SameAs(clone),
+                    "fixture precondition: the atlas pass must replace" +
+                    " the clone slot with its page material");
+                Assert.That(clone != null, Is.True,
+                    "the owned clone a committed curve names must" +
+                    " survive the build");
+                var committedClip = AlphaSeparationTestLifecycle
+                    .CommittedClipWithObjectBinding(
+                        root,
+                        "curved",
+                        "m_Materials.Array.data[0]");
+                var curve = AnimationUtility.GetObjectReferenceCurve(
+                    committedClip,
+                    EditorCurveBinding.PPtrCurve(
+                        "curved",
+                        typeof(SkinnedMeshRenderer),
+                        "m_Materials.Array.data[0]"));
+                Assert.That(curve.Length, Is.EqualTo(1));
+                Assert.That(curve[0].value, Is.SameAs(clone),
+                    "the committed curve must still name the clone");
+            }
+            finally
+            {
+                AtlasEndToEndPlugin.PreAtlasHook = null;
+                AlphaSeparationTestLifecycle.DestroyCommittedClone(
+                    root, controller);
+                AlphaSeparationTestLifecycle.DestroyGenerated(state);
+                AlphaSeparationSplitTests.DeleteSplitFolder();
+                DestroyGenerated(state);
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
         [Test]
         public void AcquisitionFailureWithdrawsTheGroup()
         {
@@ -1212,30 +1358,53 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     Track(NewQuadMesh()),
                     importableMaterial);
 
-                // A native texture asset passes every capture gate but
-                // has no texture importer, so its acquisition clone
-                // fails and the whole group withdraws.
-                var native = new Texture2D(
-                    64, 64, TextureFormat.RGBA32, true);
-                var nativePath = TempFolder + "/native main.asset";
-                AssetDatabase.CreateAsset(native, nativePath);
-                AssetDatabase.ImportAsset(
-                    nativePath, ImportAssetOptions.ForceSynchronousImport);
-                var nativeTexture =
-                    AssetDatabase.LoadAssetAtPath<Texture2D>(nativePath);
-                Assert.That(nativeTexture, Is.Not.Null,
-                    "fixture precondition: the native texture asset" +
-                    " must load");
-                var nativeMaterial =
-                    Track(new Material(LoadInstalledPoiyomiShader()));
-                nativeMaterial.SetTexture("_MainTex", nativeTexture);
-                var nativeRenderer = NewQuadRenderer(
+                // The point filter puts the second source in its own
+                // group, so one withdrawal cannot take the healthy
+                // use with it.
+                var withdrawingMaterial = NewAdmittedMaterial(
+                    "acquisition fails",
+                    new Color32(200, 60, 120, 255),
+                    new Color32(60, 200, 120, 255),
+                    FilterMode.Point);
+                var withdrawingTexture =
+                    (Texture2D)withdrawingMaterial.GetTexture("_MainTex");
+                var withdrawSourceMesh = Track(NewQuadMesh());
+                var withdrawingRenderer = NewQuadRenderer(
                     root,
-                    "native",
-                    Track(NewQuadMesh()),
-                    nativeMaterial);
+                    "withdraws",
+                    withdrawSourceMesh,
+                    withdrawingMaterial);
 
-                var context = Build(root);
+                // Capture admits both sources. Only a runtime failure
+                // after an admitted capture withdraws a group, and no
+                // real fixture reaches it inside one build, so the
+                // acquisition seam fails exactly the second source.
+                var originalAcquisition = AtlasPass.AcquireSource;
+                AtlasPass.AcquireSource =
+                    (Texture2D source,
+                        int protectedCount,
+                        out AtlasSourceImage image) =>
+                    {
+                        if (source.GetInstanceID() ==
+                            withdrawingTexture.GetInstanceID())
+                        {
+                            image = null;
+                            return false;
+                        }
+
+                        return originalAcquisition(
+                            source, protectedCount, out image);
+                    };
+
+                BuildContext context;
+                try
+                {
+                    context = Build(root);
+                }
+                finally
+                {
+                    AtlasPass.AcquireSource = originalAcquisition;
+                }
                 state = context.GetState<AmusePlatformFinishState>();
 
                 Assert.That(context.Successful, Is.True,
@@ -1244,17 +1413,21 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     Is.EqualTo(1),
                     "exactly the one withdrawn use must be recorded");
                 Assert.That(state.AtlasUseRefusals[0].renderer,
-                    Is.SameAs(nativeRenderer),
+                    Is.SameAs(withdrawingRenderer),
                     "the unacquirable source must withdraw its group");
                 Assert.That(state.AtlasUseRefusals[0].slot,
                     Is.EqualTo(0));
                 Assert.That(state.AtlasUseRefusals[0].cause,
                     Is.EqualTo(AtlasUseRefusal.SourceAcquisitionFailed),
                     "the withdrawal must name the acquisition failure");
-                Assert.That(nativeRenderer.sharedMaterial,
-                    Is.SameAs(nativeMaterial),
+                Assert.That(withdrawingRenderer.sharedMaterial,
+                    Is.SameAs(withdrawingMaterial),
                     "a withdrawn group must leave its renderer" +
                     " unchanged");
+                Assert.That(SharedMeshOf(withdrawingRenderer),
+                    Is.SameAs(withdrawSourceMesh),
+                    "a withdrawn group must change nothing on its" +
+                    " renderer");
                 Assert.That(state.AtlasPageCount, Is.EqualTo(1),
                     "the healthy group must still build its page");
                 Assert.That(fineRenderer.sharedMaterial,

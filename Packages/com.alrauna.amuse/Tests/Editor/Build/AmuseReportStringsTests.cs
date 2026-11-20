@@ -126,6 +126,38 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         [Test]
+        public void AtlasHintsMatchWhatThePassCanDo()
+        {
+            // The placement hint must offer the smaller region road,
+            // not only a larger page size.
+            Assert.That(
+                AmuseReportStrings.Get(
+                    "amuse.atlas.PlacementTooLarge:hint"),
+                Does.Contain("UV area"),
+                "the placement hint must name the used UV area");
+
+            // The acquisition failure logs nothing, so the hint must
+            // not send the reader to the console.
+            var acquisition = AmuseReportStrings.Get(
+                "amuse.atlas.SourceAcquisitionFailed:hint");
+            Assert.That(
+                acquisition, Does.Not.Contain("console"),
+                "the acquisition hint must not name the console");
+            Assert.That(
+                acquisition, Does.Contain("copy"),
+                "the acquisition hint must say AMUSE could not read a" +
+                " copy of the texture");
+
+            // A mesh with no submesh reuses the missing mesh entry,
+            // so its hint must cover both shapes.
+            Assert.That(
+                AmuseReportStrings.Get("amuse.atlas.MissingMesh:hint"),
+                Does.Contain("part"),
+                "the missing mesh hint must cover a mesh with no" +
+                " parts");
+        }
+
+        [Test]
         public void ForcedOpaqueEntryExistsWithThreeParts()
         {
             var key = "amuse.slotSeparation.ForcedOpaque";

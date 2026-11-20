@@ -34,14 +34,14 @@ namespace Alrauna.Amuse.Editor.Build
         /// <summary>
         /// The avatar-scope atlas refusal, or
         /// <see cref="AtlasUseRefusal.None"/> while no atlas gate has
-        /// refused. Milestone 2 appends use-scope members beside
-        /// these.
+        /// refused. The use-scope refusals sit in
+        /// <see cref="AtlasUseRefusals"/>.
         /// </summary>
         internal AtlasUseRefusal AtlasRefusal { get; set; }
 
         /// <summary>True when the atlas pass passed every avatar-scope
-        /// gate and reached its analysis point. Milestone 2 continues
-        /// the atlas path from this flag.</summary>
+        /// gate and reached its analysis point. The atlas path runs
+        /// from this flag.</summary>
         internal bool ReachedAtlasAnalysis { get; set; }
 
         /// <summary>How many atlas pages the atlas pass built and kept.
@@ -55,8 +55,8 @@ namespace Alrauna.Amuse.Editor.Build
         /// <summary>
         /// Every use refusal the atlas pass recorded, in record order.
         /// Each entry names the renderer, the slot, and the cause.
-        /// Milestone 2 keeps them in state only. Report lines belong
-        /// to Milestone 4.
+        /// The pass keeps them in state only. No report line reads
+        /// them on 2026-11-20.
         /// </summary>
         internal IReadOnlyList<(Renderer renderer, int slot,
             AtlasUseRefusal cause)> AtlasUseRefusals =>

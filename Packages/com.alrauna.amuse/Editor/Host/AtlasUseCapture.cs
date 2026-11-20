@@ -308,8 +308,7 @@ namespace Alrauna.Amuse.Editor.Host
                 return;
             }
 
-            if (string.IsNullOrEmpty(
-                    AssetDatabase.GetAssetPath(texture2D)))
+            if (!SourceIsImportedTextureAsset(texture2D))
             {
                 refusal = AtlasUseRefusal.SourceNotAnAsset;
                 return;
@@ -342,8 +341,11 @@ namespace Alrauna.Amuse.Editor.Host
 
             foreach (var transform in table.TransformProperties)
             {
-                if (material.GetVector(transform.Property) !=
-                    transform.Identity)
+                var value = material.GetVector(transform.Property);
+                if (value.x != transform.Identity.x ||
+                    value.y != transform.Identity.y ||
+                    value.z != transform.Identity.z ||
+                    value.w != transform.Identity.w)
                 {
                     refusal = AtlasUseRefusal.NonIdentityTransform;
                     return;
@@ -450,6 +452,31 @@ namespace Alrauna.Amuse.Editor.Host
             var block = BlockSizeOf(texture.format);
             return (texture.width >> shift) % block == 0 &&
                    (texture.height >> shift) % block == 0;
+        }
+
+        /// <summary>
+        /// True when the texture is the main asset of a file a texture
+        /// importer owns. A native asset, a sub-asset, or a texture
+        /// inside a model or scene file has a path, but no importer
+        /// reproduces it, so the runtime acquisition cannot clone it.
+        /// The rule is per use. Design section 4 condition 6.
+        /// </summary>
+        private static bool SourceIsImportedTextureAsset(
+            Texture2D texture)
+        {
+            var path = AssetDatabase.GetAssetPath(texture);
+            if (string.IsNullOrEmpty(path))
+            {
+                return false;
+            }
+
+            if (!(AssetImporter.GetAtPath(path) is TextureImporter))
+            {
+                return false;
+            }
+
+            return ReferenceEquals(
+                AssetDatabase.LoadMainAssetAtPath(path), texture);
         }
 
         private static int BlockSizeOf(TextureFormat format)
@@ -950,7 +977,7 @@ namespace Alrauna.Amuse.Editor.Host
 
             internal string Walk(Material material)
             {
-                var serialized = new SerializedObject(material);
+                using var serialized = new SerializedObject(material);
                 var property = serialized.GetIterator();
                 var enterChildren = true;
                 while (property.Next(enterChildren))
