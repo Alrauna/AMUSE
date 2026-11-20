@@ -342,9 +342,12 @@ namespace Alrauna.Amuse.Editor.Host
         /// name a clonable source, the stale sweep, the copy, the two
         /// importer flags, the size checks, and the cleanup. The read
         /// callback receives the readable clone and answers from it.
-        /// The cleanup deletes through the asset database and also
-        /// removes the pinned folder when this call created it and
-        /// nothing else moved in.
+        /// The whole clone ride leaves any open asset editing level
+        /// and restores it, so a manual bake that holds one open sees
+        /// the same import and the same cleanup as an unbatched
+        /// build. The cleanup deletes through the asset database and
+        /// also removes the pinned folder when this call created it
+        /// and nothing else moved in.
         /// </summary>
         private static bool TryWithReadableClone(
             Texture2D source,
@@ -369,79 +372,159 @@ namespace Alrauna.Amuse.Editor.Host
                 return false;
             }
 
-            // A crashed run's cleanup never ran, so its clone can still
-            // sit in the pinned folder. The sweep runs before a new clone
-            // is made and deletes exactly the route's own naming shape,
-            // so a leftover is removed rather than accumulated.
-            SweepStaleClones();
-
-            var folderCreated = !AssetDatabase.IsValidFolder(TempFolder);
-            if (folderCreated)
+            // The clone work runs with any open asset editing level left,
+            // and the scope restores those levels below. A manual bake
+            // holds one level open around the whole build, and inside it
+            // the asset database defers every import, so the copy below
+            // would never import and the route would refuse.
+            using (var leaveAssetEditing = new LeaveAssetEditingScope())
             {
-                AssetDatabase.CreateFolder(
-                    "Assets", Path.GetFileName(TempFolder));
+                // A crashed run's cleanup never ran, so its clone can still
+                // sit in the pinned folder. The sweep runs before a new clone
+                // is made and deletes exactly the route's own naming shape,
+                // so a leftover is removed rather than accumulated.
+                SweepStaleClones();
+
+                var folderCreated =
+                    !AssetDatabase.IsValidFolder(TempFolder);
+                if (folderCreated)
+                {
+                    AssetDatabase.CreateFolder(
+                        "Assets", Path.GetFileName(TempFolder));
+                }
+
+                // The source's GUID names the clone, so one source has one clone
+                // name and a leftover from a crashed capture is overwritten, not
+                // duplicated.
+                var tempPath = ClonePath(path);
+                try
+                {
+                    if (!leaveAssetEditing.CopySoTheCloneImports(
+                            path, tempPath))
+                    {
+                        return false;
+                    }
+
+                    if (!(AssetImporter.GetAtPath(tempPath)
+                            is TextureImporter importer))
+                    {
+                        return false;
+                    }
+
+                    // Only the two flags that gate editor access change. Every
+                    // content-bearing setting rides in on the copied .meta.
+                    importer.isReadable = true;
+                    importer.streamingMipmaps = false;
+                    importer.SaveAndReimport();
+
+                    var clone =
+                        AssetDatabase.LoadAssetAtPath<Texture2D>(tempPath);
+                    if (clone == null || !clone.isReadable)
+                    {
+                        return false;
+                    }
+
+                    // A crunched clone has no CPU decode on this platform:
+                    // GetPixels refuses crunched textures with an exception.
+                    // Crunched is compressed, so the import already left the
+                    // direct route at the format gate, and this refusal keeps
+                    // the capture fail closed instead of answering from the
+                    // authoring bytes.
+                    if (clone.format == TextureFormat.DXT1Crunched ||
+                        clone.format == TextureFormat.DXT5Crunched)
+                    {
+                        refusal = TextureCaptureRefusalReason.UnsupportedFormat;
+                        return false;
+                    }
+
+                    if (clone.mipmapCount != source.mipmapCount ||
+                        clone.width != source.width ||
+                        clone.height != source.height)
+                    {
+                        return false;
+                    }
+
+                    return read(clone, out refusal);
+                }
+                finally
+                {
+                    // The cleanup runs while the levels are still left, so
+                    // both deletions are immediate and no leftover waits
+                    // for the caller's batch to close.
+                    AssetDatabase.DeleteAsset(tempPath);
+                    if (folderCreated &&
+                        AssetDatabase.IsValidFolder(TempFolder) &&
+                        AssetDatabase.FindAssets("", new[] { TempFolder })
+                            .Length == 0)
+                    {
+                        AssetDatabase.DeleteAsset(TempFolder);
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Leaves the asset editing levels a build holds open around the
+        /// clone work, and restores the same number of levels when the
+        /// scope ends. Inside an open level the asset database defers
+        /// every import, and a deferred copy never imports: this editor
+        /// version exposes no depth query, public or internal, so the
+        /// scope reads the deferral itself. The first copy attempt is
+        /// the test: a copy that reports success but yields no importer
+        /// is the deferred shape, so one level is left and the copy is
+        /// retried, one level at a time, until the clone imports. A
+        /// build that holds no level open answers with its importer at
+        /// once, so nothing is left and that build path is unchanged.
+        /// A build that holds more levels open than the bound keeps its
+        /// refusal, so the route fails closed instead of unbounding the
+        /// loop.
+        /// </summary>
+        private sealed class LeaveAssetEditingScope : IDisposable
+        {
+            private const int MaxLeftLevels = 8;
+
+            internal int LeftLevels { get; private set; }
+
+            /// <summary>
+            /// Copies the source to the clone path until the copy
+            /// imports, leaving asset editing levels as needed. The
+            /// answer says whether the clone's importer exists.
+            /// </summary>
+            internal bool CopySoTheCloneImports(
+                string sourcePath,
+                string tempPath)
+            {
+                while (true)
+                {
+                    if (!AssetDatabase.CopyAsset(sourcePath, tempPath))
+                    {
+                        return false;
+                    }
+
+                    if (AssetImporter.GetAtPath(tempPath) != null)
+                    {
+                        return true;
+                    }
+
+                    if (LeftLevels == MaxLeftLevels)
+                    {
+                        return false;
+                    }
+
+                    // Stopping below zero logs an editor error, so a
+                    // level is only left after the deferred shape was
+                    // observed one step above.
+                    AssetDatabase.StopAssetEditing();
+                    LeftLevels++;
+                }
             }
 
-            // The source's GUID names the clone, so one source has one clone
-            // name and a leftover from a crashed capture is overwritten, not
-            // duplicated.
-            var tempPath = ClonePath(path);
-            try
+            public void Dispose()
             {
-                if (!AssetDatabase.CopyAsset(path, tempPath))
+                while (LeftLevels > 0)
                 {
-                    return false;
-                }
-
-                if (!(AssetImporter.GetAtPath(tempPath)
-                        is TextureImporter importer))
-                {
-                    return false;
-                }
-
-                // Only the two flags that gate editor access change. Every
-                // content-bearing setting rides in on the copied .meta.
-                importer.isReadable = true;
-                importer.streamingMipmaps = false;
-                importer.SaveAndReimport();
-
-                var clone = AssetDatabase.LoadAssetAtPath<Texture2D>(tempPath);
-                if (clone == null || !clone.isReadable)
-                {
-                    return false;
-                }
-
-                // A crunched clone has no CPU decode on this platform:
-                // GetPixels refuses crunched textures with an exception.
-                // Crunched is compressed, so the import already left the
-                // direct route at the format gate, and this refusal keeps
-                // the capture fail closed instead of answering from the
-                // authoring bytes.
-                if (clone.format == TextureFormat.DXT1Crunched ||
-                    clone.format == TextureFormat.DXT5Crunched)
-                {
-                    refusal = TextureCaptureRefusalReason.UnsupportedFormat;
-                    return false;
-                }
-
-                if (clone.mipmapCount != source.mipmapCount ||
-                    clone.width != source.width ||
-                    clone.height != source.height)
-                {
-                    return false;
-                }
-
-                return read(clone, out refusal);
-            }
-            finally
-            {
-                AssetDatabase.DeleteAsset(tempPath);
-                if (folderCreated &&
-                    AssetDatabase.IsValidFolder(TempFolder) &&
-                    AssetDatabase.FindAssets("", new[] { TempFolder })
-                        .Length == 0)
-                {
-                    AssetDatabase.DeleteAsset(TempFolder);
+                    AssetDatabase.StartAssetEditing();
+                    LeftLevels--;
                 }
             }
         }

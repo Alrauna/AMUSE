@@ -844,5 +844,114 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 AssetDatabase.DeleteAsset(AssetDatabase.GetAssetPath(texture));
             }
         }
+
+        /// <summary>
+        /// A manual bake wraps its whole build in an asset editing
+        /// batch, and inside that batch the asset database defers the
+        /// import of a copied clone. The acquisition must still answer
+        /// with the image, and no scratch folder may remain once the
+        /// batch closes.
+        /// </summary>
+        [Test]
+        public void AcquisitionInsideAnAssetEditingBatchReturnsTheImage()
+        {
+            var texture = ImportUnreadableStreamingTexture(
+                "acquisition_inside_batch", 32);
+            try
+            {
+                AssetDatabase.StartAssetEditing();
+                AtlasSourceImage image;
+                try
+                {
+                    var ok = UnityStreamingTextureEvidence
+                        .TryAcquireAtlasSource(
+                            texture, 1, out image, out var refusal);
+                    Assert.That(
+                        ok, Is.True,
+                        "the acquisition must succeed inside an asset " +
+                        "editing batch, refusal " + refusal);
+                    Assert.That(
+                        AssetDatabase.IsValidFolder(StreamingTempFolder),
+                        Is.False,
+                        "the readback folder must not remain while the " +
+                        "batch is still open");
+                }
+                finally
+                {
+                    AssetDatabase.StopAssetEditing();
+                }
+
+                Assert.That(image, Is.Not.Null);
+                Assert.That(image.Width, Is.EqualTo(32));
+                Assert.That(image.Height, Is.EqualTo(32));
+                Assert.That(
+                    image.MipCount, Is.EqualTo(texture.mipmapCount));
+                Assert.That(image.RawLevels.Count, Is.EqualTo(1));
+                Assert.That(
+                    AssetDatabase.IsValidFolder(StreamingTempFolder),
+                    Is.False,
+                    "no scratch folder may remain after the batch closes");
+            }
+            finally
+            {
+                if (AssetDatabase.IsValidFolder(StreamingTempFolder))
+                {
+                    AssetDatabase.DeleteAsset(StreamingTempFolder);
+                }
+                AssetDatabase.DeleteAsset(AssetDatabase.GetAssetPath(texture));
+            }
+        }
+
+        /// <summary>
+        /// The alpha streaming capture rides the same clone steps, so
+        /// it must also capture inside an asset editing batch and
+        /// leave no scratch folder behind.
+        /// </summary>
+        [Test]
+        public void CaptureInsideAnAssetEditingBatchReturnsTheChain()
+        {
+            var texture = ImportExrStreamingBandTexture(
+                "streaming_capture_inside_batch");
+            try
+            {
+                AssetDatabase.StartAssetEditing();
+                AlphaMipChain chain;
+                try
+                {
+                    var ok = UnityStreamingTextureEvidence.TryCapture(
+                        texture,
+                        TextureChannel.Alpha,
+                        0.25f,
+                        AlphaPolicyBounds.Inert,
+                        out chain);
+                    Assert.That(
+                        ok, Is.True,
+                        "the capture must succeed inside an asset " +
+                        "editing batch");
+                }
+                finally
+                {
+                    AssetDatabase.StopAssetEditing();
+                }
+
+                Assert.That(chain, Is.Not.Null);
+                Assert.That(chain[0].GetAlpha(8, 32), Is.EqualTo(0));
+                Assert.That(
+                    chain[0].GetAlpha(56, 32),
+                    Is.EqualTo(byte.MaxValue));
+                Assert.That(
+                    AssetDatabase.IsValidFolder(StreamingTempFolder),
+                    Is.False,
+                    "no scratch folder may remain after the batch closes");
+            }
+            finally
+            {
+                if (AssetDatabase.IsValidFolder(StreamingTempFolder))
+                {
+                    AssetDatabase.DeleteAsset(StreamingTempFolder);
+                }
+                AssetDatabase.DeleteAsset(AssetDatabase.GetAssetPath(texture));
+            }
+        }
     }
 }

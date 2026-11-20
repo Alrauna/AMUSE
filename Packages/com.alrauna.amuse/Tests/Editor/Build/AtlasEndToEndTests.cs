@@ -669,6 +669,106 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        /// <summary>
+        /// A manual bake wraps the whole build in an asset editing
+        /// batch. The batch must not change the atlas outcome: both
+        /// admitted uses still move onto the first page, both slots
+        /// carry the page material, and the streaming scratch folder
+        /// is gone. The manual bake root keeps its generated output,
+        /// so the test removes it through the asset database.
+        /// </summary>
+        [Test]
+        public void ManualBakeAtlasesLikeAnUnbatchedBuild()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = NewAtlasOnlyRoot();
+            GameObject baked = null;
+            try
+            {
+                var firstMaterial = NewAdmittedMaterial(
+                    "manual bake first",
+                    new Color32(220, 40, 40, 255),
+                    new Color32(40, 40, 220, 255));
+                var secondMaterial = NewAdmittedMaterial(
+                    "manual bake second",
+                    new Color32(40, 200, 60, 255),
+                    new Color32(220, 200, 40, 255));
+                var firstMesh = Track(NewQuadMesh());
+                var secondMesh = Track(NewQuadMesh());
+                var firstChild = new GameObject("first");
+                firstChild.transform.SetParent(root.transform, false);
+                var firstRenderer =
+                    firstChild.AddComponent<MeshRenderer>();
+                firstChild.AddComponent<MeshFilter>().sharedMesh =
+                    firstMesh;
+                firstRenderer.sharedMaterial = firstMaterial;
+                var secondChild = new GameObject("second");
+                secondChild.transform.SetParent(root.transform, false);
+                var secondRenderer =
+                    secondChild.AddComponent<MeshRenderer>();
+                secondChild.AddComponent<MeshFilter>().sharedMesh =
+                    secondMesh;
+                secondRenderer.sharedMaterial = secondMaterial;
+
+                baked = AvatarProcessor.ManualProcessAvatar(
+                    root, AtlasEndToEndPlatform.Instance);
+
+                Assert.That(
+                    baked, Is.Not.Null,
+                    "the manual bake must return the processed clone");
+                var renderers = baked
+                    .GetComponentsInChildren<MeshRenderer>();
+                Assert.That(
+                    renderers.Length, Is.EqualTo(2),
+                    "the baked clone must keep both slots");
+                var pageMaterial = renderers[0].sharedMaterial;
+                Assert.That(
+                    renderers[1].sharedMaterial,
+                    Is.SameAs(pageMaterial),
+                    "both slots must carry the one shared page material");
+                Assert.That(
+                    pageMaterial.name,
+                    Is.EqualTo("AMUSE atlas material 0-0"),
+                    "the first page must hold both uses, so the bake " +
+                    "made one page");
+                Assert.That(
+                    pageMaterial, Is.Not.SameAs(firstMaterial));
+                var page = (Texture2D)pageMaterial.GetTexture("_MainTex");
+                Assert.That(
+                    page, Is.Not.Null,
+                    "the page material must carry the page texture");
+                Assert.That(
+                    page.name, Is.EqualTo("AMUSE atlas page 0-0"));
+
+                Assert.That(
+                    AssetDatabase.IsValidFolder(
+                        "Assets/Amuse.StreamingReadback"),
+                    Is.False,
+                    "a manual bake must not leave the streaming " +
+                    "scratch folder");
+            }
+            finally
+            {
+                if (baked != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(baked);
+                }
+                if (AssetDatabase.IsValidFolder(
+                        "Assets/Amuse.StreamingReadback"))
+                {
+                    AssetDatabase.DeleteAsset(
+                        "Assets/Amuse.StreamingReadback");
+                }
+                if (AssetDatabase.IsValidFolder(
+                        "Assets/ZZZ_GeneratedAssets"))
+                {
+                    AssetDatabase.DeleteAsset(
+                        "Assets/ZZZ_GeneratedAssets");
+                }
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
         [Test]
         public void PlacementIsTheSameOnTwoBuilds()
         {
