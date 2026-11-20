@@ -677,5 +677,281 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 AssetDatabase.DeleteAsset(AssetDatabase.GetAssetPath(texture));
             }
         }
+
+        /// <summary>
+        /// Imports a streaming, non-readable RGBA32 texture with a
+        /// source file. The texels follow a deterministic pattern, so
+        /// an acquired level can be checked against the authored
+        /// bytes.
+        /// </summary>
+        private Texture2D ImportUnreadableStreamingTexture(
+            string name,
+            int size)
+        {
+            var path = TempFolder + "/" + name + ".png";
+            var pixels = new Color32[size * size];
+            for (var y = 0; y < size; y++)
+            {
+                for (var x = 0; x < size; x++)
+                {
+                    pixels[y * size + x] = new Color32(
+                        (byte)(17 * x + 3),
+                        (byte)(29 * y + 5),
+                        (byte)(x * 31 + y * 7),
+                        (byte)(x * x + 3 * y + 11));
+                }
+            }
+
+            var loaded = TestTextureImport.WritePng(
+                path, size, size, pixels, importer =>
+                {
+                    importer.mipmapEnabled = true;
+                    importer.isReadable = false;
+                    importer.textureCompression =
+                        TextureImporterCompression.Uncompressed;
+                    importer.streamingMipmaps = true;
+                });
+            Assert.That(
+                loaded.streamingMipmaps, Is.True,
+                "fixture precondition: the imported texture must be " +
+                "streaming-resident");
+            Assert.That(
+                loaded.isReadable, Is.False,
+                "fixture precondition: the imported texture must not " +
+                "be readable");
+            return loaded;
+        }
+
+        /// <summary>
+        /// Snapshots the source importer settings the acquisition must
+        /// never touch. The value is one comparable string.
+        /// </summary>
+        private static string SnapshotImporterSettings(string path)
+        {
+            var importer = (TextureImporter)AssetImporter.GetAtPath(path);
+            Assert.That(
+                importer, Is.Not.Null,
+                "fixture precondition: the source must keep its " +
+                "importer");
+            return importer.isReadable + "|" +
+                importer.streamingMipmaps + "|" +
+                importer.mipmapEnabled + "|" +
+                importer.textureCompression + "|" +
+                importer.maxTextureSize + "|" +
+                importer.sRGBTexture + "|" +
+                importer.wrapMode + "|" +
+                importer.filterMode;
+        }
+
+        [Test]
+        public void AcquisitionReturnsTheImportedSizeAndProtectedLevels()
+        {
+            const int size = 256;
+            const int protectedLevels = 2;
+            var texture = ImportUnreadableStreamingTexture(
+                "acquisition_size_and_levels", 256);
+            var path = AssetDatabase.GetAssetPath(texture);
+            var before = SnapshotImporterSettings(path);
+            string after;
+            try
+            {
+                var ok = UnityStreamingTextureEvidence.TryAcquireAtlasSource(
+                    texture, protectedLevels, out var image, out var refusal);
+                Assert.That(
+                    ok, Is.True,
+                    "the acquisition must succeed, refusal " + refusal);
+                Assert.That(image, Is.Not.Null);
+                Assert.That(image.Width, Is.EqualTo(size));
+                Assert.That(image.Height, Is.EqualTo(size));
+                Assert.That(image.Format, Is.EqualTo(texture.graphicsFormat));
+                Assert.That(image.MipCount, Is.EqualTo(texture.mipmapCount));
+                Assert.That(
+                    image.RawLevels.Count, Is.EqualTo(protectedLevels));
+                Assert.That(
+                    image.RawLevels[0].Length,
+                    Is.EqualTo(size * size * 4));
+                Assert.That(
+                    image.RawLevels[1].Length,
+                    Is.EqualTo(size / 2 * (size / 2) * 4));
+                Assert.That(image.Level0.Length, Is.EqualTo(size * size));
+
+                // The authored marker texel survives the acquisition
+                // byte for byte.
+                Assert.That(
+                    image.Level0[5 * size + 9].r,
+                    Is.EqualTo((byte)(17 * 9 + 3)));
+                Assert.That(
+                    image.Level0[5 * size + 9].g,
+                    Is.EqualTo((byte)(29 * 5 + 5)));
+                Assert.That(
+                    image.Level0[5 * size + 9].a,
+                    Is.EqualTo((byte)(9 * 9 + 3 * 5 + 11)));
+
+                after = SnapshotImporterSettings(path);
+            }
+            finally
+            {
+                AssetDatabase.DeleteAsset(path);
+            }
+
+            Assert.That(
+                after, Is.EqualTo(before),
+                "the acquisition must leave the source importer " +
+                "settings unchanged");
+        }
+
+        [Test]
+        public void AcquisitionLeavesNoTemporaryAsset()
+        {
+            // A leftover from an earlier run would hide a cleanup
+            // defect, so the test removes the pinned folder first
+            // through the asset database.
+            if (AssetDatabase.IsValidFolder(StreamingTempFolder))
+            {
+                AssetDatabase.DeleteAsset(StreamingTempFolder);
+            }
+
+            var texture = ImportUnreadableStreamingTexture(
+                "acquisition_no_leftover", 32);
+            try
+            {
+                var ok = UnityStreamingTextureEvidence.TryAcquireAtlasSource(
+                    texture, 1, out var image, out var refusal);
+                Assert.That(
+                    ok, Is.True,
+                    "fixture precondition: the acquisition must " +
+                    "succeed, refusal " + refusal);
+                Assert.That(image, Is.Not.Null);
+
+                Assert.That(
+                    AssetDatabase.FindAssets(
+                        "", new[] { StreamingTempFolder }).Length,
+                    Is.EqualTo(0),
+                    "no asset may remain in the readback folder after " +
+                    "the acquisition");
+                Assert.That(
+                    AssetDatabase.IsValidFolder(StreamingTempFolder),
+                    Is.False,
+                    "the readback folder must be gone when the route " +
+                    "created it");
+            }
+            finally
+            {
+                if (AssetDatabase.IsValidFolder(StreamingTempFolder))
+                {
+                    AssetDatabase.DeleteAsset(StreamingTempFolder);
+                }
+                AssetDatabase.DeleteAsset(AssetDatabase.GetAssetPath(texture));
+            }
+        }
+
+        /// <summary>
+        /// A manual bake wraps its whole build in an asset editing
+        /// batch, and inside that batch the asset database defers the
+        /// import of a copied clone. The acquisition must still answer
+        /// with the image, and no scratch folder may remain once the
+        /// batch closes.
+        /// </summary>
+        [Test]
+        public void AcquisitionInsideAnAssetEditingBatchReturnsTheImage()
+        {
+            var texture = ImportUnreadableStreamingTexture(
+                "acquisition_inside_batch", 32);
+            try
+            {
+                AssetDatabase.StartAssetEditing();
+                AtlasSourceImage image;
+                try
+                {
+                    var ok = UnityStreamingTextureEvidence
+                        .TryAcquireAtlasSource(
+                            texture, 1, out image, out var refusal);
+                    Assert.That(
+                        ok, Is.True,
+                        "the acquisition must succeed inside an asset " +
+                        "editing batch, refusal " + refusal);
+                    Assert.That(
+                        AssetDatabase.IsValidFolder(StreamingTempFolder),
+                        Is.False,
+                        "the readback folder must not remain while the " +
+                        "batch is still open");
+                }
+                finally
+                {
+                    AssetDatabase.StopAssetEditing();
+                }
+
+                Assert.That(image, Is.Not.Null);
+                Assert.That(image.Width, Is.EqualTo(32));
+                Assert.That(image.Height, Is.EqualTo(32));
+                Assert.That(
+                    image.MipCount, Is.EqualTo(texture.mipmapCount));
+                Assert.That(image.RawLevels.Count, Is.EqualTo(1));
+                Assert.That(
+                    AssetDatabase.IsValidFolder(StreamingTempFolder),
+                    Is.False,
+                    "no scratch folder may remain after the batch closes");
+            }
+            finally
+            {
+                if (AssetDatabase.IsValidFolder(StreamingTempFolder))
+                {
+                    AssetDatabase.DeleteAsset(StreamingTempFolder);
+                }
+                AssetDatabase.DeleteAsset(AssetDatabase.GetAssetPath(texture));
+            }
+        }
+
+        /// <summary>
+        /// The alpha streaming capture rides the same clone steps, so
+        /// it must also capture inside an asset editing batch and
+        /// leave no scratch folder behind.
+        /// </summary>
+        [Test]
+        public void CaptureInsideAnAssetEditingBatchReturnsTheChain()
+        {
+            var texture = ImportExrStreamingBandTexture(
+                "streaming_capture_inside_batch");
+            try
+            {
+                AssetDatabase.StartAssetEditing();
+                AlphaMipChain chain;
+                try
+                {
+                    var ok = UnityStreamingTextureEvidence.TryCapture(
+                        texture,
+                        TextureChannel.Alpha,
+                        0.25f,
+                        AlphaPolicyBounds.Inert,
+                        out chain);
+                    Assert.That(
+                        ok, Is.True,
+                        "the capture must succeed inside an asset " +
+                        "editing batch");
+                }
+                finally
+                {
+                    AssetDatabase.StopAssetEditing();
+                }
+
+                Assert.That(chain, Is.Not.Null);
+                Assert.That(chain[0].GetAlpha(8, 32), Is.EqualTo(0));
+                Assert.That(
+                    chain[0].GetAlpha(56, 32),
+                    Is.EqualTo(byte.MaxValue));
+                Assert.That(
+                    AssetDatabase.IsValidFolder(StreamingTempFolder),
+                    Is.False,
+                    "no scratch folder may remain after the batch closes");
+            }
+            finally
+            {
+                if (AssetDatabase.IsValidFolder(StreamingTempFolder))
+                {
+                    AssetDatabase.DeleteAsset(StreamingTempFolder);
+                }
+                AssetDatabase.DeleteAsset(AssetDatabase.GetAssetPath(texture));
+            }
+        }
     }
 }

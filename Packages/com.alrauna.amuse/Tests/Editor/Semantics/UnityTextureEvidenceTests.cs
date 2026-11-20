@@ -979,6 +979,177 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 importer => importer.mipmapEnabled = true);
         }
 
+        // --- TryGetAtlasSampler ---
+
+        /// <summary>
+        /// A native texture asset with the sampler state written on the
+        /// object. The atlas sampler capture reads authored object state,
+        /// so the asset isolates the method from import conversion.
+        /// </summary>
+        private static Texture2D ImportNativeSamplerAsset(
+            string name,
+            FilterMode filter,
+            UnityEngine.TextureWrapMode wrapU,
+            UnityEngine.TextureWrapMode wrapV,
+            int anisoLevel,
+            float mipBias)
+        {
+            var texture = new Texture2D(
+                4, 4, TextureFormat.RGBA32, true)
+            {
+                filterMode = filter,
+                wrapModeU = wrapU,
+                wrapModeV = wrapV,
+                anisoLevel = anisoLevel,
+                mipMapBias = mipBias,
+            };
+            var path = TempFolder + "/" + name + ".asset";
+            AssetDatabase.CreateAsset(texture, path);
+            AssetDatabase.ImportAsset(
+                path, ImportAssetOptions.ForceSynchronousImport);
+            var loaded = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+            Assert.That(
+                loaded, Is.Not.Null,
+                "fixture precondition: the sampler asset must load");
+            return loaded;
+        }
+
+        [Test]
+        public void TryGetAtlasSampler_CapturesAllFiveFacts()
+        {
+            var texture = ImportNativeSamplerAsset(
+                "sampler facts", FilterMode.Trilinear,
+                UnityEngine.TextureWrapMode.Clamp, UnityEngine.TextureWrapMode.Repeat, 4, 0.25f);
+
+            var captured = UnityTextureEvidence.TryGetAtlasSampler(
+                texture, out var facts);
+
+            Assert.That(captured, Is.True);
+            Assert.That(
+                facts,
+                Is.EqualTo(new AtlasSamplerFacts(
+                    FilterMode.Trilinear,
+                    UnityEngine.TextureWrapMode.Clamp,
+                    UnityEngine.TextureWrapMode.Repeat,
+                    4,
+                    0.25f)));
+        }
+
+        [Test]
+        public void TryGetAtlasSampler_EachFilterPasses(
+            [Values] FilterMode filter)
+        {
+            var texture = ImportNativeSamplerAsset(
+                "filter " + filter, filter,
+                UnityEngine.TextureWrapMode.Repeat, UnityEngine.TextureWrapMode.Repeat, 1, 0f);
+
+            var captured = UnityTextureEvidence.TryGetAtlasSampler(
+                texture, out var facts);
+
+            Assert.That(captured, Is.True);
+            Assert.That(facts.Filter, Is.EqualTo(filter));
+        }
+
+        [Test]
+        public void TryGetAtlasSampler_WrapPassesPerAxis(
+            [Values(
+                UnityEngine.TextureWrapMode.Clamp,
+                UnityEngine.TextureWrapMode.Repeat)] UnityEngine.TextureWrapMode wrapU,
+            [Values(
+                UnityEngine.TextureWrapMode.Clamp,
+                UnityEngine.TextureWrapMode.Repeat)] UnityEngine.TextureWrapMode wrapV)
+        {
+            var texture = ImportNativeSamplerAsset(
+                "wrap " + wrapU + wrapV, FilterMode.Bilinear,
+                wrapU, wrapV, 1, 0f);
+
+            var captured = UnityTextureEvidence.TryGetAtlasSampler(
+                texture, out var facts);
+
+            Assert.That(captured, Is.True);
+            Assert.That(facts.WrapU, Is.EqualTo(wrapU));
+            Assert.That(facts.WrapV, Is.EqualTo(wrapV));
+        }
+
+        [Test]
+        public void TryGetAtlasSampler_MirrorWrapFails(
+            [Values(
+                UnityEngine.TextureWrapMode.Mirror,
+                UnityEngine.TextureWrapMode.MirrorOnce)] UnityEngine.TextureWrapMode mirror)
+        {
+            var texture = ImportNativeSamplerAsset(
+                "mirror " + mirror, FilterMode.Bilinear,
+                mirror, UnityEngine.TextureWrapMode.Repeat, 1, 0f);
+
+            var captured = UnityTextureEvidence.TryGetAtlasSampler(
+                texture, out _);
+
+            Assert.That(captured, Is.False);
+        }
+
+        [Test]
+        public void TryGetAtlasSampler_NonTex2DFails()
+        {
+            var volume = new Texture3D(
+                4, 4, 4, TextureFormat.RGBA32, false);
+            var renderTexture = new RenderTexture(
+                4, 4, 0, RenderTextureFormat.ARGB32);
+            try
+            {
+                Assert.That(
+                    UnityTextureEvidence.TryGetAtlasSampler(
+                        volume, out _),
+                    Is.False,
+                    "a 3D texture has no 2D route");
+                Assert.That(
+                    UnityTextureEvidence.TryGetAtlasSampler(
+                        renderTexture, out _),
+                    Is.False,
+                    "a render texture is not a Texture2D");
+                Assert.That(
+                    UnityTextureEvidence.TryGetAtlasSampler(
+                        null, out _),
+                    Is.False,
+                    "a missing texture cannot prove a sampler");
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(volume);
+                renderTexture.Release();
+                UnityEngine.Object.DestroyImmediate(renderTexture);
+            }
+        }
+
+        [Test]
+        public void AtlasSamplerFacts_HoldValueEquality()
+        {
+            var facts = new AtlasSamplerFacts(
+                FilterMode.Bilinear,
+                UnityEngine.TextureWrapMode.Repeat,
+                UnityEngine.TextureWrapMode.Repeat,
+                2,
+                0f);
+            var same = new AtlasSamplerFacts(
+                FilterMode.Bilinear,
+                UnityEngine.TextureWrapMode.Repeat,
+                UnityEngine.TextureWrapMode.Repeat,
+                2,
+                0f);
+            var differentAniso = new AtlasSamplerFacts(
+                FilterMode.Bilinear,
+                UnityEngine.TextureWrapMode.Repeat,
+                UnityEngine.TextureWrapMode.Repeat,
+                4,
+                0f);
+
+            Assert.That(facts == same, Is.True);
+            Assert.That(facts.Equals(same), Is.True);
+            Assert.That(
+                facts.GetHashCode(), Is.EqualTo(same.GetHashCode()));
+            Assert.That(facts != differentAniso, Is.True);
+            Assert.That(facts.Equals(differentAniso), Is.False);
+        }
+
         private static Texture2D MakeRegisteredAdmittedCopy(
             string sourceName, TextureFormat format = TextureFormat.RGBA32)
         {
@@ -1022,6 +1193,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 {
                     "TryGetSourceId",
                     "TryGetSampling",
+                    "TryGetAtlasSampler",
                     "TryGetColorInterpretation",
                     "TryProveSampledAlphaIsOne",
                     "IsCanonicalNormalMapImport",

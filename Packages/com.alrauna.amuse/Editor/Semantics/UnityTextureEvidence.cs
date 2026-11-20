@@ -13,8 +13,10 @@ namespace Alrauna.Amuse.Editor.Semantics
     /// optimization policy, and no NDMF types, and it takes no
     /// <see cref="Material"/>; "which texture supplies this fact" is
     /// shader-specific knowledge that belongs in the frontend asking. It is not
-    /// an extraction framework, and it exposes exactly six facts, each with a
-    /// proven consumer.
+    /// an extraction framework, and it exposes exactly seven facts. Six
+    /// of them are proof predicates with a proven consumer. The
+    /// seventh, <see cref="TryGetAtlasSampler"/>, records authored
+    /// sampler facts for the atlas pass.
     /// </summary>
     internal static class UnityTextureEvidence
     {
@@ -157,6 +159,59 @@ namespace Alrauna.Amuse.Editor.Semantics
             sampling = new TextureSampling(
                 filter, wrapU, aniso, texture.anisoLevel != 0);
             return true;
+        }
+
+        /// <summary>
+        /// Captures the atlas sampler facts of one texture: the filter
+        /// mode, the wrap mode of each axis, the anisotropy level, and
+        /// the mip bias. Only a <see cref="Texture2D"/> of dimension
+        /// Tex2D passes. Point, Bilinear, and Trilinear filters pass.
+        /// Clamp and Repeat pass per axis, so the two axes may differ.
+        /// Mirror and MirrorOnce fail, because the atlas border covers
+        /// no mirrored footprint. The facts are recorded as authored,
+        /// never proven or modeled, so this method refuses nothing that
+        /// the hardware could sample.
+        /// </summary>
+        internal static bool TryGetAtlasSampler(
+            Texture texture,
+            out AtlasSamplerFacts facts)
+        {
+            facts = default;
+            if (!(texture is Texture2D texture2D) ||
+                texture2D.dimension !=
+                    UnityEngine.Rendering.TextureDimension.Tex2D)
+            {
+                return false;
+            }
+
+            var filter = texture2D.filterMode;
+            if (filter != FilterMode.Point &&
+                filter != FilterMode.Bilinear &&
+                filter != FilterMode.Trilinear)
+            {
+                return false;
+            }
+
+            var wrapU = texture2D.wrapModeU;
+            var wrapV = texture2D.wrapModeV;
+            if (!IsAtlasWrapMode(wrapU) || !IsAtlasWrapMode(wrapV))
+            {
+                return false;
+            }
+
+            facts = new AtlasSamplerFacts(
+                filter,
+                wrapU,
+                wrapV,
+                texture2D.anisoLevel,
+                texture2D.mipMapBias);
+            return true;
+        }
+
+        private static bool IsAtlasWrapMode(UnityEngine.TextureWrapMode mode)
+        {
+            return mode == UnityEngine.TextureWrapMode.Clamp ||
+                   mode == UnityEngine.TextureWrapMode.Repeat;
         }
 
         /// <summary>

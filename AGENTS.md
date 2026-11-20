@@ -19,7 +19,7 @@ One NDMF plugin, `AmusePlatformFinishPlugin` (`Packages/com.alrauna.amuse/Editor
 3. `AmusePlatformFinishPass` runs extension-free, so NDMF commits the animator graph first. It gates on `HostLifecycleCapability.Evaluate` (versions, platform, build path, build services). It runs the shared gates and the one consent dialog when at least one feature is on. Per renderer it captures closed animation and material evidence, resolves per-slot runtime states, classifies triangle alpha exactly, plans mesh separation, and retains `PreparedAlphaSeparation`.
 4. `AlphaSeparationApply` revalidates every candidate against live state, finalizes, sweeps unreferenced AMUSE-owned clones, and performs the single mutation: animation curves, then `sharedMesh`, then `sharedMaterials`.
 5. `TransientUnlockWindowClose` runs extension-free after the animator scope closes, reverts every open pair to its locked original, re-asserts apply's recorded writes, and destroys the unlocked clone last.
-6. `AtlasPass` runs extension-free after the window close. It reads `SharedGatesPassed` from the barrier state, so it repeats no shared gate. It reports only its own named refusals.
+6. `AtlasPass` runs extension-free after the window close. It reads `SharedGatesPassed` from the barrier state, so it repeats no shared gate. It captures one use per renderer slot, records a named refusal per refused use, builds one page per admitted group of the Poiyomi main color route, and writes the meshes and slots it changed.
 
 Module layering and dependency direction:
 

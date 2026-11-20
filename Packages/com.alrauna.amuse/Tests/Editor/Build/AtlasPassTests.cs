@@ -426,6 +426,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(state.AnalyzedRendererCount, Is.Zero,
                     "no renderer enters alpha analysis while alpha" +
                     " separation is off");
+                Assert.That(state.AtlasPageCount, Is.EqualTo(0),
+                    "an avatar with no renderer must build no atlas" +
+                    " page");
             }
             finally
             {

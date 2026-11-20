@@ -43,10 +43,12 @@ Status on 2026-11-19: Implemented and committed on branch `atlasing-m1-settings-
 
 Scope: the Poiyomi 9.3 main color route. Color role only.
 
-- [ ] Write an end-to-end public fixture with two compatible materials and different regions. Assert correct rendered output, unchanged sources, a complete output mesh with Float32 route UVs, one shared material per page, deterministic placement, and an unchanged slot count.
-- [ ] Write the falsifiers of design section 14 that apply to this row. Include a transparent slot with its opaque clone in different groups, and a refused use that keeps its alpha separation output.
-- [ ] Observe RED. Implement acquisition through the existing import copy route, the route table, the group key, placement, page generation with the protected-level copy and streaming mip maps, the output check, the mesh and material output, the identity check, the write, and cleanup. Throw on output invariants. Observe GREEN through the real build lifecycle.
-- [ ] Build and upload one public fixture avatar with an 8192 page. Record whether the page streams in the built bundle and whether VRChat accepts the page.
+Status on 2026-11-20: Implemented on branch `atlasing-m2-poiyomi-main-color`. The executable plan `docs/superpowers/plans/2026-11-19-atlasing-milestone-2-poiyomi-main-color.md` records the seven tasks and the `EmptySubmesh` review ruling. On 2026-11-20 the product and research EditMode assemblies ran in the dev editor instance, with no filter, at commit `f4f3893`. The combined payload reported 3617 total, 3592 passed, 0 failed, and 25 skipped. The skips are the vendor opt-in gates. The GPU reach fixture `AtlasGpuReachTests` re-measured the border reach on 2026-11-20: 1.326 texels at anisotropy level 0 against the border of 1, and 14.564 texels at anisotropy level 16 against the border of 16, each as the Euclidean distance in base level texels. The owner build and VRChat upload of the 8192 fixture avatar is pending owner action since 2026-11-20. The two upload facts, page streaming in the built bundle and VRChat acceptance of the page, are open.
+
+- [x] Write an end-to-end public fixture with two compatible materials and different regions. Assert correct rendered output, unchanged sources, a complete output mesh with Float32 route UVs, one shared material per page, deterministic placement, and an unchanged slot count.
+- [x] Write the falsifiers of design section 14 that apply to this row. Include a transparent slot with its opaque clone in different groups, and a refused use that keeps its alpha separation output.
+- [x] Observe RED. Implement acquisition through the existing import copy route, the route table, the group key, placement, page generation with the protected-level copy and streaming mip maps, the output check, the mesh and material output, the identity check, the write, and cleanup. Throw on output invariants. Observe GREEN through the real build lifecycle.
+- [ ] Build and upload one public fixture avatar with an 8192 page. Record whether the page streams in the built bundle and whether VRChat accepts the page. Pending owner action since 2026-11-20. The test assembly menu item `AMUSE Tests/Create atlas upload fixture` creates the avatar under `Assets/_PoiyomiShadersAtlasUpload`, a folder the gitignore already ignores. Its uncompressed RGB24 page of 8192 by 4096 texels is about 134 MB with its mip chain.
 
 ## Milestone 3: Second row
 
@@ -78,4 +80,4 @@ Scope: the Poiyomi 9.3 main color route. Color role only.
 | 10 Budget | Gate 0, 2, 5 |
 | 11 Settings and report | 1, 4 |
 
-Next action: Owner review of the uncommitted Milestone 1 changes. Then write the Milestone 2 plan against the source.
+Next action: The owner builds and uploads the 8192 fixture avatar through the VRChat SDK and records the two upload facts. Then write the Milestone 3 plan for the lilToon row.
