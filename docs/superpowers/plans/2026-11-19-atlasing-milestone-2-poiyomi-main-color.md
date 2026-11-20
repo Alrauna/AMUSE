@@ -116,7 +116,7 @@ Each test builds a real Poiyomi material on the GUID-loaded installed shader, as
 - `CrunchedSourceRefuses` and `R8SourceRefuses`: `UnsupportedFormat`.
 - `GeneratedTextureWithoutAnAssetRefuses`: `SourceNotAnAsset`.
 - `SourceWithFewerLevelsThanProtectedRefuses`: a source without mip maps and protected count 2. `SourceMipChainTooShort`.
-- `CompressedSourceNotOnTheBlockGridRefuses`: a DXT1 source of 68 by 64 texels with protected count 2. Level 1 is 34 texels wide, which is not a multiple of 4. `SourceNotAligned`.
+- `CompressedSourceNotOnTheBlockGridRefuses`: dropped on 2026-11-20. An import probe in the dev editor on 2026-11-20 showed that Unity does not produce this source. A 68 by 64 PNG with mip maps and DXT1 imports as uncompressed RGB24 with no resize, and as 64 by 64 DXT1 with the nearest power of two resize. The `SourceNotAligned` check stays in the capture as a fail-closed invariant without a direct test.
 - `ExtraSlotsRefuseTheLastSubmeshUses`: a two-submesh mesh with three slots. Slots 1 and 2 refuse with `SlotSharesSubmesh`. Slot 0 is admitted.
 - `TransparentSlotAndItsOpaqueCloneHaveDifferentMaterialKeys`: two materials that differ only in render queue and `RenderType` tag.
 
