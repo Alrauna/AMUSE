@@ -1,0 +1,1283 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Alrauna.Amuse.Editor.Build;
+using Alrauna.Amuse.Editor.Semantics.Poiyomi;
+using Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi;
+using Alrauna.Amuse.Tests.Editor.Shared;
+using nadena.dev.ndmf;
+using nadena.dev.ndmf.animator;
+using nadena.dev.ndmf.platform;
+using NUnit.Framework;
+using UnityEditor;
+using UnityEngine;
+using UnityEngine.Rendering;
+
+
+[assembly: ExportsPlugin(typeof(
+    Alrauna.Amuse.Tests.Editor.Build.AtlasEndToEndTests
+        .AtlasEndToEndPlugin))]
+
+namespace Alrauna.Amuse.Tests.Editor.Build
+{
+    /// <summary>
+    /// The end to end atlas path. Every test drives one build through
+    /// <see cref="AvatarProcessor.ProcessAvatar"/> on a dedicated
+    /// platform whose plugin runs the production pass sequence in the
+    /// production order: the structural graph check, the bindings
+    /// capture, the barrier, alpha separation apply, the unlock window
+    /// close, then the atlas pass. The barrier runs the production
+    /// entry, so every fixture material is a real installed Poiyomi
+    /// material. Each test runs inside an override of the NDMF
+    /// temporary directory and cleans its generated assets through the
+    /// asset database.
+    /// </summary>
+    public sealed class AtlasEndToEndTests
+    {
+        private const string TempFolder = "Assets/AmuseTests_AtlasEndToEnd";
+
+        private readonly TestTransientScope _scope =
+            new TestTransientScope(TempFolder);
+
+        private Func<BuildTarget> _originalTarget;
+
+        [SetUp]
+        public void SetUp()
+        {
+            _originalTarget =
+                AmusePlatformFinishPlugin.ActiveBuildTargetForTests;
+            AmusePlatformFinishPlugin.ActiveBuildTargetForTests =
+                () => BuildTarget.StandaloneWindows64;
+            _scope.EnsureTempFolder();
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            AmusePlatformFinishPlugin.ActiveBuildTargetForTests =
+                _originalTarget;
+            AtlasPass.PageCheck = AtlasPageCheck.Verify;
+            _scope.TearDown();
+            if (AssetDatabase.IsValidFolder(TempFolder))
+            {
+                AssetDatabase.DeleteAsset(TempFolder);
+                AssetDatabase.Refresh();
+            }
+        }
+
+        private T Track<T>(T obj) where T : UnityEngine.Object
+        {
+            return _scope.Track(obj);
+        }
+
+        private static HostLifecycleFacts SupportedFacts()
+        {
+            return new HostLifecycleFacts(
+                "2022.3.22f1",
+                "1.14.4",
+                "3.10.4",
+                "3.10.4",
+                WellKnownPlatforms.VRChatAvatar30,
+                AmuseBuildPath.NonPlayNdmfBuild,
+                hasAssetSaver: true,
+                hasAssetContainer: true,
+                hasObjectRegistry: true,
+                hasErrorReport: true);
+        }
+
+        // --- the dedicated platform ---------------------------------------
+
+        internal const string EndToEndPlatformName =
+            "com.alrauna.amuse.tests.atlas-end-to-end";
+
+        internal sealed class AtlasEndToEndPlatform : INDMFPlatformProvider
+        {
+            internal static readonly AtlasEndToEndPlatform Instance =
+                new AtlasEndToEndPlatform();
+
+            public string QualifiedName => EndToEndPlatformName;
+
+            public string DisplayName => "AMUSE atlas end to end";
+        }
+
+        /// <summary>
+        /// Records facts between passes that the test can only observe
+        /// while the build still holds them.
+        /// </summary>
+        public sealed class AtlasEndToEndProbe
+        {
+            internal Mesh MeshCloneBeforeAtlas;
+
+            internal Material OpaqueCloneBeforeAtlas;
+
+            internal IObjectRegistry Registry;
+
+            internal Mesh AtlasMeshAfter;
+
+            internal UnityEngine.Object AtlasMeshReferenceObject;
+        }
+
+        /// <summary>
+        /// The production pass sequence on the dedicated platform: the
+        /// structural graph check, one animator scope around the
+        /// bindings capture, the production barrier, and apply, then
+        /// the extension free window close and atlas pass, each in the
+        /// production order. A probe before the atlas pass records the
+        /// alpha separation outputs the atlas path replaces. A probe
+        /// after it records the live object registry.
+        /// </summary>
+        [RunsOnPlatforms(EndToEndPlatformName)]
+        public sealed class AtlasEndToEndPlugin : Plugin<AtlasEndToEndPlugin>
+        {
+            public override string QualifiedName =>
+                "com.alrauna.amuse.tests.atlas-end-to-end-plugin";
+
+            protected override void Configure()
+            {
+                var sequence = InPhase(BuildPhase.PlatformFinish);
+                sequence.Run(
+                    "AMUSE test structural graph check",
+                    AmuseStructuralGraphCheck.Execute);
+                sequence.WithRequiredExtension(
+                    typeof(AnimatorServicesContext),
+                    inner =>
+                    {
+                        inner.Run(
+                            "AMUSE test bindings capture",
+                            AmuseAnimatorBindingsCapture.Execute);
+                        inner.Run(
+                            "AMUSE test barrier",
+                            context => AmusePlatformFinishPass.Execute(
+                                context,
+                                SupportedFacts(),
+                                consentPresenter: subjects => true));
+                        inner.Run(
+                            AlphaSeparationApply.PassName,
+                            context => AlphaSeparationApply.Execute(
+                                context));
+                    });
+                sequence.Run(
+                    TransientUnlockWindowClose.PassName,
+                    context => TransientUnlockWindowClose.Execute(
+                        context));
+                sequence.Run("AMUSE test pre atlas probe", ProbeBeforeAtlas);
+                sequence.Run(AtlasPass.PassName, AtlasPass.Execute);
+                sequence.Run("AMUSE test post atlas probe", ProbeAfterAtlas);
+            }
+
+            private static void ProbeBeforeAtlas(BuildContext context)
+            {
+                var probe = context.GetState<AtlasEndToEndProbe>();
+                var state = context.GetState<AmusePlatformFinishState>();
+                if (state.Separation == null)
+                {
+                    return;
+                }
+
+                probe.MeshCloneBeforeAtlas =
+                    state.Separation.Renderers.Count > 0
+                        ? state.Separation.Renderers[0].MeshClone
+                        : null;
+                probe.OpaqueCloneBeforeAtlas =
+                    state.Separation.CreatedClones.FirstOrDefault(
+                        clone => clone != null);
+            }
+
+            private static void ProbeAfterAtlas(BuildContext context)
+            {
+                var probe = context.GetState<AtlasEndToEndProbe>();
+                probe.Registry = ObjectRegistry.ActiveRegistry;
+
+                var renderer = context.AvatarRootObject
+                    .GetComponentsInChildren<Renderer>(true)
+                    .FirstOrDefault();
+                if (renderer is SkinnedMeshRenderer skinned)
+                {
+                    probe.AtlasMeshAfter = skinned.sharedMesh;
+                }
+                else if (renderer != null)
+                {
+                    var filter = renderer.GetComponent<MeshFilter>();
+                    probe.AtlasMeshAfter =
+                        filter != null ? filter.sharedMesh : null;
+                }
+
+                if (probe.Registry != null && probe.AtlasMeshAfter != null)
+                {
+                    probe.AtlasMeshReferenceObject = probe.Registry
+                        .GetReference(probe.AtlasMeshAfter, false)?.Object;
+                }
+            }
+
+            /// <summary>
+            /// The injected page check failure is the one expected
+            /// exception of this suite. The base handler logs it,
+            /// which the test runner treats as an unexpected error
+            /// log, so the injected failure is skipped and every
+            /// other exception keeps the base behavior.
+            /// </summary>
+            protected override void OnUnhandledException(
+                Exception exception)
+            {
+                if (exception != null &&
+                    exception.Message.Contains(
+                        "AMUSE atlas test injected page check"))
+                {
+                    return;
+                }
+
+                base.OnUnhandledException(exception);
+            }
+        }
+
+        // --- fixtures ------------------------------------------------------
+
+        private static Shader LoadInstalledPoiyomiShader()
+        {
+            var path = AssetDatabase.GUIDToAssetPath(
+                PoiyomiSourceAttestation.CanonicalShaderGuid);
+            Assert.That(
+                path, Is.Not.Empty,
+                "fixture precondition: the installed bundled Poiyomi " +
+                "Toon shader asset must resolve by its pinned GUID");
+            var shader = AssetDatabase.LoadAssetAtPath<Shader>(path);
+            Assert.That(
+                shader, Is.Not.Null,
+                "fixture precondition: the installed bundled Poiyomi " +
+                "Toon shader asset must load");
+            return shader;
+        }
+
+        /// <summary>
+        /// One 64 by 64 mipmapped RGBA32 source with a checker pattern
+        /// of 16 texel blocks. Bilinear filtering and no anisotropy
+        /// keep the render comparison stable.
+        /// </summary>
+        private Texture2D ImportPatternTexture(
+            string name,
+            Color32 even,
+            Color32 odd)
+        {
+            var pixels = new Color32[64 * 64];
+            for (var y = 0; y < 64; y++)
+            {
+                for (var x = 0; x < 64; x++)
+                {
+                    pixels[y * 64 + x] =
+                        ((x / 16 + y / 16) % 2 == 0) ? even : odd;
+                }
+            }
+
+            // Not tracked: an imported asset leaves through the folder
+            // deletion, never through DestroyImmediate.
+            return TestTextureImport.WritePng(
+                TempFolder + "/" + name + ".png",
+                64,
+                64,
+                pixels,
+                importer =>
+                {
+                    importer.mipmapEnabled = true;
+                    importer.textureCompression =
+                        TextureImporterCompression.Uncompressed;
+                    importer.filterMode = FilterMode.Bilinear;
+                    importer.anisoLevel = 0;
+                });
+        }
+
+        private Material NewAdmittedMaterial(
+            string name,
+            Color32 even,
+            Color32 odd)
+        {
+            var material = Track(new Material(LoadInstalledPoiyomiShader()));
+            material.SetTexture(
+                "_MainTex", ImportPatternTexture(name, even, odd));
+            return material;
+        }
+
+        private static Mesh NewQuadMesh()
+        {
+            var mesh = new Mesh
+            {
+                vertices = new[]
+                {
+                    Vector3.zero,
+                    Vector3.right,
+                    Vector3.up,
+                    Vector3.right + Vector3.up,
+                },
+                uv = new[]
+                {
+                    new Vector2(0f, 0f),
+                    new Vector2(1f, 0f),
+                    new Vector2(0f, 1f),
+                    new Vector2(1f, 1f),
+                },
+            };
+            mesh.SetTriangles(new[] { 0, 2, 1, 2, 3, 1 }, 0);
+            return mesh;
+        }
+
+        /// <summary>
+        /// An opted in avatar root with alpha separation off and
+        /// atlasing on, so the only moving part is the atlas path.
+        /// </summary>
+        private GameObject NewAtlasOnlyRoot()
+        {
+            var root = new GameObject("AMUSE atlas end to end");
+            var component =
+                root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            var serialized = new SerializedObject(component);
+            var alphaSwitch =
+                serialized.FindProperty("_alphaSeparatorEnabled");
+            Assert.That(alphaSwitch, Is.Not.Null,
+                "AmuseAvatarOptimizer._alphaSeparatorEnabled field pin");
+            alphaSwitch.boolValue = false;
+            serialized.ApplyModifiedProperties();
+            FixtureProofScope.PinAllSizes(root);
+            return root;
+        }
+
+        /// <summary>
+        /// The avatar root with both features on, so alpha separation
+        /// runs before the atlas pass exactly as production orders it.
+        /// </summary>
+        private GameObject NewBothFeaturesRoot(string name)
+        {
+            var root = new GameObject(name);
+            root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            FixtureProofScope.PinAllSizes(root);
+            FixtureProofScope.AcceptDesktopAnisotropyDifferences(root);
+            return root;
+        }
+
+        /// <summary>
+        /// A real installed Poiyomi material in the convertible Fade
+        /// render state whose alpha proof reads the texture.
+        /// </summary>
+        private Material NewRealPoiyomiTextureAlphaMaterial(
+            Texture2D mainTexture)
+        {
+            var material = Track(new Material(LoadInstalledPoiyomiShader()));
+            PoiyomiFixtureTestBase.ApplyConvertibleRenderState(material);
+            material.SetFloat("_AlphaForceOpaque", 0f);
+            material.SetFloat("_MainAlphaMaskMode", 0f);
+            material.SetColor("_Color", new Color(1f, 1f, 1f, 1f));
+            material.SetTexture("_MainTex", mainTexture);
+            material.SetTextureScale("_MainTex", Vector2.one);
+            material.SetTextureOffset("_MainTex", Vector2.zero);
+            return material;
+        }
+
+        /// <summary>
+        /// A real installed Poiyomi material whose tint alpha is zero,
+        /// so the whole slot stays transparent and alpha separation
+        /// keeps it original. It carries no member texture, so the
+        /// atlas capture refuses its use.
+        /// </summary>
+        private Material NewRealPoiyomiRetainedMaterial()
+        {
+            var material = Track(new Material(LoadInstalledPoiyomiShader()));
+            PoiyomiFixtureTestBase.ApplyConvertibleRenderState(material);
+            material.SetFloat("_AlphaForceOpaque", 0f);
+            var tint = material.GetColor("_Color");
+            tint.a = 0f;
+            material.SetColor("_Color", tint);
+            material.SetTexture("_MainTex", null);
+            return material;
+        }
+
+        private static Mesh SharedMeshOf(Renderer renderer)
+        {
+            if (renderer is SkinnedMeshRenderer skinned)
+            {
+                return skinned.sharedMesh;
+            }
+
+            var filter = renderer.GetComponent<MeshFilter>();
+            return filter != null ? filter.sharedMesh : null;
+        }
+
+        private BuildContext Build(GameObject root)
+        {
+            return AvatarProcessor.ProcessAvatar(
+                root, AtlasEndToEndPlatform.Instance);
+        }
+
+        // --- the render helper ---------------------------------------------
+
+        /// <summary>
+        /// Renders one quad through an orthographic camera into a 128
+        /// by 128 target. The quad spans the unit square, so the camera
+        /// sits at its center and maps one texel row per rendered row.
+        /// </summary>
+        private static Color32[] RenderQuad(MeshRenderer renderer)
+        {
+            var cameraObject = new GameObject(
+                "AMUSE atlas render camera");
+            RenderTexture target = null;
+            Texture2D read = null;
+            try
+            {
+                var camera = cameraObject.AddComponent<Camera>();
+                camera.orthographic = true;
+                camera.orthographicSize = 0.5f;
+                camera.transform.position = new Vector3(0.5f, 0.5f, -5f);
+                camera.nearClipPlane = 0.1f;
+                camera.farClipPlane = 10f;
+                camera.clearFlags = CameraClearFlags.SolidColor;
+                camera.backgroundColor = new Color(0f, 0f, 0f, 0f);
+                camera.allowMSAA = false;
+                target = new RenderTexture(
+                    128, 128, 24, RenderTextureFormat.ARGB32)
+                {
+                    filterMode = FilterMode.Point,
+                };
+                camera.targetTexture = target;
+                camera.Render();
+
+                var previous = RenderTexture.active;
+                RenderTexture.active = target;
+                try
+                {
+                    read = new Texture2D(
+                        128, 128, TextureFormat.RGBA32, false);
+                    read.ReadPixels(new Rect(0f, 0f, 128f, 128f), 0, 0);
+                    read.Apply(false, false);
+                    return read.GetPixels32();
+                }
+                finally
+                {
+                    RenderTexture.active = previous;
+                }
+            }
+            finally
+            {
+                if (read != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(read);
+                }
+
+                if (target != null)
+                {
+                    cameraObject.GetComponent<Camera>()
+                        .targetTexture = null;
+                    target.Release();
+                    UnityEngine.Object.DestroyImmediate(target);
+                }
+
+                UnityEngine.Object.DestroyImmediate(cameraObject);
+            }
+        }
+
+        /// <summary>
+        /// The largest per channel difference of two renders, in units
+        /// of one of 255.
+        /// </summary>
+        private static int LargestChannelDifference(
+            Color32[] before,
+            Color32[] after)
+        {
+            var largest = 0;
+            for (var index = 0; index < before.Length; index++)
+            {
+                largest = Math.Max(largest,
+                    Math.Abs(before[index].r - after[index].r));
+                largest = Math.Max(largest,
+                    Math.Abs(before[index].g - after[index].g));
+                largest = Math.Max(largest,
+                    Math.Abs(before[index].b - after[index].b));
+                largest = Math.Max(largest,
+                    Math.Abs(before[index].a - after[index].a));
+            }
+
+            return largest;
+        }
+
+        private static void RenderOnly(MeshRenderer visible)
+        {
+            foreach (var renderer in visible.transform.parent
+                .GetComponentsInChildren<MeshRenderer>())
+            {
+                renderer.enabled = renderer == visible;
+            }
+        }
+
+        private static void RenderAll(MeshRenderer visible)
+        {
+            foreach (var renderer in visible.transform.parent
+                .GetComponentsInChildren<MeshRenderer>())
+            {
+                renderer.enabled = true;
+            }
+        }
+
+        private static Color32[] RenderEachQuad(
+            params MeshRenderer[] renderers)
+        {
+            var results = new List<Color32[]>();
+            foreach (var renderer in renderers)
+            {
+                RenderOnly(renderer);
+                results.Add(RenderQuad(renderer));
+            }
+
+            RenderAll(renderers[0]);
+            return results.SelectMany(colors => colors).ToArray();
+        }
+
+        // --- the tests -----------------------------------------------------
+
+        /// <summary>
+        /// Two compatible quads share one page and one page material,
+        /// and each renders as before within one of 255 per channel.
+        /// </summary>
+        [Test]
+        public void TwoCompatibleMaterialsShareOnePageWithCorrectRendering()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = NewAtlasOnlyRoot();
+            AmusePlatformFinishState state = null;
+            try
+            {
+                var firstMaterial = NewAdmittedMaterial(
+                    "shared first",
+                    new Color32(220, 40, 40, 255),
+                    new Color32(40, 40, 220, 255));
+                var secondMaterial = NewAdmittedMaterial(
+                    "shared second",
+                    new Color32(40, 200, 60, 255),
+                    new Color32(220, 200, 40, 255));
+                var firstTexture =
+                    (Texture2D)firstMaterial.GetTexture("_MainTex");
+                var secondTexture =
+                    (Texture2D)secondMaterial.GetTexture("_MainTex");
+                var firstMesh = Track(NewQuadMesh());
+                var secondMesh = Track(NewQuadMesh());
+                var firstChild = new GameObject("first");
+                firstChild.transform.SetParent(root.transform, false);
+                var firstRenderer =
+                    firstChild.AddComponent<MeshRenderer>();
+                firstChild.AddComponent<MeshFilter>().sharedMesh =
+                    firstMesh;
+                firstRenderer.sharedMaterial = firstMaterial;
+                var secondChild = new GameObject("second");
+                secondChild.transform.SetParent(root.transform, false);
+                var secondRenderer =
+                    secondChild.AddComponent<MeshRenderer>();
+                secondChild.AddComponent<MeshFilter>().sharedMesh =
+                    secondMesh;
+                secondRenderer.sharedMaterial = secondMaterial;
+
+                var before = RenderEachQuad(firstRenderer, secondRenderer);
+
+                var context = Build(root);
+                state = context.GetState<AmusePlatformFinishState>();
+
+                Assert.That(context.Successful, Is.True,
+                    "fixture precondition: the build must complete");
+                Assert.That(state.AtlasPageCount, Is.EqualTo(1),
+                    "two compatible uses of one format must share one" +
+                    " page");
+                Assert.That(state.AtlasAdmittedUseCount, Is.EqualTo(2),
+                    "both uses must move onto the page");
+                Assert.That(state.AtlasUseRefusals, Is.Empty,
+                    "an admitted fixture refuses no use");
+
+                var pageMaterial = firstRenderer.sharedMaterial;
+                Assert.That(secondRenderer.sharedMaterial,
+                    Is.SameAs(pageMaterial),
+                    "both slots must carry the one shared page material");
+                Assert.That(pageMaterial, Is.Not.SameAs(firstMaterial));
+                Assert.That(pageMaterial, Is.Not.SameAs(secondMaterial));
+
+                var page = (Texture2D)pageMaterial.GetTexture("_MainTex");
+                Assert.That(page, Is.Not.Null,
+                    "the page material must carry the page texture");
+                Assert.That(page.isReadable, Is.False,
+                    "the shipped page must not stay readable");
+
+                Assert.That(firstMaterial.GetTexture("_MainTex"),
+                    Is.SameAs(firstTexture),
+                    "the first source must stay unchanged");
+                Assert.That(secondMaterial.GetTexture("_MainTex"),
+                    Is.SameAs(secondTexture),
+                    "the second source must stay unchanged");
+                Assert.That(firstRenderer.sharedMaterials,
+                    Has.Length.EqualTo(1),
+                    "the slot count must stay unchanged");
+                Assert.That(secondRenderer.sharedMaterials,
+                    Has.Length.EqualTo(1),
+                    "the slot count must stay unchanged");
+
+                var firstOutput = SharedMeshOf(firstRenderer);
+                var secondOutput = SharedMeshOf(secondRenderer);
+                Assert.That(firstOutput, Is.Not.SameAs(firstMesh),
+                    "the pass must write a new mesh");
+                Assert.That(firstOutput, Is.Not.SameAs(secondOutput),
+                    "each renderer must get its own output mesh");
+                var route = firstOutput.GetVertexAttributes()
+                    .Single(attribute =>
+                        attribute.attribute == VertexAttribute.TexCoord0);
+                Assert.That(route.format,
+                    Is.EqualTo(VertexAttributeFormat.Float32),
+                    "the remapped route channel must be Float32");
+
+                var after = RenderEachQuad(firstRenderer, secondRenderer);
+                Assert.That(
+                    LargestChannelDifference(before, after),
+                    Is.LessThanOrEqualTo(1),
+                    "the atlas page must render as the source did");
+            }
+            finally
+            {
+                DestroyGenerated(state);
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        public void PlacementIsTheSameOnTwoBuilds()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var firstRoot = NewAtlasOnlyRoot();
+            var secondRoot = NewAtlasOnlyRoot();
+            AmusePlatformFinishState firstState = null;
+            AmusePlatformFinishState secondState = null;
+            try
+            {
+                NewSharedSourceFixture(firstRoot, "stable first");
+                NewSharedSourceFixture(secondRoot, "stable second");
+
+                var firstContext = Build(firstRoot);
+                firstState =
+                    firstContext.GetState<AmusePlatformFinishState>();
+                var secondContext = Build(secondRoot);
+                secondState =
+                    secondContext.GetState<AmusePlatformFinishState>();
+
+                Assert.That(firstContext.Successful, Is.True,
+                    "fixture precondition: the first build must complete");
+                Assert.That(secondContext.Successful, Is.True,
+                    "fixture precondition: the second build must" +
+                    " complete");
+                Assert.That(firstState.AtlasPageCount, Is.EqualTo(1));
+                Assert.That(secondState.AtlasPageCount, Is.EqualTo(1));
+                Assert.That(
+                    PlacementDigest(firstRoot),
+                    Is.EqualTo(PlacementDigest(secondRoot)),
+                    "two identical avatars must place onto the same" +
+                    " page shape and the same route values");
+            }
+            finally
+            {
+                DestroyGenerated(firstState);
+                DestroyGenerated(secondState);
+                UnityEngine.Object.DestroyImmediate(firstRoot);
+                UnityEngine.Object.DestroyImmediate(secondRoot);
+            }
+        }
+
+        [Test]
+        public void ASecondBuildCreatesFreshOutputs()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var firstRoot = NewAtlasOnlyRoot();
+            var secondRoot = NewAtlasOnlyRoot();
+            AmusePlatformFinishState firstState = null;
+            AmusePlatformFinishState secondState = null;
+            try
+            {
+                var firstFixture = NewSharedSourceFixture(
+                    firstRoot, "fresh first");
+                var secondFixture = NewSharedSourceFixture(
+                    secondRoot, "fresh second");
+
+                var firstContext = Build(firstRoot);
+                firstState =
+                    firstContext.GetState<AmusePlatformFinishState>();
+                var secondContext = Build(secondRoot);
+                secondState =
+                    secondContext.GetState<AmusePlatformFinishState>();
+
+                Assert.That(firstContext.Successful, Is.True,
+                    "fixture precondition: the first build must complete");
+                Assert.That(secondContext.Successful, Is.True,
+                    "fixture precondition: the second build must" +
+                    " complete");
+
+                var firstPage = (Texture2D)firstFixture.Renderer
+                    .sharedMaterial.GetTexture("_MainTex");
+                var secondPage = (Texture2D)secondFixture.Renderer
+                    .sharedMaterial.GetTexture("_MainTex");
+                Assert.That(secondPage, Is.Not.SameAs(firstPage),
+                    "the second build must create a fresh page texture");
+                Assert.That(secondFixture.Renderer.sharedMaterial,
+                    Is.Not.SameAs(firstFixture.Renderer.sharedMaterial),
+                    "the second build must create a fresh page material");
+                Assert.That(SharedMeshOf(secondFixture.Renderer),
+                    Is.Not.SameAs(SharedMeshOf(firstFixture.Renderer)),
+                    "the second build must create a fresh output mesh");
+                Assert.That(secondState.AtlasPageCount, Is.EqualTo(1),
+                    "the second build must atlas again");
+            }
+            finally
+            {
+                DestroyGenerated(firstState);
+                DestroyGenerated(secondState);
+                UnityEngine.Object.DestroyImmediate(firstRoot);
+                UnityEngine.Object.DestroyImmediate(secondRoot);
+            }
+        }
+
+        [Test]
+        public void TwoRenderersOnOneSourceMeshGetTwoOutputMeshes()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = NewAtlasOnlyRoot();
+            AmusePlatformFinishState state = null;
+            try
+            {
+                var material = NewAdmittedMaterial(
+                    "shared source",
+                    new Color32(200, 60, 120, 255),
+                    new Color32(60, 120, 200, 255));
+                var mesh = Track(NewQuadMesh());
+                var first = NewQuadRenderer(root, "first", mesh, material);
+                var second = NewQuadRenderer(root, "second", mesh, material);
+                var before = new[] { first, second }
+                    .Select(SharedMeshOf).ToArray();
+
+                var context = Build(root);
+                state = context.GetState<AmusePlatformFinishState>();
+
+                Assert.That(context.Successful, Is.True,
+                    "fixture precondition: the build must complete");
+                Assert.That(state.AtlasPageCount, Is.EqualTo(1),
+                    "two uses of one material must share one page");
+                var firstOutput = SharedMeshOf(first);
+                var secondOutput = SharedMeshOf(second);
+                Assert.That(firstOutput, Is.Not.SameAs(secondOutput),
+                    "each renderer must get its own output mesh");
+                Assert.That(firstOutput, Is.Not.SameAs(mesh),
+                    "the source mesh must stay untouched");
+                Assert.That(mesh.vertexCount, Is.EqualTo(before[0].vertexCount));
+                Assert.That(mesh.uv.Length, Is.EqualTo(before[0].uv.Length));
+                for (var index = 0; index < mesh.uv.Length; index++)
+                {
+                    Assert.That(mesh.uv[index],
+                        Is.EqualTo(before[0].uv[index]),
+                        "the source mesh route must stay unchanged at" +
+                        " vertex " + index);
+                }
+            }
+            finally
+            {
+                DestroyGenerated(state);
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
+        /// The split fixture: one real transparent Poiyomi slot over a
+        /// split alpha texture, one retained transparent slot beside
+        /// it. Alpha separation splits the first submesh, so the
+        /// renderer carries the transparent original on slot zero and
+        /// the opaque clone on the appended slot one.
+        /// </summary>
+        private (SkinnedMeshRenderer renderer, Mesh sourceMesh,
+            Material transparent, Texture2D texture)
+            NewSplitFixture(GameObject root)
+        {
+            AlphaSeparationSplitTests.EnsureSplitFolder();
+            var texture = Track(
+                AlphaSeparationSplitTests.ImportSplitAlphaTexture(
+                    "atlas_end_to_end_split"));
+            var transparent =
+                NewRealPoiyomiTextureAlphaMaterial(texture);
+            var retained = NewRealPoiyomiRetainedMaterial();
+            var mesh = Track(
+                AlphaSeparationSplitTests.CreateSplitSourceMesh());
+            var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(
+                root, "body", mesh, transparent, retained);
+            return (renderer, mesh, transparent, texture);
+        }
+
+        [Test]
+        public void TransparentSlotAndItsOpaqueCloneLandInDifferentGroups()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = NewBothFeaturesRoot(
+                "AMUSE atlas split groups");
+            AmusePlatformFinishState state = null;
+            try
+            {
+                var (renderer, sourceMesh, transparent, texture) =
+                    NewSplitFixture(root);
+
+                var context = Build(root);
+                state = context.GetState<AmusePlatformFinishState>();
+
+                Assert.That(context.Successful, Is.True,
+                    "fixture precondition: the build must complete");
+                Assert.That(renderer.sharedMaterials,
+                    Has.Length.EqualTo(3),
+                    "fixture precondition: alpha separation must split" +
+                    " one submesh and append one slot");
+
+                Assert.That(state.AtlasPageCount, Is.EqualTo(2),
+                    "the transparent original and its opaque clone must" +
+                    " land in two groups, one page each");
+                Assert.That(state.AtlasAdmittedUseCount, Is.EqualTo(2),
+                    "the two admitted uses must move onto their pages");
+                Assert.That(renderer.sharedMaterials[0],
+                    Is.Not.SameAs(transparent),
+                    "the transparent slot must carry its page material");
+                Assert.That(renderer.sharedMaterials[1],
+                    Is.Not.SameAs(renderer.sharedMaterials[0]),
+                    "the two groups must not share one page material");
+                Assert.That(renderer.sharedMaterials[1]
+                    .GetTexture("_MainTex"),
+                    Is.Not.SameAs(texture),
+                    "the opaque clone slot must carry a page texture");
+            }
+            finally
+            {
+                AlphaSeparationTestLifecycle.DestroyGenerated(state);
+                AlphaSeparationSplitTests.DeleteSplitFolder();
+                DestroyGenerated(state);
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        public void RefusedAtlasUseKeepsItsAlphaSeparationOutput()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = NewBothFeaturesRoot(
+                "AMUSE atlas refused use");
+            AmusePlatformFinishState state = null;
+            try
+            {
+                var texture = ImportPatternTexture(
+                    "refused source",
+                    new Color32(180, 180, 40, 255),
+                    new Color32(40, 180, 180, 255));
+                var material = Track(
+                    new Material(LoadInstalledPoiyomiShader()));
+                material.SetFloat("_AlphaForceOpaque", 1f);
+                PoiyomiFixtureTestBase.ApplyConvertibleRenderState(material);
+                material.SetTexture("_MainTex", texture);
+                material.EnableKeyword("POI_UDIMDISCARD");
+                var mesh = Track(
+                    AlphaSeparationTestLifecycle.SingleTriangleMesh());
+                var renderer = AlphaSeparationTestLifecycle.AddRenderer(
+                    root, "body", mesh, material);
+
+                var context = Build(root);
+                state = context.GetState<AmusePlatformFinishState>();
+
+                Assert.That(context.Successful, Is.True,
+                    "fixture precondition: the build must complete");
+                var clone = state.Separation.CreatedClones
+                    .Single(created => created != null);
+                Assert.That(renderer.sharedMaterials[0],
+                    Is.SameAs(clone),
+                    "a refused atlas use must keep the opaque clone that" +
+                    " alpha separation wrote");
+                Assert.That(state.AtlasPageCount, Is.EqualTo(0),
+                    "a refused use must build no page");
+                // The keyword itself cannot refuse the use through the
+                // clone: Unity's material copy constructor, which the
+                // canonical clone path uses, drops manually enabled
+                // keywords. The mesh carries no route channel, so the
+                // capture refuses with MissingRouteChannel instead and
+                // proves the same contract.
+                Assert.That(state.AtlasUseRefusals.Count,
+                    Is.EqualTo(1),
+                    "exactly the one refused use must be recorded");
+                Assert.That(state.AtlasUseRefusals[0].renderer,
+                    Is.SameAs(renderer));
+                Assert.That(state.AtlasUseRefusals[0].slot,
+                    Is.EqualTo(0));
+                Assert.That(state.AtlasUseRefusals[0].cause,
+                    Is.EqualTo(AtlasUseRefusal.MissingRouteChannel),
+                    "the use must refuse on the missing route channel");
+                Assert.That(SharedMeshOf(renderer), Is.SameAs(mesh),
+                    "a refused use must keep its mesh");
+            }
+            finally
+            {
+                AlphaSeparationTestLifecycle.DestroyGenerated(state);
+                DestroyGenerated(state);
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        public void InjectedInvariantFailureReachesTheBuild()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = NewAtlasOnlyRoot();
+            AmusePlatformFinishState state = null;
+            try
+            {
+                var material = NewAdmittedMaterial(
+                    "injected failure",
+                    new Color32(90, 90, 200, 255),
+                    new Color32(200, 90, 90, 255));
+                var renderer = NewQuadRenderer(
+                    root, "body", Track(NewQuadMesh()), material);
+
+                AtlasPass.PageCheck =
+                    (page, plan, sources, protectedCount, ledger) =>
+                        throw new InvalidOperationException(
+                            "AMUSE atlas test injected page check" +
+                            " failure.");
+
+                var context = null as BuildContext;
+                var reports = new List<ErrorContext>();
+                UnityEngine.TestTools.LogAssert.Expect(
+                    LogType.Exception,
+                    new System.Text.RegularExpressions.Regex(
+                        "AMUSE atlas test injected page check failure"));
+                reports.AddRange(ErrorReport.CaptureErrors(
+                    () => context = Build(root)));
+                Assert.That(context, Is.Not.Null,
+                    "fixture precondition: the build must finish");
+                Assert.That(reports, Is.Not.Empty,
+                    "the injected failure must produce an error entry");
+                // The custom platform also raises the vendor
+                // platform warnings, so only the presence of an
+                // error entry is pinned here.
+                state = context.GetState<AmusePlatformFinishState>();
+                Assert.That(state.AtlasPageCount, Is.EqualTo(0),
+                    "the failed group must leave no page behind");
+                Assert.That(renderer.sharedMaterial,
+                    Is.SameAs(material),
+                    "a failed page build must leave the renderer" +
+                    " unchanged");
+                Assert.That(SharedMeshOf(renderer).uv.Length,
+                    Is.EqualTo(4),
+                    "a failed page build must leave the source mesh in" +
+                    " place");
+            }
+            finally
+            {
+                AtlasPass.PageCheck = AtlasPageCheck.Verify;
+                DestroyGenerated(state);
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        public void RegistryResolvesTheSourceMeshAfterCleanup()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = NewBothFeaturesRoot(
+                "AMUSE atlas registry");
+            AmusePlatformFinishState state = null;
+            try
+            {
+                var (renderer, sourceMesh, transparent, texture) =
+                    NewSplitFixture(root);
+
+                var context = Build(root);
+                state = context.GetState<AmusePlatformFinishState>();
+                var probe = context.GetState<AtlasEndToEndProbe>();
+
+                Assert.That(context.Successful, Is.True,
+                    "fixture precondition: the build must complete");
+                var atlasMesh = SharedMeshOf(renderer);
+                Assert.That(atlasMesh,
+                    Is.Not.SameAs(probe.MeshCloneBeforeAtlas),
+                    "fixture precondition: the atlas pass must replace" +
+                    " the owned mesh clone");
+                Assert.That(probe.MeshCloneBeforeAtlas == null,
+                    Is.True,
+                    "the replaced owned mesh must be destroyed");
+                Assert.That(probe.Registry, Is.Not.Null,
+                    "fixture precondition: the build must hold the" +
+                    " object registry");
+
+                // Alpha separation registered source mesh to clone,
+                // so the atlas registration resolves the atlas mesh
+                // back to the authored source mesh. The owned clone
+                // in between is destroyed, and the chain still
+                // resolves.
+                Assert.That(
+                    ReferenceEquals(
+                        probe.AtlasMeshReferenceObject, sourceMesh),
+                    Is.True,
+                    "the registry must resolve the atlas mesh back to" +
+                    " the source mesh after the cleanup destroyed it." +
+                    " Resolved: " +
+                    (probe.AtlasMeshReferenceObject == null
+                        ? "<null>"
+                        : probe.AtlasMeshReferenceObject.name));
+                var liveReference = probe.Registry.GetReference(
+                    atlasMesh, false);
+                Assert.That(liveReference, Is.Not.Null,
+                    "the atlas mesh must carry a registry entry");
+                Assert.That(
+                    ReferenceEquals(liveReference.Object, sourceMesh),
+                    Is.True,
+                    "the registry must resolve the atlas mesh back to" +
+                    " the source mesh after the cleanup destroyed it." +
+                    " Resolved: " +
+                    (liveReference == null || liveReference.Object == null
+                        ? "<null>"
+                        : liveReference.Object.name));
+            }
+            finally
+            {
+                AlphaSeparationTestLifecycle.DestroyGenerated(state);
+                AlphaSeparationSplitTests.DeleteSplitFolder();
+                DestroyGenerated(state);
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        public void AlphaCloneThatThePageReplacesIsDestroyed()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = NewBothFeaturesRoot(
+                "AMUSE atlas owned cleanup");
+            AmusePlatformFinishState state = null;
+            try
+            {
+                var (renderer, sourceMesh, transparent, texture) =
+                    NewSplitFixture(root);
+
+                var context = Build(root);
+                state = context.GetState<AmusePlatformFinishState>();
+                var probe = context.GetState<AtlasEndToEndProbe>();
+
+                Assert.That(context.Successful, Is.True,
+                    "fixture precondition: the build must complete");
+                Assert.That(probe.OpaqueCloneBeforeAtlas == null,
+                    Is.True,
+                    "the opaque material the page replaced must be" +
+                    " destroyed");
+                Assert.That(probe.MeshCloneBeforeAtlas == null,
+                    Is.True,
+                    "the mesh clone the page replaced must be" +
+                    " destroyed");
+                Assert.That(transparent != null, Is.True,
+                    "the user owned transparent original must stay" +
+                    " alive");
+            }
+            finally
+            {
+                AlphaSeparationTestLifecycle.DestroyGenerated(state);
+                AlphaSeparationSplitTests.DeleteSplitFolder();
+                DestroyGenerated(state);
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        public void AcquisitionFailureWithdrawsTheGroup()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = NewAtlasOnlyRoot();
+            AmusePlatformFinishState state = null;
+            try
+            {
+                var importableMaterial = NewAdmittedMaterial(
+                    "acquisition fine",
+                    new Color32(30, 160, 200, 255),
+                    new Color32(200, 160, 30, 255));
+                var fineRenderer = NewQuadRenderer(
+                    root,
+                    "fine",
+                    Track(NewQuadMesh()),
+                    importableMaterial);
+
+                // A native texture asset passes every capture gate but
+                // has no texture importer, so its acquisition clone
+                // fails and the whole group withdraws.
+                var native = new Texture2D(
+                    64, 64, TextureFormat.RGBA32, true);
+                var nativePath = TempFolder + "/native main.asset";
+                AssetDatabase.CreateAsset(native, nativePath);
+                AssetDatabase.ImportAsset(
+                    nativePath, ImportAssetOptions.ForceSynchronousImport);
+                var nativeTexture =
+                    AssetDatabase.LoadAssetAtPath<Texture2D>(nativePath);
+                Assert.That(nativeTexture, Is.Not.Null,
+                    "fixture precondition: the native texture asset" +
+                    " must load");
+                var nativeMaterial =
+                    Track(new Material(LoadInstalledPoiyomiShader()));
+                nativeMaterial.SetTexture("_MainTex", nativeTexture);
+                var nativeRenderer = NewQuadRenderer(
+                    root,
+                    "native",
+                    Track(NewQuadMesh()),
+                    nativeMaterial);
+
+                var context = Build(root);
+                state = context.GetState<AmusePlatformFinishState>();
+
+                Assert.That(context.Successful, Is.True,
+                    "fixture precondition: the build must complete");
+                Assert.That(state.AtlasUseRefusals.Count,
+                    Is.EqualTo(1),
+                    "exactly the one withdrawn use must be recorded");
+                Assert.That(state.AtlasUseRefusals[0].renderer,
+                    Is.SameAs(nativeRenderer),
+                    "the unacquirable source must withdraw its group");
+                Assert.That(state.AtlasUseRefusals[0].slot,
+                    Is.EqualTo(0));
+                Assert.That(state.AtlasUseRefusals[0].cause,
+                    Is.EqualTo(AtlasUseRefusal.SourceAcquisitionFailed),
+                    "the withdrawal must name the acquisition failure");
+                Assert.That(nativeRenderer.sharedMaterial,
+                    Is.SameAs(nativeMaterial),
+                    "a withdrawn group must leave its renderer" +
+                    " unchanged");
+                Assert.That(state.AtlasPageCount, Is.EqualTo(1),
+                    "the healthy group must still build its page");
+                Assert.That(fineRenderer.sharedMaterial,
+                    Is.Not.SameAs(importableMaterial),
+                    "the healthy group must still move onto its page");
+            }
+            finally
+            {
+                DestroyGenerated(state);
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
+        /// Characterization, not a falsifier. Both switches off must
+        /// leave every renderer and every report unchanged.
+        /// </summary>
+        [Test]
+        public void BothSwitchesOffStillChangesNothing()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = new GameObject("AMUSE atlas both off");
+            var component =
+                root.AddComponent<Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            var serialized = new SerializedObject(component);
+            serialized.FindProperty("_alphaSeparatorEnabled")
+                .boolValue = false;
+            serialized.FindProperty("_atlasingEnabled").boolValue = false;
+            serialized.ApplyModifiedProperties();
+            var material = NewAdmittedMaterial(
+                "both off",
+                new Color32(120, 30, 200, 255),
+                new Color32(30, 200, 120, 255));
+            var mesh = Track(NewQuadMesh());
+            var renderer = NewQuadRenderer(root, "body", mesh, material);
+            AmusePlatformFinishState state = null;
+            try
+            {
+                var context = Build(root);
+                state = context.GetState<AmusePlatformFinishState>();
+
+                Assert.That(context.Successful, Is.True,
+                    "fixture precondition: the build must complete");
+                Assert.That(renderer.sharedMaterial,
+                    Is.SameAs(material),
+                    "both switches off must keep the material");
+                Assert.That(SharedMeshOf(renderer), Is.SameAs(mesh),
+                    "both switches off must keep the mesh");
+                Assert.That(state.AtlasPageCount, Is.EqualTo(0),
+                    "both switches off must build no page");
+                Assert.That(state.AtlasUseRefusals, Is.Empty,
+                    "both switches off must record no use refusal");
+            }
+            finally
+            {
+                DestroyGenerated(state);
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        // --- shared fixture helpers ---------------------------------------
+
+        private sealed class QuadFixture
+        {
+            internal MeshRenderer Renderer;
+        }
+
+        /// <summary>
+        /// One renderer with its own admitted material and quad mesh.
+        /// </summary>
+        private QuadFixture NewSharedSourceFixture(
+            GameObject root, string name)
+        {
+            var material = NewAdmittedMaterial(
+                name,
+                new Color32(140, 200, 40, 255),
+                new Color32(40, 200, 140, 255));
+            var renderer = NewQuadRenderer(
+                root, name, Track(NewQuadMesh()), material);
+            return new QuadFixture { Renderer = renderer };
+        }
+
+        private static MeshRenderer NewQuadRenderer(
+            GameObject root,
+            string name,
+            Mesh mesh,
+            Material material)
+        {
+            var child = new GameObject(name);
+            child.transform.SetParent(root.transform, false);
+            var renderer = child.AddComponent<MeshRenderer>();
+            child.AddComponent<MeshFilter>().sharedMesh = mesh;
+            renderer.sharedMaterial = material;
+            return renderer;
+        }
+
+        /// <summary>
+        /// A digest of the placement: the page shape and every route
+        /// channel value of every renderer, in capture order.
+        /// </summary>
+        private static string PlacementDigest(GameObject root)
+        {
+            var parts = new List<string>();
+            foreach (var renderer in root
+                .GetComponentsInChildren<Renderer>(true))
+            {
+                var texture = (Texture2D)renderer.sharedMaterials[0]
+                    .GetTexture("_MainTex");
+                parts.Add(texture != null
+                    ? texture.width + "x" + texture.height
+                    : "none");
+                parts.AddRange(SharedMeshOf(renderer).uv
+                    .Select(uv => uv.x.ToString("R") + "|" +
+                        uv.y.ToString("R")));
+            }
+
+            return string.Join(";;", parts);
+        }
+
+        /// <summary>
+        /// Destroys every live object the build state says AMUSE owns.
+        /// The tear down folder deletion then removes any persisted
+        /// remains through the asset database.
+        /// </summary>
+        private static void DestroyGenerated(
+            AmusePlatformFinishState state)
+        {
+            if (state == null)
+            {
+                return;
+            }
+
+            foreach (var owned in state.AmuseOwnedObjects)
+            {
+                if (owned != null && !EditorUtility.IsPersistent(owned))
+                {
+                    UnityEngine.Object.DestroyImmediate(owned);
+                }
+            }
+        }
+    }
+}

@@ -44,6 +44,58 @@ namespace Alrauna.Amuse.Editor.Build
         /// the atlas path from this flag.</summary>
         internal bool ReachedAtlasAnalysis { get; set; }
 
+        /// <summary>How many atlas pages the atlas pass built and kept.
+        /// A withdrawn group subtracts its pages again.</summary>
+        internal int AtlasPageCount { get; set; }
+
+        /// <summary>How many uses the atlas pass moved onto a page.
+        /// A use is one admitted material slot of one renderer.</summary>
+        internal int AtlasAdmittedUseCount { get; set; }
+
+        /// <summary>
+        /// Every use refusal the atlas pass recorded, in record order.
+        /// Each entry names the renderer, the slot, and the cause.
+        /// Milestone 2 keeps them in state only. Report lines belong
+        /// to Milestone 4.
+        /// </summary>
+        internal IReadOnlyList<(Renderer renderer, int slot,
+            AtlasUseRefusal cause)> AtlasUseRefusals =>
+            atlasUseRefusals;
+
+        private readonly List<(Renderer renderer, int slot,
+            AtlasUseRefusal cause)> atlasUseRefusals =
+            new List<(Renderer, int, AtlasUseRefusal)>();
+
+        /// <summary>
+        /// Records one use-scope atlas refusal.
+        /// <see cref="AtlasUseRefusal.None"/> is not a refusal and
+        /// throws, because a recorded None hides a missing cause.
+        /// </summary>
+        internal void RecordAtlasUseRefusal(
+            Renderer renderer,
+            int slot,
+            AtlasUseRefusal cause)
+        {
+            if (cause == AtlasUseRefusal.None)
+            {
+                throw new ArgumentException(
+                    "AtlasUseRefusal.None is not a refusal.",
+                    nameof(cause));
+            }
+
+            atlasUseRefusals.Add((renderer, slot, cause));
+        }
+
+        /// <summary>
+        /// Every object AMUSE created and owns in this build. Alpha
+        /// apply adds its surviving mesh clones and canonical
+        /// materials. The atlas pass adds its pages, page materials,
+        /// and meshes. The atlas cleanup destroys a member only when
+        /// no renderer references it.
+        /// </summary>
+        internal HashSet<UnityEngine.Object> AmuseOwnedObjects { get; } =
+            new HashSet<UnityEngine.Object>();
+
         /// <summary>
         /// True when the barrier passed every shared avatar-scope
         /// gate: the lifecycle verdict, the opt-in component on the

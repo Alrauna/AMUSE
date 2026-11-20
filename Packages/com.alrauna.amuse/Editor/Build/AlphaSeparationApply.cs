@@ -585,6 +585,40 @@ namespace Alrauna.Amuse.Editor.Build
             // destroyed, and nothing else ever is. No reference counting.
             SweepUnreferencedClones(separation, rendererSurvivors);
 
+            // E2: every survivor the sweep kept is AMUSE owned. The
+            // atlas pass reads this set, so its cleanup can destroy a
+            // replaced clone later. The mesh clones and the canonical
+            // materials are created before this pass runs, so the
+            // survivors of the sweep are exactly the live owned
+            // objects. An identity mapping names the user material
+            // and never enters the set.
+            foreach (var survivors in rendererSurvivors)
+            {
+                foreach (var slot in survivors)
+                {
+                    foreach (var pair in slot.OpaqueOfAdmitted)
+                    {
+                        if (!ReferenceEquals(pair.Key, pair.Value))
+                        {
+                            state.AmuseOwnedObjects.Add(pair.Value);
+                        }
+                    }
+                }
+            }
+
+            for (var index = 0;
+                index < separation.Renderers.Count;
+                index++)
+            {
+                if (rendererSurvivors[index].Any(slot =>
+                        slot.Plan.Disposition ==
+                        SubmeshSeparationDisposition.Split))
+                {
+                    state.AmuseOwnedObjects.Add(
+                        separation.Renderers[index].MeshClone);
+                }
+            }
+
             // --- Registration (B5, decision V9). Every material mapping
             // and mesh clone that survives the sweep is registered with
             // NDMF's object registry, so later passes and error reports
