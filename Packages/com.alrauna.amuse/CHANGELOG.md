@@ -12,6 +12,9 @@ All notable changes to AMUSE are documented in this file.
 ### Changed
 - 2026-11-19. The shared build gates run when alpha separation or atlasing is on. Atlasing is on by default. So an avatar with alpha separation off can now get the consent dialog for an unverified host version, and it can get the structural graph refusal. One dialog serves both features. An atlas-only build collects no shader consent subjects and opens no unlock window. When both switches are off, AMUSE analyzes, changes, and reports nothing.
 
+### Fixed
+- 2026-11-20. An NDMF manual bake now gives the same AMUSE result as an upload build. The manual bake holds an asset editing batch open, and the readable copy of a streaming texture did not import inside it. So alpha separation refused the textures that needed that copy, and the bake left an empty `Assets/Amuse.StreamingReadback` folder. The copy now leaves the batch and restores it after the copy.
+
 ## [0.1.0] - 2026-11-15
 
 ### Added
