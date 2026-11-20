@@ -11,6 +11,9 @@ All notable changes to AMUSE are documented in this file.
 ### Changed
 - 2026-11-19. The shared build gates run when alpha separation or atlasing is on. Atlasing is on by default. So an avatar with alpha separation off can now get the consent dialog for an unverified host version, and it can get the structural graph refusal. One dialog serves both features. An atlas-only build collects no shader consent subjects and opens no unlock window. When both switches are off, AMUSE analyzes, changes, and reports nothing.
 
+### Fixed
+- 2026-11-20. The opaque clone of an alpha separation now keeps the keyword set of its source material. Before, the material copy re-derived the Poiyomi drawer keywords from their properties. A source whose keywords disagreed with those properties could then render a different shader variant after alpha separation.
+
 ## [0.1.0] - 2026-11-15
 
 ### Added
