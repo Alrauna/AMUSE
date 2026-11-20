@@ -112,20 +112,21 @@ Thus, a capability observation from one machine does not describe another machin
 
 ## Continuous integration
 
-Two workflows run the EditMode suites on GitHub. Both run on hosted Windows runners. A licensed job activates a burner Unity account. The maintainer approves every licensed pull request run before it starts. That approval is the trust boundary of the gate. It means the maintainer read the full change first, including the workflows and the scripts.
+Four workflows run on GitHub. Only two of them run the EditMode suites: the release workflow and the weekly canary. Both run on hosted Windows runners. A licensed job activates a burner Unity account. Since 2026-11-20, no pull request and no push to `main` runs Unity. The maintainer asked for this change because a Unity run on every pull request took too long. The full two-assembly run on the maintainer machine before each push takes its place. So a green pull request check does not mean that the EditMode tests ran.
 
 ### The gate
 
-`pr.yml` runs on every pull request and on every push to `main`. It holds six jobs.
+`pr.yml` runs on every pull request and on every push to `main`. It holds three jobs. None of them starts Unity or reads a secret.
 
 - `scripts` runs the Pester tests of the CI scripts and checks that `scripts/ci/lock.json` matches `Packages/vpm-manifest.json`.
 - `cheap` checks the changed lines with `git diff --check` and checks the contents of the release package. The whitespace check skips the YAML files that Unity writes: `.meta`, `.asset`, `.unity`, `.prefab`, `.mat`, `.anim`, and `.controller`.
-- `scope` says whether the `unity` job is needed. For a pull request, the job is not needed only when the pull request targets the default branch and every changed path is on a short allow list. The list holds `docs/` files of type `.md` and common image types, `README.md`, `CHANGELOG.md`, and `CONTRIBUTING.md` in the repository root, `.github/dependabot.yml`, `.github/workflows/build-listing.yml`, and `.github/workflows/release.yml`. The list is in `scripts/ci/get-change-scope.ps1`. For a push to `main`, the job is not needed when a merged pull request made the pushed commit. That pull request had its own run, and the rule "require branches to be up to date" means the pushed files equal the tested files. Keep that rule turned on. A direct push to `main` has no such pull request, so it runs the job. A pull request against another branch, an empty change, an unusual path, and any error all mean that the job is needed. A label, a title, or a commit message cannot skip the job.
-- `unity` installs the locked Editor, activates the license, installs the locked vendor packages with hash checks, and runs the product and research assemblies as two steps of one job. A download that meets a short network fault runs again, up to three runs in all, with pauses of 5 and 20 seconds. The faults are an HTTP 408, 429, or 5xx answer, a timeout, and a broken connection. An HTTP 4xx answer and a hash mismatch fail at once. On 2026-11-08 (UTC), the `github.com` release links answered scripts with HTTP 504 while a browser got the files. So a vendor zip on a GitHub release gets a second route after two failed direct runs. The script then asks the GitHub release API for the asset. The hash check is the same for both routes. The job runs the tests as a local low-privilege user. A probe fails the job when that user can read runner memory or write to a folder that administrator steps run from.
-- `fork-notice` turns red when `scope` says the `unity` job is needed and the pull request comes from a fork or from Dependabot. Such a pull request gets no secrets, so the `unity` job skips it. The notice asks the maintainer to read the change and to push it to a branch in this repository. The pull request must then come from that branch. A fork or Dependabot pull request that changes only allow-listed paths needs no Unity run, so it gets no notice.
-- `validate` is the required check. It passes only when `scripts`, `cheap`, and `scope` pass and `fork-notice` is skipped. It also needs `unity` to pass, unless `scope` said exactly `false`. In that case `unity` must be skipped.
+- `validate` is the required check. It passes only when `scripts` and `cheap` both pass. GitHub counts a skipped job as a passing check, so `validate` asks for success by name.
 
-A pull request can rewrite `pr.yml` or `scripts/ci/get-change-scope.ps1`. The skip decision runs the code of the pull request, as the rest of `validate` does. A pull request that rewrites either file can force a skip, so a change to them does not always need a Unity run. The review of changes to `.github/` and `scripts/ci/` is the only barrier. Settings outside the repository can add a second barrier. Examples are a required review and a code owner rule for those paths.
+### The release run
+
+`release.yml` starts by hand from `main`. Its `unity` job must pass before the `build` job makes the release. The job runs in the `unity-main` Environment, which allows only `main`. The code on `main` was read at merge time, so the job needs no approval.
+
+The `unity` job installs the locked Editor, activates the license, installs the locked vendor packages with hash checks, and runs the product and research assemblies as two steps of one job. A download that meets a short network fault runs again, up to three runs in all, with pauses of 5 and 20 seconds. The faults are an HTTP 408, 429, or 5xx answer, a timeout, and a broken connection. An HTTP 4xx answer and a hash mismatch fail at once. On 2026-11-08 (UTC), the `github.com` release links answered scripts with HTTP 504 while a browser got the files. So a vendor zip on a GitHub release gets a second route after two failed direct runs. The script then asks the GitHub release API for the asset. The hash check is the same for both routes. The job runs the tests as a local low-privilege user. A probe fails the job when that user can read runner memory or write to a folder that administrator steps run from.
 
 ### The weekly canary
 
@@ -133,15 +134,15 @@ A pull request can rewrite `pr.yml` or `scripts/ci/get-change-scope.ps1`. The sk
 
 Canary time as of 2026-11-14: the first passing run took 71 minutes, and the product step took 64.5 of its 75 minutes. A second run after the strict skip check took 59 minutes. The floating vendor versions can make a later run longer.
 
-The licensed jobs of both workflows share one concurrency group. They queue in order instead of cancelling a waiting run. The gate and the canary never sign in to the one account at the same time.
+The licensed jobs of both workflows share one concurrency group. They queue in order instead of cancelling a waiting run. The release run and the canary never sign in to the one account at the same time.
 
 ### Opt-in gates in CI
 
-`scripts/ci/run-tests.ps1` unsets all four opt-in gates before every Editor run. The `-OptIn` parameter then sets only the named gates to 1 for the Editor process. The parameter accepts only the four gate names. The script restores the caller values after the run. As of 2026-11-13, `pr.yml` passes `AMUSE_REAL_LAC_PASS` to the product run. `canary.yml` passes all four. The research run passes none. A Pester test for each workflow fails when a name leaves the step.
+`scripts/ci/run-tests.ps1` unsets all four opt-in gates before every Editor run. The `-OptIn` parameter then sets only the named gates to 1 for the Editor process. The parameter accepts only the four gate names. The script restores the caller values after the run. As of 2026-11-20, `release.yml` passes `AMUSE_REAL_LAC_PASS` to the product run. `canary.yml` passes all four. The research run passes none. A Pester test for each workflow fails when a name leaves the step.
 
 A test can skip itself for a gate. Its skip text starts with `The opt-in variable NAME is not set to 1.` As of 2026-11-14, a CI run allows only this kind of skip, and only for a gate that `-OptIn` did not set. The run fails in four cases. A skip names a gate that `-OptIn` set. That means the variable did not reach the test. A skip comes from an absent vendor package. CI installs every locked vendor, so that skip means an install broke. A skip has any other reason or no reason. The reader finds fewer skipped tests than the run counts. That means the reader is inert. The run prints one line per unset gate with its skip count. The check reads the skip reasons in `TestResults.xml`. A failure message holds the gate name or the reason text that the test author wrote. It holds no test name.
 
-On 2026-11-13, a run of the PR step with `AMUSE_REAL_THRY_LOCK` set took 52 minutes of its 55 minute budget. So the PR gate does not set that gate. The older real-lock suite failed on the hosted runner at first. The cause was the dirty-state check in the test preflight. Two things were dirty on the runner: `ProjectSettings/QualitySettings.asset` and one open scene. Since 2026-11-13 the preflight ignores native files under `ProjectSettings/` and scenes that have no saved file. After that change the suite passed on the hosted runner.
+On 2026-11-13, a run of the pull request step with `AMUSE_REAL_THRY_LOCK` set took 52 minutes of its 55 minute budget. So that step did not set the gate. Since 2026-11-20, the release run uses the same step and the same choice. The older real-lock suite failed on the hosted runner at first. The cause was the dirty-state check in the test preflight. Two things were dirty on the runner: `ProjectSettings/QualitySettings.asset` and one open scene. Since 2026-11-13 the preflight ignores native files under `ProjectSettings/` and scenes that have no saved file. After that change the suite passed on the hosted runner.
 
 ### The local gate
 
@@ -172,8 +173,8 @@ The maintainer does these once. The spec section 10 holds the full form.
 
 1. Prepare the burner Unity account. Give it a unique password of 20 or more characters with no quote and no space. Turn two-factor sign-in off. Give the account its own mailbox. Set the account up on a clean machine. Add no payment detail, no asset, and no phone number that you share with your main accounts.
 2. Sign in to the Unity Hub once with that account on that clean machine. Activate Personal. Sign out. The account then holds an entitlement.
-3. Create the Environments `unity-gate`, `unity-main`, and `unity-canary`. Set the allowed refs and the reviewers as the spec describes. Turn "Allow administrators to bypass" off on all three. Turn "prevent self-review" off on `unity-gate`.
-4. Add `UNITY_EMAIL` and `UNITY_PASSWORD` to all three Environments with the one account. Delete the old `UNITY_LICENSE` secrets.
+3. Create the Environments `unity-main` and `unity-canary`. Set the allowed refs as the spec describes. Turn "Allow administrators to bypass" off on both. Since 2026-11-20, no workflow uses the `unity-gate` Environment of the spec.
+4. Add `UNITY_EMAIL` and `UNITY_PASSWORD` to both Environments with the one account. Delete the old `UNITY_LICENSE` secrets.
 5. Set the repository settings. Require full SHA pinning for actions with an allowlist. Require approval for all outside collaborators. Set the default token permission to read-only.
 6. Limit the `release` Environment to `main`. Set a tag ruleset that blocks tag updates and tag deletions. Tag creation stays allowed.
-7. Check that no rule merges Dependabot pull requests on its own. A pull request that changes only allow-listed paths can reach a green `validate` with no approval of the `unity-gate` Environment. Read such a pull request before you merge it. Branch protection of `main` requires no review as of 2026-11-08 (UTC), by ruling O4 of the spec.
+7. Check that no rule merges Dependabot pull requests on its own. A green `validate` does not mean that the EditMode tests ran. Read every pull request before you merge it. Branch protection of `main` requires no review as of 2026-11-08 (UTC), by ruling O4 of the spec.

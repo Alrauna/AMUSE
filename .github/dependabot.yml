@@ -2,12 +2,9 @@
 # SHA-pinned actions/checkout in each workflow, the four pinned
 # actions in release.yml, and the four pinned GitHub-owned actions
 # in build-listing.yml.
-# Dependabot runs get no Actions secrets. The unity job in pr.yml skips
-# a Dependabot pull request. The scope job in pr.yml reads the changed
-# paths. A change to allow-listed paths only, such as this file, needs
-# no Unity run and passes. Any other change shows a red fork-notice
-# job. The maintainer reads that change and pushes it again from a
-# branch in this repository.
+# Dependabot runs get no Actions secrets. Since 2026-11-20, pr.yml runs
+# no Unity job and needs no secret, so a Dependabot pull request gets
+# the same checks as any other pull request.
 version: 2
 updates:
   - package-ecosystem: "github-actions"
