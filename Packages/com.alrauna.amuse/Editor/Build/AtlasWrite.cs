@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Alrauna.Amuse.Editor.Host;
 using nadena.dev.ndmf;
 using UnityEngine;
@@ -67,7 +68,8 @@ namespace Alrauna.Amuse.Editor.Build
     {
         internal static void Apply(
             AmusePlatformFinishState state,
-            IReadOnlyList<AtlasRendererOutput> outputs)
+            IReadOnlyList<AtlasRendererOutput> outputs,
+            IReadOnlyCollection<UnityEngine.Object> curveReferenced)
         {
             if (state == null)
             {
@@ -78,6 +80,12 @@ namespace Alrauna.Amuse.Editor.Build
             {
                 throw new ArgumentNullException(nameof(outputs));
             }
+
+            if (curveReferenced == null)
+            {
+                throw new ArgumentNullException(nameof(curveReferenced));
+            }
+
 
             var replaced = new List<UnityEngine.Object>();
             foreach (var output in outputs)
@@ -107,7 +115,8 @@ namespace Alrauna.Amuse.Editor.Build
 
             var keepAlive = new HashSet<UnityEngine.Object>();
             RegisterReplacements(state, outputs, keepAlive);
-            Cleanup(state, outputs, replaced, keepAlive);
+            Cleanup(
+                state, outputs, replaced, keepAlive, curveReferenced);
         }
 
         /// <summary>
@@ -226,16 +235,21 @@ namespace Alrauna.Amuse.Editor.Build
         }
 
         /// <summary>
-        /// Destroys each replaced object the state owns and no
-        /// renderer references. The scan covers every renderer of the
+        /// Destroys each replaced object the state owns, that no
+        /// renderer references, and that no committed object
+        /// reference curve names. The renderer scan covers the whole
         /// avatar, because a shared clone can outlive the slot that
-        /// first referenced it.
+        /// first referenced it. The curve set follows the controller
+        /// ruling: an object curve keyframe keeps its object alive,
+        /// because a destroyed keyframe would serialize as a missing
+        /// reference.
         /// </summary>
         private static void Cleanup(
             AmusePlatformFinishState state,
             IReadOnlyList<AtlasRendererOutput> outputs,
             List<UnityEngine.Object> replaced,
-            HashSet<UnityEngine.Object> keepAlive)
+            HashSet<UnityEngine.Object> keepAlive,
+            IReadOnlyCollection<UnityEngine.Object> curveReferenced)
         {
             if (replaced.Count == 0 || outputs.Count == 0)
             {
@@ -265,6 +279,7 @@ namespace Alrauna.Amuse.Editor.Build
             {
                 if (candidate == null || keepAlive.Contains(candidate) ||
                     referenced.Contains(candidate) ||
+                    curveReferenced.Contains(candidate) ||
                     !state.AmuseOwnedObjects.Contains(candidate))
                 {
                     continue;

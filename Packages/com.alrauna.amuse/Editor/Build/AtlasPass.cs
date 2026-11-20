@@ -278,7 +278,44 @@ namespace Alrauna.Amuse.Editor.Build
             }
 
             state.AtlasAdmittedUseCount = pageMaterialByUse.Count;
-            AtlasWrite.Apply(state, outputs);
+            AtlasWrite.Apply(
+                state, outputs, CollectCurveReferences(graph));
+        }
+
+        /// <summary>
+        /// Every object the committed object reference curves name.
+        /// The cleanup keeps each owned member of this set, because a
+        /// curve keyframe references objects no renderer holds.
+        /// </summary>
+        private static HashSet<UnityEngine.Object>
+            CollectCurveReferences(CommittedControllerGraphResult graph)
+        {
+            var referenced = new HashSet<UnityEngine.Object>();
+            if (graph == null)
+            {
+                return referenced;
+            }
+
+            foreach (var layer in graph.Layers)
+            {
+                foreach (var clip in layer.Clips)
+                {
+                    foreach (var binding in AnimationUtility
+                        .GetObjectReferenceCurveBindings(clip))
+                    {
+                        foreach (var frame in AnimationUtility
+                            .GetObjectReferenceCurve(clip, binding))
+                        {
+                            if (frame.value != null)
+                            {
+                                referenced.Add(frame.value);
+                            }
+                        }
+                    }
+                }
+            }
+
+            return referenced;
         }
 
         /// <summary>
@@ -299,6 +336,15 @@ namespace Alrauna.Amuse.Editor.Build
             Dictionary<int, AtlasPlacement> placementByUse,
             Dictionary<int, AtlasPagePlanEntry> pageByUse)
         {
+            // A group whose every placement refused has no page and
+            // no admitted use. Its refusals are already recorded, so
+            // the build simply moves on.
+            if (plan.Pages.Count == 0 ||
+                plan.AdmittedUseIndices.Count == 0)
+            {
+                return;
+            }
+
             var built = new List<UnityEngine.Object>();
             var pagesBuilt = 0;
             try
@@ -340,16 +386,19 @@ namespace Alrauna.Amuse.Editor.Build
                             sources,
                             protectedMipLevelCount,
                             ledger);
+                        // The texture joins the built list at once, so
+                        // a check or ledger failure below cannot leak
+                        // it.
+                        built.Add(texture);
+                        state.AmuseOwnedObjects.Add(texture);
                         PageCheck(
                             texture, page, sources,
                             protectedMipLevelCount, ledger);
                         texture.Apply(false, true);
 
-                        var pageMaterial = new Material(firstMaterial);
-                        pageMaterial.SetTexture("_MainTex", texture);
-                        built.Add(texture);
+                        var pageMaterial =
+                            NewPageMaterial(firstMaterial, texture);
                         built.Add(pageMaterial);
-                        state.AmuseOwnedObjects.Add(texture);
                         state.AmuseOwnedObjects.Add(pageMaterial);
                         state.AtlasPageCount++;
                         pagesBuilt++;
@@ -380,6 +429,39 @@ namespace Alrauna.Amuse.Editor.Build
                 state.AtlasPageCount -= pagesBuilt;
                 throw;
             }
+        }
+
+        /// <summary>
+        /// One page material per page: a clone of the first use
+        /// material with the page on the member texture. Unity's
+        /// material copy constructor re-syncs drawer governed
+        /// keywords to their controlling property values, so the
+        /// clone can carry keywords the capture never checked. The
+        /// source keyword array is written back, and a remaining
+        /// difference is an invariant failure.
+        /// </summary>
+        private static Material NewPageMaterial(
+            Material firstMaterial,
+            Texture2D texture)
+        {
+            var pageMaterial = new Material(firstMaterial);
+            pageMaterial.shaderKeywords = firstMaterial.shaderKeywords;
+            pageMaterial.SetTexture("_MainTex", texture);
+            var sourceKeywords = new HashSet<string>(
+                firstMaterial.shaderKeywords,
+                StringComparer.Ordinal);
+            var pageKeywords = new HashSet<string>(
+                pageMaterial.shaderKeywords,
+                StringComparer.Ordinal);
+            if (!sourceKeywords.SetEquals(pageKeywords))
+            {
+                throw new InvalidOperationException(
+                    "The page material of an atlas page carries a" +
+                    " different enabled keyword set than its source" +
+                    " material. The copy and the capture disagree.");
+            }
+
+            return pageMaterial;
         }
 
         /// <summary>

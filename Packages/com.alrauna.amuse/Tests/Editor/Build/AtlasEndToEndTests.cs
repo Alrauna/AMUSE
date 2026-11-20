@@ -869,7 +869,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 material.SetFloat("_AlphaForceOpaque", 1f);
                 PoiyomiFixtureTestBase.ApplyConvertibleRenderState(material);
                 material.SetTexture("_MainTex", texture);
-                material.EnableKeyword("POI_UDIMDISCARD");
+                // A non allowed keyword row cannot pass a real alpha
+                // build: the controlling property of the drawer
+                // governed keyword also makes the alpha proof refuse
+                // the slot, so no clone is written at all (observed:
+                // the separation state stays null). A non identity
+                // member transform refuses the atlas use instead,
+                // through a clone alpha separation did write.
+                material.SetTextureScale("_MainTex", new Vector2(2f, 2f));
                 var mesh = Track(
                     AlphaSeparationTestLifecycle.SingleTriangleMesh());
                 var renderer = AlphaSeparationTestLifecycle.AddRenderer(
@@ -888,12 +895,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     " alpha separation wrote");
                 Assert.That(state.AtlasPageCount, Is.EqualTo(0),
                     "a refused use must build no page");
-                // The keyword itself cannot refuse the use through the
-                // clone: Unity's material copy constructor, which the
-                // canonical clone path uses, drops manually enabled
-                // keywords. The mesh carries no route channel, so the
-                // capture refuses with MissingRouteChannel instead and
-                // proves the same contract.
                 Assert.That(state.AtlasUseRefusals.Count,
                     Is.EqualTo(1),
                     "exactly the one refused use must be recorded");
@@ -902,8 +903,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(state.AtlasUseRefusals[0].slot,
                     Is.EqualTo(0));
                 Assert.That(state.AtlasUseRefusals[0].cause,
-                    Is.EqualTo(AtlasUseRefusal.MissingRouteChannel),
-                    "the use must refuse on the missing route channel");
+                    Is.EqualTo(AtlasUseRefusal.NonIdentityTransform),
+                    "the non identity member transform must refuse" +
+                    " the use");
                 Assert.That(SharedMeshOf(renderer), Is.SameAs(mesh),
                     "a refused use must keep its mesh");
             }
@@ -930,11 +932,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 var renderer = NewQuadRenderer(
                     root, "body", Track(NewQuadMesh()), material);
 
+                Texture2D failedPage = null;
                 AtlasPass.PageCheck =
                     (page, plan, sources, protectedCount, ledger) =>
+                    {
+                        failedPage = page;
                         throw new InvalidOperationException(
                             "AMUSE atlas test injected page check" +
                             " failure.");
+                    };
 
                 var context = null as BuildContext;
                 var reports = new List<ErrorContext>();
@@ -952,6 +958,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 // platform warnings, so only the presence of an
                 // error entry is pinned here.
                 state = context.GetState<AmusePlatformFinishState>();
+                Assert.That(failedPage == null, Is.True,
+                    "the failed page build must destroy the page" +
+                    " texture it already made");
                 Assert.That(state.AtlasPageCount, Is.EqualTo(0),
                     "the failed group must leave no page behind");
                 Assert.That(renderer.sharedMaterial,
@@ -966,6 +975,113 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             finally
             {
                 AtlasPass.PageCheck = AtlasPageCheck.Verify;
+                DestroyGenerated(state);
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        public void AWholeGroupPlacementRefusalStillBuilds()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = NewAtlasOnlyRoot();
+            var component =
+                root.GetComponent<
+                    Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+            var serialized = new SerializedObject(component);
+            var pageSize =
+                serialized.FindProperty("_maximumAtlasPageSize");
+            Assert.That(pageSize, Is.Not.Null,
+                "AmuseAvatarOptimizer._maximumAtlasPageSize field pin");
+            pageSize.intValue = 16;
+            serialized.ApplyModifiedProperties();
+            AmusePlatformFinishState state = null;
+            try
+            {
+                var material = NewAdmittedMaterial(
+                    "too large",
+                    new Color32(60, 200, 200, 255),
+                    new Color32(200, 60, 200, 255));
+                var mesh = Track(NewQuadMesh());
+                var renderer = NewQuadRenderer(
+                    root, "body", mesh, material);
+
+                var context = Build(root);
+                state = context.GetState<AmusePlatformFinishState>();
+
+                Assert.That(context.Successful, Is.True,
+                    "a group that only refuses placement must not" +
+                    " fail the build");
+                Assert.That(renderer.sharedMaterial,
+                    Is.SameAs(material),
+                    "a refused placement must keep the slot material");
+                Assert.That(SharedMeshOf(renderer), Is.SameAs(mesh),
+                    "a refused placement must keep the mesh");
+                Assert.That(state.AtlasPageCount, Is.EqualTo(0),
+                    "a refused placement must build no page");
+                Assert.That(state.AtlasUseRefusals.Count,
+                    Is.EqualTo(1),
+                    "exactly the one refused use must be recorded");
+                Assert.That(state.AtlasUseRefusals[0].renderer,
+                    Is.SameAs(renderer));
+                Assert.That(state.AtlasUseRefusals[0].slot,
+                    Is.EqualTo(0));
+                Assert.That(state.AtlasUseRefusals[0].cause,
+                    Is.EqualTo(AtlasUseRefusal.PlacementTooLarge),
+                    "a source larger than the maximum page size must" +
+                    " refuse its placement");
+            }
+            finally
+            {
+                DestroyGenerated(state);
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        [Test]
+        public void PageMaterialKeepsTheSourceEnabledKeywordSet()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = NewAtlasOnlyRoot();
+            AmusePlatformFinishState state = null;
+            try
+            {
+                var material = NewAdmittedMaterial(
+                    "keyword sync",
+                    new Color32(200, 120, 60, 255),
+                    new Color32(60, 120, 200, 255));
+                // The controlling property and the keyword disagree.
+                // The capture sees the keyword off, so the use
+                // admits. The copy constructor would re-enable it on
+                // the page material without the explicit restore.
+                material.SetFloat("_EnableUDIMDiscardOptions", 1f);
+                material.DisableKeyword("POI_UDIMDISCARD");
+                var renderer = NewQuadRenderer(
+                    root, "body", Track(NewQuadMesh()), material);
+
+                var context = Build(root);
+                state = context.GetState<AmusePlatformFinishState>();
+
+                Assert.That(context.Successful, Is.True,
+                    "fixture precondition: the build must complete");
+                Assert.That(state.AtlasPageCount, Is.EqualTo(1),
+                    "the keyword off material must admit");
+                var pageMaterial = renderer.sharedMaterial;
+                Assert.That(
+                    new HashSet<string>(pageMaterial.shaderKeywords),
+                    Is.EqualTo(
+                        new HashSet<string>(material.shaderKeywords)),
+                    "the page material must keep the source enabled" +
+                    " keyword set");
+                var pageKeywords =
+                    new HashSet<string>(pageMaterial.shaderKeywords);
+                Assert.That(pageKeywords.Contains("POI_UDIMDISCARD"),
+                    Is.False,
+                    "the page material must not re-enable the" +
+                    " drawer governed keyword");
+            }
+            finally
+            {
                 DestroyGenerated(state);
                 UnityEngine.Object.DestroyImmediate(root);
             }
