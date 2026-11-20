@@ -5,6 +5,7 @@ using NUnit.Framework;
 using Unity.Collections;
 using UnityEngine;
 using UnityEngine.Rendering;
+using UnityEditor;
 
 namespace Alrauna.Amuse.Tests.Editor.Build
 {
@@ -18,6 +19,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
     [TestFixture]
     public sealed class AtlasMeshBuilderTests
     {
+        private const string TempFolder =
+            "Assets/AmuseTests_AtlasMeshBuilder";
+
         private readonly List<Mesh> created = new List<Mesh>();
 
         private Mesh fixture;
@@ -25,12 +29,24 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         [SetUp]
         public void SetUp()
         {
+            if (!AssetDatabase.IsValidFolder(TempFolder))
+            {
+                AssetDatabase.CreateFolder(
+                    "Assets", "AmuseTests_AtlasMeshBuilder");
+            }
+
             fixture = Track(CreateSkinnedFixture());
         }
 
         [TearDown]
         public void TearDown()
         {
+            if (AssetDatabase.IsValidFolder(TempFolder))
+            {
+                AssetDatabase.DeleteAsset(TempFolder);
+                AssetDatabase.Refresh();
+            }
+
             foreach (var mesh in created)
             {
                 if (mesh != null)
@@ -72,6 +88,17 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             Assert.AreEqual(fixture.bounds.center, built.bounds.center);
             Assert.AreEqual(fixture.bounds.extents, built.bounds.extents);
             AssertBindPosesMatch(fixture.bindposes, built.bindposes);
+            for (var submesh = 0; submesh < fixture.subMeshCount; submesh++)
+            {
+                Assert.AreEqual(
+                    fixture.GetSubMesh(submesh).bounds.center,
+                    built.GetSubMesh(submesh).bounds.center,
+                    "the bounds center of submesh " + submesh + " carries over");
+                Assert.AreEqual(
+                    fixture.GetSubMesh(submesh).bounds.extents,
+                    built.GetSubMesh(submesh).bounds.extents,
+                    "the bounds extents of submesh " + submesh + " carry over");
+            }
             AssertAttributeLayoutMatches(fixture, built);
             AssertBoneWeightsMatchSource(fixture, built, new[] { 0, 1, 2, 3 });
             AssertBlendShapesMatchSource(fixture, built, new[] { 0, 1, 2, 3 });
@@ -285,6 +312,163 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "the index words are the same");
         }
 
+        [Test]
+        public void BaseVertexSubmeshMapsThroughItsOffset()
+        {
+            var source = Track(CreateBaseVertexFixture());
+            Assert.AreEqual(
+                4, source.GetSubMesh(1).baseVertex,
+                "fixture precondition: submesh 1 sits at base vertex 4");
+            Assert.AreEqual(
+                IndexFormat.UInt16, source.indexFormat,
+                "fixture precondition: the source fits in sixteen bits");
+            var remaps = new List<AtlasSubmeshRemap>
+            {
+                Placement(0, 16, 16),
+                new AtlasSubmeshRemap(1),
+            };
+
+            var built = Track(AtlasMeshBuilder.Build(source, remaps));
+
+            Assert.AreEqual(8, built.vertexCount, "the two submeshes touch disjoint vertices");
+            CollectionAssert.AreEqual(new[] { 0, 1, 2 }, built.GetTriangles(0));
+            CollectionAssert.AreEqual(
+                new[] { 4, 5, 6 }, built.GetTriangles(1),
+                "the kept submesh resolves through its base vertex");
+
+            var sourceUv = source.uv;
+            Assert.AreEqual(MapUv(sourceUv[0], remaps[0]), built.uv[0], "vertex 0 takes the map");
+            Assert.AreEqual(MapUv(sourceUv[1], remaps[0]), built.uv[1], "vertex 1 takes the map");
+            Assert.AreEqual(MapUv(sourceUv[2], remaps[0]), built.uv[2], "vertex 2 takes the map");
+            Assert.AreEqual(sourceUv[4], built.uv[4], "a vertex behind the base vertex offset keeps its value");
+            Assert.AreEqual(sourceUv[5], built.uv[5], "a vertex behind the base vertex offset keeps its value");
+            Assert.AreEqual(sourceUv[6], built.uv[6], "a vertex behind the base vertex offset keeps its value");
+        }
+
+        [Test]
+        public void NonSquareRemapMapsEachAxisIndependently()
+        {
+            var source = Track(CreateNonSquareFixture());
+            // Every number of the map differs from its partner on the
+            // other axis. The expected values are hand arithmetic on
+            // the exact dyadic source values.
+            //   u = (u * 512 + 16 + 100) / 4096
+            //   v = (v * 256 + 8 + 200) / 2048
+            //   (0.50, 0.25) to (372 / 4096, 272 / 2048)
+            //   (0.75, 0.50) to (500 / 4096, 336 / 2048)
+            //   (0.25, 0.75) to (244 / 4096, 400 / 2048)
+            //   (1.00, 0.00) to (628 / 4096, 208 / 2048)
+            var remap = new AtlasSubmeshRemap(
+                0, 512, 256, -16, -8, 100, 200, 4096, 2048);
+
+            var built = Track(AtlasMeshBuilder.Build(
+                source, new List<AtlasSubmeshRemap> { remap }));
+
+            Assert.AreEqual(
+                new Vector2(372f / 4096f, 272f / 2048f), built.uv[0], "vertex 0");
+            Assert.AreEqual(
+                new Vector2(500f / 4096f, 336f / 2048f), built.uv[1], "vertex 1");
+            Assert.AreEqual(
+                new Vector2(244f / 4096f, 400f / 2048f), built.uv[2], "vertex 2");
+            Assert.AreEqual(
+                new Vector2(628f / 4096f, 208f / 2048f), built.uv[3], "vertex 3");
+        }
+
+        [Test]
+        public void NonReadableSkinnedAssetKeepsWeightsAndBlendShapes()
+        {
+            var path = TempFolder + "/NonReadableSkinned.asset";
+            var authored = CreateSkinnedFixture();
+            AssetDatabase.CreateAsset(authored, path);
+            var serialized = new SerializedObject(authored);
+            serialized.FindProperty("m_IsReadable").boolValue = false;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            AssetDatabase.SaveAssets();
+            Resources.UnloadAsset(authored);
+            var source = AssetDatabase.LoadAssetAtPath<Mesh>(path);
+            Assert.IsNotNull(source, "the mesh asset must reload");
+            Assert.IsFalse(
+                source.isReadable,
+                "fixture precondition: the asset reports Read and Write off");
+            Assert.Greater(
+                source.GetAllBoneWeights().Length, 0,
+                "fixture precondition: the editor serves the bone " +
+                "weights of a non-readable mesh asset");
+
+            var built = Track(AtlasMeshBuilder.Build(
+                source,
+                new List<AtlasSubmeshRemap>
+                {
+                    new AtlasSubmeshRemap(0),
+                    new AtlasSubmeshRemap(1),
+                }));
+
+            Assert.AreEqual(4, built.vertexCount);
+            AssertBoneWeightsMatchSource(source, built, new[] { 0, 1, 2, 3 });
+            AssertBlendShapesMatchSource(source, built, new[] { 0, 1, 2, 3 });
+            AssertBindPosesMatch(source.bindposes, built.bindposes);
+        }
+
+        [Test]
+        public void SkinnedSourceWithVanishedBoneWeightRowsRefuses()
+        {
+            var mesh = new Mesh();
+            mesh.name = "AmuseWeightlessFixture";
+            mesh.vertices = new[]
+            {
+                new Vector3(0f, 0f, 0f),
+                new Vector3(1f, 0f, 0f),
+                new Vector3(0f, 1f, 0f),
+            };
+            mesh.uv = new[]
+            {
+                new Vector2(0.1f, 0.2f),
+                new Vector2(0.3f, 0.4f),
+                new Vector2(0.5f, 0.6f),
+            };
+            mesh.triangles = new[] { 0, 1, 2 };
+            mesh.bindposes = new[]
+            {
+                Matrix4x4.identity,
+                Matrix4x4.identity,
+            };
+            Track(mesh);
+
+            Assert.Throws<InvalidOperationException>(
+                () => AtlasMeshBuilder.Build(
+                    mesh, new List<AtlasSubmeshRemap> { new AtlasSubmeshRemap(0) }),
+                "a mesh that claims bone data must not lose its weights");
+        }
+
+        [Test]
+        public void Float16RouteChannelSharesItsStreamWithLaterAttributes()
+        {
+            var source = Track(CreateSharedStreamHalfFixture());
+            var remap = Placement(0, 16, 16);
+
+            var built = Track(AtlasMeshBuilder.Build(
+                source, new List<AtlasSubmeshRemap> { remap }));
+
+            var route = FindAttribute(built, VertexAttribute.TexCoord0);
+            Assert.AreEqual(
+                VertexAttributeFormat.Float32, route.format,
+                "the route channel becomes Float32");
+            Assert.AreEqual(
+                1, source.vertexBufferCount,
+                "fixture precondition: all source attributes share one stream");
+            CollectionAssert.AreEqual(source.vertices, built.vertices);
+            CollectionAssert.AreEqual(source.normals, built.normals);
+            CollectionAssert.AreEqual(source.tangents, built.tangents);
+            CollectionAssert.AreEqual(source.uv2, built.uv2);
+            var sourceUv = source.uv;
+            for (var i = 0; i < sourceUv.Length; i++)
+            {
+                Assert.AreEqual(
+                    MapUv(sourceUv[i], remap), built.uv[i],
+                    "the mapped value of vertex " + i);
+            }
+        }
+
         /// <summary>Keeps a mesh alive until the tear down destroys it.</summary>
         private Mesh Track(Mesh mesh)
         {
@@ -385,6 +569,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             mesh.subMeshCount = 2;
             mesh.SetTriangles(new[] { 0, 1, 2 }, 0);
             mesh.SetTriangles(new[] { 2, 1, 3 }, 1);
+
+            // Authored submesh bounds, unrelated to the geometry, so an
+            // implicit recalculation cannot pass as a copy.
+            for (var submesh = 0; submesh < mesh.subMeshCount; submesh++)
+            {
+                var descriptor = mesh.GetSubMesh(submesh);
+                descriptor.bounds = new Bounds(
+                    new Vector3(50f + submesh, 60f + submesh, 70f + submesh),
+                    new Vector3(3f, 4f, 5f));
+                mesh.SetSubMesh(
+                    submesh, descriptor, MeshUpdateFlags.DontRecalculateBounds);
+            }
 
             var bonesPerVertex = new NativeArray<byte>(4, Allocator.Temp);
             bonesPerVertex[0] = 2;
@@ -514,6 +710,213 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             mesh.triangles = triangles;
             mesh.RecalculateBounds();
             return mesh;
+        }
+
+        /// <summary>
+        /// Eight vertices. Submesh 0 uses the vertices 0, 1, and 2.
+        /// Submesh 1 stores the local indices 0, 1, and 2 with base
+        /// vertex 4, so it addresses the vertices 4, 5, and 6.
+        /// </summary>
+        private static Mesh CreateBaseVertexFixture()
+        {
+            const int count = 8;
+            var mesh = new Mesh();
+            mesh.name = "AmuseBaseVertexFixture";
+            var positions = new Vector3[count];
+            var uvs = new Vector2[count];
+            for (var i = 0; i < count; i++)
+            {
+                positions[i] = new Vector3(i * 0.25f, i * 0.5f, i);
+                uvs[i] = new Vector2(i / 8.0f, i / 16.0f);
+            }
+
+            mesh.vertices = positions;
+            mesh.uv = uvs;
+            mesh.subMeshCount = 2;
+            mesh.SetIndices(
+                new[] { 0, 1, 2 }, MeshTopology.Triangles, 0, false, 0);
+            mesh.SetIndices(
+                new[] { 0, 1, 2 }, MeshTopology.Triangles, 1, false, 4);
+            mesh.RecalculateBounds();
+            return mesh;
+        }
+
+        /// <summary>
+        /// Four vertices with exact dyadic UV values. The non square
+        /// remap of the axis test maps them by hand.
+        /// </summary>
+        private static Mesh CreateNonSquareFixture()
+        {
+            var mesh = new Mesh();
+            mesh.name = "AmuseNonSquareFixture";
+            mesh.vertices = new[]
+            {
+                new Vector3(0f, 0f, 0f),
+                new Vector3(1f, 0f, 0.1f),
+                new Vector3(0f, 1f, 0.2f),
+                new Vector3(1f, 1f, 0.3f),
+            };
+            mesh.uv = new[]
+            {
+                new Vector2(0.5f, 0.25f),
+                new Vector2(0.75f, 0.5f),
+                new Vector2(0.25f, 0.75f),
+                new Vector2(1f, 0f),
+            };
+            mesh.triangles = new[] { 0, 1, 2, 0, 2, 3 };
+            mesh.RecalculateBounds();
+            return mesh;
+        }
+
+        /// <summary>
+        /// Four vertices whose attributes share one stream. The route
+        /// channel sits between the position and the later
+        /// attributes, so its growth to Float32 moves their offsets.
+        /// </summary>
+        private static Mesh CreateSharedStreamHalfFixture()
+        {
+            var halfUv = new[]
+            {
+                new Vector2(0.5f, 0.25f),
+                new Vector2(0.75f, 0.125f),
+                new Vector2(0.0625f, 0.625f),
+                new Vector2(0.375f, 0.875f),
+            };
+            var positions = new[]
+            {
+                new Vector3(0f, 0f, 0f),
+                new Vector3(1f, 0f, 0.5f),
+                new Vector3(0f, 1f, 1f),
+                new Vector3(1f, 1f, 1.5f),
+            };
+            var normals = new[]
+            {
+                new Vector3(0f, 0f, -1f),
+                new Vector3(1f, 0f, 0f),
+                new Vector3(0f, 1f, 0f),
+                new Vector3(0f, 0f, 1f),
+            };
+            var tangents = new[]
+            {
+                new Vector4(1f, 0f, 0f, 1f),
+                new Vector4(0f, 1f, 0f, -1f),
+                new Vector4(-1f, 0f, 0f, 1f),
+                new Vector4(1f, 0f, 1f, 1f),
+            };
+            var secondUv = new[]
+            {
+                new Vector2(0.1f, 0.9f),
+                new Vector2(0.2f, 0.8f),
+                new Vector2(0.3f, 0.7f),
+                new Vector2(0.4f, 0.6f),
+            };
+
+            var writable = Mesh.AllocateWritableMeshData(1);
+            var data = writable[0];
+            data.SetVertexBufferParams(
+                4,
+                new VertexAttributeDescriptor(
+                    VertexAttribute.Position, VertexAttributeFormat.Float32, 3, 0),
+                new VertexAttributeDescriptor(
+                    VertexAttribute.TexCoord0, VertexAttributeFormat.Float16, 2, 0),
+                new VertexAttributeDescriptor(
+                    VertexAttribute.Normal, VertexAttributeFormat.Float32, 3, 0),
+                new VertexAttributeDescriptor(
+                    VertexAttribute.Tangent, VertexAttributeFormat.Float32, 4, 0),
+                new VertexAttributeDescriptor(
+                    VertexAttribute.TexCoord1, VertexAttributeFormat.Float32, 2, 0));
+            var stream = data.GetVertexData<byte>(0);
+            var stride = data.GetVertexBufferStride(0);
+            var uvOffset =
+                data.GetVertexAttributeOffset(VertexAttribute.TexCoord0);
+            var normalOffset =
+                data.GetVertexAttributeOffset(VertexAttribute.Normal);
+            var tangentOffset =
+                data.GetVertexAttributeOffset(VertexAttribute.Tangent);
+            var secondUvOffset =
+                data.GetVertexAttributeOffset(VertexAttribute.TexCoord1);
+            for (var i = 0; i < 4; i++)
+            {
+                var vertex = i * stride;
+                WriteVector3(stream, vertex, positions[i]);
+                WriteUShort(stream, vertex + uvOffset, ToHalf(halfUv[i].x));
+                WriteUShort(stream, vertex + uvOffset + 2, ToHalf(halfUv[i].y));
+                WriteVector3(stream, vertex + normalOffset, normals[i]);
+                WriteVector4(stream, vertex + tangentOffset, tangents[i]);
+                WriteVector2(stream, vertex + secondUvOffset, secondUv[i]);
+            }
+
+            data.SetIndexBufferParams(6, IndexFormat.UInt16);
+            var indices = data.GetIndexData<ushort>();
+            var words = new ushort[] { 0, 1, 2, 2, 1, 3 };
+            for (var i = 0; i < words.Length; i++)
+            {
+                indices[i] = words[i];
+            }
+
+            data.subMeshCount = 1;
+            data.SetSubMesh(
+                0, new SubMeshDescriptor(0, 6, MeshTopology.Triangles));
+
+            var mesh = new Mesh();
+            mesh.name = "AmuseSharedStreamFixture";
+            Mesh.ApplyAndDisposeWritableMeshData(
+                writable, mesh, MeshUpdateFlags.DontRecalculateBounds);
+            mesh.bounds = new Bounds(
+                new Vector3(0.5f, 0.5f, 0.75f), new Vector3(1f, 1f, 1.5f));
+            return mesh;
+        }
+
+        /// <summary>Writes a float into a raw vertex stream.</summary>
+        private static void WriteFloatBytes(
+            Unity.Collections.NativeArray<byte> stream,
+            int index,
+            float value)
+        {
+            var bits = BitConverter.SingleToInt32Bits(value);
+            stream[index] = (byte)bits;
+            stream[index + 1] = (byte)(bits >> 8);
+            stream[index + 2] = (byte)(bits >> 16);
+            stream[index + 3] = (byte)(bits >> 24);
+        }
+
+        private static void WriteVector2(
+            Unity.Collections.NativeArray<byte> stream,
+            int index,
+            Vector2 value)
+        {
+            WriteFloatBytes(stream, index, value.x);
+            WriteFloatBytes(stream, index + 4, value.y);
+        }
+
+        private static void WriteVector3(
+            Unity.Collections.NativeArray<byte> stream,
+            int index,
+            Vector3 value)
+        {
+            WriteFloatBytes(stream, index, value.x);
+            WriteFloatBytes(stream, index + 4, value.y);
+            WriteFloatBytes(stream, index + 8, value.z);
+        }
+
+        private static void WriteVector4(
+            Unity.Collections.NativeArray<byte> stream,
+            int index,
+            Vector4 value)
+        {
+            WriteFloatBytes(stream, index, value.x);
+            WriteFloatBytes(stream, index + 4, value.y);
+            WriteFloatBytes(stream, index + 8, value.z);
+            WriteFloatBytes(stream, index + 12, value.w);
+        }
+
+        private static void WriteUShort(
+            Unity.Collections.NativeArray<byte> stream,
+            int index,
+            ushort value)
+        {
+            stream[index] = (byte)value;
+            stream[index + 1] = (byte)(value >> 8);
         }
 
         private static Vector3[] Deltas(int seed)

@@ -161,10 +161,16 @@ namespace Alrauna.Amuse.Editor.Build
                     for (var s = 0; s < remapBySubmesh.Length; s++)
                     {
                         var submesh = source.GetSubMesh(s);
+                        var descriptor = new SubMeshDescriptor(
+                            indexStart, submesh.indexCount, submesh.topology);
+
+                        // The output addresses vertices directly, so its
+                        // base vertex stays zero. The authored bounds
+                        // carry over without a recalculation.
+                        descriptor.bounds = submesh.bounds;
                         output.SetSubMesh(
-                            s,
-                            new SubMeshDescriptor(
-                                indexStart, submesh.indexCount, submesh.topology));
+                            s, descriptor,
+                            MeshUpdateFlags.DontRecalculateBounds);
                         indexStart += submesh.indexCount;
                     }
 
@@ -175,8 +181,17 @@ namespace Alrauna.Amuse.Editor.Build
                     built.name = current.name + NameSuffix;
                     built.bounds = current.bounds;
                     built.bindposes = current.bindposes;
-                    CopyBoneWeights(current, built, vertexOrigin);
-                    CopyBlendShapes(current, built, vertexOrigin);
+                    try
+                    {
+                        CopyBoneWeights(current, built, vertexOrigin);
+                        CopyBlendShapes(current, built, vertexOrigin);
+                    }
+                    catch
+                    {
+                        // A half copied mesh must not leak.
+                        UnityEngine.Object.DestroyImmediate(built);
+                        throw;
+                    }
                     return built;
                 }
                 finally
@@ -258,7 +273,8 @@ namespace Alrauna.Amuse.Editor.Build
 
         /// <summary>
         /// Records the distinct map of each vertex in submesh order.
-        /// A kept submesh records null.
+        /// A stored index addresses its vertex through the base vertex
+        /// of the submesh. A kept submesh records null.
         /// </summary>
         private static void ScanSubmesh(
             Mesh.MeshData source,
@@ -274,7 +290,9 @@ namespace Alrauna.Amuse.Editor.Build
                 var indices = source.GetIndexData<ushort>();
                 for (var i = descriptor.indexStart; i < end; i++)
                 {
-                    Remember(indices[i], map, remapsPerVertex);
+                    Remember(
+                        indices[i] + descriptor.baseVertex,
+                        map, remapsPerVertex);
                 }
             }
             else
@@ -282,7 +300,9 @@ namespace Alrauna.Amuse.Editor.Build
                 var indices = source.GetIndexData<uint>();
                 for (var i = descriptor.indexStart; i < end; i++)
                 {
-                    Remember((int)indices[i], map, remapsPerVertex);
+                    Remember(
+                        (int)indices[i] + descriptor.baseVertex,
+                        map, remapsPerVertex);
                 }
             }
         }
@@ -522,7 +542,8 @@ namespace Alrauna.Amuse.Editor.Build
                     for (var i = descriptor.indexStart; i < end; i++)
                     {
                         indices[cursor++] = SlotOf(
-                            sourceIndices[i], map, remapsPerVertex, slots);
+                            sourceIndices[i] + descriptor.baseVertex,
+                            map, remapsPerVertex, slots);
                     }
                 }
                 else
@@ -531,7 +552,8 @@ namespace Alrauna.Amuse.Editor.Build
                     for (var i = descriptor.indexStart; i < end; i++)
                     {
                         indices[cursor++] = SlotOf(
-                            (int)sourceIndices[i], map, remapsPerVertex, slots);
+                            (int)sourceIndices[i] + descriptor.baseVertex,
+                            map, remapsPerVertex, slots);
                     }
                 }
             }
@@ -570,12 +592,20 @@ namespace Alrauna.Amuse.Editor.Build
         private static void CopyBoneWeights(Mesh source, Mesh target, int[] vertexOrigin)
         {
             var bonesPerVertex = source.GetBonesPerVertex();
+            var sourceWeights = source.GetAllBoneWeights();
             if (bonesPerVertex.Length == 0)
             {
+                if (sourceWeights.Length > 0 || source.bindposes.Length > 0)
+                {
+                    throw new InvalidOperationException(
+                        "The source mesh carries bone data but no per " +
+                        "vertex bone weight rows. The mesh output refuses " +
+                        "to drop them.");
+                }
+
                 return;
             }
 
-            var sourceWeights = source.GetAllBoneWeights();
             var sourceOffsets = new int[bonesPerVertex.Length + 1];
             for (var v = 0; v < bonesPerVertex.Length; v++)
             {
