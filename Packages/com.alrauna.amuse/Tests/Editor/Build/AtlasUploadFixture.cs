@@ -13,13 +13,16 @@ namespace Alrauna.Amuse.Tests.Editor.Build
     /// whether the page streams in the built bundle and whether VRChat
     /// accepts the page. The fixture holds one renderer with two slots
     /// of the installed Poiyomi main shader. Each slot material binds
-    /// one deterministic 4096 by 4096 RGBA32 source with anisotropy
-    /// level 16. The mesh maps a UV rectangle of 4064 by 4064 texels
-    /// inside each source. The border of a placement is then 16 texels
-    /// on each side, so each placement is 4096 by 4096 texels and the
-    /// two placements share one page of 8192 by 4096 texels. The item
-    /// lives in the test assembly, so it never ships. It writes only
-    /// under the scratch folder and deletes a prior fixture first.
+    /// one deterministic opaque 4096 by 4096 source with anisotropy
+    /// level 16. Each PNG has no alpha, so the importer emits an
+    /// uncompressed RGB24 source and the page format follows it. The
+    /// mesh maps a UV rectangle of 4064 by 4064 texels inside each
+    /// source. The border of a placement is then 16 texels on each
+    /// side, so each placement is 4096 by 4096 texels and the two
+    /// placements share one page of 8192 by 4096 texels. The
+    /// uncompressed RGB24 page with its mip chain is about 134 MB. The
+    /// item lives in the test assembly, so it never ships. It writes
+    /// only under the scratch folder and deletes a prior fixture first.
     /// </summary>
     internal static class AtlasUploadFixture
     {
@@ -73,11 +76,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 AssetDatabase.Refresh();
                 Debug.Log(
                     "AMUSE atlas upload fixture created under " +
-                    ScratchFolder + ". Two 4096 sources, a 4064 texel UV" +
+                    ScratchFolder + ". Two opaque 4096 sources that" +
+                    " import as uncompressed RGB24, a 4064 texel UV" +
                     " rectangle each, one shared page of 8192 by 4096" +
-                    " texels after the 16 texel border.");
+                    " texels after the 16 texel border, about 134 MB" +
+                    " with mips.");
             }
-            catch (Exception exception)
+            catch (System.Exception exception)
             {
                 Debug.LogException(exception);
             }

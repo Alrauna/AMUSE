@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Linq;
 using Alrauna.Amuse.Tests.Editor.Shared;
 using NUnit.Framework;
 using UnityEditor;
@@ -14,11 +15,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
     /// GPU with the method of the record: a probe shader samples one
     /// black texture with one white texel on its base level through
     /// explicit gradients, the sample spacing is one eighth of a texel,
-    /// the sweep covers six angles, several gradient lengths, and
-    /// anisotropic ratios up to 64, and the quality setting pins
-    /// anisotropic filtering to forced on. A row fails when any nonzero
-    /// output lies its border reach plus one half texel or more from
-    /// the white texel.
+    /// the sweep covers six angles, gradient lengths 1 to 40 texels at
+    /// every integer length, and anisotropic ratios up to 64, and the
+    /// quality setting pins anisotropic filtering to forced on. The
+    /// reach is the Euclidean distance in texels of the base level
+    /// from the white texel center to the farthest nonzero probe
+    /// output. A row fails when any nonzero output lies its border
+    /// reach plus one half texel or more from the white texel. A
+    /// positive control first proves the probe samples the white texel
+    /// at all. The anisotropy 16 row also needs a reach above four
+    /// texels, which only the anisotropic walk produces, because an
+    /// isotropic footprint reads at most about one and a half texels
+    /// from its sample point.
     /// </summary>
     public sealed class AtlasGpuReachTests
     {
@@ -34,7 +42,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
         private const int WhiteTexelY = 32;
 
-        private static readonly int[] SweepLengths = { 1, 2, 4, 8, 16, 32 };
+        private static readonly int[] SweepLengths =
+            Enumerable.Range(1, 40).ToArray();
 
         private static readonly int[] SweepRatios = { 1, 2, 4, 8, 16, 32, 64 };
 
@@ -77,12 +86,34 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 try
                 {
                     var reach = MeasureReach(texture, shader);
+                    Assert.That(
+                        reach.MaxValue,
+                        Is.GreaterThanOrEqualTo(128),
+                        "The probe must sample the white texel. A run" +
+                        " that renders black everywhere would otherwise" +
+                        " pass with a reach of zero.");
+                    if (anisoLevel > 0)
+                    {
+                        // An isotropic footprint reads at most about one
+                        // and a half texels from its sample point. Only
+                        // the anisotropic walk carries nonzero output
+                        // past four texels, so this bound fails when the
+                        // row runs without anisotropy.
+                        Assert.That(
+                            reach.MaxDistance,
+                            Is.GreaterThan(4f),
+                            "Anisotropy level " + anisoLevel + " must" +
+                            " sample through the anisotropic walk, whose" +
+                            " reach exceeds the isotropic bound of four" +
+                            " texels.");
+                    }
+
                     TestContext.Out.WriteLine(
                         "Observed reach for anisotropy level " + anisoLevel +
                         " is " + reach.MaxDistance.ToString(
                             "0.###", CultureInfo.InvariantCulture) +
-                        " texels. The farthest config was " + reach.Cause +
-                        ".");
+                        " texels, Euclidean distance in base level texels." +
+                        " The farthest config was " + reach.Cause + ".");
                     Assert.That(
                         reach.MaxDistance,
                         Is.LessThan(borderReachTexels + 0.5f),
@@ -135,15 +166,25 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
         private readonly struct ReachResult
         {
-            internal ReachResult(float maxDistance, string cause)
+            internal ReachResult(
+                float maxDistance,
+                string cause,
+                float maxValue)
             {
                 MaxDistance = maxDistance;
                 Cause = cause;
+                MaxValue = maxValue;
             }
 
             internal float MaxDistance { get; }
 
             internal string Cause { get; }
+
+            /// <summary>
+            /// The largest sampled value of the whole sweep. It proves
+            /// the probe rendered and touched the white texel.
+            /// </summary>
+            internal float MaxValue { get; }
         }
 
         /// <summary>
@@ -179,7 +220,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     ShaderIds.Texel,
                     new Vector2(1f / TextureSize, 1f / TextureSize));
 
-                var best = new ReachResult(0f, "none");
+                var best = new ReachResult(0f, "none", 0f);
+                var maxValue = 0f;
                 foreach (var angle in SweepAngles)
                 {
                     var radians = angle * Mathf.PI / 180f;
@@ -198,8 +240,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                                 new Vector4(
                                     cross.x, cross.y, length / (float)ratio,
                                     0f));
-                            var distance = RenderAndMeasure(
+                            float distance;
+                            float value;
+                            (distance, value) = RenderAndMeasure(
                                 texture, material, target, readback);
+                            maxValue = Mathf.Max(maxValue, value);
                             if (distance > best.MaxDistance)
                             {
                                 best = new ReachResult(
@@ -207,13 +252,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                                     "angle " + angle.ToString(
                                         CultureInfo.InvariantCulture) +
                                     " degrees, gradient length " + length +
-                                    " texels, ratio " + ratio);
+                                    " texels, ratio " + ratio,
+                                    0f);
                             }
                         }
                     }
                 }
 
-                return best;
+                return new ReachResult(
+                    best.MaxDistance, best.Cause, maxValue);
             }
             finally
             {
@@ -230,7 +277,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
-        private static float RenderAndMeasure(
+        private static (float Distance, float Value) RenderAndMeasure(
             Texture2D texture,
             Material material,
             RenderTexture target,
@@ -253,14 +300,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var pixels = readback.GetPixels32();
             var half = (ProbePixels - 1) * 0.5f;
             var best = 0f;
+            var value = 0f;
             for (var y = 0; y < ProbePixels; y++)
             {
                 for (var x = 0; x < ProbePixels; x++)
                 {
-                    if (pixels[y * ProbePixels + x].r == 0)
+                    var level = pixels[y * ProbePixels + x].r;
+                    value = Mathf.Max(value, level);
+                    if (level == 0)
                     {
                         continue;
                     }
+
 
                     var dx = (x - half) * TexelsPerProbeStep;
                     var dy = (y - half) * TexelsPerProbeStep;
@@ -272,7 +323,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 }
             }
 
-            return best;
+            return (best, value);
         }
 
         private static void Destroy(Object obj)
@@ -301,7 +352,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// One probe pass maps every render target pixel to one sample
         /// point around the white texel, at the record's spacing, and
         /// samples the probe texture at that point through explicit
-        /// gradients of the swept length, angle, and ratio.
+        /// gradients of the swept length, angle, and ratio. The pixel
+        /// index, not the pixel center, names the sample offset, so the
+        /// C# side and the shader share one center at half the probe
+        /// grid.
         /// </summary>
         private const string ProbeShaderSource = @"
 Shader ""Hidden/Alrauna/AmuseTests/AtlasGpuReachProbe""
@@ -344,8 +398,9 @@ Shader ""Hidden/Alrauna/AmuseTests/AtlasGpuReachProbe""
 
             float4 frag(v2f input) : SV_Target
             {
+                float2 pixel = floor(input.grid);
                 float2 center = _Grid.xx * 0.5 - 0.5;
-                float2 offsetTexels = (input.grid - center) * _Grid.y;
+                float2 offsetTexels = (pixel - center) * _Grid.y;
                 float2 uv = _Grid.zw + offsetTexels * _Texel;
                 float2 ddx = _AxisA.xy * _AxisA.z * _Texel;
                 float2 ddy = _AxisB.xy * _AxisB.z * _Texel;
