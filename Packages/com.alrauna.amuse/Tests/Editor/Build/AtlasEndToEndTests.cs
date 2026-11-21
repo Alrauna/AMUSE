@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics.LilToon;
@@ -63,6 +64,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             AtlasPass.AcquireSource =
                 AtlasPass.AcquireThroughStreamingEvidence;
             AtlasEndToEndPlugin.PreAtlasHook = null;
+            AtlasBudgetLimits.Provider = () => AtlasBudgetLimits.Unlimited;
             _scope.TearDown();
             if (AssetDatabase.IsValidFolder(TempFolder))
             {
@@ -1643,6 +1645,285 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
+                DestroyGenerated(state);
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        // --- report lines ---------------------------------------------------
+
+        private static List<ErrorContext> EntriesWithKey(
+            IEnumerable<ErrorContext> reports, string titleKey)
+        {
+            return reports
+                .Where(entry => entry.TheError is SimpleError simple &&
+                    simple.TitleKey == titleKey)
+                .ToList();
+        }
+
+        private static List<ErrorContext> EntriesWithPrefix(
+            IEnumerable<ErrorContext> reports, string prefix)
+        {
+            return reports
+                .Where(entry => entry.TheError is SimpleError simple &&
+                    simple.TitleKey.StartsWith(prefix, StringComparison.Ordinal))
+                .ToList();
+        }
+
+        private static long TextureBytesOf(Texture2D texture)
+        {
+            return AtlasBudget.TextureBytes(
+                texture.width,
+                texture.height,
+                texture.graphicsFormat,
+                texture.mipmapCount);
+        }
+
+        /// <summary>
+        /// --- Falsifier 3: a report that prints nothing for a page set,
+        /// or that counts the bytes of the sources as the change. The
+        /// line must state the page bytes as the change, the source
+        /// bytes as retained, the merge-ready result, and the draw call
+        /// fact. The byte oracle reads the live textures, not the
+        /// plan. ---
+        /// </summary>
+        [Test]
+        public void TwoMaterialsReportOnePageSetLine()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = NewAtlasOnlyRoot();
+            AmusePlatformFinishState state = null;
+            try
+            {
+                var firstMaterial = NewAdmittedMaterial(
+                    "report first",
+                    new Color32(220, 40, 40, 255),
+                    new Color32(40, 40, 220, 255));
+                var secondMaterial = NewAdmittedMaterial(
+                    "report second",
+                    new Color32(40, 200, 60, 255),
+                    new Color32(220, 200, 40, 255));
+                var sourceBytes =
+                    TextureBytesOf(
+                        (Texture2D)firstMaterial.GetTexture("_MainTex")) +
+                    TextureBytesOf(
+                        (Texture2D)secondMaterial.GetTexture("_MainTex"));
+                var firstRenderer = NewQuadRenderer(
+                    root, "first", Track(NewQuadMesh()), firstMaterial);
+                NewQuadRenderer(
+                    root, "second", Track(NewQuadMesh()), secondMaterial);
+
+                BuildContext context = null;
+                var reports = ErrorReport.CaptureErrors(
+                    () => context = Build(root));
+                state = context.GetState<AmusePlatformFinishState>();
+
+                Assert.That(context.Successful, Is.True,
+                    "fixture precondition: the build must complete");
+                Assert.That(state.AtlasPageCount, Is.EqualTo(1),
+                    "fixture precondition: one page");
+                var pageBytes = TextureBytesOf((Texture2D)firstRenderer
+                    .sharedMaterial.GetTexture("_MainTex"));
+
+                var lines = EntriesWithKey(reports, "amuse.atlas.PageSet");
+                Assert.That(lines, Has.Count.EqualTo(1),
+                    "one page set must report exactly one line");
+                Assert.That(
+                    EntriesWithPrefix(reports, "amuse.atlas."),
+                    Has.Count.EqualTo(1),
+                    "an admitted fixture reports no use refusal");
+                var message = lines[0].TheError.ToMessage();
+                Assert.That(message, Does.Contain(
+                    "moves 2 material slots onto 1 page."));
+                Assert.That(message, Does.Contain("merge-ready"));
+                Assert.That(message, Does.Contain(
+                    "The pages add " + pageBytes + " bytes"));
+                Assert.That(message, Does.Contain(
+                    "2 source textures with " + sourceBytes + " bytes"));
+                Assert.That(message, Does.Contain(
+                    "does not reduce draw calls"));
+            }
+            finally
+            {
+                DestroyGenerated(state);
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
+        /// --- Falsifier 4: a report that keeps use refusals in state
+        /// only, or that prints a line without the slot and the
+        /// renderer. ---
+        /// </summary>
+        [Test]
+        public void RefusedUseReportsOneLineWithItsSlot()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = NewAtlasOnlyRoot();
+            AmusePlatformFinishState state = null;
+            try
+            {
+                var material = NewAdmittedMaterial(
+                    "report refused",
+                    new Color32(180, 180, 40, 255),
+                    new Color32(40, 180, 180, 255));
+                material.SetTextureScale("_MainTex", new Vector2(2f, 2f));
+                NewQuadRenderer(
+                    root, "body", Track(NewQuadMesh()), material);
+
+                BuildContext context = null;
+                var reports = ErrorReport.CaptureErrors(
+                    () => context = Build(root));
+                state = context.GetState<AmusePlatformFinishState>();
+
+                Assert.That(context.Successful, Is.True,
+                    "fixture precondition: the build must complete");
+                var lines = EntriesWithKey(
+                    reports, "amuse.atlas.NonIdentityTransform");
+                Assert.That(lines, Has.Count.EqualTo(1),
+                    "one refused use must report exactly one line");
+                Assert.That(
+                    EntriesWithPrefix(reports, "amuse.atlas."),
+                    Has.Count.EqualTo(1),
+                    "a fixture with no admitted use reports no page set");
+                Assert.That(lines[0].TheError.ToMessage(), Does.Contain(
+                    "material slot 0 of renderer 'body'"));
+                Assert.That(lines[0].TheError.ToMessage(),
+                    Does.Not.Contain("{"),
+                    "every placeholder of the line must be filled");
+            }
+            finally
+            {
+                DestroyGenerated(state);
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
+        /// --- Falsifier 5: a report that lists a page set for every
+        /// planned group. A withdrawn group built no kept page, so it
+        /// reports only its use lines. ---
+        /// </summary>
+        [Test]
+        public void WithdrawnGroupReportsNoPageSetLine()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = NewAtlasOnlyRoot();
+            AmusePlatformFinishState state = null;
+            var originalAcquisition = AtlasPass.AcquireSource;
+            try
+            {
+                NewQuadRenderer(
+                    root,
+                    "fine",
+                    Track(NewQuadMesh()),
+                    NewAdmittedMaterial(
+                        "report fine",
+                        new Color32(30, 160, 200, 255),
+                        new Color32(200, 160, 30, 255)));
+                var withdrawingMaterial = NewAdmittedMaterial(
+                    "report withdraws",
+                    new Color32(200, 60, 120, 255),
+                    new Color32(60, 200, 120, 255),
+                    FilterMode.Point);
+                var withdrawingTexture =
+                    (Texture2D)withdrawingMaterial.GetTexture("_MainTex");
+                NewQuadRenderer(
+                    root,
+                    "withdraws",
+                    Track(NewQuadMesh()),
+                    withdrawingMaterial);
+                AtlasPass.AcquireSource =
+                    (Texture2D source,
+                        int protectedCount,
+                        out AtlasSourceImage image) =>
+                    {
+                        if (source.GetInstanceID() ==
+                            withdrawingTexture.GetInstanceID())
+                        {
+                            image = null;
+                            return false;
+                        }
+
+                        return originalAcquisition(
+                            source, protectedCount, out image);
+                    };
+
+                BuildContext context = null;
+                var reports = ErrorReport.CaptureErrors(
+                    () => context = Build(root));
+                state = context.GetState<AmusePlatformFinishState>();
+
+                Assert.That(context.Successful, Is.True,
+                    "fixture precondition: the build must complete");
+                Assert.That(
+                    EntriesWithKey(reports, "amuse.atlas.PageSet"),
+                    Has.Count.EqualTo(1),
+                    "only the healthy group reports a page set");
+                var withdrawn = EntriesWithKey(
+                    reports, "amuse.atlas.SourceAcquisitionFailed");
+                Assert.That(withdrawn, Has.Count.EqualTo(1),
+                    "the withdrawn use reports one line");
+                Assert.That(withdrawn[0].TheError.ToMessage(),
+                    Does.Contain("renderer 'withdraws'"));
+            }
+            finally
+            {
+                AtlasPass.AcquireSource = originalAcquisition;
+                DestroyGenerated(state);
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
+        /// --- Falsifier 6: a budget line that names the number but not
+        /// its value and limit (design section 10). The group factor
+        /// 1 / 1000 refuses any page. Its limit is the floor of the
+        /// source bytes divided by 1000. ---
+        /// </summary>
+        [Test]
+        public void BudgetRefusalLineStatesTheValueAndTheLimit()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = NewAtlasOnlyRoot();
+            AmusePlatformFinishState state = null;
+            try
+            {
+                var material = NewAdmittedMaterial(
+                    "report budget",
+                    new Color32(90, 200, 90, 255),
+                    new Color32(200, 90, 200, 255));
+                var limit = TextureBytesOf(
+                    (Texture2D)material.GetTexture("_MainTex")) / 1000;
+                NewQuadRenderer(
+                    root, "body", Track(NewQuadMesh()), material);
+                AtlasBudgetLimits.Provider = () => new AtlasBudgetLimits(
+                    1, 1000, long.MaxValue, long.MaxValue);
+
+                BuildContext context = null;
+                var reports = ErrorReport.CaptureErrors(
+                    () => context = Build(root));
+                state = context.GetState<AmusePlatformFinishState>();
+
+                Assert.That(context.Successful, Is.True,
+                    "fixture precondition: the build must complete");
+                Assert.That(state.AtlasUseRefusals, Has.Count.EqualTo(1));
+                var value = state.AtlasUseRefusals[0].valueBytes;
+                Assert.That(state.AtlasUseRefusals[0].limitBytes,
+                    Is.EqualTo(limit));
+                Assert.That(value, Is.GreaterThan(limit));
+                var lines = EntriesWithKey(
+                    reports, "amuse.atlas.GroupBudget");
+                Assert.That(lines, Has.Count.EqualTo(1));
+                var message = lines[0].TheError.ToMessage();
+                Assert.That(message, Does.Contain(
+                    "The value is " + value + " bytes."));
+                Assert.That(message, Does.Contain(
+                    "The limit is " + limit + " bytes."));
+            }
+            finally
+            {
+                AtlasBudgetLimits.Provider = () => AtlasBudgetLimits.Unlimited;
                 DestroyGenerated(state);
                 UnityEngine.Object.DestroyImmediate(root);
             }

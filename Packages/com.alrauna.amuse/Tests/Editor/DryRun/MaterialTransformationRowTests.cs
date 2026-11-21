@@ -145,13 +145,18 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 Is.EqualTo(
                     "The first open measures textures on the GPU. " +
                     "It can take a moment."));
+            Assert.That(
+                RowText.DisclosureSentence(2),
+                Is.EqualTo(
+                    "This view excludes atlasing. The build console " +
+                    "lists the atlas results."));
         }
 
         [Test]
         public void DisclosureSentenceThrowsOutOfRange()
         {
             Assert.Throws<ArgumentOutOfRangeException>(
-                () => RowText.DisclosureSentence(2));
+                () => RowText.DisclosureSentence(3));
             Assert.Throws<ArgumentOutOfRangeException>(
                 () => RowText.DisclosureSentence(-1));
         }
@@ -368,6 +373,7 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
                 RowText.NoteSentence(NoteKind.RefreshOnly),
                 RowText.DisclosureSentence(0),
                 RowText.DisclosureSentence(1),
+                RowText.DisclosureSentence(2),
                 RowText.ErroredSentence(Path, TypeName),
                 RowText.NoRenderersSentence(),
                 RowText.RefusedSlotSentence(),

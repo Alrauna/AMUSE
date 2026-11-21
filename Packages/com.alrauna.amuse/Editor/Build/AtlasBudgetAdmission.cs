@@ -13,12 +13,13 @@ namespace Alrauna.Amuse.Editor.Build
     {
         /// <summary>
         /// Admits each group plan against the three budget numbers and
-        /// returns one refusal per group, in plan order. The group
+        /// returns one verdict per group, in plan order. The group
         /// check runs first, then the peak check, then the avatar
         /// check. Only an admitted group adds its retained bytes to
-        /// the avatar sum.
+        /// the avatar sum. A refusal carries the value and the limit
+        /// of its number, so the report can state them.
         /// </summary>
-        internal static IReadOnlyList<AtlasUseRefusal> Admit(
+        internal static IReadOnlyList<AtlasBudgetVerdict> Admit(
             IReadOnlyList<AtlasGroupPlan> plans,
             IReadOnlyList<CapturedAtlasUse> uses,
             int protectedMipLevelCount,
@@ -26,12 +27,12 @@ namespace Alrauna.Amuse.Editor.Build
         {
             checked
             {
-                var results = new List<AtlasUseRefusal>(plans.Count);
+                var results = new List<AtlasBudgetVerdict>(plans.Count);
                 if (limits.IsUnlimited)
                 {
                     for (int i = 0; i < plans.Count; i++)
                     {
-                        results.Add(AtlasUseRefusal.None);
+                        results.Add(AtlasBudgetVerdict.Admitted);
                     }
 
                     return results;
@@ -45,7 +46,11 @@ namespace Alrauna.Amuse.Editor.Build
                     if (retainedBytes * limits.FactorDenominator
                         > sourceBytes * limits.FactorNumerator)
                     {
-                        results.Add(AtlasUseRefusal.GroupBudget);
+                        results.Add(new AtlasBudgetVerdict(
+                            AtlasUseRefusal.GroupBudget,
+                            retainedBytes,
+                            sourceBytes * limits.FactorNumerator
+                                / limits.FactorDenominator));
                         continue;
                     }
 
@@ -55,19 +60,25 @@ namespace Alrauna.Amuse.Editor.Build
                         protectedMipLevelCount);
                     if (peakBytes > limits.PeakTemporaryBytes)
                     {
-                        results.Add(AtlasUseRefusal.PeakBudget);
+                        results.Add(new AtlasBudgetVerdict(
+                            AtlasUseRefusal.PeakBudget,
+                            peakBytes,
+                            limits.PeakTemporaryBytes));
                         continue;
                     }
 
                     if (avatarRetainedSum + retainedBytes
                         > limits.AvatarRetainedBytes)
                     {
-                        results.Add(AtlasUseRefusal.AvatarBudget);
+                        results.Add(new AtlasBudgetVerdict(
+                            AtlasUseRefusal.AvatarBudget,
+                            avatarRetainedSum + retainedBytes,
+                            limits.AvatarRetainedBytes));
                         continue;
                     }
 
                     avatarRetainedSum += retainedBytes;
-                    results.Add(AtlasUseRefusal.None);
+                    results.Add(AtlasBudgetVerdict.Admitted);
                 }
 
                 return results;

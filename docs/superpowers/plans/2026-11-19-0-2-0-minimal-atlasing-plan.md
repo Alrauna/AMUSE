@@ -60,7 +60,11 @@ Status on 2026-11-21: Implemented on branch `atlasing-m3-liltoon-main-color`. Th
 
 ## Milestone 4: Report and interface
 
-- [ ] One report line per page set with the merge-ready result and the allocation change with its cause. One line per refused use. The dry run label states that the preview excludes atlasing. Verify the actual inspector.
+Executable plan: `docs/superpowers/plans/2026-11-21-atlasing-milestone-4-report-and-interface.md`.
+
+Status on 2026-11-21: Implemented on branch `atlasing-m4-report-and-interface`. The full product and research EditMode run on 2026-11-21 reported 3697 total, 3672 passed, 0 failed, and 25 skipped. The real inspector was checked in the dev editor instance on 2026-11-21.
+
+- [x] One report line per page set with the merge-ready result and the allocation change with its cause. One line per refused use. The dry run label states that the preview excludes atlasing. Verify the actual inspector.
 
 ## Milestone 5: Release qualification
 
@@ -84,4 +88,4 @@ Status on 2026-11-21: Implemented on branch `atlasing-m3-liltoon-main-color`. Th
 | 10 Budget | Gate 0, 2, 5 |
 | 11 Settings and report | 1, 4 |
 
-Next action on 2026-11-21: The owner builds and uploads the 8192 fixture avatar through the VRChat SDK and records the two upload facts. Then write the Milestone 4 plan for the report and the interface.
+Next action on 2026-11-21: The owner builds and uploads the 8192 fixture avatar through the VRChat SDK and records the two upload facts. Then write the Milestone 5 plan for release qualification.

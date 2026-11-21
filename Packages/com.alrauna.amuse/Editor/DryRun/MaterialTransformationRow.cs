@@ -278,7 +278,7 @@ namespace Alrauna.Amuse.Editor.DryRun
 
         internal static string DisclosureSentence(int index)
         {
-            // The spec lists exactly two disclosure rows under the
+            // The spec lists exactly three disclosure rows under the
             // nested foldout title. An index outside them is a
             // programming defect, so the builder throws instead of
             // drawing a blank row.
@@ -292,6 +292,11 @@ namespace Alrauna.Amuse.Editor.DryRun
                 case 1:
                     return "The first open measures textures on the GPU. "
                         + "It can take a moment.";
+                case 2:
+                    // Atlasing design section 11: the view shows no
+                    // atlas rows, and its label says so.
+                    return "This view excludes atlasing. The build console "
+                        + "lists the atlas results.";
                 default:
                     throw new ArgumentOutOfRangeException(
                         nameof(index), index, "Unknown disclosure row.");

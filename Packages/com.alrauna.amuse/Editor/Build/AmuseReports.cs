@@ -702,6 +702,74 @@ namespace Alrauna.Amuse.Editor.Build
             }
         }
 
+        /// <summary>
+        /// One Information entry per refused atlas use, with the
+        /// renderer as its clickable context. The title names the slot
+        /// and the renderer, because the build copy is gone after Play
+        /// mode ends. A budget cause states its value and limit in
+        /// bytes. Every other cause ignores them.
+        /// </summary>
+        internal static void AtlasUseLine(
+            Renderer renderer,
+            int slotIndex,
+            AtlasUseRefusal cause,
+            long valueBytes,
+            long limitBytes)
+        {
+            if (cause == AtlasUseRefusal.None)
+            {
+                throw new InvalidOperationException(
+                    "AtlasUseRefusal.None is not a refusal.");
+            }
+
+            using (ErrorReport.WithContextObject(renderer))
+            {
+                ErrorReport.ReportError(
+                    Localizer,
+                    ErrorSeverity.Information,
+                    AmuseReportStrings.AtlasKey(cause),
+                    slotIndex,
+                    renderer != null ? renderer.gameObject.name : null,
+                    valueBytes,
+                    limitBytes);
+            }
+        }
+
+        /// <summary>
+        /// One Information entry per atlas page set, with the avatar
+        /// root as its context. The entry states the merge-ready
+        /// result, the allocation change with its cause, and that
+        /// atlasing alone does not reduce draw calls (design sections
+        /// 1, 10, and 11).
+        /// </summary>
+        internal static void AtlasPageSetLine(
+            GameObject avatarRoot, AtlasPageSet pageSet)
+        {
+            using (ErrorReport.WithContextObject(avatarRoot))
+            {
+                ErrorReport.ReportError(
+                    Localizer,
+                    ErrorSeverity.Information,
+                    "amuse.atlas.PageSet",
+                    pageSet.GroupIndex,
+                    pageSet.ShaderRowName,
+                    CountPhrase(pageSet.PageCount, "page", "pages"),
+                    SlotCountPhrase(pageSet.UseCount),
+                    pageSet.PageBytes,
+                    CountPhrase(
+                        pageSet.SourceCount,
+                        "source texture",
+                        "source textures"),
+                    pageSet.SourceBytes);
+            }
+        }
+
+        private static string CountPhrase(
+            int count, string singular, string plural)
+        {
+            return count == 1 ? "1 " + singular : count + " " + plural;
+        }
+
         internal static void AvatarRefusal(
             GameObject avatarRoot, AvatarAnimationRefusal cause)
         {

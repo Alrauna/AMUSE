@@ -182,6 +182,97 @@ namespace Alrauna.Amuse.Tests.Editor
                 "the cutout submenu header must draw under the reveal");
         }
 
+        [UnityTest]
+        public IEnumerator AtlasSettingsHeaderDrawsUnderTheReveal()
+        {
+            var component = NewHiddenComponent();
+            var headersDrawn = new List<string>();
+            Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor.OnFoldoutHeaderDrawnForTest =
+                header => headersDrawn.Add(header);
+            try
+            {
+                yield return RepaintThroughHostWindow(component);
+            }
+            finally
+            {
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                    .OnFoldoutHeaderDrawnForTest = null;
+            }
+
+            Assert.That(headersDrawn, Contains.Item("Atlas Settings"),
+                "the atlas settings header must draw under the reveal");
+        }
+
+        /// <summary>
+        /// --- Falsifier 7: an Atlasing toggle that draws a constant or
+        /// reads another field. Stored false must draw unchecked. ---
+        /// </summary>
+        [UnityTest]
+        public IEnumerator AtlasingToggleDrawsTheStoredValue()
+        {
+            var component = NewHiddenComponent();
+            SetSwitch(component, "_atlasingEnabled", false);
+            var drawn = new List<bool>();
+            Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                .OnAtlasingToggleDrawnForTest = value => drawn.Add(value);
+            try
+            {
+                yield return RepaintThroughHostWindow(component);
+            }
+            finally
+            {
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                    .OnAtlasingToggleDrawnForTest = null;
+            }
+
+            Assert.That(drawn, Is.Not.Empty,
+                "the Atlasing toggle must draw");
+            Assert.That(drawn.Last(), Is.False,
+                "a stored false must draw unchecked");
+            Assert.That(component.AtlasingEnabled, Is.False,
+                "a plain repaint must not rewrite the switch");
+        }
+
+        /// <summary>
+        /// --- Falsifier 8: a page size control that clamps the stored
+        /// value on a plain repaint, or that shows no warning. The
+        /// build refuses a stored 9000, so the inspector must name
+        /// it and leave it for the user to change. ---
+        /// </summary>
+        [UnityTest]
+        public IEnumerator OutOfRangePageSizeDrawsAWarningAndKeepsTheValue()
+        {
+            var component = NewHiddenComponent();
+            SetStored(component, "_maximumAtlasPageSize", 9000);
+            SetStored(component, "_protectedMipLevelCount", 20);
+            var helpBoxes = new List<string>();
+            Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                .OnHelpBoxDrawnForTest = (message, type) =>
+                    helpBoxes.Add(message);
+            try
+            {
+                yield return RepaintThroughHostWindow(component);
+            }
+            finally
+            {
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                    .OnHelpBoxDrawnForTest = null;
+            }
+
+            Assert.That(Stored(component, "_maximumAtlasPageSize"),
+                Is.EqualTo(9000),
+                "a plain repaint rewrote the stored page size");
+            Assert.That(Stored(component, "_protectedMipLevelCount"),
+                Is.EqualTo(20),
+                "a plain repaint rewrote the stored protected count");
+            Assert.That(helpBoxes, Contains.Item(
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                    .OutOfBandWarning("Maximum Page Size", 9000, 8192)));
+            Assert.That(helpBoxes, Contains.Item(
+                Alrauna.Amuse.Editor.AmuseAvatarOptimizerEditor
+                    .OutOfBandWarning("Protected Mip Levels", 20, 14)));
+        }
+
         /// <summary>
         /// --- Falsifier 2: an implementation that inverts the drawn value
         /// (draws the negation of the stored bool) or renames the stored
