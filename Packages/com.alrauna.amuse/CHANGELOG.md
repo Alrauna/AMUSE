@@ -14,6 +14,7 @@ All notable changes to AMUSE are documented in this file.
 
 ### Fixed
 - 2026-11-20. An NDMF manual bake now gives the same AMUSE result as an upload build. The manual bake holds an asset editing batch open, and the readable copy of a streaming texture did not import inside it. So alpha separation refused the textures that needed that copy, and the bake left an empty `Assets/Amuse.StreamingReadback` folder. The copy now leaves the batch and restores it after the copy.
+- 2026-11-20. The opaque clone of an alpha separation now keeps the keyword set of its source material. Before, the material copy re-derived the Poiyomi drawer keywords from their properties. A source whose keywords disagreed with those properties could then render a different shader variant after alpha separation.
 
 ## [0.1.0] - 2026-11-15
 

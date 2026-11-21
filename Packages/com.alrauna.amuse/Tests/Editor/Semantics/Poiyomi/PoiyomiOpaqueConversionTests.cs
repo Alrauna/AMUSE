@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Alrauna.Amuse.Editor.Host;
@@ -361,6 +362,38 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 
             Assert.That(ReferenceEquals(clone, source), Is.False);
             Assert.That(clone.shader, Is.SameAs(source.shader));
+        }
+
+        // --- Falsifier: a material copy re-derives drawer keywords ---
+        /// <summary>
+        /// The source renders with its own keyword set. A keyword set that
+        /// disagrees with its drawer properties is legal material state.
+        /// The Unity material copy re-derives drawer keywords from the
+        /// property values, so a clone that keeps the copy's set renders a
+        /// different variant than the source.
+        /// </summary>
+        [Test]
+        public void PreparedClone_KeepsASourceKeywordSetThatDisagreesWithItsDrawers()
+        {
+            var source = RealConvertibleFade();
+            source.DisableKeyword("_LIGHTINGMODE_FLAT");
+            source.EnableKeyword("_SUNDISK_HIGH_QUALITY");
+            var sourceKeywords = new HashSet<string>(
+                source.shaderKeywords, StringComparer.Ordinal);
+
+            // No-op guard: a plain copy must change this source's set, or
+            // the fixture no longer exercises the drawer re-derivation.
+            var plainCopy = Track(new Material(source));
+            Assert.That(
+                sourceKeywords.SetEquals(plainCopy.shaderKeywords),
+                Is.False,
+                "A plain material copy kept the disagreeing keyword set.");
+
+            var clone = Track(PoiyomiOpaqueConversion.PrepareCanonicalOpaqueClone(source));
+
+            Assert.That(
+                new HashSet<string>(clone.shaderKeywords, StringComparer.Ordinal),
+                Is.EquivalentTo(sourceKeywords));
         }
 
         /// <summary>

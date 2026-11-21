@@ -17,8 +17,10 @@ namespace Alrauna.Amuse.Editor.Semantics
     /// </para>
     /// <para>
     /// The skeleton never saves and never writes the source. It clones with
-    /// <c>new Material(source)</c> and destroys the clone on every failure
-    /// path. The shader-identity sentence stays per family through
+    /// <c>new Material(source)</c>, writes the source keyword set back over
+    /// the set that the copy re-derived from the drawers, and destroys the
+    /// clone on every failure path. The shader-identity sentence stays per
+    /// family through
     /// <paramref name="shaderIdentityFailureText"/>, because the two
     /// frontends refuse with different words.
     /// </para>
@@ -98,6 +100,21 @@ namespace Alrauna.Amuse.Editor.Semantics
             var completed = false;
             try
             {
+                // The material copy re-derives every drawer keyword from
+                // its property value. The source renders with its own set,
+                // and that set can legally disagree with its drawers. So
+                // the source set is written back before any family write,
+                // and a set that does not read back is an invariant failure.
+                clone.shaderKeywords = source.shaderKeywords;
+                if (!new HashSet<string>(
+                        source.shaderKeywords, StringComparer.Ordinal)
+                    .SetEquals(clone.shaderKeywords))
+                {
+                    throw new InvalidOperationException(
+                        "Generated opaque material did not read back the " +
+                        "source keyword set.");
+                }
+
                 if (attestedTarget != null)
                 {
                     clone.shader = attestedTarget;
