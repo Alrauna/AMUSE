@@ -7,7 +7,7 @@ namespace Alrauna.Amuse.Editor.Build
     /// <summary>
     /// The budget admission of the atlas pass. It walks the group
     /// plans in plan order and names the budget number that refuses
-    /// each group. Unlimited limits skip every comparison.
+    /// each group.
     /// </summary>
     internal static class AtlasBudgetAdmission
     {
@@ -28,16 +28,6 @@ namespace Alrauna.Amuse.Editor.Build
             checked
             {
                 var results = new List<AtlasBudgetVerdict>(plans.Count);
-                if (limits.IsUnlimited)
-                {
-                    for (int i = 0; i < plans.Count; i++)
-                    {
-                        results.Add(AtlasBudgetVerdict.Admitted);
-                    }
-
-                    return results;
-                }
-
                 long avatarRetainedSum = 0;
                 foreach (AtlasGroupPlan plan in plans)
                 {

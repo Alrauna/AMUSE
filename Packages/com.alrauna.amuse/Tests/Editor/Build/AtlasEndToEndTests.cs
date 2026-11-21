@@ -45,11 +45,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
         private Func<BuildTarget> _originalTarget;
 
+        private Func<AtlasBudgetLimits> _originalBudget;
+
         [SetUp]
         public void SetUp()
         {
             _originalTarget =
                 AmusePlatformFinishPlugin.ActiveBuildTargetForTests;
+            _originalBudget = AtlasBudgetLimits.Provider;
             AmusePlatformFinishPlugin.ActiveBuildTargetForTests =
                 () => BuildTarget.StandaloneWindows64;
             _scope.EnsureTempFolder();
@@ -64,7 +67,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             AtlasPass.AcquireSource =
                 AtlasPass.AcquireThroughStreamingEvidence;
             AtlasEndToEndPlugin.PreAtlasHook = null;
-            AtlasBudgetLimits.Provider = () => AtlasBudgetLimits.Unlimited;
+            AtlasBudgetLimits.Provider = _originalBudget;
             _scope.TearDown();
             if (AssetDatabase.IsValidFolder(TempFolder))
             {
@@ -1025,12 +1028,22 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         /// split alpha texture, one retained transparent slot beside
         /// it. Alpha separation splits the first submesh, so the
         /// renderer carries the transparent original on slot zero and
-        /// the opaque clone on the appended slot one.
+        /// the opaque clone on the appended slot one. The split texture
+        /// is 8 by 8 texels with anisotropy, so its page border of 16
+        /// texels makes the page far larger than 5/4 of the source.
+        /// These tests check grouping and cleanup, not the budget, so
+        /// the fixture widens only the group factor. The tear down
+        /// restores the provider.
         /// </summary>
         private (SkinnedMeshRenderer renderer, Mesh sourceMesh,
             Material transparent, Texture2D texture)
             NewSplitFixture(GameObject root)
         {
+            AtlasBudgetLimits.Provider = () => new AtlasBudgetLimits(
+                1000,
+                1,
+                AtlasBudgetLimits.Production.AvatarRetainedBytes,
+                AtlasBudgetLimits.Production.PeakTemporaryBytes);
             AlphaSeparationSplitTests.EnsureSplitFolder();
             var texture = Track(
                 AlphaSeparationSplitTests.ImportSplitAlphaTexture(
@@ -1923,7 +1936,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
             finally
             {
-                AtlasBudgetLimits.Provider = () => AtlasBudgetLimits.Unlimited;
                 DestroyGenerated(state);
                 UnityEngine.Object.DestroyImmediate(root);
             }
