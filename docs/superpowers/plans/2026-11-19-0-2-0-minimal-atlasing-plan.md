@@ -84,4 +84,4 @@ Status on 2026-11-21: Implemented on branch `atlasing-m3-liltoon-main-color`. Th
 | 10 Budget | Gate 0, 2, 5 |
 | 11 Settings and report | 1, 4 |
 
-Next action: The owner builds and uploads the 8192 fixture avatar through the VRChat SDK and records the two upload facts. Then write the Milestone 3 plan for the lilToon row.
+Next action on 2026-11-21: The owner builds and uploads the 8192 fixture avatar through the VRChat SDK and records the two upload facts. Then write the Milestone 4 plan for the report and the interface.
