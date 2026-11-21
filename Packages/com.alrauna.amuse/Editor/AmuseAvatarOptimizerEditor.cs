@@ -31,6 +31,12 @@ namespace Alrauna.Amuse.Editor
         private bool _cutoutSettingsOpen = true;
 
         /// <summary>
+        /// The Atlas Settings foldout state lives in the editor
+        /// session, like the states above. It starts open.
+        /// </summary>
+        private bool _atlasSettingsOpen = true;
+
+        /// <summary>
         /// The two foldout states live in the editor session, like
         /// the two states above. No serialized field stores them, so
         /// presets, Undo, and Reset stay untouched.
@@ -63,6 +69,7 @@ namespace Alrauna.Amuse.Editor
         internal static Action<bool> OnOutOfRangeToggleDrawnForTest;
         internal static Action<bool> OnCutoutSeparatorToggleDrawnForTest;
         internal static Action<bool> OnTransparentSeparatorToggleDrawnForTest;
+        internal static Action<bool> OnAtlasingToggleDrawnForTest;
 
         private void OnEnable()
         {
@@ -154,6 +161,7 @@ namespace Alrauna.Amuse.Editor
                     "AMUSE will run when you upload this avatar and when " +
                     "you enter Play mode. " +
                     "It moves proven opaque parts of transparent materials onto opaque copies. " +
+                    "With Atlasing on, it also moves supported main color textures onto shared pages. " +
                     "Anything it cannot prove stays unchanged and gets reported.",
                     MessageType.Info);
             }
@@ -196,11 +204,17 @@ namespace Alrauna.Amuse.Editor
                 }
             }
 
+            var atlasSwitch = serializedObject.FindProperty("_atlasingEnabled");
+            EditorGUILayout.PropertyField(atlasSwitch, AtlasingSwitchContent);
+            OnAtlasingToggleDrawnForTest?.Invoke(atlasSwitch.boolValue);
+            serializedObject.ApplyModifiedProperties();
+
             DrawMaterialTransformations();
 
             if (DrawSettings())
             {
                 DrawAlphaSeparatorSettings();
+                DrawAtlasSettings();
             }
 
             if (AmuseBuildStatusStore.TryGet(out var status))
@@ -268,6 +282,9 @@ namespace Alrauna.Amuse.Editor
                     EditorStyles.wordWrappedLabel);
                 EditorGUILayout.LabelField(
                     RowText.DisclosureSentence(1),
+                    EditorStyles.wordWrappedLabel);
+                EditorGUILayout.LabelField(
+                    RowText.DisclosureSentence(2),
                     EditorStyles.wordWrappedLabel);
 
                 if (Event.current.type == EventType.Layout)
@@ -526,6 +543,35 @@ namespace Alrauna.Amuse.Editor
                 }
             }
         }
+
+        /// <summary>
+        /// The Atlasing master row copy. It states what moves, what
+        /// stays, and that atlasing alone does not reduce draw calls
+        /// (atlasing design sections 1 and 11).
+        /// </summary>
+        private static readonly GUIContent AtlasingSwitchContent = new GUIContent(
+            "Atlasing",
+            "Moves the main color textures of supported materials " +
+            "onto shared atlas pages and rewrites the mesh UVs. " +
+            "Materials that AMUSE cannot prove keep their textures " +
+            "and get a report line. This version does not reduce " +
+            "draw calls. Texture memory can grow. Turn this off to " +
+            "skip atlasing. Nothing is analyzed, moved, or reported " +
+            "for the feature.");
+
+        private static readonly GUIContent MaximumPageSizeContent = new GUIContent(
+            "Maximum Page Size",
+            "The largest width or height of one atlas page, in " +
+            "texels. VRChat does not accept a texture larger than " +
+            "8192. A region that does not fit an empty page of " +
+            "this size keeps its own texture.");
+
+        private static readonly GUIContent ProtectedMipLevelsContent = new GUIContent(
+            "Protected Mip Levels",
+            "How many of the largest mipmap levels each page copies " +
+            "from the source without a change. More levels need " +
+            "wider page borders, so the pages grow. The default of " +
+            "1 protects the level that shows at normal distances.");
 
         /// <summary>
         /// The Alpha Separator master row copy. The promise of a later
@@ -826,6 +872,104 @@ namespace Alrauna.Amuse.Editor
             CutoutMaterialCoverageRowContent,
             CutoutPreserveCoverageRowContent,
         };
+
+        /// <summary>
+        /// The Atlas Settings foldout. It holds the two numeric atlas
+        /// settings under the Advanced Settings reveal. A stored value
+        /// outside its range draws the out-of-band warning, because
+        /// the build refuses it. The control writes only when the
+        /// user changes it.
+        /// </summary>
+        private void DrawAtlasSettings()
+        {
+            using (new EditorGUI.IndentLevelScope(2))
+            {
+                _atlasSettingsOpen = EditorGUILayout.Foldout(
+                    _atlasSettingsOpen, "Atlas Settings",
+                    EditorStyles.foldoutHeader);
+                OnFoldoutHeaderDrawnForTest?.Invoke("Atlas Settings");
+                if (!_atlasSettingsOpen)
+                {
+                    return;
+                }
+
+                using (new EditorGUI.IndentLevelScope())
+                {
+                    // The rows share the label width rule of the
+                    // Alpha Separator Settings rows, so no label
+                    // truncates while the row affords it.
+                    var previousWidth = EditorGUIUtility.labelWidth;
+                    var rowIndent = EditorGUI.IndentedRect(
+                        new Rect(0f, 0f, 0f, 0f)).x;
+                    EditorGUIUtility.labelWidth = AlphaSeparatorLabelWidth(
+                        Mathf.Max(
+                            EditorStyles.label.CalcSize(
+                                MaximumPageSizeContent).x,
+                            EditorStyles.label.CalcSize(
+                                ProtectedMipLevelsContent).x),
+                        rowIndent,
+                        EditorGUIUtility.currentViewWidth - rowIndent);
+                    var pageSize = serializedObject.FindProperty(
+                        "_maximumAtlasPageSize");
+                    WarnWhenOutOfBand(
+                        MaximumPageSizeContent.text,
+                        pageSize.intValue,
+                        1,
+                        AmuseAvatarOptimizer.MaximumAtlasPageSizeLimit);
+                    EditorGUI.BeginChangeCheck();
+                    var size = EditorGUILayout.DelayedIntField(
+                        MaximumPageSizeContent, pageSize.intValue);
+                    if (EditorGUI.EndChangeCheck())
+                    {
+                        pageSize.intValue = Mathf.Clamp(
+                            size,
+                            1,
+                            AmuseAvatarOptimizer.MaximumAtlasPageSizeLimit);
+                    }
+
+                    var levels = serializedObject.FindProperty(
+                        "_protectedMipLevelCount");
+                    WarnWhenOutOfBand(
+                        ProtectedMipLevelsContent.text,
+                        levels.intValue,
+                        1,
+                        AmuseAvatarOptimizer.MaximumProtectedMipLevelCount);
+                    EditorGUI.BeginChangeCheck();
+                    var count = EditorGUILayout.IntSlider(
+                        ProtectedMipLevelsContent,
+                        Mathf.Clamp(
+                            levels.intValue,
+                            1,
+                            AmuseAvatarOptimizer.MaximumProtectedMipLevelCount),
+                        1,
+                        AmuseAvatarOptimizer.MaximumProtectedMipLevelCount);
+                    if (EditorGUI.EndChangeCheck())
+                    {
+                        levels.intValue = count;
+                    }
+
+                    EditorGUIUtility.labelWidth = previousWidth;
+                }
+            }
+
+            serializedObject.ApplyModifiedProperties();
+        }
+
+        private static void WarnWhenOutOfBand(
+            string controlName, int stored, int lowestLegal, int highestLegal)
+        {
+            if (!StoredValueIsOutOfBand(stored, lowestLegal, highestLegal))
+            {
+                return;
+            }
+
+            var warning = OutOfBandWarning(
+                controlName,
+                stored,
+                Mathf.Clamp(stored, lowestLegal, highestLegal));
+            EditorGUILayout.HelpBox(warning, MessageType.Warning);
+            OnHelpBoxDrawnForTest?.Invoke(warning, MessageType.Warning);
+        }
 
         /// <summary>
         /// The Alpha Separator Settings foldout. It holds the user's

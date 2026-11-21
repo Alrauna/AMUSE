@@ -1233,10 +1233,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             // scope-split the assertions read. The plugin reports one
             // informational build summary on every analyzed build, so
             // the close-path counts read against that baseline.
+            // The atlas pass runs after the close and reports its own
+            // use lines, so the close-path counts leave them out.
             var observedKeys = new List<string>();
             var summaryReports = new List<ErrorContext>();
             var avatarReports = new List<ErrorContext>();
             var slotRetentionReports = new List<ErrorContext>();
+            var nonAtlasCount = 0;
             foreach (var entry in errors)
             {
                 observedKeys.Add(
@@ -1245,7 +1248,13 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         : entry.TheError?.GetType().Name ?? "null error");
                 if (!(entry.TheError is SimpleError keyed))
                 {
+                    nonAtlasCount++;
                     continue;
+                }
+
+                if (!keyed.TitleKey.StartsWith("amuse.atlas."))
+                {
+                    nonAtlasCount++;
                 }
 
                 if (keyed.TitleKey == "amuse.summary.Title")
@@ -1297,7 +1306,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(slotRetentionReports, Is.Empty,
                     "the proven close emits zero slot-separation " +
                     "entries");
-                Assert.That(errors, Has.Count.EqualTo(1),
+                Assert.That(nonAtlasCount, Is.EqualTo(1),
                     "the close emits zero entries: the build carried " +
                     string.Join(", ", observedKeys));
                 Assert.That(cloneAtClose == null, Is.True,
@@ -1327,7 +1336,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "a slot-less pair has no slot scope to report " +
                 "against, so the retention emits zero " +
                 "slot-separation entries");
-            Assert.That(errors, Has.Count.EqualTo(2),
+            Assert.That(nonAtlasCount, Is.EqualTo(2),
                 "the avatar entry is the close's whole report over " +
                 "the build summary, but the build carried: " +
                 string.Join(", ", observedKeys));

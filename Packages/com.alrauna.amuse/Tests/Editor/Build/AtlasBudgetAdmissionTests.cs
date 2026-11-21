@@ -173,7 +173,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 LimitsAt((BudgetNumber)number, 0));
 
             Assert.That(results.Count, Is.EqualTo(1));
-            Assert.That(results[0], Is.EqualTo(AtlasUseRefusal.None));
+            Assert.That(results[0].Refusal, Is.EqualTo(AtlasUseRefusal.None));
         }
 
         [TestCase((int)BudgetNumber.Group, (int)AtlasUseRefusal.GroupBudget)]
@@ -191,7 +191,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
             Assert.That(results.Count, Is.EqualTo(1));
             Assert.That(
-                results[0],
+                results[0].Refusal,
                 Is.EqualTo((AtlasUseRefusal)expectedRefusal));
         }
 
@@ -213,11 +213,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var results = AtlasBudgetAdmission.Admit(plans, uses, 1, limits);
 
             Assert.That(
-                results[0],
+                results[0].Refusal,
                 Is.EqualTo(AtlasUseRefusal.AvatarBudget),
                 "the large group passes the limit of 100 bytes");
             Assert.That(
-                results[1],
+                results[1].Refusal,
                 Is.EqualTo(AtlasUseRefusal.None),
                 "the refused bytes stay out of the sum, so the later"
                 + " smaller group still fits");
@@ -243,17 +243,17 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             var results = AtlasBudgetAdmission.Admit(plans, uses, 1, limits);
 
             Assert.That(
-                results[0],
+                results[0].Refusal,
                 Is.EqualTo(AtlasUseRefusal.None),
                 "the first group of 60 bytes fits the limit of 100"
                 + " bytes on its own");
             Assert.That(
-                results[1],
+                results[1].Refusal,
                 Is.EqualTo(AtlasUseRefusal.AvatarBudget),
                 "the second group would raise the running sum to 110"
                 + " bytes, above the limit");
             Assert.That(
-                results[2],
+                results[2].Refusal,
                 Is.EqualTo(AtlasUseRefusal.None),
                 "the refused 50 bytes stayed out of the sum, so 60"
                 + " plus 40 reaches the limit exactly and the third"
@@ -271,7 +271,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 1,
                 new AtlasBudgetLimits(1, 1, 1, 1));
             Assert.That(
-                allThreeFail[0],
+                allThreeFail[0].Refusal,
                 Is.EqualTo(AtlasUseRefusal.GroupBudget),
                 "the group check runs first");
 
@@ -281,7 +281,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 1,
                 new AtlasBudgetLimits(1000, 1, 1, 1));
             Assert.That(
-                peakAndAvatarFail[0],
+                peakAndAvatarFail[0].Refusal,
                 Is.EqualTo(AtlasUseRefusal.PeakBudget),
                 "the peak check runs before the avatar check");
         }
@@ -360,7 +360,74 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 AtlasBudgetLimits.Provider());
 
             Assert.That(results.Count, Is.EqualTo(1));
-            Assert.That(results[0], Is.EqualTo(AtlasUseRefusal.None));
+            Assert.That(results[0].Refusal, Is.EqualTo(AtlasUseRefusal.None));
+        }
+
+        /// <summary>
+        /// --- Falsifier 1: a verdict that states the unrounded or the
+        /// rounded-up group limit. The source bytes 81 times 3 / 4 give
+        /// 60.75. The trip rule compares integers, so the exact limit
+        /// is the floor 60. ---
+        /// </summary>
+        [Test]
+        public void GroupBudgetVerdictStatesTheFlooredLimit()
+        {
+            var results = AtlasBudgetAdmission.Admit(
+                new[] { BoundaryPlan() },
+                BoundaryUses(),
+                1,
+                new AtlasBudgetLimits(3, 4, long.MaxValue, long.MaxValue));
+
+            Assert.That(
+                results[0].Refusal, Is.EqualTo(AtlasUseRefusal.GroupBudget));
+            Assert.That(results[0].ValueBytes,
+                Is.EqualTo(BoundaryRetainedBytes));
+            Assert.That(results[0].LimitBytes, Is.EqualTo(60L));
+        }
+
+        [Test]
+        public void PeakBudgetVerdictStatesThePrediction()
+        {
+            var results = AtlasBudgetAdmission.Admit(
+                new[] { BoundaryPlan() },
+                BoundaryUses(),
+                1,
+                LimitsAt(BudgetNumber.Peak, 1));
+
+            Assert.That(
+                results[0].Refusal, Is.EqualTo(AtlasUseRefusal.PeakBudget));
+            Assert.That(results[0].ValueBytes, Is.EqualTo(BoundaryPeakBytes));
+            Assert.That(results[0].LimitBytes,
+                Is.EqualTo(BoundaryPeakBytes - 1));
+        }
+
+        /// <summary>
+        /// --- Falsifier 2: a verdict that states only the bytes of the
+        /// refused group. The avatar number compares the running sum,
+        /// so the value is the sum the group would make. ---
+        /// </summary>
+        [Test]
+        public void AvatarBudgetVerdictStatesTheRunningSum()
+        {
+            var plans = new[]
+            {
+                R8Group("sixty", 910, 60, 60, 0),
+                R8Group("fifty", 911, 50, 50, 1),
+            };
+            var uses = new[]
+            {
+                R8Use(910, 60, 1, 0),
+                R8Use(911, 50, 1, 1),
+            };
+
+            var results = AtlasBudgetAdmission.Admit(
+                plans, uses, 1,
+                new AtlasBudgetLimits(1000, 1, 100, long.MaxValue));
+
+            Assert.That(
+                results[1].Refusal, Is.EqualTo(AtlasUseRefusal.AvatarBudget));
+            Assert.That(results[1].ValueBytes, Is.EqualTo(110L));
+            Assert.That(results[1].LimitBytes, Is.EqualTo(100L));
         }
     }
 }

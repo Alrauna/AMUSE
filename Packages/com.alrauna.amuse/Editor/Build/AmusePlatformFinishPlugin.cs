@@ -54,17 +54,26 @@ namespace Alrauna.Amuse.Editor.Build
 
         /// <summary>
         /// Every use refusal the atlas pass recorded, in record order.
-        /// Each entry names the renderer, the slot, and the cause.
-        /// The pass keeps them in state only. No report line reads
-        /// them on 2026-11-20.
+        /// Each entry names the renderer, the slot, and the cause. A
+        /// budget refusal also holds the value and the limit of its
+        /// number in bytes. Every other cause holds zero bytes. The
+        /// atlas report emits one line per entry.
         /// </summary>
         internal IReadOnlyList<(Renderer renderer, int slot,
-            AtlasUseRefusal cause)> AtlasUseRefusals =>
-            atlasUseRefusals;
+            AtlasUseRefusal cause, long valueBytes, long limitBytes)>
+            AtlasUseRefusals => atlasUseRefusals;
 
         private readonly List<(Renderer renderer, int slot,
-            AtlasUseRefusal cause)> atlasUseRefusals =
-            new List<(Renderer, int, AtlasUseRefusal)>();
+            AtlasUseRefusal cause, long valueBytes, long limitBytes)>
+            atlasUseRefusals =
+                new List<(Renderer, int, AtlasUseRefusal, long, long)>();
+
+        /// <summary>
+        /// Every page set the atlas pass built and kept, in plan
+        /// order. The atlas report emits one line per entry.
+        /// </summary>
+        internal List<AtlasPageSet> AtlasPageSets { get; } =
+            new List<AtlasPageSet>();
 
         /// <summary>
         /// Records one use-scope atlas refusal.
@@ -74,7 +83,9 @@ namespace Alrauna.Amuse.Editor.Build
         internal void RecordAtlasUseRefusal(
             Renderer renderer,
             int slot,
-            AtlasUseRefusal cause)
+            AtlasUseRefusal cause,
+            long valueBytes = 0,
+            long limitBytes = 0)
         {
             if (cause == AtlasUseRefusal.None)
             {
@@ -83,7 +94,8 @@ namespace Alrauna.Amuse.Editor.Build
                     nameof(cause));
             }
 
-            atlasUseRefusals.Add((renderer, slot, cause));
+            atlasUseRefusals.Add(
+                (renderer, slot, cause, valueBytes, limitBytes));
         }
 
         /// <summary>

@@ -138,6 +138,7 @@ namespace Alrauna.Amuse.Editor.Build
 
             state.ReachedAtlasAnalysis = true;
             Run(context, state, optimizer);
+            Report(context, state);
         }
 
         /// <summary>
@@ -214,14 +215,15 @@ namespace Alrauna.Amuse.Editor.Build
                 }
             }
 
-            var admissions = AtlasBudgetAdmission.Admit(
+            var verdicts = AtlasBudgetAdmission.Admit(
                 plans,
                 uses,
                 optimizer.ProtectedMipLevelCount,
                 AtlasBudgetLimits.Provider());
             for (var group = 0; group < plans.Count; group++)
             {
-                if (admissions[group] == AtlasUseRefusal.None)
+                var verdict = verdicts[group];
+                if (verdict.Refusal == AtlasUseRefusal.None)
                 {
                     continue;
                 }
@@ -231,7 +233,9 @@ namespace Alrauna.Amuse.Editor.Build
                     state.RecordAtlasUseRefusal(
                         admittedOutcomes[useIndex].Renderer,
                         admittedOutcomes[useIndex].SlotIndex,
-                        admissions[group]);
+                        verdict.Refusal,
+                        verdict.ValueBytes,
+                        verdict.LimitBytes);
                 }
             }
 
@@ -273,7 +277,7 @@ namespace Alrauna.Amuse.Editor.Build
                 new Dictionary<int, AtlasPagePlanEntry>();
             for (var group = 0; group < plans.Count; group++)
             {
-                if (admissions[group] != AtlasUseRefusal.None)
+                if (verdicts[group].Refusal != AtlasUseRefusal.None)
                 {
                     continue;
                 }
@@ -454,6 +458,8 @@ namespace Alrauna.Amuse.Editor.Build
                         sources.Clear();
                     }
                 }
+
+                state.AtlasPageSets.Add(NewPageSet(groupIndex, plan, uses));
             }
             catch
             {
@@ -626,6 +632,58 @@ namespace Alrauna.Amuse.Editor.Build
             output.NewSlots = newSlots;
             output.NewMesh = AtlasMeshBuilder.Build(output.Mesh, remaps);
             state.AmuseOwnedObjects.Add(output.NewMesh);
+        }
+
+        /// <summary>
+        /// The report facts of one group whose pages all built. The
+        /// source count and bytes cover the distinct sources of the
+        /// admitted uses, as the budget counts them.
+        /// </summary>
+        private static AtlasPageSet NewPageSet(
+            int groupIndex,
+            AtlasGroupPlan plan,
+            IReadOnlyList<CapturedAtlasUse> uses)
+        {
+            var sources = new HashSet<int>();
+            foreach (var useIndex in plan.AdmittedUseIndices)
+            {
+                sources.Add(uses[useIndex].SourceTextureInstanceId);
+            }
+
+            return new AtlasPageSet(
+                groupIndex,
+                plan.Key.ShaderRowName,
+                plan.Pages.Count,
+                plan.AdmittedUseIndices.Count,
+                AtlasBudget.GroupRetainedBytes(plan),
+                sources.Count,
+                AtlasBudget.SourceBytes(plan, uses));
+        }
+
+        /// <summary>
+        /// R4: one line per recorded use refusal in record order, then
+        /// one line per page set in plan order. The report runs after
+        /// the write, so a thrown invariant failure reports nothing.
+        /// </summary>
+        private static void Report(
+            BuildContext context,
+            AmusePlatformFinishState state)
+        {
+            foreach (var refusal in state.AtlasUseRefusals)
+            {
+                AmuseReports.AtlasUseLine(
+                    refusal.renderer,
+                    refusal.slot,
+                    refusal.cause,
+                    refusal.valueBytes,
+                    refusal.limitBytes);
+            }
+
+            foreach (var pageSet in state.AtlasPageSets)
+            {
+                AmuseReports.AtlasPageSetLine(
+                    context.AvatarRootObject, pageSet);
+            }
         }
 
         /// <summary>
