@@ -1,15 +1,10 @@
 # This workflow is the merge gate for pull requests and for pushes to main.
 # The scripts job tests the CI scripts. The cheap job checks the changed
-# lines for whitespace problems and checks the release package. The scope
-# job reads the changed paths and says whether the Unity job is needed. Only
-# a short allow list of paths, such as docs and Dependabot files, can skip
-# it. The unity job installs the locked Editor, activates the license and
-# runs the product and research tests as a local low-privilege user. A
-# maintainer approves every unity-gate run before it starts. That approval
-# is the trust boundary of this gate. It means the maintainer read the full
-# change first. The fork-notice job asks the maintainer to move a fork
-# change to a branch in this repository. The validate job turns all results
-# into one check.
+# lines for whitespace problems and checks the release package. The
+# validate job turns both results into one check. No job here runs Unity.
+# The full EditMode run happens before a release (release.yml), once a
+# week in the canary (canary.yml), and on the maintainer machine before
+# each push.
 name: PR Check
 
 on:
@@ -25,10 +20,7 @@ permissions: {}
 cache-mode: none
 
 # A new push to the same pull request cancels the older run. A running run
-# on main is never cancelled by a newer run. A cancelled unity job still
-# returns the license and cleans up when the runner still runs the job,
-# because those steps run with if: always(). A hard kill or a lost runner
-# can skip the return step.
+# on main is never cancelled by a newer run.
 concurrency:
   group: pr-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
@@ -117,213 +109,27 @@ jobs:
         shell: pwsh
         run: ./scripts/ci/check-release-exclusion.ps1
 
-  # Decides whether the Unity job is needed. A pull request answer comes from
-  # the changed paths alone. A push answer comes from the pull requests linked
-  # to the commit. A label or a message cannot change either answer. Any
-  # other event and any doubt mean the job is needed.
-  scope:
-    name: scope
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
-      contents: read
-      pull-requests: read
-    outputs:
-      unity_needed: ${{ steps.scope.outputs.unity_needed }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-          fetch-depth: 0
-
-      - name: Read the changed paths
-        id: scope
-        timeout-minutes: 5
-        shell: pwsh
-        env:
-          PR_BASE: ${{ github.base_ref }}
-          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
-          GH_TOKEN: ${{ github.token }}
-        run: ./scripts/ci/get-change-scope.ps1
-
-  unity:
-    name: unity
-    needs: [scripts, cheap, scope]
-    if: needs.scope.outputs.unity_needed == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.id == github.repository_id) && github.actor != 'dependabot[bot]'
-    runs-on: windows-2022
-    timeout-minutes: 300
-    environment: ${{ github.event_name == 'push' && 'unity-main' || 'unity-gate' }}
-    permissions:
-      contents: read
-    # One license account serves the whole repository. Licensed jobs sign in
-    # one after the other. A run that waits in the group stays in line and
-    # runs in order, up to 100 waiting runs. If the queue is full, extra
-    # runs are cancelled. A waiting run never cancels the running job.
-    concurrency:
-      group: unity-license
-      cancel-in-progress: false
-      queue: max
-    steps:
-      # Git for Windows turns LF into CRLF on checkout by default. Some
-      # product tests hold verbatim multi-line strings and compare them with
-      # LF text. The step must run before the checkout.
-      - name: Keep LF line endings
-        shell: pwsh
-        run: git config --global core.autocrlf false
-
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-
-      - name: Install Unity
-        timeout-minutes: 20
-        shell: pwsh
-        run: ./scripts/ci/install-unity.ps1
-
-      # This step copies the scripts to a folder that only administrators can
-      # write. Every later step runs that copy, because the workspace may hold
-      # code that ran as the low user.
-      - name: Prepare the run as a low-privilege user
-        timeout-minutes: 10
-        shell: pwsh
-        run: ./scripts/ci/prepare-run.ps1
-
-      # Only this step sees the account secrets.
-      - name: Activate the license
-        timeout-minutes: 20
-        shell: pwsh
-        env:
-          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
-          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
-        run: ${{ runner.temp }}/admin-scripts/license.ps1 -Action Activate
-
-      - name: Install the vendor packages
-        timeout-minutes: 30
-        shell: pwsh
-        run: ${{ runner.temp }}/admin-scripts/install-packages.ps1 -Mode gate -ProjectPath ${{ github.workspace }}
-
-      - name: Prepare the project for the low user
-        timeout-minutes: 15
-        shell: pwsh
-        run: ${{ runner.temp }}/admin-scripts/prepare-project.ps1
-
-      - name: Probe the isolation of the low user
-        timeout-minutes: 10
-        shell: pwsh
-        run: ${{ runner.temp }}/admin-scripts/isolation-probe.ps1
-
-      # The two gates run the real LAC pass and the real Thry lock tests on
-      # the code that a pull request changes. AMUSE_DAO_INTEGRATION and
-      # AMUSE_PRODUCTION_ORDER_DISPATCH stay canary only. The research
-      # assembly holds no gated test, so its step passes no -OptIn.
-      - name: Run the product tests
-        timeout-minutes: 60
-        shell: pwsh
-        run: ${{ runner.temp }}/admin-scripts/run-tests.ps1 -AsLowUser -Assembly Alrauna.Amuse.Tests.Editor -OptIn AMUSE_REAL_LAC_PASS -TimeoutMinutes 55
-
-      - name: Run the research tests
-        timeout-minutes: 60
-        shell: pwsh
-        run: ${{ runner.temp }}/admin-scripts/run-tests.ps1 -AsLowUser -Assembly Alrauna.Amuse.Research.Tests.Editor -TimeoutMinutes 55
-
-      # A cancelled run still frees the activation and cleans up when the
-      # runner still runs the job. A hard kill or a lost runner can skip
-      # this step.
-      - name: Return the license
-        if: always()
-        timeout-minutes: 10
-        shell: pwsh
-        run: ${{ runner.temp }}/admin-scripts/license.ps1 -Action Return
-
-      - name: Clean up the low user and the license file
-        if: always()
-        timeout-minutes: 10
-        shell: pwsh
-        run: ${{ runner.temp }}/admin-scripts/cleanup.ps1
-
-  fork-notice:
-    name: fork-notice
-    needs: [scope]
-    if: needs.scope.outputs.unity_needed == 'true' && github.event_name == 'pull_request' && (github.event.pull_request.head.repo.id != github.repository_id || github.actor == 'dependabot[bot]')
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions: {}
-    steps:
-      - name: Ask the maintainer to use a branch in this repository
-        timeout-minutes: 5
-        shell: bash
-        run: |
-          echo "The Unity gate does not run on this change."
-          echo "The change comes from a fork or from Dependabot."
-          echo "Fork runs get no secrets, so the gate cannot work here."
-          echo "Push this change to a branch in this repository."
-          echo "Then open the pull request from that branch."
-          exit 1
-
   validate:
     name: validate
-    needs: [scripts, cheap, scope, unity, fork-notice]
+    needs: [scripts, cheap]
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions: {}
     steps:
-      # No checkout. Nothing from the pull request runs here.
+      # No checkout. Nothing from the pull request runs here. GitHub counts
+      # a skipped job as a passing check, so the step asks for success.
       - name: Decide the gate verdict
         timeout-minutes: 5
-        shell: pwsh
+        shell: bash
         env:
-          NEEDS_JSON: ${{ toJSON(needs) }}
+          SCRIPTS_RESULT: ${{ needs.scripts.result }}
+          CHEAP_RESULT: ${{ needs.cheap.result }}
         run: |
-          # GitHub counts a skipped job as a passing check. This function
-          # closes that path. It turns every bad job result into one problem
-          # line. The gate passes only when the list of problems is empty.
-          # A skipped unity job is legal only when the scope job succeeded
-          # and said exactly false. Any other answer expects unity to pass.
-          function Get-ValidateVerdict($needs) {
-              $problems = @()
-              $unityExpected = 'success'
-              $scope = $needs.PSObject.Properties['scope']
-              if ($null -eq $scope) {
-                  $problems += 'job result missing: scope'
-              }
-              else {
-                  $scopeResult = [string]$scope.Value.result
-                  if ($scopeResult -cne 'success') {
-                      $problems += "scope result is '$scopeResult', expected 'success'"
-                  }
-                  $outputs = $scope.Value.PSObject.Properties['outputs']
-                  $answer = ''
-                  if ($null -ne $outputs -and $null -ne $outputs.Value) {
-                      $neededProperty = $outputs.Value.PSObject.Properties['unity_needed']
-                      if ($null -ne $neededProperty) { $answer = [string]$neededProperty.Value }
-                  }
-                  if ($answer -ceq 'false') { $unityExpected = 'skipped' }
-                  elseif ($answer -cne 'true') { $problems += "scope answer is '$answer', expected 'true' or 'false'" }
-              }
-              $expected = [ordered]@{
-                  'scripts'     = 'success'
-                  'cheap'       = 'success'
-                  'unity'       = $unityExpected
-                  'fork-notice' = 'skipped'
-              }
-              foreach ($name in $expected.Keys) {
-                  $property = $needs.PSObject.Properties[$name]
-                  if ($null -eq $property) {
-                      $problems += "job result missing: $name"
-                      continue
-                  }
-                  $actual = [string]$property.Value.result
-                  if ($actual -cne $expected[$name]) {
-                      $problems += "$name result is '$actual', expected '$($expected[$name])'"
-                  }
-              }
-              return $problems
-          }
-          $needs = $env:NEEDS_JSON | ConvertFrom-Json
-          $problems = @(Get-ValidateVerdict $needs)
-          foreach ($problem in $problems) { Write-Output "gate problem: $problem" }
-          if ($problems.Count -gt 0) { exit 1 }
-          Write-Output 'The gate passes.'
+          echo "scripts: $SCRIPTS_RESULT"
+          echo "cheap: $CHEAP_RESULT"
+          if [ "$SCRIPTS_RESULT" != "success" ] || [ "$CHEAP_RESULT" != "success" ]; then
+            echo "The gate fails."
+            exit 1
+          fi
+          echo "The gate passes."

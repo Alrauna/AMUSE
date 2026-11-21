@@ -335,9 +335,8 @@ third line is dropped]]></message></failure>
         BeforeAll {
             # The workflows call the admin copy of run-tests.ps1. A silent
             # removal of a gate from a product step must turn these tests
-            # red. The precedent is the ChangeScope suite, which cuts text
-            # out of pr.yml.
-            $prWorkflow = Get-Content -LiteralPath (Join-Path $PSScriptRoot '../../../.github/workflows/pr.yml') -Raw
+            # red. The tests cut the step lines out of the workflow text.
+            $releaseWorkflow = Get-Content -LiteralPath (Join-Path $PSScriptRoot '../../../.github/workflows/release.yml') -Raw
             $canaryWorkflow = Get-Content -LiteralPath (Join-Path $PSScriptRoot '../../../.github/workflows/canary.yml') -Raw
 
             # Returns the one run-tests.ps1 step line of the workflow that
@@ -354,8 +353,8 @@ third line is dropped]]></message></failure>
             }
         }
 
-        It 'ThePrProductStepSetsOnlyTheRealLacPassGate' {
-            $line = Get-RunTestsLine $prWorkflow 'Alrauna\.Amuse\.Tests\.Editor'
+        It 'TheReleaseProductStepSetsOnlyTheRealLacPassGate' {
+            $line = Get-RunTestsLine $releaseWorkflow 'Alrauna\.Amuse\.Tests\.Editor'
             $line | Should -Match '-OptIn'
             $line | Should -Match 'AMUSE_REAL_LAC_PASS'
             $line | Should -Not -Match 'AMUSE_REAL_THRY_LOCK'
@@ -373,7 +372,7 @@ third line is dropped]]></message></failure>
         }
 
         It 'TheResearchStepsSetNoGate' {
-            Get-RunTestsLine $prWorkflow 'Alrauna\.Amuse\.Research\.Tests\.Editor' | Should -Not -Match '-OptIn'
+            Get-RunTestsLine $releaseWorkflow 'Alrauna\.Amuse\.Research\.Tests\.Editor' | Should -Not -Match '-OptIn'
             Get-RunTestsLine $canaryWorkflow 'Alrauna\.Amuse\.Research\.Tests\.Editor' | Should -Not -Match '-OptIn'
         }
     }
