@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.Host;
+using Alrauna.Amuse.Editor.Semantics.LilToon;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
 using Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi;
 using Alrauna.Amuse.Tests.Editor.Shared;
@@ -661,6 +662,112 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     LargestChannelDifference(before, after),
                     Is.LessThanOrEqualTo(1),
                     "the atlas page must render as the source did");
+            }
+            finally
+            {
+                DestroyGenerated(state);
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
+        /// A fresh material on the GUID-loaded installed lilToon shader
+        /// with a pattern source on the member texture.
+        /// </summary>
+        private Material NewAdmittedLilToonMaterial(
+            string name,
+            Color32 even,
+            Color32 odd)
+        {
+            var path = AssetDatabase.GUIDToAssetPath(
+                LilToonSourceAttestation.SupportedShaderGuid);
+            var shader = AssetDatabase.LoadAssetAtPath<Shader>(path);
+            Assert.That(
+                shader, Is.Not.Null,
+                "fixture precondition: the installed lilToon shader must" +
+                " load by its pinned GUID");
+            var material = Track(new Material(shader));
+            material.SetTexture(
+                "_MainTex", ImportPatternTexture(name, even, odd));
+            return material;
+        }
+
+        /// <summary>
+        /// The lilToon row takes the same path as the Poiyomi row. Two
+        /// compatible lilToon quads share one page and one page
+        /// material on the lilToon shader, and each renders as before
+        /// within one of 255 per channel.
+        /// </summary>
+        [Test]
+        public void TwoLilToonMaterialsShareOnePageWithCorrectRendering()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = NewAtlasOnlyRoot();
+            AmusePlatformFinishState state = null;
+            try
+            {
+                var firstMaterial = NewAdmittedLilToonMaterial(
+                    "liltoon first",
+                    new Color32(220, 40, 40, 255),
+                    new Color32(40, 40, 220, 255));
+                var secondMaterial = NewAdmittedLilToonMaterial(
+                    "liltoon second",
+                    new Color32(40, 200, 60, 255),
+                    new Color32(220, 200, 40, 255));
+                var firstTexture =
+                    (Texture2D)firstMaterial.GetTexture("_MainTex");
+                var secondTexture =
+                    (Texture2D)secondMaterial.GetTexture("_MainTex");
+                var firstRenderer = NewQuadRenderer(
+                    root, "liltoon first", Track(NewQuadMesh()),
+                    firstMaterial);
+                var secondRenderer = NewQuadRenderer(
+                    root, "liltoon second", Track(NewQuadMesh()),
+                    secondMaterial);
+
+                var before = RenderEachQuad(firstRenderer, secondRenderer);
+
+                var context = Build(root);
+                state = context.GetState<AmusePlatformFinishState>();
+
+                Assert.That(context.Successful, Is.True,
+                    "fixture precondition: the build must complete");
+                Assert.That(state.AtlasUseRefusals, Is.Empty,
+                    "an admitted lilToon fixture refuses no use");
+                Assert.That(state.AtlasPageCount, Is.EqualTo(1),
+                    "two compatible lilToon uses must share one page");
+                Assert.That(state.AtlasAdmittedUseCount, Is.EqualTo(2),
+                    "both uses must move onto the page");
+
+                var pageMaterial = firstRenderer.sharedMaterial;
+                Assert.That(secondRenderer.sharedMaterial,
+                    Is.SameAs(pageMaterial),
+                    "both slots must carry the one shared page material");
+                Assert.That(pageMaterial.shader,
+                    Is.SameAs(firstMaterial.shader),
+                    "the page material must stay on the lilToon shader");
+                Assert.That(pageMaterial.GetTexture("_MainTex"),
+                    Is.Not.SameAs(firstTexture),
+                    "the page material must carry the page texture");
+                Assert.That(firstMaterial.GetTexture("_MainTex"),
+                    Is.SameAs(firstTexture),
+                    "the first source must stay unchanged");
+                Assert.That(secondMaterial.GetTexture("_MainTex"),
+                    Is.SameAs(secondTexture),
+                    "the second source must stay unchanged");
+
+                var route = SharedMeshOf(firstRenderer).GetVertexAttributes()
+                    .Single(attribute =>
+                        attribute.attribute == VertexAttribute.TexCoord0);
+                Assert.That(route.format,
+                    Is.EqualTo(VertexAttributeFormat.Float32),
+                    "the remapped route channel must be Float32");
+
+                var after = RenderEachQuad(firstRenderer, secondRenderer);
+                Assert.That(
+                    LargestChannelDifference(before, after),
+                    Is.LessThanOrEqualTo(1),
+                    "the lilToon atlas page must render as the source did");
             }
             finally
             {

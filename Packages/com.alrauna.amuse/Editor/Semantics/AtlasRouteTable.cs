@@ -75,6 +75,43 @@ namespace Alrauna.Amuse.Editor.Semantics
                 },
                 HoldsPoiyomiMainColorRequiredValues);
 
+        private static readonly string[] LilToonFeatureSwitches =
+        {
+            "_ShiftBackfaceUV",
+            "_UseParallax",
+            "_UseMain2ndTex",
+            "_UseMain3rdTex",
+            "_UseGlitter",
+            "_UseAudioLink",
+        };
+
+        private static readonly string[] LilToonUdimDiscardRowFlags =
+            UdimDiscardRowFlagNames();
+
+        private static readonly string[] LilToonIdMaskFlags =
+            IdMaskFlagNames();
+
+        /// <summary>
+        /// The lilToon main color route. The ten admitted lilToon rows
+        /// share it. Member: <c>_MainTex</c> on UV0. A fresh material
+        /// assigns no other texture, so the neutral list is empty.
+        /// lilToon gates its features with uniform switches and declares
+        /// no local feature keyword in these rows, so the allowed list
+        /// is empty too.
+        /// </summary>
+        internal static readonly AtlasRouteTable LilToonMainColor =
+            new AtlasRouteTable(
+                "_MainTex",
+                Array.Empty<string>(),
+                Array.Empty<string>(),
+                LilToonConditionProperties(),
+                new (string, Vector4)[]
+                {
+                    ("_MainTex_ST", new Vector4(1f, 1f, 0f, 0f)),
+                    ("_MainTex_ScrollRotate", new Vector4(0f, 0f, 0f, 0f)),
+                },
+                HoldsLilToonMainColorRequiredValues);
+
         internal string MemberProperty { get; }
 
         internal IReadOnlyCollection<string> NeutralProperties { get; }
@@ -117,11 +154,8 @@ namespace Alrauna.Amuse.Editor.Semantics
 
         /// <summary>
         /// Whether the material holds every scalar required value of the
-        /// row. The Poiyomi row demands the UV selector at zero, pixel
-        /// mode at zero, stochastic sampling at zero, the ambient
-        /// occlusion blocker at zero, and the sharpened alpha-to-coverage
-        /// pair with at least one side at zero. Every compare is exact,
-        /// because these are authored flags and not measured values.
+        /// row. Every flag compare is exact, because these are authored
+        /// flags and not measured values. So a NaN flag refuses.
         /// </summary>
         internal bool HoldsRequiredValues(Material material)
         {
@@ -137,6 +171,109 @@ namespace Alrauna.Amuse.Editor.Semantics
                    (material.GetFloat("_AlphaSharpenedA2C") == 0f ||
                     material.GetFloat("_AlphaToCoverage") == 0f) &&
                    material.GetFloat("_RenderingAOBlockerEnabled") == 0f;
+        }
+
+        /// <summary>
+        /// The lilToon row demands every feature switch at zero. The
+        /// dissolve mode must round to zero on every platform, so it
+        /// must lie strictly between minus one half and one half. An
+        /// exact half refuses, because the rounding of a half differs
+        /// between platforms. The UV tile discard flags must be zero
+        /// unless its UV selector is not zero, because the shader picks
+        /// UV0 with an exact compare. The ID mask flags must be zero
+        /// unless its source selector is at least one. The shader reads
+        /// that selector as an unsigned integer, and a value between
+        /// zero and one can convert to zero, which reads UV0.
+        /// </summary>
+        private static bool HoldsLilToonMainColorRequiredValues(
+            Material material)
+        {
+            foreach (var property in LilToonFeatureSwitches)
+            {
+                if (material.GetFloat(property) != 0f)
+                {
+                    return false;
+                }
+            }
+
+            var dissolveMode = material.GetVector("_DissolveParams").x;
+            if (!(dissolveMode > -0.5f && dissolveMode < 0.5f))
+            {
+                return false;
+            }
+
+            // A NaN selector counts as UV0, so the check fails closed.
+            var udimSelector = material.GetFloat("_UDIMDiscardUV");
+            var udimMayReadUv0 =
+                udimSelector == 0f || float.IsNaN(udimSelector);
+            if (udimMayReadUv0 &&
+                AnyFlagSet(material, LilToonUdimDiscardRowFlags))
+            {
+                return false;
+            }
+
+            return material.GetFloat("_IDMaskFrom") >= 1f ||
+                   !AnyFlagSet(material, LilToonIdMaskFlags);
+        }
+
+        private static bool AnyFlagSet(Material material, string[] flags)
+        {
+            foreach (var flag in flags)
+            {
+                if (material.GetFloat(flag) != 0f)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static string[] UdimDiscardRowFlagNames()
+        {
+            var names = new string[16];
+            for (var row = 0; row < 4; row++)
+            {
+                for (var column = 0; column < 4; column++)
+                {
+                    names[row * 4 + column] =
+                        "_UDIMDiscardRow" + row + "_" + column;
+                }
+            }
+
+            return names;
+        }
+
+        private static string[] IdMaskFlagNames()
+        {
+            var names = new string[16];
+            for (var index = 0; index < 8; index++)
+            {
+                names[index * 2] = "_IDMask" + (index + 1);
+                names[index * 2 + 1] = "_IDMaskPrior" + (index + 1);
+            }
+
+            return names;
+        }
+
+        /// <summary>
+        /// Every lilToon condition property: the feature switches, the
+        /// dissolve parameters, both selectors with their flags, and
+        /// the two transform properties.
+        /// </summary>
+        private static string[] LilToonConditionProperties()
+        {
+            var names = new List<string>(LilToonFeatureSwitches)
+            {
+                "_DissolveParams",
+                "_UDIMDiscardUV",
+                "_IDMaskFrom",
+                "_MainTex_ST",
+                "_MainTex_ScrollRotate",
+            };
+            names.AddRange(LilToonUdimDiscardRowFlags);
+            names.AddRange(LilToonIdMaskFlags);
+            return names.ToArray();
         }
     }
 }

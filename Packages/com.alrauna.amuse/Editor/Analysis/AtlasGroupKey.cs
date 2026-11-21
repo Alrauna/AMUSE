@@ -19,11 +19,12 @@ namespace Alrauna.Amuse.Editor.Analysis
     internal sealed class AtlasGroupKey : IEquatable<AtlasGroupKey>
     {
         /// <summary>
-        /// The route name of the main color route. Milestone 2 plans
-        /// only this route. A later row that adds a route names it here
-        /// so its uses land in their own groups.
+        /// The route name of the main color route. Every row in 0.2.0
+        /// has only this route, and the key holds the row, so the name
+        /// does not name a shader family. A later route names itself
+        /// here so its uses land in their own groups.
         /// </summary>
-        internal const string MainColorRouteName = "PoiyomiMainColor";
+        internal const string MainColorRouteName = "MainColor";
 
         internal string ShaderRowName { get; }
 

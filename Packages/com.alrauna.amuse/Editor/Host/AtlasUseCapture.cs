@@ -4,6 +4,7 @@ using System.IO;
 using System.Text;
 using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.Semantics;
+using Alrauna.Amuse.Editor.Semantics.LilToon;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
 using nadena.dev.ndmf.animator;
 using UnityEditor;
@@ -249,17 +250,13 @@ namespace Alrauna.Amuse.Editor.Host
                 return;
             }
 
-            if (!TryAttestShader(material, out var shaderRowName))
+            var rowRefusal =
+                AttestRow(material, out var shaderRowName, out var table);
+            if (rowRefusal != AtlasUseRefusal.None)
             {
-                refusal = AtlasUseRefusal.UnattestedShader;
+                refusal = rowRefusal;
                 return;
             }
-
-            // Milestone 2 admits the four Poiyomi rows, and every one of
-            // them carries the same route table. NoRouteTable stays the
-            // named refusal for the first row a later milestone admits
-            // without a table.
-            var table = AtlasRouteTable.PoiyomiMainColor;
 
             if (!KeywordsAllowed(
                     material, table, DeclaredKeywordsOf(
@@ -712,11 +709,93 @@ namespace Alrauna.Amuse.Editor.Host
         }
 
         /// <summary>
-        /// The shader row gate: the name classifies, some row with this
+        /// The shader row gate. It returns the route table of the one
+        /// exactly attested row that the material shader matches. An
+        /// attested lilToon Multi container has no route table in 0.2.0,
+        /// so it refuses with its own name. Every other shader refuses
+        /// as unattested. Version consent never extends a row here.
+        /// </summary>
+        private static AtlasUseRefusal AttestRow(
+            Material material,
+            out string shaderRowName,
+            out AtlasRouteTable table)
+        {
+            table = null;
+            if (TryAttestPoiyomi(material, out shaderRowName))
+            {
+                table = AtlasRouteTable.PoiyomiMainColor;
+                return AtlasUseRefusal.None;
+            }
+
+            var shader = material.shader;
+            if (shader == null)
+            {
+                return AtlasUseRefusal.UnattestedShader;
+            }
+
+            if (LilToonMultiResolution.IsMultiContainerShaderName(shader.name))
+            {
+                return LilToonMultiAttests(material)
+                    ? AtlasUseRefusal.NoRouteTable
+                    : AtlasUseRefusal.UnattestedShader;
+            }
+
+            if (LilToonSourceAttestation.TryGatherSourceEvidenceForShaderName(
+                    shader, LilToonIdentityEvidence(material),
+                    out var lilToon, out _) &&
+                LilToonSourceAttestation.TryVerifyExactRowIdentity(lilToon))
+            {
+                shaderRowName = shader.name;
+                table = AtlasRouteTable.LilToonMainColor;
+                return AtlasUseRefusal.None;
+            }
+
+            return AtlasUseRefusal.UnattestedShader;
+        }
+
+        /// <summary>
+        /// The lilToon identity gather reads the shader name and the
+        /// material shader-format stamp. No other material fact enters
+        /// the identity conjunction.
+        /// </summary>
+        private static readonly MaterialEvidenceRequest
+            LilToonIdentityRequest = new MaterialEvidenceRequest(
+                true,
+                false,
+                Array.Empty<string>(),
+                new[] { LilToonSourceAttestation.ShaderFormatVersionProperty },
+                Array.Empty<string>(),
+                Array.Empty<string>(),
+                Array.Empty<TexturePropertyEvidenceRequest>());
+
+        private static CapturedMaterialEvidence LilToonIdentityEvidence(
+            Material material)
+        {
+            return UnityMaterialEvidenceCapture.Capture(new[]
+            {
+                new MaterialEvidenceCaptureInput(
+                    material, LilToonIdentityRequest),
+            })[0];
+        }
+
+        private static bool LilToonMultiAttests(Material material)
+        {
+            return LilToonSourceAttestation.TryResolveMultiContainer(
+                       material.shader,
+                       LilToonIdentityEvidence(material),
+                       out var source,
+                       out var profile,
+                       out _) &&
+                   LilToonSourceAttestation.TryVerifyMultiContainer(
+                       source, profile, out _);
+        }
+
+        /// <summary>
+        /// The Poiyomi row gate: the name classifies, some row with this
         /// name holds this GUID, and the normalized source digest matches
         /// that same row. One row must hold all three values together.
         /// </summary>
-        private static bool TryAttestShader(
+        private static bool TryAttestPoiyomi(
             Material material,
             out string shaderRowName)
         {
