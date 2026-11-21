@@ -6,25 +6,30 @@ namespace Alrauna.Amuse.Editor.Build
     /// The three budget numbers of one build: the rational factor of
     /// the group check, the avatar retained byte limit, and the peak
     /// temporary byte limit. All comparisons use these numbers as
-    /// integers. Milestone 5 sets the measured values. Until then the
-    /// production provider returns <see cref="Unlimited"/>, which
-    /// skips every comparison, so no product can overflow.
+    /// integers. Milestone 5 set the production values from
+    /// measurements on public fixtures. The values and their reasons
+    /// are in
+    /// docs/superpowers/plans/2026-11-21-atlasing-milestone-5-release-qualification.md,
+    /// decisions B1 to B3.
     /// </summary>
     internal readonly struct AtlasBudgetLimits
     {
         /// <summary>
-        /// The limits before Milestone 5. Every comparison is skipped,
-        /// so every group passes the budget gates.
+        /// The production limits.
+        /// <list type="bullet">
+        /// <item>B1. Group factor 5/4. Borders and packing gaps are the
+        /// only cause of page bytes above source bytes. The public
+        /// fixtures measure at most 1.061.</item>
+        /// <item>B2. Avatar retained bytes 524,288,000 (500 MiB). This
+        /// is the VRChat SDK limit for the uncompressed size of a PC
+        /// avatar bundle. Pages above it alone can never upload.</item>
+        /// <item>B3. Peak temporary bytes 4,294,967,296 (4 GiB). It
+        /// admits a full 8192 page with up to five distinct 8192 by
+        /// 8192 RGBA32 sources.</item>
+        /// </list>
         /// </summary>
-        internal static AtlasBudgetLimits Unlimited { get; } =
-            new AtlasBudgetLimits(
-                true,
-                1,
-                1,
-                long.MaxValue,
-                long.MaxValue);
-
-        internal bool IsUnlimited { get; }
+        internal static AtlasBudgetLimits Production { get; } =
+            new AtlasBudgetLimits(5, 4, 524288000L, 4294967296L);
 
         /// <summary>
         /// The numerator of the group factor. The group check holds
@@ -43,21 +48,6 @@ namespace Alrauna.Amuse.Editor.Build
         internal long PeakTemporaryBytes { get; }
 
         internal AtlasBudgetLimits(
-            long factorNumerator,
-            long factorDenominator,
-            long avatarRetainedBytes,
-            long peakTemporaryBytes)
-            : this(
-                false,
-                factorNumerator,
-                factorDenominator,
-                avatarRetainedBytes,
-                peakTemporaryBytes)
-        {
-        }
-
-        private AtlasBudgetLimits(
-            bool isUnlimited,
             long factorNumerator,
             long factorDenominator,
             long avatarRetainedBytes,
@@ -91,7 +81,6 @@ namespace Alrauna.Amuse.Editor.Build
                     "Every budget number must be zero or positive.");
             }
 
-            IsUnlimited = isUnlimited;
             FactorNumerator = factorNumerator;
             FactorDenominator = factorDenominator;
             AvatarRetainedBytes = avatarRetainedBytes;
@@ -99,10 +88,10 @@ namespace Alrauna.Amuse.Editor.Build
         }
 
         /// <summary>
-        /// The production limits delegate. The release gate replaces it
-        /// with the measured values of Milestone 5. Tests that replace
-        /// it restore it in their tear down.
+        /// The limits delegate of the atlas pass. It returns
+        /// <see cref="Production"/>. Tests that replace it restore the
+        /// saved delegate in their tear down.
         /// </summary>
-        internal static Func<AtlasBudgetLimits> Provider = () => Unlimited;
+        internal static Func<AtlasBudgetLimits> Provider = () => Production;
     }
 }

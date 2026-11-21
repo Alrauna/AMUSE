@@ -68,10 +68,14 @@ Status on 2026-11-21: Implemented on branch `atlasing-m4-report-and-interface`. 
 
 ## Milestone 5: Release qualification
 
-- [ ] Set the three budget values from measurements of production code on public fixtures. Record each value with its reason.
-- [ ] Run the product and research EditMode assemblies in the pinned dev project. Record the observed counts. A filtered run with zero tests fails.
-- [ ] Run the relock regression fixture behind the vendor opt-in gate.
-- [ ] Update `README.md` with the supported cases, the refusals, the one-GPU anisotropy limit, and the statement that 0.2.0 does not reduce draw calls. Sweep changed documents for private identifiers.
+Executable plan: `docs/superpowers/plans/2026-11-21-atlasing-milestone-5-release-qualification.md`.
+
+Status on 2026-11-21: Implemented on branch `atlasing-m5-release-qualification`. The budget values are a group factor of 5/4, an avatar limit of 524,288,000 bytes, and a peak limit of 4,294,967,296 bytes. The full product and research EditMode run on 2026-11-21 reported 3699 total, 3674 passed, 0 failed, and 25 skipped. The relock fixture ran 30 tests with its gate set on 2026-11-21, and all 30 passed.
+
+- [x] Set the three budget values from measurements of production code on public fixtures. Record each value with its reason.
+- [x] Run the product and research EditMode assemblies in the pinned dev project. Record the observed counts. A filtered run with zero tests fails.
+- [x] Run the relock regression fixture behind the vendor opt-in gate.
+- [x] Update `README.md` with the supported cases, the refusals, the one-GPU anisotropy limit, and the statement that 0.2.0 does not reduce draw calls. Sweep changed documents for private identifiers.
 
 ## Coverage
 
@@ -88,4 +92,4 @@ Status on 2026-11-21: Implemented on branch `atlasing-m4-report-and-interface`. 
 | 10 Budget | Gate 0, 2, 5 |
 | 11 Settings and report | 1, 4 |
 
-Next action on 2026-11-21: The owner builds and uploads the 8192 fixture avatar through the VRChat SDK and records the two upload facts. Then write the Milestone 5 plan for release qualification.
+Next action on 2026-11-21: The owner builds and uploads the 8192 fixture avatar through the VRChat SDK and records the two upload facts. That is the last open item before the 0.2.0 release decision.

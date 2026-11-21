@@ -149,14 +149,187 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
-        [Test]
-        public void ProviderReturnsUnlimitedByDefault()
+        private static CapturedAtlasUse UseOf(
+            int instanceId,
+            GraphicsFormat format,
+            int width,
+            int height,
+            int mipCount,
+            int captureOrder)
         {
+            return new CapturedAtlasUse(
+                0,
+                captureOrder,
+                captureOrder,
+                "Poiyomi 9.3 release main",
+                instanceId,
+                format,
+                width,
+                height,
+                mipCount,
+                Sampler,
+                new AtlasUvRect(0.0, 0.0, 1.0, 1.0),
+                "material",
+                Array.Empty<string>(),
+                captureOrder);
+        }
+
+        // One page that places each listed use as its own source. The
+        // placements may overlap, because admission reads only the
+        // page facts and the distinct sources.
+        private static AtlasGroupPlan PageOf(
+            string materialKey,
+            GraphicsFormat format,
+            int pageWidth,
+            int pageHeight,
+            int mipCount,
+            IReadOnlyList<CapturedAtlasUse> uses,
+            int firstUse,
+            int useCount)
+        {
+            var placements = new AtlasPlacement[useCount];
+            var useIndices = new int[useCount];
+            for (var i = 0; i < useCount; i++)
+            {
+                var use = uses[firstUse + i];
+                useIndices[i] = firstUse + i;
+                placements[i] = new AtlasPlacement(
+                    use.SourceTextureInstanceId,
+                    Sampler,
+                    0,
+                    0,
+                    use.SourceWidth,
+                    use.SourceHeight,
+                    0,
+                    0,
+                    0,
+                    new[] { firstUse + i });
+            }
+
+            var page = new AtlasPagePlanEntry(
+                pageWidth,
+                pageHeight,
+                format,
+                mipCount,
+                placements);
+            var key = new AtlasGroupKey(
+                "Poiyomi 9.3 release main",
+                AtlasGroupKey.MainColorRouteName,
+                format,
+                Sampler,
+                materialKey,
+                Array.Empty<string>());
+            return new AtlasGroupPlan(
+                key,
+                new[] { page },
+                useIndices,
+                Array.Empty<AtlasRefusedUse>());
+        }
+
+        /// <summary>
+        /// --- Falsifier 3: a group factor of 1 refuses the 100 byte
+        /// page, and a factor of 3/2 admits the 101 byte page. The
+        /// production factor 5/4 limits an 80 byte source to exactly
+        /// 100 page bytes. ---
+        /// </summary>
+        [Test]
+        public void ProductionGroupFactorAdmitsAQuarterOfBorder()
+        {
+            var uses = new[] { R8Use(11, 80, 1, 0) };
+
+            var atLimit = AtlasBudgetAdmission.Admit(
+                new[] { R8Group("factor", 11, 80, 100, 0) },
+                uses,
+                1,
+                AtlasBudgetLimits.Provider());
+            var overLimit = AtlasBudgetAdmission.Admit(
+                new[] { R8Group("factor", 11, 80, 101, 0) },
+                uses,
+                1,
+                AtlasBudgetLimits.Provider());
+
             Assert.That(
-                AtlasBudgetLimits.Provider().IsUnlimited,
-                Is.True,
-                "the production provider must return Unlimited"
-                + " before Milestone 5 sets the measured values");
+                atLimit[0].Refusal,
+                Is.EqualTo(AtlasUseRefusal.None),
+                "a page of exactly 5/4 of its source bytes is admitted");
+            Assert.That(
+                overLimit[0].Refusal,
+                Is.EqualTo(AtlasUseRefusal.GroupBudget));
+            Assert.That(overLimit[0].ValueBytes, Is.EqualTo(101));
+            Assert.That(overLimit[0].LimitBytes, Is.EqualTo(100));
+        }
+
+        /// <summary>
+        /// --- Falsifier 4: a limit of 500,000,000 bytes, the decimal
+        /// reading of 500 MB, refuses the eighth group. The VRChat SDK
+        /// limit is 500 MiB. Eight groups of 65,536,000 bytes fill it
+        /// exactly, and one more byte passes it. ---
+        /// </summary>
+        [Test]
+        public void ProductionAvatarLimitAdmitsExactlyFiveHundredMebibytes()
+        {
+            var uses = new List<CapturedAtlasUse>();
+            var plans = new List<AtlasGroupPlan>();
+            for (var i = 0; i < 8; i++)
+            {
+                uses.Add(UseOf(100 + i, GraphicsFormat.R8_UNorm, 8192, 8000, 1, i));
+                plans.Add(PageOf(
+                    "avatar" + i, GraphicsFormat.R8_UNorm, 8192, 8000, 1, uses, i, 1));
+            }
+
+            uses.Add(UseOf(200, GraphicsFormat.R8_UNorm, 1, 1, 1, 8));
+            plans.Add(PageOf("avatar8", GraphicsFormat.R8_UNorm, 1, 1, 1, uses, 8, 1));
+
+            var results = AtlasBudgetAdmission.Admit(
+                plans,
+                uses,
+                1,
+                AtlasBudgetLimits.Provider());
+
+            for (var i = 0; i < 8; i++)
+            {
+                Assert.That(
+                    results[i].Refusal,
+                    Is.EqualTo(AtlasUseRefusal.None),
+                    "group " + i + " fits under 500 MiB");
+            }
+
+            Assert.That(results[8].Refusal, Is.EqualTo(AtlasUseRefusal.AvatarBudget));
+            Assert.That(results[8].ValueBytes, Is.EqualTo(524288001L));
+            Assert.That(results[8].LimitBytes, Is.EqualTo(524288000L));
+        }
+
+        /// <summary>
+        /// --- Falsifier 5: a peak limit of 2 GiB refuses five full size
+        /// sources, and no peak limit admits six. The prediction for
+        /// five sources is 4,294,967,292 bytes, four bytes under 4 GiB.
+        /// Each further source adds 536,870,912 bytes. ---
+        /// </summary>
+        [Test]
+        public void ProductionPeakLimitAdmitsFiveFullSizeSources()
+        {
+            var format = GraphicsFormat.R8G8B8A8_SRGB;
+            var uses = new List<CapturedAtlasUse>();
+            for (var i = 0; i < 6; i++)
+            {
+                uses.Add(UseOf(300 + i, format, 8192, 8192, 14, i));
+            }
+
+            var five = AtlasBudgetAdmission.Admit(
+                new[] { PageOf("peak", format, 8192, 8192, 14, uses, 0, 5) },
+                uses,
+                1,
+                AtlasBudgetLimits.Provider());
+            var six = AtlasBudgetAdmission.Admit(
+                new[] { PageOf("peak", format, 8192, 8192, 14, uses, 0, 6) },
+                uses,
+                1,
+                AtlasBudgetLimits.Provider());
+
+            Assert.That(five[0].Refusal, Is.EqualTo(AtlasUseRefusal.None));
+            Assert.That(six[0].Refusal, Is.EqualTo(AtlasUseRefusal.PeakBudget));
+            Assert.That(six[0].ValueBytes, Is.EqualTo(4831838204L));
+            Assert.That(six[0].LimitBytes, Is.EqualTo(4294967296L));
         }
 
         [TestCase((int)BudgetNumber.Group)]
@@ -286,75 +459,24 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "the peak check runs before the avatar check");
         }
 
+        /// <summary>
+        /// The shape of the upload fixture: two 4096 by 4096 RGB24
+        /// sources on one 8192 by 4096 page. The production limits
+        /// admit it. This test also passed with unlimited budgets, so it
+        /// is a characterization test.
+        /// </summary>
         [Test]
-        public void UnlimitedAdmitsAnEightKilotexelGroup()
+        public void ProductionLimitsAdmitTheUploadFixtureShape()
         {
-            var format = GraphicsFormat.RGBA_BC7_SRGB;
+            var format = GraphicsFormat.R8G8B8_SRGB;
             var uses = new[]
             {
-                new CapturedAtlasUse(
-                    0,
-                    0,
-                    0,
-                    "Poiyomi 9.3 release main",
-                    9001,
-                    format,
-                    4096,
-                    4096,
-                    13,
-                    Sampler,
-                    new AtlasUvRect(0.0, 0.0, 1.0, 1.0),
-                    "material",
-                    Array.Empty<string>(),
-                    0),
-                new CapturedAtlasUse(
-                    0,
-                    1,
-                    1,
-                    "Poiyomi 9.3 release main",
-                    9002,
-                    format,
-                    4096,
-                    4096,
-                    13,
-                    Sampler,
-                    new AtlasUvRect(0.0, 0.0, 1.0, 1.0),
-                    "material",
-                    Array.Empty<string>(),
-                    1),
-            };
-            var page = new AtlasPagePlanEntry(
-                8192,
-                4096,
-                format,
-                14,
-                new[]
-                {
-                    new AtlasPlacement(
-                        9001, Sampler, 0, 0, 4096, 4096, 0, 0, 0,
-                        new[] { 0 }),
-                    new AtlasPlacement(
-                        9002, Sampler, 0, 0, 4096, 4096, 0, 4096, 0,
-                        new[] { 1 }),
-                });
-            var key = new AtlasGroupKey(
-                "Poiyomi 9.3 release main",
-                AtlasGroupKey.MainColorRouteName,
-                format,
-                Sampler,
-                "material",
-                Array.Empty<string>());
-            var plans = new[]
-            {
-                new AtlasGroupPlan(
-                    key,
-                    new[] { page },
-                    new[] { 0, 1 },
-                    Array.Empty<AtlasRefusedUse>()),
+                UseOf(9001, format, 4096, 4096, 13, 0),
+                UseOf(9002, format, 4096, 4096, 13, 1),
             };
 
             var results = AtlasBudgetAdmission.Admit(
-                plans,
+                new[] { PageOf("material", format, 8192, 4096, 14, uses, 0, 2) },
                 uses,
                 1,
                 AtlasBudgetLimits.Provider());
