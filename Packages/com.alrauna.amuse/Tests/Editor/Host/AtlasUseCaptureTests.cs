@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.Host;
+using Alrauna.Amuse.Editor.Semantics.LilToon;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
 using Alrauna.Amuse.Tests.Editor.Shared;
 using nadena.dev.ndmf.animator;
@@ -1283,6 +1284,322 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 Is.EqualTo(outcomes[1].Use.MaterialKey),
                 "two materials with the same serialized facts share " +
                 "one key");
+        }
+
+        // --- lilToon rows ----------------------------------------------------
+
+        private const string LilToonPackageShaderFolder =
+            "Packages/jp.lilxyzw.liltoon/Shader/";
+
+        private static Shader LoadInstalledLilToonShader(string assetGuid)
+        {
+            var path = AssetDatabase.GUIDToAssetPath(assetGuid);
+            Assert.That(
+                path, Is.Not.Empty,
+                "fixture precondition: the installed lilToon shader must " +
+                "resolve by its pinned GUID");
+            var shader = AssetDatabase.LoadAssetAtPath<Shader>(path);
+            Assert.That(
+                shader, Is.Not.Null,
+                "fixture precondition: the installed lilToon shader must " +
+                "load");
+            return shader;
+        }
+
+        private static Shader LoadLilToonPackageShader(string fileName)
+        {
+            var shader = AssetDatabase.LoadAssetAtPath<Shader>(
+                LilToonPackageShaderFolder + fileName);
+            Assert.That(
+                shader, Is.Not.Null,
+                "fixture precondition: the installed lilToon package " +
+                "must hold " + fileName);
+            return shader;
+        }
+
+        /// <summary>
+        /// One use on a fresh lilToon material with a 64 by 64 imported
+        /// PNG on the member texture. A fresh material assigns no other
+        /// texture, so the neutral list of the row is empty.
+        /// </summary>
+        private AtlasFixture NewLilToonFixture(Shader shader)
+        {
+            var root = Track(new GameObject("lilToon capture root"));
+            var material = Track(new Material(shader));
+            material.SetTexture("_MainTex", ImportMainTexture("liltoon main"));
+            var mesh = Track(NewQuadMesh());
+            var renderer =
+                AddSkinnedRenderer(root, "Body", mesh, new[] { material });
+            return new AtlasFixture
+            {
+                Root = root,
+                Renderer = renderer,
+                Material = material,
+                Mesh = mesh,
+                MainTexture = (Texture2D)material.GetTexture("_MainTex"),
+            };
+        }
+
+        private AtlasFixture NewLilToonFixture()
+        {
+            return NewLilToonFixture(LoadInstalledLilToonShader(
+                LilToonSourceAttestation.SupportedShaderGuid));
+        }
+
+        [TestCase(LilToonSourceAttestation.SupportedShaderGuid)]
+        [TestCase(LilToonSourceAttestation.CutoutShaderGuid)]
+        [TestCase(LilToonSourceAttestation.TransparentShaderGuid)]
+        [TestCase(LilToonSourceAttestation.OutlineShaderGuid)]
+        [TestCase(LilToonSourceAttestation.OutlineCutoutShaderGuid)]
+        [TestCase(LilToonSourceAttestation.OutlineTransparentShaderGuid)]
+        [TestCase(LilToonSourceAttestation.OnePassTransparentShaderGuid)]
+        [TestCase(LilToonSourceAttestation.TwoPassTransparentShaderGuid)]
+        [TestCase(
+            LilToonSourceAttestation.OnePassTransparentOutlineShaderGuid)]
+        [TestCase(
+            LilToonSourceAttestation.TwoPassTransparentOutlineShaderGuid)]
+        public void FreshLilToonMaterialIsAdmittedOnEveryRow(string shaderGuid)
+        {
+            var shader = LoadInstalledLilToonShader(shaderGuid);
+            var fixture = NewLilToonFixture(shader);
+
+            var outcome = SingleOutcome(CaptureUses(fixture.Root));
+
+            AssertAdmitted(outcome);
+            Assert.That(outcome.Use.ShaderRowName, Is.EqualTo(shader.name));
+            Assert.That(
+                outcome.Use.SourceTextureInstanceId,
+                Is.EqualTo(fixture.MainTexture.GetInstanceID()));
+        }
+
+        [Test]
+        public void LilToonRequiredValueNotHeldRefuses(
+            [Values(
+                "_ShiftBackfaceUV",
+                "_UseParallax",
+                "_UseMain2ndTex",
+                "_UseMain3rdTex",
+                "_UseGlitter",
+                "_UseAudioLink")] string property)
+        {
+            var fixture = NewLilToonFixture();
+            fixture.Material.SetFloat(property, 1f);
+
+            var outcome = SingleOutcome(CaptureUses(fixture.Root));
+
+            AssertRefused(outcome, AtlasUseRefusal.RequiredValueNotHeld);
+        }
+
+        [Test]
+        public void LilToonNaNFlagRefuses()
+        {
+            // The shader branches on a nonzero flag, and NaN is not
+            // zero. An implementation that admits a flag unless it
+            // reads exactly 1 fails this row.
+            var fixture = NewLilToonFixture();
+            fixture.Material.SetFloat("_UseGlitter", float.NaN);
+
+            var outcome = SingleOutcome(CaptureUses(fixture.Root));
+
+            AssertRefused(outcome, AtlasUseRefusal.RequiredValueNotHeld);
+        }
+
+        [TestCase(1f)]
+        [TestCase(0.5f)]
+        [TestCase(-0.5f)]
+        [TestCase(float.NaN)]
+        public void LilToonDissolveModeRefuses(float mode)
+        {
+            var fixture = NewLilToonFixture();
+            var dissolve = fixture.Material.GetVector("_DissolveParams");
+            dissolve.x = mode;
+            fixture.Material.SetVector("_DissolveParams", dissolve);
+
+            var outcome = SingleOutcome(CaptureUses(fixture.Root));
+
+            AssertRefused(outcome, AtlasUseRefusal.RequiredValueNotHeld);
+        }
+
+        [Test]
+        public void LilToonDissolveModeBelowHalfIsAdmitted()
+        {
+            var fixture = NewLilToonFixture();
+            var dissolve = fixture.Material.GetVector("_DissolveParams");
+            dissolve.x = 0.49f;
+            fixture.Material.SetVector("_DissolveParams", dissolve);
+
+            var outcome = SingleOutcome(CaptureUses(fixture.Root));
+
+            AssertAdmitted(outcome);
+        }
+
+        private static IEnumerable<string> UdimDiscardRowFlags()
+        {
+            for (var row = 0; row < 4; row++)
+            {
+                for (var column = 0; column < 4; column++)
+                {
+                    yield return "_UDIMDiscardRow" + row + "_" + column;
+                }
+            }
+        }
+
+        [Test]
+        public void LilToonUdimDiscardFlagOnUv0Refuses(
+            [ValueSource(nameof(UdimDiscardRowFlags))] string flag)
+        {
+            var fixture = NewLilToonFixture();
+            fixture.Material.SetFloat("_UDIMDiscardUV", 0f);
+            fixture.Material.SetFloat(flag, 1f);
+
+            var outcome = SingleOutcome(CaptureUses(fixture.Root));
+
+            AssertRefused(outcome, AtlasUseRefusal.RequiredValueNotHeld);
+        }
+
+        [Test]
+        public void LilToonUdimDiscardOnUv1IsAdmitted()
+        {
+            var fixture = NewLilToonFixture();
+            fixture.Material.SetFloat("_UDIMDiscardUV", 1f);
+            fixture.Material.SetFloat("_UDIMDiscardRow0_0", 1f);
+
+            var outcome = SingleOutcome(CaptureUses(fixture.Root));
+
+            AssertAdmitted(outcome);
+        }
+
+        private static IEnumerable<string> IdMaskFlags()
+        {
+            for (var index = 1; index <= 8; index++)
+            {
+                yield return "_IDMask" + index;
+                yield return "_IDMaskPrior" + index;
+            }
+        }
+
+        [Test]
+        public void LilToonIdMaskFlagFromUv0Refuses(
+            [ValueSource(nameof(IdMaskFlags))] string flag)
+        {
+            var fixture = NewLilToonFixture();
+            fixture.Material.SetFloat("_IDMaskFrom", 0f);
+            fixture.Material.SetFloat(flag, 1f);
+
+            var outcome = SingleOutcome(CaptureUses(fixture.Root));
+
+            AssertRefused(outcome, AtlasUseRefusal.RequiredValueNotHeld);
+        }
+
+        [Test]
+        public void LilToonFractionalIdMaskSourceRefuses()
+        {
+            // The shader reads the source selector as an unsigned
+            // integer. A value of one half can convert to zero and read
+            // UV0, so only a selector of at least one is safe.
+            var fixture = NewLilToonFixture();
+            fixture.Material.SetFloat("_IDMaskFrom", 0.5f);
+            fixture.Material.SetFloat("_IDMask1", 1f);
+
+            var outcome = SingleOutcome(CaptureUses(fixture.Root));
+
+            AssertRefused(outcome, AtlasUseRefusal.RequiredValueNotHeld);
+        }
+
+        [Test]
+        public void LilToonIdMaskFromUv1IsAdmitted()
+        {
+            var fixture = NewLilToonFixture();
+            fixture.Material.SetFloat("_IDMaskFrom", 1f);
+            fixture.Material.SetFloat("_IDMask1", 1f);
+
+            var outcome = SingleOutcome(CaptureUses(fixture.Root));
+
+            AssertAdmitted(outcome);
+        }
+
+        [Test]
+        public void LilToonNonIdentityScaleRefuses()
+        {
+            var fixture = NewLilToonFixture();
+            fixture.Material.SetTextureScale(
+                "_MainTex", new Vector2(2f, 1f));
+
+            var outcome = SingleOutcome(CaptureUses(fixture.Root));
+
+            AssertRefused(outcome, AtlasUseRefusal.NonIdentityTransform);
+        }
+
+        [Test]
+        public void LilToonScrollRotateRefuses()
+        {
+            var fixture = NewLilToonFixture();
+            fixture.Material.SetVector(
+                "_MainTex_ScrollRotate", new Vector4(0f, 0f, 0.25f, 0f));
+
+            var outcome = SingleOutcome(CaptureUses(fixture.Root));
+
+            AssertRefused(outcome, AtlasUseRefusal.NonIdentityTransform);
+        }
+
+        [Test]
+        public void LilToonUnlistedTextureRefuses()
+        {
+            var fixture = NewLilToonFixture();
+            fixture.Material.SetTexture("_EmissionMap", fixture.MainTexture);
+
+            var outcome = SingleOutcome(CaptureUses(fixture.Root));
+
+            AssertRefused(outcome, AtlasUseRefusal.UnlistedTexture);
+        }
+
+        [Test]
+        public void LilToonAnimatedConditionPropertyRefuses()
+        {
+            var fixture = NewLilToonFixture();
+            var clip = Track(new AnimationClip { name = "Glitter" });
+            AnimateScalar(clip, "Body", "material._UseGlitter");
+            var graph = GraphOf(fixture.Root, clip);
+
+            var outcome = SingleOutcome(CaptureUses(fixture.Root, graph));
+
+            AssertRefused(outcome, AtlasUseRefusal.AnimatedRouteProperty);
+        }
+
+        [Test]
+        public void LilToonPropertyBlockOnConditionRefuses()
+        {
+            var fixture = NewLilToonFixture();
+            var block = new MaterialPropertyBlock();
+            block.SetFloat("_ShiftBackfaceUV", 0f);
+            fixture.Renderer.SetPropertyBlock(block);
+
+            var outcome = SingleOutcome(CaptureUses(fixture.Root));
+
+            AssertRefused(
+                outcome, AtlasUseRefusal.PropertyBlockOnRouteProperty);
+        }
+
+        [Test]
+        public void LilToonMultiRefusesWithoutARouteTable()
+        {
+            var fixture = NewLilToonFixture(
+                LoadLilToonPackageShader("ltsmulti.shader"));
+
+            var outcome = SingleOutcome(CaptureUses(fixture.Root));
+
+            AssertRefused(outcome, AtlasUseRefusal.NoRouteTable);
+        }
+
+        [Test]
+        public void LilToonFurShaderRefuses()
+        {
+            var fixture = NewLilToonFixture(
+                LoadLilToonPackageShader("lts_fur.shader"));
+
+            var outcome = SingleOutcome(CaptureUses(fixture.Root));
+
+            AssertRefused(outcome, AtlasUseRefusal.UnattestedShader);
         }
     }
 }

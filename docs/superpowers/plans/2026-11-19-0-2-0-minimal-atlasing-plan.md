@@ -52,7 +52,11 @@ Status on 2026-11-20: Implemented on branch `atlasing-m2-poiyomi-main-color`. Th
 
 ## Milestone 3: Second row
 
-- [ ] Add the lilToon main color route table with one falsifier per list entry. Add the end-to-end fixture for lilToon. Observe RED and GREEN.
+Executable plan: `docs/superpowers/plans/2026-11-20-atlasing-milestone-3-liltoon-main-color.md`.
+
+Status on 2026-11-21: Implemented on branch `atlasing-m3-liltoon-main-color`. The full product and research EditMode run on 2026-11-21 reported 3687 total, 3662 passed, 0 failed, and 25 skipped.
+
+- [x] Add the lilToon main color route table with one falsifier per list entry. Add the end-to-end fixture for lilToon. Observe RED and GREEN.
 
 ## Milestone 4: Report and interface
 

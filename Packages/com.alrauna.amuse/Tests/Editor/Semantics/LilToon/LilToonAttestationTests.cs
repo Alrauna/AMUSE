@@ -2860,6 +2860,47 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
         }
 
         /// <summary>
+        /// The atlas twin of the approved non-row pin: the identity
+        /// conjunction admits 2.4.3, but an atlas use needs an exact
+        /// row. An implementation that reused the identity verdict alone
+        /// would admit it.
+        /// </summary>
+        [Test]
+        public void ExactRowRefusesAnApprovedNonRowVersion()
+        {
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyExactRowIdentity(
+                    Evidence(packageVersion: "2.4.3")),
+                Is.False);
+        }
+
+        [Test]
+        public void ExactRowAdmitsThePinnedVersion()
+        {
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyExactRowIdentity(
+                    Evidence()),
+                Is.True);
+        }
+
+        /// <summary>
+        /// A loose install carries no version label. Its include tree
+        /// alone names the admitted row, so the exact-row term must not
+        /// refuse it.
+        /// </summary>
+        [Test]
+        public void ExactRowAdmitsALooseInstallWithAnAdmittedTree()
+        {
+            Assert.That(
+                LilToonSourceAttestation.TryVerifyExactRowIdentity(
+                    Evidence(
+                        hasPackage: false,
+                        packageName: null,
+                        packageVersion: null)),
+                Is.True);
+        }
+
+        /// <summary>
         /// The version and the include tree must pair: a 2.3.3 install
         /// carrying the 2.3.4 include tree fails closed as modified source,
         /// because the tree is the only per-version bytes the identity

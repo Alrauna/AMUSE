@@ -2237,6 +2237,24 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
         }
 
         /// <summary>
+        /// Verifies identity like <see cref="TryVerifyIdentityForShaderName"/>
+        /// and also requires an exact admitted row. The identity conjunction
+        /// admits an approved package version that is not a row, because
+        /// version consent extends alpha separation to it. Atlas uses admit
+        /// only exact rows, so a packaged install must carry an admitted
+        /// row version. A loose install has no version label, and the
+        /// identity conjunction already requires an admitted include tree
+        /// for it.
+        /// </summary>
+        internal static bool TryVerifyExactRowIdentity(
+            LilToonSourceEvidence evidence)
+        {
+            return TryVerifyIdentityForShaderName(evidence, out _) &&
+                   (!evidence.HasPackage ||
+                    IsAdmittedPackageVersion(evidence.PackageVersion));
+        }
+
+        /// <summary>
         /// Resolves the canonical opaque target shader name for a source
         /// shader name. A Multi container resolves to itself: the clone
         /// stays on its container asset. Outline wrapper sources move to
