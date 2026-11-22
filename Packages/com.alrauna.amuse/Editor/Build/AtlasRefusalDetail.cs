@@ -223,5 +223,49 @@ namespace Alrauna.Amuse.Editor.Build
         {
             return "A source texture of this group changed during the build.";
         }
+
+        internal static string SingleSourceGroup(Texture memberTexture)
+        {
+            return memberTexture == null
+                ? "Every slot of this group uses the same texture."
+                : "Every slot of this group uses the texture '" +
+                  memberTexture.name + "'.";
+        }
+
+        /// <summary>
+        /// Names the route texture a companion refusal applies to,
+        /// then adds the sentence that names the bad value.
+        /// </summary>
+        internal static string RouteTexture(string property, string sentence)
+        {
+            return "This applies to the route texture '" + property + "'. " +
+                   sentence;
+        }
+
+        internal static string CompanionSize(
+            Texture texture, int mainWidth, int mainHeight)
+        {
+            return "The texture '" + texture.name + "' is " +
+                   Number(texture.width) + " x " + Number(texture.height) +
+                   ". The main texture is " + Number(mainWidth) + " x " +
+                   Number(mainHeight) + ".";
+        }
+
+        internal static string OutlineSampler(Texture outline, Texture main)
+        {
+            var mainSentence = "The main texture uses " + SamplerWords(main) +
+                               ".";
+            return outline == null
+                ? "The outline texture is not assigned. " + mainSentence
+                : "The outline texture '" + outline.name + "' uses " +
+                  SamplerWords(outline) + ". " + mainSentence;
+        }
+
+        private static string SamplerWords(Texture texture)
+        {
+            return texture.filterMode + " filter, " + texture.wrapModeU +
+                   " wrap on U, " + texture.wrapModeV +
+                   " wrap on V, and anisotropy " + Number(texture.anisoLevel);
+        }
     }
 }

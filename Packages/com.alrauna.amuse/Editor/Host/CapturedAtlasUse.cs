@@ -134,6 +134,27 @@ namespace Alrauna.Amuse.Editor.Host
         /// </summary>
         internal int CaptureOrder { get; }
 
+        /// <summary>
+        /// The companion route textures that move into companion pages,
+        /// sorted by property, ordinal.
+        /// </summary>
+        internal IReadOnlyList<CapturedAtlasCompanion> Companions { get; }
+
+        /// <summary>
+        /// The texture properties the page material sets to the main
+        /// page, sorted ordinal: the member copies the shader declares,
+        /// and each companion that is the member texture itself under
+        /// the member sampler.
+        /// </summary>
+        internal IReadOnlyList<string> PageAliasProperties { get; }
+
+        /// <summary>
+        /// One string for every fact of the aliases and the companions
+        /// that shapes a page or the page material. Uses with different
+        /// signatures never share a group.
+        /// </summary>
+        internal string RouteSignature { get; }
+
         internal CapturedAtlasUse(
             int rendererIndex,
             int slotIndex,
@@ -148,7 +169,9 @@ namespace Alrauna.Amuse.Editor.Host
             AtlasUvRect uvRect,
             string materialKey,
             IReadOnlyList<string> animatedPropertyNames,
-            int captureOrder)
+            int captureOrder,
+            IReadOnlyList<CapturedAtlasCompanion> companions = null,
+            IReadOnlyList<string> pageAliasProperties = null)
         {
             RendererIndex = rendererIndex;
             SlotIndex = slotIndex;
@@ -165,6 +188,38 @@ namespace Alrauna.Amuse.Editor.Host
             AnimatedPropertyNames = new ReadOnlyCollection<string>(
                 new List<string>(animatedPropertyNames));
             CaptureOrder = captureOrder;
+
+            var sortedCompanions = new List<CapturedAtlasCompanion>(
+                companions ?? Array.Empty<CapturedAtlasCompanion>());
+            sortedCompanions.Sort((left, right) =>
+                string.CompareOrdinal(left.Property, right.Property));
+            Companions =
+                new ReadOnlyCollection<CapturedAtlasCompanion>(sortedCompanions);
+            var sortedAliases = new List<string>(
+                pageAliasProperties ?? Array.Empty<string>());
+            sortedAliases.Sort(StringComparer.Ordinal);
+            PageAliasProperties =
+                new ReadOnlyCollection<string>(sortedAliases);
+
+            var parts = new List<string>();
+            foreach (var alias in sortedAliases)
+            {
+                parts.Add("alias:" + alias);
+            }
+
+            foreach (var companion in sortedCompanions)
+            {
+                parts.Add(
+                    "page:" + companion.Property + ":" +
+                    companion.SourceFormat + ":" + companion.ScaleShift +
+                    ":" + companion.Sampler.Filter + ":" +
+                    companion.Sampler.WrapU + ":" + companion.Sampler.WrapV +
+                    ":" + companion.Sampler.AnisoLevel + ":" +
+                    BitConverter.SingleToInt32Bits(companion.Sampler.MipBias)
+                        .ToString("X8"));
+            }
+
+            RouteSignature = string.Join(";", parts);
         }
     }
 }

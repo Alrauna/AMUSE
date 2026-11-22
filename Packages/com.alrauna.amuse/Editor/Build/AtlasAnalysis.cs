@@ -91,7 +91,7 @@ namespace Alrauna.Amuse.Editor.Build
                 }
             }
 
-            var verdicts = AtlasBudgetAdmission.Admit(
+            var verdicts = AdmitOrSkip(
                 plans,
                 uses,
                 protectedMipLevelCount,
@@ -113,7 +113,10 @@ namespace Alrauna.Amuse.Editor.Build
                         verdict.Refusal,
                         outcome.Material,
                         outcome.MemberTexture,
-                        string.Empty,
+                        verdict.Refusal == AtlasUseRefusal.SingleSourceGroup
+                            ? AtlasRefusalDetail.SingleSourceGroup(
+                                outcome.MemberTexture)
+                            : string.Empty,
                         verdict.ValueBytes,
                         verdict.LimitBytes));
                 }
@@ -126,6 +129,54 @@ namespace Alrauna.Amuse.Editor.Build
                 plans,
                 verdicts,
                 refusals);
+        }
+
+        /// <summary>
+        /// Skips each group whose pages hold exactly one placement,
+        /// then admits the other groups against the budget. One
+        /// placement is one source set, so its page would only copy
+        /// the source and add memory. A skipped group adds no bytes to
+        /// the avatar sum. The verdicts keep plan order.
+        /// </summary>
+        private static IReadOnlyList<AtlasBudgetVerdict> AdmitOrSkip(
+            IReadOnlyList<AtlasGroupPlan> plans,
+            IReadOnlyList<CapturedAtlasUse> uses,
+            int protectedMipLevelCount,
+            AtlasBudgetLimits limits)
+        {
+            var verdicts = new AtlasBudgetVerdict[plans.Count];
+            var admittable = new List<AtlasGroupPlan>(plans.Count);
+            var admittableIndices = new List<int>(plans.Count);
+            for (var group = 0; group < plans.Count; group++)
+            {
+                var placementCount = 0;
+                foreach (var page in plans[group].Pages)
+                {
+                    placementCount += page.Placements.Count;
+                }
+
+                if (placementCount == 1)
+                {
+                    verdicts[group] = new AtlasBudgetVerdict(
+                        AtlasUseRefusal.SingleSourceGroup, 0, 0);
+                    continue;
+                }
+
+                admittable.Add(plans[group]);
+                admittableIndices.Add(group);
+            }
+
+            var admitted = AtlasBudgetAdmission.Admit(
+                admittable,
+                uses,
+                protectedMipLevelCount,
+                limits);
+            for (var index = 0; index < admitted.Count; index++)
+            {
+                verdicts[admittableIndices[index]] = admitted[index];
+            }
+
+            return verdicts;
         }
 
         /// <summary>
@@ -143,6 +194,10 @@ namespace Alrauna.Amuse.Editor.Build
             foreach (var useIndex in plan.AdmittedUseIndices)
             {
                 sources.Add(analysis.Uses[useIndex].SourceTextureInstanceId);
+                foreach (var companion in analysis.Uses[useIndex].Companions)
+                {
+                    sources.Add(companion.SourceTextureInstanceId);
+                }
             }
 
             var pages = new List<AtlasPageSetPage>(plan.Pages.Count);
@@ -163,6 +218,19 @@ namespace Alrauna.Amuse.Editor.Build
                         pageIndexByUse[useIndex] = pageIndex;
                     }
                 }
+            }
+
+            foreach (var companionPage in plan.CompanionPages)
+            {
+                var entry = companionPage.Entry;
+                pages.Add(new AtlasPageSetPage(
+                    entry.Width,
+                    entry.Height,
+                    entry.Format,
+                    entry.MipCount,
+                    entry.Placements.Count,
+                    companionPage.Property,
+                    companionPage.MainPageIndex));
             }
 
             var members = new List<AtlasPageSetMember>(
@@ -206,8 +274,13 @@ namespace Alrauna.Amuse.Editor.Build
                         refused.RegionHeight,
                         maximumPageSize);
                 case AtlasPlacementRefusal.ClampEdgeOnBc7:
-                    return AtlasRefusalDetail.ClampEdgeOnBc7(
-                        outcome.MemberTexture);
+                    return refused.RouteProperty == null
+                        ? AtlasRefusalDetail.ClampEdgeOnBc7(
+                            outcome.MemberTexture)
+                        : AtlasRefusalDetail.RouteTexture(
+                            refused.RouteProperty,
+                            "The texture is BC7, uses Clamp wrap, and its" +
+                            " UV region reaches the texture edge.");
                 default:
                     throw new ArgumentOutOfRangeException(
                         nameof(refused));

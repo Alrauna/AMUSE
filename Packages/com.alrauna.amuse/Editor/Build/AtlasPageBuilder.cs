@@ -332,7 +332,7 @@ namespace Alrauna.Amuse.Editor.Build
         /// bytes. A Repeat block maps to the wrapped source block. A
         /// Clamp block outside the image keeps the edge block endpoints
         /// and repeats the edge row or column indices, which stays
-        /// exact on BC1 and BC3.
+        /// exact on BC1, BC3, BC4, and BC5.
         /// </summary>
         private static void OverwriteProtectedLevels(
             Texture2D pageTexture,
@@ -522,7 +522,7 @@ namespace Alrauna.Amuse.Editor.Build
             var pageBlocksX = (pageWidth + 3) / 4;
             var textureFormat = GraphicsFormatUtility.GetTextureFormat(
                 source.Format);
-            var blockIsBc3 = textureFormat == TextureFormat.DXT5;
+            var layout = BlockLayoutOf(textureFormat);
             var blockIsBc7 = textureFormat == TextureFormat.BC7;
             var firstPageBlockX = pageX / 4;
             var firstPageBlockY = pageY / 4;
@@ -577,10 +577,40 @@ namespace Alrauna.Amuse.Editor.Build
                         sourceBlockOffset,
                         pageData,
                         pageOffset,
-                        blockIsBc3,
+                        bytesPerBlock,
+                        layout,
                         mapX,
                         mapY);
                 }
+            }
+        }
+
+        /// <summary>
+        /// The index planes of one remappable block format. BC1 holds
+        /// one plane of 2-bit color indices. BC3 holds a plane of 3-bit
+        /// alpha indices, then a BC1 color half. BC4 holds one plane of
+        /// 3-bit indices. BC5 holds two BC4 halves.
+        /// </summary>
+        private enum BlockLayout
+        {
+            Bc1 = 0,
+            Bc3 = 1,
+            Bc4 = 2,
+            Bc5 = 3,
+        }
+
+        private static BlockLayout BlockLayoutOf(TextureFormat format)
+        {
+            switch (format)
+            {
+                case TextureFormat.DXT5:
+                    return BlockLayout.Bc3;
+                case TextureFormat.BC4:
+                    return BlockLayout.Bc4;
+                case TextureFormat.BC5:
+                    return BlockLayout.Bc5;
+                default:
+                    return BlockLayout.Bc1;
             }
         }
 
@@ -594,7 +624,8 @@ namespace Alrauna.Amuse.Editor.Build
             int sourceBlockOffset,
             byte[] pageData,
             int pageOffset,
-            bool blockIsBc3,
+            int bytesPerBlock,
+            BlockLayout layout,
             BlockAxisMap mapX,
             BlockAxisMap mapY)
         {
@@ -605,20 +636,95 @@ namespace Alrauna.Amuse.Editor.Build
                 sourceBlockOffset,
                 pageData,
                 pageOffset,
-                blockIsBc3 ? 16 : 8);
+                bytesPerBlock);
 
-            // A BC1 block holds its color indices in bytes four to
-            // seven. A BC3 block holds eight bytes of alpha first, so
-            // its color indices sit in bytes twelve to fifteen and
-            // its alpha indices sit in bytes two to seven.
-            var colorBase = blockIsBc3 ? 8 : 0;
-            ulong colorIndices = ReadBits(
-                sourceLevel, sourceBlockOffset + colorBase + 4, 32);
-            ulong alphaIndices = blockIsBc3
-                ? ReadBits(sourceLevel, sourceBlockOffset + 2, 48)
-                : 0;
-            ulong newColor = 0;
-            ulong newAlpha = 0;
+            switch (layout)
+            {
+                case BlockLayout.Bc1:
+                    RemapTwoBitIndexPlane(
+                        sourceLevel, sourceBlockOffset, pageData,
+                        pageOffset, 0, mapX, mapY);
+                    return;
+                case BlockLayout.Bc3:
+                    RemapThreeBitIndexPlane(
+                        sourceLevel, sourceBlockOffset, pageData,
+                        pageOffset, 0, mapX, mapY);
+                    RemapTwoBitIndexPlane(
+                        sourceLevel, sourceBlockOffset, pageData,
+                        pageOffset, 8, mapX, mapY);
+                    return;
+                case BlockLayout.Bc4:
+                    RemapThreeBitIndexPlane(
+                        sourceLevel, sourceBlockOffset, pageData,
+                        pageOffset, 0, mapX, mapY);
+                    return;
+                case BlockLayout.Bc5:
+                    RemapThreeBitIndexPlane(
+                        sourceLevel, sourceBlockOffset, pageData,
+                        pageOffset, 0, mapX, mapY);
+                    RemapThreeBitIndexPlane(
+                        sourceLevel, sourceBlockOffset, pageData,
+                        pageOffset, 8, mapX, mapY);
+                    return;
+                default:
+                    throw new ArgumentOutOfRangeException(nameof(layout));
+            }
+        }
+
+        /// <summary>
+        /// Remaps the 2-bit indices of one BC1 color half. The half
+        /// starts at <paramref name="halfOffset"/> and holds its
+        /// indices in bytes four to seven.
+        /// </summary>
+        private static void RemapTwoBitIndexPlane(
+            byte[] sourceLevel,
+            int sourceBlockOffset,
+            byte[] pageData,
+            int pageOffset,
+            int halfOffset,
+            BlockAxisMap mapX,
+            BlockAxisMap mapY)
+        {
+            ulong indices = ReadBits(
+                sourceLevel, sourceBlockOffset + halfOffset + 4, 32);
+            WriteBits(
+                RemapIndices(indices, 2, mapX, mapY),
+                pageData,
+                pageOffset + halfOffset + 4,
+                32);
+        }
+
+        /// <summary>
+        /// Remaps the 3-bit indices of one BC4 style half: two endpoint
+        /// bytes, then 48 index bits. BC3 alpha, BC4, and each BC5
+        /// channel use this layout.
+        /// </summary>
+        private static void RemapThreeBitIndexPlane(
+            byte[] sourceLevel,
+            int sourceBlockOffset,
+            byte[] pageData,
+            int pageOffset,
+            int halfOffset,
+            BlockAxisMap mapX,
+            BlockAxisMap mapY)
+        {
+            ulong indices = ReadBits(
+                sourceLevel, sourceBlockOffset + halfOffset + 2, 48);
+            WriteBits(
+                RemapIndices(indices, 3, mapX, mapY),
+                pageData,
+                pageOffset + halfOffset + 2,
+                48);
+        }
+
+        private static ulong RemapIndices(
+            ulong indices,
+            int bitsPerIndex,
+            BlockAxisMap mapX,
+            BlockAxisMap mapY)
+        {
+            var mask = (1UL << bitsPerIndex) - 1;
+            ulong remapped = 0;
             for (var row = 0; row < 4; row++)
             {
                 var sourceRow = MapIndex(mapY, row);
@@ -627,23 +733,13 @@ namespace Alrauna.Amuse.Editor.Build
                     var sourceColumn = MapIndex(mapX, column);
                     var oldPosition = 4 * sourceRow + sourceColumn;
                     var newPosition = 4 * row + column;
-                    newColor |= ((colorIndices >> (2 * oldPosition)) & 3) <<
-                        (2 * newPosition);
-                    if (blockIsBc3)
-                    {
-                        newAlpha |=
-                            ((alphaIndices >> (3 * oldPosition)) & 7) <<
-                            (3 * newPosition);
-                    }
+                    remapped |=
+                        ((indices >> (bitsPerIndex * oldPosition)) & mask) <<
+                        (bitsPerIndex * newPosition);
                 }
             }
 
-            WriteBits(
-                newColor, pageData, pageOffset + colorBase + 4, 32);
-            if (blockIsBc3)
-            {
-                WriteBits(newAlpha, pageData, pageOffset + 2, 48);
-            }
+            return remapped;
         }
 
         /// <summary>

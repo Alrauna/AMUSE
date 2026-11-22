@@ -79,10 +79,12 @@ namespace Alrauna.Amuse.Editor.Host
     /// animation, a slot that shares the last submesh, slot material
     /// presence, a material swap binding, the vendor lock, the shader
     /// row, the feature keywords, the required values, the assigned
-    /// textures, property blocks renderer-wide first, animated route
-    /// properties, the member texture, the texture transform, the UV0
-    /// channel, and the unit square. An earlier check therefore never
-    /// reads state a later refusal would have made unreachable.
+    /// textures, the companion route values, property blocks
+    /// renderer-wide first, animated route properties, the member
+    /// texture, the texture transform, the UV0 channel, the unit
+    /// square, and then the companion textures. An earlier check
+    /// therefore never reads state a later refusal would have made
+    /// unreachable.
     /// </para>
     /// <para>
     /// The animation breadth is deliberately wider than an exact match.
@@ -120,6 +122,8 @@ namespace Alrauna.Amuse.Editor.Host
                 TextureFormat.RGB24,
                 TextureFormat.DXT1,
                 TextureFormat.DXT5,
+                TextureFormat.BC4,
+                TextureFormat.BC5,
                 TextureFormat.BC7,
             };
 
@@ -322,17 +326,37 @@ namespace Alrauna.Amuse.Editor.Host
                 return;
             }
 
-            var unlistedTextures = UnlistedTextures(material, table);
-            if (unlistedTextures.Count > 0)
+            var outlineRow = table.HasOutlinePass(shaderRowName);
+            var resolution = ResolveRouteTextures(material, table, outlineRow);
+            if (resolution.Unlisted.Count > 0)
             {
                 refusal = AtlasUseRefusal.UnlistedTexture;
                 detail = AtlasRefusalDetail.UnlistedTextures(
-                    unlistedTextures);
+                    resolution.Unlisted);
                 return;
             }
 
+            foreach (var pending in resolution.PendingUv0)
+            {
+                var unheldRouteValue =
+                    pending.Route.UnheldRequiredValue(material);
+                if (unheldRouteValue != null)
+                {
+                    refusal = AtlasUseRefusal.RequiredValueNotHeld;
+                    detail = unheldRouteValue;
+                    return;
+                }
+            }
+
+            var conditions = new List<string>(table.ConditionProperties);
+            conditions.AddRange(resolution.ConditionProperties);
+
             var blockProperty = PropertyBlockRouteProperty(
-                renderer, slotIndex, table, out var rendererWide);
+                renderer,
+                slotIndex,
+                table.MemberProperty,
+                conditions,
+                out var rendererWide);
             if (blockProperty != null)
             {
                 refusal = AtlasUseRefusal.PropertyBlockOnRouteProperty;
@@ -341,7 +365,8 @@ namespace Alrauna.Amuse.Editor.Host
                 return;
             }
 
-            var animatedProperty = AnimatedRouteProperty(animation, table);
+            var animatedProperty = AnimatedRouteProperty(
+                animation, table.MemberProperty, conditions);
             if (animatedProperty != null)
             {
                 refusal = AtlasUseRefusal.AnimatedRouteProperty;
@@ -455,6 +480,21 @@ namespace Alrauna.Amuse.Editor.Host
                 return;
             }
 
+            var companions = new List<CapturedAtlasCompanion>();
+            refusal = CaptureCompanions(
+                material,
+                outlineRow,
+                resolution,
+                texture2D,
+                sampler,
+                protectedMipLevelCount,
+                companions,
+                out detail);
+            if (refusal != AtlasUseRefusal.None)
+            {
+                return;
+            }
+
             use = new CapturedAtlasUse(
                 rendererIndex,
                 slotIndex,
@@ -467,9 +507,215 @@ namespace Alrauna.Amuse.Editor.Host
                 texture2D.mipmapCount,
                 sampler,
                 uvRect,
-                MaterialKeyOf(material, table),
+                MaterialKeyOf(material, resolution.KeySkipped),
                 animation.AnimatedMaterialPropertyNames,
-                captureOrder);
+                captureOrder,
+                companions,
+                resolution.AliasProperties);
+        }
+
+        /// <summary>
+        /// The inline trilinear Repeat sampler of a route without its
+        /// own sampler state. It asks for no anisotropy and no bias.
+        /// </summary>
+        private static readonly AtlasSamplerFacts InlineTrilinearRepeat =
+            new AtlasSamplerFacts(
+                FilterMode.Trilinear,
+                UnityEngine.TextureWrapMode.Repeat,
+                UnityEngine.TextureWrapMode.Repeat,
+                0,
+                0f);
+
+        private const string OutlineTextureProperty = "_OutlineTex";
+
+        /// <summary>
+        /// Captures every pending UV0 companion in shader property
+        /// order, or the first refusal. Per companion the order is the
+        /// transforms, the texture dimension, the effective sampler, the
+        /// member alias, the source asset, the format, the mip chain,
+        /// the block alignment, and the size ratio. A companion that is
+        /// the member texture under the member sampler facts becomes a
+        /// page alias and needs no page. Then an outline row whose
+        /// companions read <c>sampler_MainTex</c> needs an outline
+        /// texture with the main sampler facts, because the outline
+        /// pass reads <c>sampler_MainTex</c> as the outline sampler.
+        /// </summary>
+        private static AtlasUseRefusal CaptureCompanions(
+            Material material,
+            bool outlineRow,
+            AtlasRouteResolution resolution,
+            Texture2D main,
+            AtlasSamplerFacts mainSampler,
+            int protectedMipLevelCount,
+            List<CapturedAtlasCompanion> companions,
+            out string detail)
+        {
+            detail = string.Empty;
+            var memberSamplerUsed = false;
+            foreach (var pending in resolution.PendingUv0)
+            {
+                var route = pending.Route;
+                var texture = pending.Texture;
+                foreach (var transform in route.TransformProperties)
+                {
+                    var value = material.GetVector(transform.Property);
+                    if (value.x != transform.Identity.x ||
+                        value.y != transform.Identity.y ||
+                        value.z != transform.Identity.z ||
+                        value.w != transform.Identity.w)
+                    {
+                        detail = AtlasRefusalDetail.RouteTexture(
+                            route.Property,
+                            AtlasRefusalDetail.NonIdentityTransform(
+                                transform.Property, value, transform.Identity));
+                        return AtlasUseRefusal.NonIdentityTransform;
+                    }
+                }
+
+                if (!(texture is Texture2D texture2D) ||
+                    texture2D.dimension !=
+                        UnityEngine.Rendering.TextureDimension.Tex2D)
+                {
+                    detail = AtlasRefusalDetail.RouteTexture(
+                        route.Property,
+                        AtlasRefusalDetail.UnsupportedTextureDimension(texture));
+                    return AtlasUseRefusal.UnsupportedTextureDimension;
+                }
+
+                AtlasSamplerFacts facts;
+                switch (route.Sampler)
+                {
+                    case AtlasCompanionSampler.Own:
+                        if (!UnityTextureEvidence.TryGetAtlasSampler(
+                                texture2D, out facts))
+                        {
+                            detail = AtlasRefusalDetail.RouteTexture(
+                                route.Property,
+                                AtlasRefusalDetail.UnsupportedWrap(texture2D));
+                            return AtlasUseRefusal.UnsupportedWrap;
+                        }
+
+                        break;
+                    case AtlasCompanionSampler.Member:
+                        facts = mainSampler;
+                        memberSamplerUsed = true;
+                        break;
+                    case AtlasCompanionSampler.InlineTrilinearRepeat:
+                        facts = InlineTrilinearRepeat;
+                        break;
+                    default:
+                        throw new InvalidOperationException(
+                            "The companion route '" + route.Property +
+                            "' names the unknown sampler " + route.Sampler +
+                            ".");
+                }
+
+                if (ReferenceEquals(texture2D, main) &&
+                    facts.Equals(mainSampler))
+                {
+                    resolution.AliasProperties.Add(route.Property);
+                    continue;
+                }
+
+                var sourceProblem = SourceAssetProblem(texture2D);
+                if (sourceProblem != null)
+                {
+                    detail = AtlasRefusalDetail.RouteTexture(
+                        route.Property, sourceProblem);
+                    return AtlasUseRefusal.SourceNotAnAsset;
+                }
+
+                if (!SupportedPageFormats.Contains(texture2D.format))
+                {
+                    detail = AtlasRefusalDetail.RouteTexture(
+                        route.Property,
+                        AtlasRefusalDetail.UnsupportedFormat(texture2D));
+                    return AtlasUseRefusal.UnsupportedFormat;
+                }
+
+                if (texture2D.mipmapCount < protectedMipLevelCount)
+                {
+                    detail = AtlasRefusalDetail.RouteTexture(
+                        route.Property,
+                        AtlasRefusalDetail.SourceMipChainTooShort(
+                            texture2D, protectedMipLevelCount));
+                    return AtlasUseRefusal.SourceMipChainTooShort;
+                }
+
+                if (!SourceIsBlockAligned(texture2D, protectedMipLevelCount))
+                {
+                    detail = AtlasRefusalDetail.RouteTexture(
+                        route.Property,
+                        AtlasRefusalDetail.SourceNotAligned(
+                            texture2D,
+                            protectedMipLevelCount,
+                            BlockSizeOf(texture2D.format)));
+                    return AtlasUseRefusal.SourceNotAligned;
+                }
+
+                var scaleShift = ScaleShiftOf(
+                    main.width, main.height, texture2D.width, texture2D.height);
+                if (scaleShift < 0)
+                {
+                    detail = AtlasRefusalDetail.RouteTexture(
+                        route.Property,
+                        AtlasRefusalDetail.CompanionSize(
+                            texture2D, main.width, main.height));
+                    return AtlasUseRefusal.CompanionSizeMismatch;
+                }
+
+                companions.Add(new CapturedAtlasCompanion(
+                    route.Property,
+                    texture2D.GetInstanceID(),
+                    texture2D.graphicsFormat,
+                    texture2D.width,
+                    texture2D.height,
+                    texture2D.mipmapCount,
+                    facts,
+                    scaleShift));
+            }
+
+            if (outlineRow && memberSamplerUsed)
+            {
+                var outline = material.GetTexture(OutlineTextureProperty);
+                if (outline == null ||
+                    !UnityTextureEvidence.TryGetAtlasSampler(
+                        outline, out var outlineFacts) ||
+                    !outlineFacts.Equals(mainSampler))
+                {
+                    detail = AtlasRefusalDetail.RouteTexture(
+                        OutlineTextureProperty,
+                        AtlasRefusalDetail.OutlineSampler(outline, main));
+                    return AtlasUseRefusal.RouteSamplerMismatch;
+                }
+            }
+
+            return AtlasUseRefusal.None;
+        }
+
+        /// <summary>
+        /// The shift k with <c>mainWidth == width &lt;&lt; k</c> and
+        /// <c>mainHeight == height &lt;&lt; k</c>, or -1 when no such k
+        /// exists. A companion larger than the main texture has none.
+        /// </summary>
+        private static int ScaleShiftOf(
+            int mainWidth,
+            int mainHeight,
+            int width,
+            int height)
+        {
+            for (var shift = 0;
+                (width << shift) <= mainWidth && shift < 31;
+                shift++)
+            {
+                if ((width << shift) == mainWidth &&
+                    (height << shift) == mainHeight)
+                {
+                    return shift;
+                }
+            }
+
+            return -1;
         }
 
 
@@ -572,6 +818,8 @@ namespace Alrauna.Amuse.Editor.Host
             {
                 case TextureFormat.DXT1:
                 case TextureFormat.DXT5:
+                case TextureFormat.BC4:
+                case TextureFormat.BC5:
                 case TextureFormat.BC7:
                     return 4;
                 default:
@@ -730,17 +978,18 @@ namespace Alrauna.Amuse.Editor.Host
         /// </summary>
         private static string AnimatedRouteProperty(
             RendererAnimationFacts animation,
-            AtlasRouteTable table)
+            string memberProperty,
+            IReadOnlyCollection<string> conditionProperties)
         {
             foreach (var stripped in animation.AnimatedFloatProperties)
             {
                 if (stripped.StartsWith(
-                        table.MemberProperty, StringComparison.Ordinal))
+                        memberProperty, StringComparison.Ordinal))
                 {
                     return stripped;
                 }
 
-                foreach (var condition in table.ConditionProperties)
+                foreach (var condition in conditionProperties)
                 {
                     if (stripped.StartsWith(
                             condition, StringComparison.Ordinal))
@@ -854,7 +1103,14 @@ namespace Alrauna.Amuse.Editor.Host
                 LilToonSourceAttestation.TryVerifyExactRowIdentity(lilToon))
             {
                 shaderRowName = shader.name;
-                table = AtlasRouteTable.LilToonMainColor;
+                // The companion review read the 2.4.1 source only, so
+                // an older admitted version keeps the plain route.
+                table = string.Equals(
+                        lilToon.PackageVersion,
+                        LilToonSourceAttestation.PackageVersion,
+                        StringComparison.Ordinal)
+                    ? AtlasRouteTable.LilToonReviewedMainColor
+                    : AtlasRouteTable.LilToonMainColor;
                 return AtlasUseRefusal.None;
             }
 
@@ -1032,18 +1288,64 @@ namespace Alrauna.Amuse.Editor.Host
         }
 
         /// <summary>
-        /// Every assigned texture must be the member or a neutral
-        /// texture. The enumeration walks the shader properties, so a
-        /// texture that reachable code samples can never be missed.
-        /// The result lists every other assigned texture in shader
-        /// property order. An empty list admits.
+        /// The texture facts of one material under its route table.
         /// </summary>
-        private static List<(string Property, Texture Texture)>
-            UnlistedTextures(
-                Material material,
-                AtlasRouteTable table)
+        private sealed class AtlasRouteResolution
         {
-            var unlisted = new List<(string Property, Texture Texture)>();
+            /// <summary>
+            /// Every assigned texture the route does not list, in
+            /// shader property order.
+            /// </summary>
+            internal readonly List<(string Property, Texture Texture)>
+                Unlisted = new List<(string Property, Texture Texture)>();
+
+            /// <summary>
+            /// The texture properties the material key records as
+            /// <c>member</c>: the member, the member copies, the inert
+            /// routes, and the assigned UV0 routes.
+            /// </summary>
+            internal readonly HashSet<string> KeySkipped =
+                new HashSet<string>(StringComparer.Ordinal);
+
+            /// <summary>
+            /// The per-material condition properties: the property, the
+            /// transforms, and the conditions of each assigned route.
+            /// </summary>
+            internal readonly List<string> ConditionProperties =
+                new List<string>();
+
+            /// <summary>
+            /// The assigned UV0 routes in shader property order.
+            /// </summary>
+            internal readonly List<(AtlasCompanionRoute Route, Texture Texture)>
+                PendingUv0 =
+                    new List<(AtlasCompanionRoute Route, Texture Texture)>();
+
+            /// <summary>
+            /// The properties the page material sets to the main page.
+            /// </summary>
+            internal readonly List<string> AliasProperties =
+                new List<string>();
+        }
+
+        /// <summary>
+        /// Sorts every texture property of the shader by its route.
+        /// The enumeration walks the shader properties, so a texture
+        /// that reachable code samples can never be missed. An assigned
+        /// texture that is not the member, a member copy, neutral, or a
+        /// companion route is unlisted. A companion route asks the
+        /// material how it uses the texture. An inert texture leaves
+        /// the key. A UV0 texture leaves the key and waits for the
+        /// companion checks. A null texture on a UV0 route stays in the
+        /// key, so a material without the texture never joins a group
+        /// whose page material binds one.
+        /// </summary>
+        private static AtlasRouteResolution ResolveRouteTextures(
+            Material material,
+            AtlasRouteTable table,
+            bool outlineRow)
+        {
+            var resolution = new AtlasRouteResolution();
             var shader = material.shader;
             var count = ShaderUtil.GetPropertyCount(shader);
             for (var index = 0; index < count; index++)
@@ -1056,35 +1358,102 @@ namespace Alrauna.Amuse.Editor.Host
 
                 var name = ShaderUtil.GetPropertyName(shader, index);
                 var texture = material.GetTexture(name);
-                if (texture == null)
-                {
-                    continue;
-                }
-
                 if (string.Equals(
                         name, table.MemberProperty, StringComparison.Ordinal))
                 {
+                    resolution.KeySkipped.Add(name);
                     continue;
                 }
 
-                var neutral = false;
-                foreach (var entry in table.NeutralProperties)
+                if (Lists(table.MemberCopyProperties, name))
                 {
-                    if (string.Equals(
-                            entry, name, StringComparison.Ordinal))
-                    {
-                        neutral = true;
-                        break;
-                    }
+                    resolution.KeySkipped.Add(name);
+                    resolution.AliasProperties.Add(name);
+                    continue;
                 }
 
-                if (!neutral)
+                if (Lists(table.NeutralProperties, name))
                 {
-                    unlisted.Add((name, texture));
+                    continue;
+                }
+
+                var route = RouteOf(table, name);
+                if (route == null)
+                {
+                    if (texture != null)
+                    {
+                        resolution.Unlisted.Add((name, texture));
+                    }
+
+                    continue;
+                }
+
+                if (texture != null)
+                {
+                    resolution.ConditionProperties.Add(route.Property);
+                    foreach (var transform in route.TransformProperties)
+                    {
+                        resolution.ConditionProperties.Add(transform.Property);
+                    }
+
+                    resolution.ConditionProperties.AddRange(
+                        route.ConditionProperties);
+                }
+
+                switch (route.UseOf(material, outlineRow))
+                {
+                    case AtlasRouteUse.Inert:
+                        resolution.KeySkipped.Add(name);
+                        break;
+                    case AtlasRouteUse.OtherCoordinates:
+                        break;
+                    case AtlasRouteUse.Uv0:
+                        if (texture != null)
+                        {
+                            resolution.KeySkipped.Add(name);
+                            resolution.PendingUv0.Add((route, texture));
+                        }
+
+                        break;
+                    default:
+                        throw new InvalidOperationException(
+                            "The companion route '" + name +
+                            "' returned an unknown use.");
                 }
             }
 
-            return unlisted;
+            return resolution;
+        }
+
+        private static bool Lists(
+            IReadOnlyCollection<string> entries,
+            string name)
+        {
+            foreach (var entry in entries)
+            {
+                if (string.Equals(entry, name, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static AtlasCompanionRoute RouteOf(
+            AtlasRouteTable table,
+            string name)
+        {
+            foreach (var route in table.CompanionRoutes)
+            {
+                if (string.Equals(
+                        route.Property, name, StringComparison.Ordinal))
+                {
+                    return route;
+                }
+            }
+
+            return null;
         }
 
         /// <summary>
@@ -1097,12 +1466,14 @@ namespace Alrauna.Amuse.Editor.Host
         private static string PropertyBlockRouteProperty(
             Renderer renderer,
             int slotIndex,
-            AtlasRouteTable table,
+            string memberProperty,
+            IReadOnlyCollection<string> conditionProperties,
             out bool rendererWide)
         {
             var block = new MaterialPropertyBlock();
             renderer.GetPropertyBlock(block);
-            var property = BlockRouteProperty(block, table);
+            var property = BlockRouteProperty(
+                block, memberProperty, conditionProperties);
             if (property != null)
             {
                 rendererWide = true;
@@ -1111,19 +1482,21 @@ namespace Alrauna.Amuse.Editor.Host
 
             rendererWide = false;
             renderer.GetPropertyBlock(block, slotIndex);
-            return BlockRouteProperty(block, table);
+            return BlockRouteProperty(
+                block, memberProperty, conditionProperties);
         }
 
         private static string BlockRouteProperty(
             MaterialPropertyBlock block,
-            AtlasRouteTable table)
+            string memberProperty,
+            IReadOnlyCollection<string> conditionProperties)
         {
-            if (BlockNamesRoute(block, table.MemberProperty))
+            if (BlockNamesRoute(block, memberProperty))
             {
-                return table.MemberProperty;
+                return memberProperty;
             }
 
-            foreach (var condition in table.ConditionProperties)
+            foreach (var condition in conditionProperties)
             {
                 if (BlockNamesRoute(block, condition))
                 {
@@ -1150,31 +1523,33 @@ namespace Alrauna.Amuse.Editor.Host
         /// string from one <see cref="SerializedObject"/> walk of the
         /// material. The walk skips the asset name, because two uses of
         /// the same state under different names must share a page. It
-        /// skips the member texture reference, because the member moves
-        /// into the page and the page serves every source of the group.
-        /// Every float enters as its exact bits and every object
-        /// reference as its instance id, so near-equal states stay
-        /// distinct. The key is build-local. No consumer stores it.
+        /// records each skipped texture reference as <c>member</c>: the
+        /// member and every UV0 companion move into pages that serve
+        /// every source of the group, and an inert or member copy
+        /// texture is never sampled. Every float enters as its exact
+        /// bits and every other object reference as its instance id, so
+        /// near-equal states stay distinct. The key is build-local. No
+        /// consumer stores it.
         /// </summary>
         private static string MaterialKeyOf(
             Material material,
-            AtlasRouteTable table)
+            ISet<string> skippedTextureProperties)
         {
-            return new MaterialKeyWalker(table.MemberProperty)
+            return new MaterialKeyWalker(skippedTextureProperties)
                 .Walk(material);
         }
 
         private sealed class MaterialKeyWalker
         {
-            private readonly string memberProperty;
+            private readonly ISet<string> skippedTextureProperties;
             private readonly StringBuilder builder =
                 new StringBuilder(4096);
             private readonly Dictionary<string, string> texEnvNames =
                 new Dictionary<string, string>(StringComparer.Ordinal);
 
-            internal MaterialKeyWalker(string memberProperty)
+            internal MaterialKeyWalker(ISet<string> skippedTextureProperties)
             {
-                this.memberProperty = memberProperty;
+                this.skippedTextureProperties = skippedTextureProperties;
             }
 
             internal string Walk(Material material)
@@ -1349,9 +1724,9 @@ namespace Alrauna.Amuse.Editor.Host
 
             /// <summary>
             /// Whether one object reference property is the texture
-            /// reference of the member texture environment. The
-            /// element prefix of the reference path names the element,
-            /// and the recorded name must equal the member property.
+            /// reference of a skipped texture environment. The element
+            /// prefix of the reference path names the element, and the
+            /// recorded name must be in the skipped set.
             /// </summary>
             private bool IsMemberTextureReference(string path)
             {
@@ -1364,10 +1739,7 @@ namespace Alrauna.Amuse.Editor.Host
                 return texEnvNames.TryGetValue(
                     PathPrefix(path, TexEnvTextureSuffix.Length),
                     out var elementName) &&
-                    string.Equals(
-                        elementName,
-                        memberProperty,
-                        StringComparison.Ordinal);
+                    skippedTextureProperties.Contains(elementName);
             }
 
             private static string PathPrefix(

@@ -57,6 +57,13 @@ namespace Alrauna.Amuse.Editor.Analysis
         /// <summary>The served uses, in capture order.</summary>
         internal IReadOnlyList<int> UseIndices { get; }
 
+        /// <summary>
+        /// The companion source of each group companion, in the order
+        /// of <see cref="Host.CapturedAtlasUse.Companions"/>. Empty for
+        /// a group without companions and for a companion page entry.
+        /// </summary>
+        internal IReadOnlyList<int> CompanionSourceIds { get; }
+
         internal AtlasPlacement(
             int sourceTextureInstanceId,
             AtlasSamplerFacts sampler,
@@ -67,7 +74,8 @@ namespace Alrauna.Amuse.Editor.Analysis
             int pageIndex,
             int pageX,
             int pageY,
-            IReadOnlyList<int> useIndices)
+            IReadOnlyList<int> useIndices,
+            IReadOnlyList<int> companionSourceIds = null)
         {
             SourceTextureInstanceId = sourceTextureInstanceId;
             Sampler = sampler;
@@ -80,6 +88,8 @@ namespace Alrauna.Amuse.Editor.Analysis
             PageY = pageY;
             UseIndices = new ReadOnlyCollection<int>(
                 new List<int>(useIndices));
+            CompanionSourceIds = new ReadOnlyCollection<int>(
+                new List<int>(companionSourceIds ?? Array.Empty<int>()));
         }
     }
 
@@ -132,16 +142,24 @@ namespace Alrauna.Amuse.Editor.Analysis
         /// </summary>
         internal int RegionHeight { get; }
 
+        /// <summary>
+        /// The companion route property whose page refused the use, or
+        /// null when the main page refused it.
+        /// </summary>
+        internal string RouteProperty { get; }
+
         internal AtlasRefusedUse(
             int useIndex,
             AtlasPlacementRefusal refusal,
             int regionWidth,
-            int regionHeight)
+            int regionHeight,
+            string routeProperty = null)
         {
             UseIndex = useIndex;
             Refusal = refusal;
             RegionWidth = regionWidth;
             RegionHeight = regionHeight;
+            RouteProperty = routeProperty;
         }
     }
 
@@ -156,6 +174,12 @@ namespace Alrauna.Amuse.Editor.Analysis
 
         internal IReadOnlyList<AtlasPagePlanEntry> Pages { get; }
 
+        /// <summary>
+        /// The companion pages, ordered by main page index, then by
+        /// property, ordinal.
+        /// </summary>
+        internal IReadOnlyList<AtlasCompanionPage> CompanionPages { get; }
+
         /// <summary>The admitted uses, in capture order.</summary>
         internal IReadOnlyList<int> AdmittedUseIndices { get; }
 
@@ -166,7 +190,8 @@ namespace Alrauna.Amuse.Editor.Analysis
             AtlasGroupKey key,
             IReadOnlyList<AtlasPagePlanEntry> pages,
             IReadOnlyList<int> admittedUseIndices,
-            IReadOnlyList<AtlasRefusedUse> refusedUses)
+            IReadOnlyList<AtlasRefusedUse> refusedUses,
+            IReadOnlyList<AtlasCompanionPage> companionPages = null)
         {
             Key = key;
             Pages = new ReadOnlyCollection<AtlasPagePlanEntry>(
@@ -175,6 +200,9 @@ namespace Alrauna.Amuse.Editor.Analysis
                 new List<int>(admittedUseIndices));
             RefusedUses = new ReadOnlyCollection<AtlasRefusedUse>(
                 new List<AtlasRefusedUse>(refusedUses));
+            CompanionPages = new ReadOnlyCollection<AtlasCompanionPage>(
+                new List<AtlasCompanionPage>(
+                    companionPages ?? Array.Empty<AtlasCompanionPage>()));
         }
     }
 }

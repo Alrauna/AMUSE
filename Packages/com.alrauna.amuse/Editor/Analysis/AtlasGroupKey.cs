@@ -57,13 +57,21 @@ namespace Alrauna.Amuse.Editor.Analysis
         /// </summary>
         internal IReadOnlyList<string> AnimatedPropertyNames { get; }
 
+        /// <summary>
+        /// The aliases and companion pages of the use. The page
+        /// material binds them, so uses with different signatures need
+        /// different page materials.
+        /// </summary>
+        internal string RouteSignature { get; }
+
         internal AtlasGroupKey(
             string shaderRowName,
             string routeName,
             GraphicsFormat sourceFormat,
             AtlasSamplerFacts sampler,
             string materialKey,
-            IReadOnlyList<string> animatedPropertyNames)
+            IReadOnlyList<string> animatedPropertyNames,
+            string routeSignature = "")
         {
             ShaderRowName = shaderRowName;
             RouteName = routeName;
@@ -73,6 +81,7 @@ namespace Alrauna.Amuse.Editor.Analysis
             var names = new List<string>(animatedPropertyNames);
             names.Sort(StringComparer.Ordinal);
             AnimatedPropertyNames = new ReadOnlyCollection<string>(names);
+            RouteSignature = routeSignature ?? string.Empty;
         }
 
         /// <summary>Builds the group key of one captured use.</summary>
@@ -84,7 +93,8 @@ namespace Alrauna.Amuse.Editor.Analysis
                 use.SourceFormat,
                 use.Sampler,
                 use.MaterialKey,
-                use.AnimatedPropertyNames);
+                use.AnimatedPropertyNames,
+                use.RouteSignature);
         }
 
         public bool Equals(AtlasGroupKey other)
@@ -98,7 +108,8 @@ namespace Alrauna.Amuse.Editor.Analysis
                 !string.Equals(RouteName, other.RouteName, StringComparison.Ordinal) ||
                 SourceFormat != other.SourceFormat ||
                 !Sampler.Equals(other.Sampler) ||
-                !string.Equals(MaterialKey, other.MaterialKey, StringComparison.Ordinal))
+                !string.Equals(MaterialKey, other.MaterialKey, StringComparison.Ordinal) ||
+                !string.Equals(RouteSignature, other.RouteSignature, StringComparison.Ordinal))
             {
                 return false;
             }
@@ -140,6 +151,8 @@ namespace Alrauna.Amuse.Editor.Analysis
                 hash = (hash * 397) ^ Sampler.GetHashCode();
                 hash = (hash * 397) ^
                         StringComparer.Ordinal.GetHashCode(MaterialKey);
+                hash = (hash * 397) ^
+                        StringComparer.Ordinal.GetHashCode(RouteSignature);
                 foreach (var name in AnimatedPropertyNames)
                 {
                     hash = (hash * 397) ^

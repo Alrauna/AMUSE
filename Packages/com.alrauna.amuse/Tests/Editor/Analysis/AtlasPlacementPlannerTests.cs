@@ -596,6 +596,152 @@ namespace Alrauna.Amuse.Tests.Editor.Analysis
                 captureOrder);
         }
 
+        private static CapturedAtlasUse WithCompanion(
+            int instanceId,
+            int companionId,
+            GraphicsFormat companionFormat,
+            int companionSize,
+            int scaleShift,
+            AtlasSamplerFacts companionSampler,
+            int captureOrder)
+        {
+            return new CapturedAtlasUse(
+                0,
+                0,
+                0,
+                "lilToon main",
+                instanceId,
+                GraphicsFormat.RGBA_DXT1_SRGB,
+                companionSize << scaleShift,
+                companionSize << scaleShift,
+                1,
+                RepeatNoAnisoSampler,
+                new AtlasUvRect(0.0, 0.0, 1.0, 1.0),
+                "material",
+                Array.Empty<string>(),
+                captureOrder,
+                new[]
+                {
+                    new CapturedAtlasCompanion(
+                        "_BumpMap",
+                        companionId,
+                        companionFormat,
+                        companionSize,
+                        companionSize,
+                        1,
+                        companionSampler,
+                        scaleShift),
+                });
+        }
+
+        /// <summary>
+        /// --- Falsifier: a companion page that keeps the main
+        /// coordinates, or a main grid too fine for the shifted
+        /// companion blocks. Every companion value must equal the main
+        /// value shifted right by the scale, and the main grid must
+        /// hold the companion block edge at that scale. ---
+        /// </summary>
+        [Test]
+        public void CompanionPageIsTheMainLayoutShiftedByTheScale()
+        {
+            var uses = new[]
+            {
+                WithCompanion(
+                    701, 711, GraphicsFormat.R_BC4_UNorm, 32, 1,
+                    RepeatNoAnisoSampler, 0),
+                WithCompanion(
+                    702, 712, GraphicsFormat.R_BC4_UNorm, 32, 1,
+                    RepeatNoAnisoSampler, 1),
+            };
+
+            var plan = AtlasPlacementPlanner.Plan(uses, 8192, 1).Single();
+
+            Assert.That(plan.Pages, Has.Count.EqualTo(1));
+            Assert.That(plan.CompanionPages, Has.Count.EqualTo(1));
+            var main = plan.Pages[0];
+            var companion = plan.CompanionPages[0];
+            Assert.That(companion.Property, Is.EqualTo("_BumpMap"));
+            Assert.That(companion.MainPageIndex, Is.Zero);
+            Assert.That(companion.Entry.Format,
+                Is.EqualTo(GraphicsFormat.R_BC4_UNorm));
+            Assert.That(companion.Entry.Width, Is.EqualTo(main.Width >> 1));
+            Assert.That(companion.Entry.Height, Is.EqualTo(main.Height >> 1));
+            Assert.That(companion.Entry.Placements,
+                Has.Count.EqualTo(main.Placements.Count));
+            for (var index = 0; index < main.Placements.Count; index++)
+            {
+                var mainPlacement = main.Placements[index];
+                var shifted = companion.Entry.Placements[index];
+
+                // The companion blocks are 4 texels at half scale, so
+                // the main grid is 8 texels.
+                Assert.That(mainPlacement.SourceX % 8, Is.Zero);
+                Assert.That(mainPlacement.PageX % 8, Is.Zero);
+                Assert.That(mainPlacement.Width % 8, Is.Zero);
+                Assert.That(shifted.SourceX, Is.EqualTo(mainPlacement.SourceX >> 1));
+                Assert.That(shifted.SourceY, Is.EqualTo(mainPlacement.SourceY >> 1));
+                Assert.That(shifted.Width, Is.EqualTo(mainPlacement.Width >> 1));
+                Assert.That(shifted.Height, Is.EqualTo(mainPlacement.Height >> 1));
+                Assert.That(shifted.PageX, Is.EqualTo(mainPlacement.PageX >> 1));
+                Assert.That(shifted.PageY, Is.EqualTo(mainPlacement.PageY >> 1));
+                Assert.That(
+                    shifted.SourceTextureInstanceId,
+                    Is.EqualTo(mainPlacement.CompanionSourceIds[0]));
+                CollectionAssert.AreEqual(
+                    mainPlacement.UseIndices, shifted.UseIndices);
+
+                // The companion border at half scale is 4 + 1 texels,
+                // so the main border is at least 10 texels.
+                Assert.That(mainPlacement.SourceX, Is.LessThanOrEqualTo(-10));
+            }
+        }
+
+        [Test]
+        public void UsesWithEqualMainAndDifferentCompanionsGetTwoPlacements()
+        {
+            var uses = new[]
+            {
+                WithCompanion(
+                    801, 811, GraphicsFormat.R_BC4_UNorm, 32, 1,
+                    RepeatNoAnisoSampler, 0),
+                WithCompanion(
+                    801, 812, GraphicsFormat.R_BC4_UNorm, 32, 1,
+                    RepeatNoAnisoSampler, 1),
+            };
+
+            var plan = AtlasPlacementPlanner.Plan(uses, 8192, 1).Single();
+
+            Assert.That(
+                plan.Pages.Sum(page => page.Placements.Count),
+                Is.EqualTo(2),
+                "a different companion source is a different source set");
+        }
+
+        [Test]
+        public void Bc7CompanionClampEdgeRefusesWithItsProperty()
+        {
+            var clamp = new AtlasSamplerFacts(
+                FilterMode.Bilinear,
+                UnityEngine.TextureWrapMode.Clamp,
+                UnityEngine.TextureWrapMode.Clamp,
+                0,
+                0f);
+            var uses = new[]
+            {
+                WithCompanion(
+                    901, 911, GraphicsFormat.RGBA_BC7_UNorm, 32, 1, clamp, 0),
+            };
+
+            var plan = AtlasPlacementPlanner.Plan(uses, 8192, 1).Single();
+
+            Assert.That(plan.RefusedUses, Has.Count.EqualTo(1));
+            Assert.That(
+                plan.RefusedUses[0].Refusal,
+                Is.EqualTo(AtlasPlacementRefusal.ClampEdgeOnBc7));
+            Assert.That(
+                plan.RefusedUses[0].RouteProperty, Is.EqualTo("_BumpMap"));
+        }
+
         private static void AssertPlansEqual(
             IReadOnlyList<AtlasGroupPlan> expected,
             IReadOnlyList<AtlasGroupPlan> actual)

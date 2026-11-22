@@ -1399,7 +1399,6 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             [Values(
                 "_ShiftBackfaceUV",
                 "_UseParallax",
-                "_UseMain2ndTex",
                 "_UseMain3rdTex",
                 "_UseGlitter",
                 "_UseAudioLink")] string property)
@@ -1569,7 +1568,8 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         public void LilToonUnlistedTextureRefuses()
         {
             var fixture = NewLilToonFixture();
-            fixture.Material.SetTexture("_EmissionMap", fixture.MainTexture);
+            // The second emission layer has no companion route.
+            fixture.Material.SetTexture("_Emission2ndMap", fixture.MainTexture);
 
             var outcome = SingleOutcome(CaptureUses(fixture.Root));
 
@@ -1623,6 +1623,380 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var outcome = SingleOutcome(CaptureUses(fixture.Root));
 
             AssertRefused(outcome, AtlasUseRefusal.UnattestedShader);
+        }
+
+        // --- lilToon companion routes -------------------------------------
+
+        private static Texture2D ImportRouteTexture(
+            string name,
+            int size,
+            Action<TextureImporter> configure = null)
+        {
+            return ImportMainTexture(name, size, size, importer =>
+            {
+                importer.npotScale = TextureImporterNPOTScale.None;
+                configure?.Invoke(importer);
+            });
+        }
+
+        private static AtlasUseOutcome CaptureLilToon(AtlasFixture fixture)
+        {
+            return SingleOutcome(CaptureUses(fixture.Root));
+        }
+
+        [Test]
+        public void LilToonBaseMapCopiesAdmitAndLeaveTheKey()
+        {
+            var plain = NewLilToonFixture();
+            var copied = NewLilToonFixture();
+            var other = ImportRouteTexture("base map copy", 64);
+            copied.Material.SetTexture("_BaseMap", other);
+            copied.Material.SetTexture("_BaseColorMap", other);
+
+            var plainOutcome = CaptureLilToon(plain);
+            var copiedOutcome = CaptureLilToon(copied);
+
+            AssertAdmitted(plainOutcome);
+            AssertAdmitted(copiedOutcome);
+            Assert.That(
+                copiedOutcome.Use.MaterialKey,
+                Is.EqualTo(plainOutcome.Use.MaterialKey),
+                "a texture no shader code samples must not split groups");
+            Assert.That(
+                copiedOutcome.Use.PageAliasProperties,
+                Is.EqualTo(new[] { "_BaseColorMap", "_BaseMap" }));
+            Assert.That(copiedOutcome.Use.Companions, Is.Empty);
+        }
+
+        [Test]
+        public void LilToonMatCapTexturesAdmitAsNeutral()
+        {
+            var first = NewLilToonFixture();
+            var second = NewLilToonFixture();
+            first.Material.SetFloat("_UseMatCap", 1f);
+            second.Material.SetFloat("_UseMatCap", 1f);
+            first.Material.SetTexture(
+                "_MatCapTex", ImportRouteTexture("matcap first", 64));
+            second.Material.SetTexture(
+                "_MatCapTex", ImportRouteTexture("matcap second", 64));
+
+            var firstOutcome = CaptureLilToon(first);
+            var secondOutcome = CaptureLilToon(second);
+
+            AssertAdmitted(firstOutcome);
+            AssertAdmitted(secondOutcome);
+            Assert.That(firstOutcome.Use.Companions, Is.Empty);
+            Assert.That(
+                secondOutcome.Use.MaterialKey,
+                Is.Not.EqualTo(firstOutcome.Use.MaterialKey),
+                "a neutral texture stays bound, so it must split groups");
+        }
+
+        [Test]
+        public void GatedOffBumpMapIsInertAndLeavesTheKey()
+        {
+            var first = NewLilToonFixture();
+            var second = NewLilToonFixture();
+            first.Material.SetFloat("_UseBumpMap", 0f);
+            second.Material.SetFloat("_UseBumpMap", 0f);
+            first.Material.SetTexture(
+                "_BumpMap", ImportRouteTexture("inert bump first", 64));
+            second.Material.SetTexture(
+                "_BumpMap", ImportRouteTexture("inert bump second", 64));
+
+            var firstOutcome = CaptureLilToon(first);
+            var secondOutcome = CaptureLilToon(second);
+
+            AssertAdmitted(firstOutcome);
+            AssertAdmitted(secondOutcome);
+            Assert.That(firstOutcome.Use.Companions, Is.Empty);
+            Assert.That(
+                secondOutcome.Use.MaterialKey,
+                Is.EqualTo(firstOutcome.Use.MaterialKey),
+                "a texture behind an off switch must not split groups");
+        }
+
+        [Test]
+        public void BumpMapAtHalfSizeBecomesACompanion()
+        {
+            var fixture = NewLilToonFixture();
+            var bump = ImportRouteTexture("half bump", 32);
+            fixture.Material.SetFloat("_UseBumpMap", 1f);
+            fixture.Material.SetTexture("_BumpMap", bump);
+
+            var outcome = CaptureLilToon(fixture);
+
+            AssertAdmitted(outcome);
+            Assert.That(outcome.Use.Companions, Has.Count.EqualTo(1));
+            var companion = outcome.Use.Companions[0];
+            Assert.That(companion.Property, Is.EqualTo("_BumpMap"));
+            Assert.That(
+                companion.SourceTextureInstanceId,
+                Is.EqualTo(bump.GetInstanceID()));
+            Assert.That(companion.ScaleShift, Is.EqualTo(1));
+            Assert.That(
+                companion.Sampler, Is.EqualTo(outcome.Use.Sampler),
+                "the bump map reads with the member sampler");
+        }
+
+        [TestCase(48)]
+        [TestCase(128)]
+        public void CompanionSizeOffThePowerOfTwoLadderRefuses(int size)
+        {
+            var fixture = NewLilToonFixture();
+            fixture.Material.SetFloat("_UseBumpMap", 1f);
+            fixture.Material.SetTexture(
+                "_BumpMap", ImportRouteTexture("bump " + size, size));
+
+            var outcome = CaptureLilToon(fixture);
+
+            AssertRefused(outcome, AtlasUseRefusal.CompanionSizeMismatch);
+            Assert.That(outcome.Detail, Does.StartWith(
+                "This applies to the route texture '_BumpMap'."));
+        }
+
+        [Test]
+        public void CompanionTilingRefuses()
+        {
+            var fixture = NewLilToonFixture();
+            fixture.Material.SetFloat("_UseBumpMap", 1f);
+            fixture.Material.SetTexture(
+                "_BumpMap", ImportRouteTexture("tiled bump", 64));
+            fixture.Material.SetTextureScale("_BumpMap", new Vector2(2f, 2f));
+
+            var outcome = CaptureLilToon(fixture);
+
+            AssertRefused(outcome, AtlasUseRefusal.NonIdentityTransform);
+            Assert.That(outcome.Detail, Does.StartWith(
+                "This applies to the route texture '_BumpMap'."));
+        }
+
+        [Test]
+        public void EmissionOnUv1StaysKeyedAndAdmits()
+        {
+            var first = NewLilToonFixture();
+            var second = NewLilToonFixture();
+            foreach (var fixture in new[] { first, second })
+            {
+                fixture.Material.SetFloat("_UseEmission", 1f);
+                fixture.Material.SetFloat("_EmissionMap_UVMode", 1f);
+            }
+
+            first.Material.SetTexture(
+                "_EmissionMap", ImportRouteTexture("uv1 emission first", 64));
+            second.Material.SetTexture(
+                "_EmissionMap", ImportRouteTexture("uv1 emission second", 64));
+
+            var firstOutcome = CaptureLilToon(first);
+            var secondOutcome = CaptureLilToon(second);
+
+            AssertAdmitted(firstOutcome);
+            Assert.That(firstOutcome.Use.Companions, Is.Empty);
+            Assert.That(
+                secondOutcome.Use.MaterialKey,
+                Is.Not.EqualTo(firstOutcome.Use.MaterialKey),
+                "a texture on another UV channel stays bound, so it must" +
+                " split groups");
+        }
+
+        [Test]
+        public void ShadowBorderMaskLodRefuses()
+        {
+            var fixture = NewLilToonFixture();
+            fixture.Material.SetFloat("_UseShadow", 1f);
+            fixture.Material.SetTexture(
+                "_ShadowBorderMask", ImportRouteTexture("border mask", 64));
+            fixture.Material.SetFloat("_ShadowBorderMaskLOD", 0.5f);
+
+            var outcome = CaptureLilToon(fixture);
+
+            AssertRefused(outcome, AtlasUseRefusal.RequiredValueNotHeld);
+            Assert.That(outcome.Detail, Does.Contain("_ShadowBorderMaskLOD"));
+        }
+
+        [Test]
+        public void ShadowBorderMaskReadsWithTheInlineSampler()
+        {
+            var fixture = NewLilToonFixture();
+            fixture.Material.SetFloat("_UseShadow", 1f);
+            fixture.Material.SetTexture(
+                "_ShadowBorderMask", ImportRouteTexture("inline mask", 16));
+
+            var outcome = CaptureLilToon(fixture);
+
+            AssertAdmitted(outcome);
+            var companion = outcome.Use.Companions.Single();
+            Assert.That(companion.ScaleShift, Is.EqualTo(2));
+            Assert.That(
+                companion.Sampler.Filter, Is.EqualTo(FilterMode.Trilinear));
+            Assert.That(
+                companion.Sampler.WrapU,
+                Is.EqualTo(UnityEngine.TextureWrapMode.Repeat));
+            Assert.That(companion.Sampler.AnisoLevel, Is.Zero);
+        }
+
+        [Test]
+        public void OutlineTextureEqualToMainIsAnAlias()
+        {
+            var fixture = NewLilToonFixture(LoadInstalledLilToonShader(
+                LilToonSourceAttestation.OutlineShaderGuid));
+            fixture.Material.SetTexture("_OutlineTex", fixture.MainTexture);
+
+            var outcome = CaptureLilToon(fixture);
+
+            AssertAdmitted(outcome);
+            Assert.That(outcome.Use.Companions, Is.Empty);
+            Assert.That(
+                outcome.Use.PageAliasProperties,
+                Is.EqualTo(new[] { "_BaseColorMap", "_BaseMap", "_OutlineTex" }));
+        }
+
+        [Test]
+        public void OutlineSamplerMismatchRefuses()
+        {
+            var fixture = NewLilToonFixture(LoadInstalledLilToonShader(
+                LilToonSourceAttestation.OutlineShaderGuid));
+            fixture.Material.SetFloat("_AlphaMaskMode", 1f);
+            fixture.Material.SetTexture(
+                "_AlphaMask", ImportRouteTexture("outline alpha mask", 64));
+            fixture.Material.SetTexture(
+                "_OutlineTex",
+                ImportRouteTexture(
+                    "clamped outline",
+                    64,
+                    importer => importer.wrapMode =
+                        UnityEngine.TextureWrapMode.Clamp));
+
+            var outcome = CaptureLilToon(fixture);
+
+            AssertRefused(outcome, AtlasUseRefusal.RouteSamplerMismatch);
+        }
+
+        [Test]
+        public void AnimatedGateRefusesOnlyWithAnAssignedCompanion(
+            [Values(true, false)] bool assigned)
+        {
+            var fixture = NewLilToonFixture();
+            fixture.Material.SetFloat("_UseBumpMap", 1f);
+            if (assigned)
+            {
+                fixture.Material.SetTexture(
+                    "_BumpMap", ImportRouteTexture("animated gate bump", 64));
+            }
+
+            var clip = Track(new AnimationClip { name = "BumpGate" });
+            AnimateScalar(clip, "Body", "material._UseBumpMap");
+            var graph = GraphOf(fixture.Root, clip);
+
+            var outcome = SingleOutcome(CaptureUses(fixture.Root, graph));
+
+            if (assigned)
+            {
+                AssertRefused(outcome, AtlasUseRefusal.AnimatedRouteProperty);
+            }
+            else
+            {
+                AssertAdmitted(outcome);
+            }
+        }
+
+        [Test]
+        public void Main2ndOnUv0BecomesACompanion()
+        {
+            var fixture = NewLilToonFixture();
+            var layer = ImportRouteTexture("main2nd layer", 64);
+            fixture.Material.SetFloat("_UseMain2ndTex", 1f);
+            fixture.Material.SetTexture("_Main2ndTex", layer);
+
+            var outcome = CaptureLilToon(fixture);
+
+            AssertAdmitted(outcome);
+            var companion = outcome.Use.Companions.Single();
+            Assert.That(companion.Property, Is.EqualTo("_Main2ndTex"));
+            Assert.That(
+                companion.SourceTextureInstanceId,
+                Is.EqualTo(layer.GetInstanceID()));
+        }
+
+        [Test]
+        public void Main2ndDecalRefuses()
+        {
+            var fixture = NewLilToonFixture();
+            fixture.Material.SetFloat("_UseMain2ndTex", 1f);
+            fixture.Material.SetFloat("_Main2ndTexIsDecal", 1f);
+
+            var outcome = CaptureLilToon(fixture);
+
+            AssertRefused(outcome, AtlasUseRefusal.RequiredValueNotHeld);
+            Assert.That(outcome.Detail, Does.Contain("_Main2ndTexIsDecal"));
+        }
+
+        [Test]
+        public void Main2ndAnimationFrameZeroSpeedRefuses()
+        {
+            // A w of 0 selects frame z, and frame 1 shifts V by 1.
+            var fixture = NewLilToonFixture();
+            fixture.Material.SetFloat("_UseMain2ndTex", 1f);
+            fixture.Material.SetVector(
+                "_Main2ndTexDecalAnimation", new Vector4(1f, 1f, 1f, 0f));
+
+            var outcome = CaptureLilToon(fixture);
+
+            AssertRefused(outcome, AtlasUseRefusal.RequiredValueNotHeld);
+            Assert.That(
+                outcome.Detail, Does.Contain("_Main2ndTexDecalAnimation"));
+        }
+
+        [Test]
+        public void Main2ndDissolveRefusesOnEveryUvMode(
+            [Values(0f, 1f)] float uvMode)
+        {
+            var fixture = NewLilToonFixture();
+            fixture.Material.SetFloat("_UseMain2ndTex", 1f);
+            fixture.Material.SetFloat("_Main2ndTex_UVMode", uvMode);
+            var dissolve = fixture.Material.GetVector("_Main2ndDissolveParams");
+            dissolve.x = 1f;
+            fixture.Material.SetVector("_Main2ndDissolveParams", dissolve);
+
+            var outcome = CaptureLilToon(fixture);
+
+            AssertRefused(outcome, AtlasUseRefusal.RequiredValueNotHeld);
+            Assert.That(
+                outcome.Detail, Does.Contain("_Main2ndDissolveParams.x"));
+        }
+
+        [Test]
+        public void Bc5MainTextureIsAdmitted()
+        {
+            var texture = ImportMainTexture("bc5 main", 64, 64, importer =>
+            {
+                importer.sRGBTexture = false;
+                importer.SetPlatformTextureSettings(
+                    new TextureImporterPlatformSettings
+                    {
+                        name = "Standalone",
+                        overridden = true,
+                        maxTextureSize = 2048,
+                        format = TextureImporterFormat.BC5,
+                    });
+            });
+            Assert.That(
+                texture.format, Is.EqualTo(TextureFormat.BC5),
+                "fixture precondition: the import must land on BC5");
+            var root = Track(new GameObject("bc5 root"));
+            AddSkinnedRenderer(
+                root,
+                "Body",
+                Track(NewQuadMesh()),
+                new[] { NewAdmittedMaterial(texture) });
+
+            var outcome = SingleOutcome(CaptureUses(root));
+
+            AssertAdmitted(outcome);
+            Assert.That(
+                outcome.Use.SourceFormat,
+                Is.EqualTo(UnityEngine.Experimental.Rendering.GraphicsFormat
+                    .RG_BC5_UNorm));
         }
     }
 }

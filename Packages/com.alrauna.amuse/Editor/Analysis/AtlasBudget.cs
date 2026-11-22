@@ -40,7 +40,7 @@ namespace Alrauna.Amuse.Editor.Analysis
 
         /// <summary>
         /// The retained bytes of one group: the sum of the texture
-        /// bytes of all its pages.
+        /// bytes of all its main and companion pages.
         /// </summary>
         internal static long GroupRetainedBytes(AtlasGroupPlan plan)
         {
@@ -49,23 +49,33 @@ namespace Alrauna.Amuse.Editor.Analysis
                 long sum = 0;
                 foreach (AtlasPagePlanEntry page in plan.Pages)
                 {
-                    sum += TextureBytes(
-                        page.Width,
-                        page.Height,
-                        page.Format,
-                        page.MipCount);
+                    sum += EntryBytes(page);
+                }
+
+                foreach (AtlasCompanionPage page in plan.CompanionPages)
+                {
+                    sum += EntryBytes(page.Entry);
                 }
 
                 return sum;
             }
         }
 
+        private static long EntryBytes(AtlasPagePlanEntry page)
+        {
+            return TextureBytes(
+                page.Width,
+                page.Height,
+                page.Format,
+                page.MipCount);
+        }
+
         /// <summary>
         /// The source bytes of one group: the texture bytes of every
-        /// distinct source its admitted uses reference. A source that
-        /// several uses reference counts once per group. Sources count
-        /// as retained, because proof that a source has no other
-        /// reference is not available.
+        /// distinct main and companion source its admitted uses
+        /// reference. A source that several uses reference counts once
+        /// per group. Sources count as retained, because proof that a
+        /// source has no other reference is not available.
         /// </summary>
         internal static long SourceBytes(
             AtlasGroupPlan plan,
@@ -78,16 +88,26 @@ namespace Alrauna.Amuse.Editor.Analysis
                 foreach (int useIndex in plan.AdmittedUseIndices)
                 {
                     CapturedAtlasUse use = uses[useIndex];
-                    if (!seenSources.Add(use.SourceTextureInstanceId))
+                    if (seenSources.Add(use.SourceTextureInstanceId))
                     {
-                        continue;
+                        sum += TextureBytes(
+                            use.SourceWidth,
+                            use.SourceHeight,
+                            use.SourceFormat,
+                            use.SourceMipCount);
                     }
 
-                    sum += TextureBytes(
-                        use.SourceWidth,
-                        use.SourceHeight,
-                        use.SourceFormat,
-                        use.SourceMipCount);
+                    foreach (var companion in use.Companions)
+                    {
+                        if (seenSources.Add(companion.SourceTextureInstanceId))
+                        {
+                            sum += TextureBytes(
+                                companion.SourceWidth,
+                                companion.SourceHeight,
+                                companion.SourceFormat,
+                                companion.SourceMipCount);
+                        }
+                    }
                 }
 
                 return sum;
@@ -98,7 +118,7 @@ namespace Alrauna.Amuse.Editor.Analysis
         /// The predicted peak bytes of one group. The pass builds one
         /// page at a time and releases all temporaries of a page
         /// before the next page starts. So the peak of the group is
-        /// the largest peak of its pages.
+        /// the largest peak of its main and companion pages.
         /// </summary>
         internal static long PredictPeakBytes(
             AtlasGroupPlan plan,
@@ -110,14 +130,18 @@ namespace Alrauna.Amuse.Editor.Analysis
                 long peak = 0;
                 foreach (AtlasPagePlanEntry page in plan.Pages)
                 {
-                    long pagePeak = PredictPagePeakBytes(
+                    peak = Math.Max(peak, PredictPagePeakBytes(
                         page,
                         uses,
-                        protectedMipLevelCount);
-                    if (pagePeak > peak)
-                    {
-                        peak = pagePeak;
-                    }
+                        protectedMipLevelCount));
+                }
+
+                foreach (AtlasCompanionPage page in plan.CompanionPages)
+                {
+                    peak = Math.Max(peak, PredictPagePeakBytes(
+                        page.Entry,
+                        uses,
+                        protectedMipLevelCount));
                 }
 
                 return peak;
@@ -164,21 +188,21 @@ namespace Alrauna.Amuse.Editor.Analysis
                         continue;
                     }
 
-                    CapturedAtlasUse source =
+                    AtlasSourceShape source =
                         FindSource(uses, placement.SourceTextureInstanceId);
 
                     total += TextureBytes(
-                        source.SourceWidth,
-                        source.SourceHeight,
-                        source.SourceFormat,
+                        source.Width,
+                        source.Height,
+                        source.Format,
                         protectedMipLevelCount);
-                    total += 4L * source.SourceWidth * source.SourceHeight;
+                    total += 4L * source.Width * source.Height;
 
                     long cloneBytes = TextureBytes(
-                        source.SourceWidth,
-                        source.SourceHeight,
-                        source.SourceFormat,
-                        source.SourceMipCount);
+                        source.Width,
+                        source.Height,
+                        source.Format,
+                        source.MipCount);
                     if (cloneBytes > largestCloneBytes)
                     {
                         largestCloneBytes = cloneBytes;
@@ -188,8 +212,8 @@ namespace Alrauna.Amuse.Editor.Analysis
                     for (int level = 0; level < protectedMipLevelCount; level++)
                     {
                         decodeBytes += 4L
-                            * LevelSize(source.SourceWidth, level)
-                            * LevelSize(source.SourceHeight, level);
+                            * LevelSize(source.Width, level)
+                            * LevelSize(source.Height, level);
                     }
 
                     if (decodeBytes > largestDecodeBytes)
@@ -206,7 +230,12 @@ namespace Alrauna.Amuse.Editor.Analysis
             }
         }
 
-        private static CapturedAtlasUse FindSource(
+        /// <summary>
+        /// The shape of one page source. A source can be the member of
+        /// one use and a companion of another, and both report the same
+        /// texture facts.
+        /// </summary>
+        private static AtlasSourceShape FindSource(
             IReadOnlyList<CapturedAtlasUse> uses,
             int sourceTextureInstanceId)
         {
@@ -214,7 +243,24 @@ namespace Alrauna.Amuse.Editor.Analysis
             {
                 if (use.SourceTextureInstanceId == sourceTextureInstanceId)
                 {
-                    return use;
+                    return new AtlasSourceShape(
+                        use.SourceWidth,
+                        use.SourceHeight,
+                        use.SourceFormat,
+                        use.SourceMipCount);
+                }
+
+                foreach (var companion in use.Companions)
+                {
+                    if (companion.SourceTextureInstanceId ==
+                        sourceTextureInstanceId)
+                    {
+                        return new AtlasSourceShape(
+                            companion.SourceWidth,
+                            companion.SourceHeight,
+                            companion.SourceFormat,
+                            companion.SourceMipCount);
+                    }
                 }
             }
 

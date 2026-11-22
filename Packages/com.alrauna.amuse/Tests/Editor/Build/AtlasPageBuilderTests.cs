@@ -614,6 +614,186 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
         }
 
+        /// <summary>
+        /// Imports a linear noise source with a Standalone format
+        /// override. BC4 and BC5 have no compression preset, so the
+        /// override is the only way to reach them.
+        /// </summary>
+        private Texture2D ImportSourceAs(
+            string name,
+            int size,
+            TextureImporterFormat format)
+        {
+            var path = TempFolder + "/" + name + ".png";
+            var pixels = new Color32[size * size];
+            for (var y = 0; y < size; y++)
+            {
+                for (var x = 0; x < size; x++)
+                {
+                    pixels[y * size + x] = NoiseTexel(x, y);
+                }
+            }
+
+            return TestTextureImport.WritePng(
+                path, size, size, pixels, importer =>
+                {
+                    importer.mipmapEnabled = true;
+                    importer.isReadable = false;
+                    importer.streamingMipmaps = true;
+                    importer.sRGBTexture = false;
+                    importer.SetPlatformTextureSettings(
+                        new TextureImporterPlatformSettings
+                        {
+                            name = "Standalone",
+                            overridden = true,
+                            maxTextureSize = 2048,
+                            format = format,
+                        });
+                },
+                true);
+        }
+
+        /// <summary>
+        /// --- Falsifier: a builder that copies BC4 or BC5 blocks with
+        /// the BC1 layout, or that the encoder cannot land on the plan
+        /// format. Every protected level must decode to the source
+        /// texels across a Repeat border. ---
+        /// </summary>
+        [TestCase(TextureImporterFormat.BC4, TextureFormat.BC4)]
+        [TestCase(TextureImporterFormat.BC5, TextureFormat.BC5)]
+        public void RedAndRedGreenBlockFormatsCopyExactly(
+            TextureImporterFormat importFormat,
+            TextureFormat expectedFormat)
+        {
+            const int p = 2;
+            var source = ImportSourceAs(
+                "protected_exact_" + expectedFormat, 64, importFormat);
+            Texture2D page = null;
+            try
+            {
+                Assert.That(
+                    source.format, Is.EqualTo(expectedFormat),
+                    "fixture precondition: the import must land on the " +
+                    "planned format");
+                var image = Acquire(source, p);
+                var border = BorderOf(true, p);
+                var region = 64 + 2 * border;
+                var placement = PlacementOf(
+                    source,
+                    RepeatSampler,
+                    -border,
+                    -border,
+                    region,
+                    region,
+                    0,
+                    0);
+                var mips = FullMipCount(region, region);
+                var plan = new AtlasPagePlanEntry(
+                    region,
+                    region,
+                    source.graphicsFormat,
+                    mips,
+                    new[] { placement });
+                var sources = SourcesOf(source, image);
+
+                page = AtlasPageBuilder.Build(
+                    plan,
+                    RepeatSampler,
+                    sources,
+                    p,
+                    new AtlasByteLedger(long.MaxValue));
+
+                Assert.That(
+                    page.graphicsFormat,
+                    Is.EqualTo(source.graphicsFormat),
+                    "the page must keep the source format");
+                Assert.That(page.mipmapCount, Is.EqualTo(mips));
+                Assert.DoesNotThrow(
+                    () => AtlasPageCheck.Verify(page, plan, sources, p),
+                    "every protected level must decode to the source " +
+                    "texels");
+            }
+            finally
+            {
+                if (page != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(page);
+                }
+                AssetDatabase.DeleteAsset(AssetDatabase.GetAssetPath(source));
+            }
+        }
+
+        /// <summary>
+        /// --- Falsifier: a Clamp border on BC4 or BC5 that moves the
+        /// wrong index bits, or that remaps only the first BC5 half.
+        /// The fixture noise differs per texel in red and green, so
+        /// either fault fails the check. ---
+        /// </summary>
+        [TestCase(TextureImporterFormat.BC4, TextureFormat.BC4)]
+        [TestCase(TextureImporterFormat.BC5, TextureFormat.BC5)]
+        public void RedAndRedGreenClampEdgeBorderIsExact(
+            TextureImporterFormat importFormat,
+            TextureFormat expectedFormat)
+        {
+            var source = ImportSourceAs(
+                "clamp_edge_" + expectedFormat, 64, importFormat);
+            Texture2D page = null;
+            try
+            {
+                Assert.That(
+                    source.format, Is.EqualTo(expectedFormat),
+                    "fixture precondition: the import must land on the " +
+                    "planned format");
+                var image = Acquire(source, 1);
+                var clampSampler = new AtlasSamplerFacts(
+                    FilterMode.Bilinear,
+                    UnityEngine.TextureWrapMode.Clamp,
+                    UnityEngine.TextureWrapMode.Clamp,
+                    0,
+                    0f);
+                var placement = PlacementOf(
+                    source,
+                    clampSampler,
+                    32,
+                    32,
+                    40,
+                    40,
+                    0,
+                    0);
+                var plan = new AtlasPagePlanEntry(
+                    40,
+                    40,
+                    source.graphicsFormat,
+                    FullMipCount(40, 40),
+                    new[] { placement });
+                var sources = SourcesOf(source, image);
+
+                page = AtlasPageBuilder.Build(
+                    plan,
+                    clampSampler,
+                    sources,
+                    1,
+                    new AtlasByteLedger(long.MaxValue));
+                AtlasPageCheck.Verify(page, plan, sources, 1);
+
+                var pageColors = page.GetPixels32(0);
+                var corner = pageColors[36 * 40 + 36];
+                var expectedCorner = image.Level0[63 * 64 + 63];
+                Assert.That(
+                    corner.r + "|" + corner.g,
+                    Is.EqualTo(expectedCorner.r + "|" + expectedCorner.g),
+                    "the clamp corner border must repeat the edge texel");
+            }
+            finally
+            {
+                if (page != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(page);
+                }
+                AssetDatabase.DeleteAsset(AssetDatabase.GetAssetPath(source));
+            }
+        }
+
         [Test]
         public void Bc1ClampBorderWithNegativeOriginIsExact()
         {
