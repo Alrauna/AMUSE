@@ -2443,7 +2443,8 @@ Shader ""Hidden/Alrauna/AmuseTests/AtlasUseCaptureFooUndeclared""
             Assert.That(
                 secondOutcome.Use.MaterialKey,
                 Is.EqualTo(firstOutcome.Use.MaterialKey),
-                "a rim color behind an off switch must not split groups");
+                "a rim border behind an off switch must not split " +
+                "groups");
         }
 
         [Test]
@@ -2487,7 +2488,7 @@ Shader ""Hidden/Alrauna/AmuseTests/AtlasUseCaptureFooUndeclared""
             Assert.That(
                 secondOutcome.Use.MaterialKey,
                 Is.Not.EqualTo(firstOutcome.Use.MaterialKey),
-                "a rim color behind an on switch must split groups");
+                "a rim border behind an on switch must split groups");
         }
 
         // --- Falsifier 4: an animated switch may hold any value at
@@ -2666,6 +2667,44 @@ Shader ""Hidden/Alrauna/AmuseTests/AtlasUseCaptureFooUndeclared""
                 Is.Not.EqualTo(firstOutcome.Use.MaterialKey),
                 "the fallback shader reads the rim color, so the tag " +
                 "keeps every value live");
+        }
+
+        // --- Falsifier 12: a toon standard fallback shader copies
+        // every same-named keyword, so an invalid keyword must
+        // change the key. ---
+        [Test]
+        public void ToonStandardFallbackTagKeepsInvalidKeywords()
+        {
+            var plain = NewLilToonFixture();
+            var flagged = NewLilToonFixture();
+            foreach (var fixture in new[] { plain, flagged })
+            {
+                fixture.Material.SetOverrideTag(
+                    "VRCFallback", "toonstandard");
+            }
+
+            flagged.Material.EnableKeyword("AMUSE_TEST_UNDECLARED");
+
+            var plainOutcome = CaptureLilToon(plain);
+            var flaggedOutcome = CaptureLilToon(flagged);
+
+            AssertAdmitted(plainOutcome);
+            AssertAdmitted(flaggedOutcome);
+            Assert.That(
+                InvalidKeywordsOf(flagged.Material),
+                Does.Contain("AMUSE_TEST_UNDECLARED"),
+                "fixture guard: the keyword must be serialized as " +
+                "invalid");
+            Assert.That(
+                InvalidKeywordsOf(plain.Material),
+                Is.Empty,
+                "fixture guard: the plain fixture holds no invalid " +
+                "keyword");
+            Assert.That(
+                flaggedOutcome.Use.MaterialKey,
+                Is.Not.EqualTo(plainOutcome.Use.MaterialKey),
+                "the fallback shader copies the keyword, so the tag " +
+                "keeps every keyword counted");
         }
 
         [Test]

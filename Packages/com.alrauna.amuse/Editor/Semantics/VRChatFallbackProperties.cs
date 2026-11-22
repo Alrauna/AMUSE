@@ -46,6 +46,7 @@ namespace Alrauna.Amuse.Editor.Semantics
                 "_DetailMask",
                 "_DetailNormalMap",
                 "_DetailNormalMapScale",
+                "_DstBlend",
                 "_EmissionColor",
                 "_EmissionHueShift",
                 "_EmissionMap",
@@ -86,7 +87,9 @@ namespace Alrauna.Amuse.Editor.Semantics
                 "_SpecGlossMap",
                 "_SpecularHighlights",
                 "_SpecularSharpness",
+                "_SrcBlend",
                 "_UVSec",
+                "_ZWrite",
             };
     }
 }

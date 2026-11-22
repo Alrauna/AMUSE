@@ -333,14 +333,16 @@ namespace Alrauna.Amuse.Editor.Host
 
             // A model exists only on a reviewed row. A toon standard
             // fallback tag swaps the shader at runtime, so every value
-            // counts and no stale name is skipped there. The dead set
-            // feeds the route walk, so it is computed before the walk.
+            // and every keyword counts and no stale name is skipped
+            // there. The dead set feeds the route walk, so it is
+            // computed before the walk.
             var liveValues = table.LiveValues;
             var deadProperties = NoDeadProperties;
+            var toonStandardFallback = IsToonStandardFallback(material);
             var skipStaleSavedNames = false;
             if (liveValues != null)
             {
-                skipStaleSavedNames = !IsToonStandardFallback(material);
+                skipStaleSavedNames = !toonStandardFallback;
                 if (skipStaleSavedNames)
                 {
                     deadProperties = liveValues.DeadProperties(
@@ -537,7 +539,8 @@ namespace Alrauna.Amuse.Editor.Host
                     resolution.KeySkipped,
                     deadProperties,
                     liveValues,
-                    skipStaleSavedNames),
+                    skipStaleSavedNames,
+                    toonStandardFallback),
                 animation.AnimatedMaterialPropertyNames,
                 captureOrder,
                 companions,
@@ -1617,7 +1620,9 @@ namespace Alrauna.Amuse.Editor.Host
         {
             return material
                 .GetTag("VRCFallback", false, string.Empty)
-                .StartsWith("toonstandard", StringComparison.Ordinal);
+                .StartsWith(
+                    "toonstandard",
+                    StringComparison.OrdinalIgnoreCase);
         }
 
         // --- the material key ----------------------------------------------
@@ -1631,7 +1636,9 @@ namespace Alrauna.Amuse.Editor.Host
         /// different names must share a page. It skips the custom
         /// render queue and the invalid keywords, because the queue
         /// token holds the effective queue and a keyword the shader
-        /// does not declare cannot change rendering. It records each
+        /// does not declare cannot change rendering. A toon standard
+        /// fallback tag makes VRChat copy same-named keywords, so the
+        /// walk keeps the invalid keywords there. It records each
         /// skipped texture reference as <c>member</c>: the member and
         /// every UV0 companion move into pages that serve every
         /// source of the group, and an inert or member copy texture
@@ -1648,13 +1655,15 @@ namespace Alrauna.Amuse.Editor.Host
             ISet<string> skippedTextureProperties,
             ISet<string> deadProperties,
             AtlasLiveValueModel liveValues,
-            bool skipStaleSavedNames)
+            bool skipStaleSavedNames,
+            bool keepInvalidKeywords)
         {
             return new MaterialKeyWalker(
                     skippedTextureProperties,
                     deadProperties,
                     liveValues,
-                    skipStaleSavedNames)
+                    skipStaleSavedNames,
+                    keepInvalidKeywords)
                 .Walk(material);
         }
 
@@ -1678,6 +1687,7 @@ namespace Alrauna.Amuse.Editor.Host
             private readonly ISet<string> deadProperties;
             private readonly AtlasLiveValueModel liveValues;
             private readonly bool skipStaleSavedNames;
+            private readonly bool keepInvalidKeywords;
             private readonly HashSet<string> shaderPropertyNames =
                 new HashSet<string>();
             private readonly StringBuilder builder =
@@ -1687,12 +1697,14 @@ namespace Alrauna.Amuse.Editor.Host
                 ISet<string> skippedTextureProperties,
                 ISet<string> deadProperties,
                 AtlasLiveValueModel liveValues,
-                bool skipStaleSavedNames)
+                bool skipStaleSavedNames,
+                bool keepInvalidKeywords)
             {
                 this.skippedTextureProperties = skippedTextureProperties;
                 this.deadProperties = deadProperties;
                 this.liveValues = liveValues;
                 this.skipStaleSavedNames = skipStaleSavedNames;
+                this.keepInvalidKeywords = keepInvalidKeywords;
             }
 
             internal string Walk(Material material)
@@ -1741,10 +1753,12 @@ namespace Alrauna.Amuse.Editor.Host
             /// Whether one path names a subtree that the generic walk
             /// must skip. The name is identity. The custom queue
             /// enters as the effective queue. An undeclared keyword
-            /// cannot change rendering. The saved properties enter by
-            /// name after the walk.
+            /// cannot change rendering, unless a toon standard
+            /// fallback tag makes VRChat copy it to the fallback
+            /// shader. The saved properties enter by name after the
+            /// walk.
             /// </summary>
-            private static bool IsSkippedSubtree(string path)
+            private bool IsSkippedSubtree(string path)
             {
                 return string.Equals(
                            path, MaterialNamePath,
@@ -1752,9 +1766,10 @@ namespace Alrauna.Amuse.Editor.Host
                        string.Equals(
                            path, CustomRenderQueuePath,
                            StringComparison.Ordinal) ||
-                       string.Equals(
-                           path, InvalidKeywordsPath,
-                           StringComparison.Ordinal) ||
+                       (!keepInvalidKeywords &&
+                           string.Equals(
+                               path, InvalidKeywordsPath,
+                               StringComparison.Ordinal)) ||
                        string.Equals(
                            path, SavedPropertiesPath,
                            StringComparison.Ordinal);
