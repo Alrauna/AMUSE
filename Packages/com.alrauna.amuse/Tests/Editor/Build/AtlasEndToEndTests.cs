@@ -277,22 +277,24 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
-        /// One 64 by 64 mipmapped RGBA32 source with a checker pattern
-        /// of 16 texel blocks. Bilinear filtering and no anisotropy
-        /// keep the render comparison stable.
+        /// One mipmapped RGBA32 source, 64 by 64 unless the caller asks
+        /// for another size, with a checker pattern of 16 texel blocks.
+        /// Bilinear filtering and no anisotropy keep the render
+        /// comparison stable.
         /// </summary>
         private Texture2D ImportPatternTexture(
             string name,
             Color32 even,
             Color32 odd,
-            FilterMode filter = FilterMode.Bilinear)
+            FilterMode filter = FilterMode.Bilinear,
+            int size = 64)
         {
-            var pixels = new Color32[64 * 64];
-            for (var y = 0; y < 64; y++)
+            var pixels = new Color32[size * size];
+            for (var y = 0; y < size; y++)
             {
-                for (var x = 0; x < 64; x++)
+                for (var x = 0; x < size; x++)
                 {
-                    pixels[y * 64 + x] =
+                    pixels[y * size + x] =
                         ((x / 16 + y / 16) % 2 == 0) ? even : odd;
                 }
             }
@@ -301,8 +303,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             // deletion, never through DestroyImmediate.
             return TestTextureImport.WritePng(
                 TempFolder + "/" + name + ".png",
-                64,
-                64,
+                size,
+                size,
                 pixels,
                 importer =>
                 {
@@ -683,7 +685,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         private Material NewAdmittedLilToonMaterial(
             string name,
             Color32 even,
-            Color32 odd)
+            Color32 odd,
+            int size = 64)
         {
             var path = AssetDatabase.GUIDToAssetPath(
                 LilToonSourceAttestation.SupportedShaderGuid);
@@ -694,7 +697,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 " load by its pinned GUID");
             var material = Track(new Material(shader));
             material.SetTexture(
-                "_MainTex", ImportPatternTexture(name, even, odd));
+                "_MainTex",
+                ImportPatternTexture(
+                    name, even, odd, FilterMode.Bilinear, size));
             return material;
         }
 
@@ -774,6 +779,115 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     LargestChannelDifference(before, after),
                     Is.LessThanOrEqualTo(1),
                     "the lilToon atlas page must render as the source did");
+            }
+            finally
+            {
+                DestroyGenerated(state);
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
+        /// --- Falsifier: a companion page that keeps the source
+        /// layout, or a page material that keeps the source emission
+        /// map. Two lilToon quads with identical settings and their own
+        /// half-size emission maps share one main page and one emission
+        /// page, and each renders as before within one of 255 per
+        /// channel. ---
+        /// </summary>
+        [Test]
+        public void TwoLilToonMaterialsShareMainAndEmissionPages()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = NewAtlasOnlyRoot();
+            AmusePlatformFinishState state = null;
+            try
+            {
+                // 128 and 64 texel sources keep the border share of
+                // the pages inside the group budget factor.
+                var firstMaterial = NewAdmittedLilToonMaterial(
+                    "emission first",
+                    new Color32(120, 40, 40, 255),
+                    new Color32(40, 40, 120, 255),
+                    128);
+                var secondMaterial = NewAdmittedLilToonMaterial(
+                    "emission second",
+                    new Color32(40, 100, 60, 255),
+                    new Color32(100, 90, 40, 255),
+                    128);
+                var firstEmission = ImportPatternTexture(
+                    "emission map first",
+                    new Color32(90, 0, 0, 255),
+                    new Color32(0, 0, 0, 255),
+                    size: 64);
+                var secondEmission = ImportPatternTexture(
+                    "emission map second",
+                    new Color32(0, 0, 90, 255),
+                    new Color32(0, 60, 0, 255),
+                    size: 64);
+                foreach (var (material, emission) in new[]
+                {
+                    (firstMaterial, firstEmission),
+                    (secondMaterial, secondEmission),
+                })
+                {
+                    material.SetFloat("_UseEmission", 1f);
+                    material.SetColor("_EmissionColor", Color.white);
+                    material.SetTexture("_EmissionMap", emission);
+                }
+
+                var firstRenderer = NewQuadRenderer(
+                    root, "emission first", Track(NewQuadMesh()),
+                    firstMaterial);
+                var secondRenderer = NewQuadRenderer(
+                    root, "emission second", Track(NewQuadMesh()),
+                    secondMaterial);
+
+                var before = RenderEachQuad(firstRenderer, secondRenderer);
+
+                BuildContext context = null;
+                var reports = ErrorReport.CaptureErrors(
+                    () => context = Build(root));
+                state = context.GetState<AmusePlatformFinishState>();
+
+                Assert.That(context.Successful, Is.True,
+                    "fixture precondition: the build must complete");
+                Assert.That(
+                    state.AtlasUseRefusals.Select(
+                        record => record.Cause + ": " + record.Detail),
+                    Is.Empty,
+                    "both emission uses must admit");
+                Assert.That(state.AtlasPageCount, Is.EqualTo(1));
+                var pageMaterial = firstRenderer.sharedMaterial;
+                Assert.That(secondRenderer.sharedMaterial,
+                    Is.SameAs(pageMaterial),
+                    "both slots must carry the one shared page material");
+                var emissionPage =
+                    (Texture2D)pageMaterial.GetTexture("_EmissionMap");
+                Assert.That(emissionPage, Is.Not.Null);
+                Assert.That(emissionPage, Is.Not.SameAs(firstEmission));
+                Assert.That(emissionPage.name,
+                    Is.EqualTo("AMUSE atlas page 0-0 _EmissionMap"));
+                var mainPage = (Texture2D)pageMaterial.GetTexture("_MainTex");
+                Assert.That(emissionPage.width,
+                    Is.EqualTo(mainPage.width >> 1));
+                Assert.That(emissionPage.height,
+                    Is.EqualTo(mainPage.height >> 1));
+                Assert.That(firstMaterial.GetTexture("_EmissionMap"),
+                    Is.SameAs(firstEmission),
+                    "the source emission map must stay unchanged");
+
+                var pageSets = EntriesWithKey(reports, "amuse.atlas.PageSet");
+                Assert.That(pageSets, Has.Count.EqualTo(1));
+                Assert.That(pageSets[0].TheError.ToMessage(),
+                    Does.Contain("Page 0 for '_EmissionMap': "));
+
+                var after = RenderEachQuad(firstRenderer, secondRenderer);
+                Assert.That(
+                    LargestChannelDifference(before, after),
+                    Is.LessThanOrEqualTo(1),
+                    "the main and emission pages must render as the" +
+                    " sources did");
             }
             finally
             {
@@ -991,6 +1105,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 var mesh = Track(NewQuadMesh());
                 var first = NewQuadRenderer(root, "first", mesh, material);
                 var second = NewQuadRenderer(root, "second", mesh, material);
+                AddPartnerQuad(root, "shared source partner");
                 var before = new[] { first, second }
                     .Select(SharedMeshOf).ToArray();
 
@@ -1056,6 +1171,19 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 AlphaSeparationSplitTests.CreateSplitSourceMesh());
             var renderer = AlphaSeparationTestLifecycle.AddRendererPadded(
                 root, "body", mesh, transparent, retained);
+
+            // A group with one source set builds no page. A second
+            // split renderer with its own texture of the same shape
+            // gives each of the two groups a second source.
+            var partnerTexture = Track(
+                AlphaSeparationSplitTests.ImportSplitAlphaTexture(
+                    "atlas_end_to_end_split_partner"));
+            AlphaSeparationTestLifecycle.AddRendererPadded(
+                root,
+                "partner",
+                Track(AlphaSeparationSplitTests.CreateSplitSourceMesh()),
+                NewRealPoiyomiTextureAlphaMaterial(partnerTexture),
+                NewRealPoiyomiRetainedMaterial());
             return (renderer, mesh, transparent, texture);
         }
 
@@ -1084,8 +1212,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(state.AtlasPageCount, Is.EqualTo(2),
                     "the transparent original and its opaque clone must" +
                     " land in two groups, one page each");
-                Assert.That(state.AtlasAdmittedUseCount, Is.EqualTo(2),
-                    "the two admitted uses must move onto their pages");
+                Assert.That(state.AtlasAdmittedUseCount, Is.EqualTo(4),
+                    "the four admitted uses must move onto their pages");
                 Assert.That(renderer.sharedMaterials[0],
                     Is.Not.SameAs(transparent),
                     "the transparent slot must carry its page material");
@@ -1186,6 +1314,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     new Color32(200, 90, 90, 255));
                 var renderer = NewQuadRenderer(
                     root, "body", Track(NewQuadMesh()), material);
+                AddPartnerQuad(root, "injected failure partner");
 
                 Texture2D failedPage = null;
                 AtlasPass.PageCheck =
@@ -1305,20 +1434,38 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     "keyword sync",
                     new Color32(200, 120, 60, 255),
                     new Color32(60, 120, 200, 255));
+                var partner = NewAdmittedMaterial(
+                    "keyword sync partner",
+                    new Color32(60, 200, 120, 255),
+                    new Color32(120, 60, 200, 255));
+
                 // The controlling property and the keyword disagree.
                 // The capture sees the keyword off, so the use
                 // admits. The copy constructor would re-enable it on
-                // the page material without the explicit restore.
-                material.SetFloat("_EnableUDIMDiscardOptions", 1f);
-                material.DisableKeyword("POI_UDIMDISCARD");
+                // the page material without the explicit restore. Both
+                // texture imports run first, because an import can
+                // re-sync the keyword of a material.
+                foreach (var keywordMaterial in new[] { material, partner })
+                {
+                    keywordMaterial.SetFloat("_EnableUDIMDiscardOptions", 1f);
+                    keywordMaterial.DisableKeyword("POI_UDIMDISCARD");
+                }
+
                 var renderer = NewQuadRenderer(
                     root, "body", Track(NewQuadMesh()), material);
+                NewQuadRenderer(
+                    root, "partner", Track(NewQuadMesh()), partner);
 
                 var context = Build(root);
                 state = context.GetState<AmusePlatformFinishState>();
 
                 Assert.That(context.Successful, Is.True,
                     "fixture precondition: the build must complete");
+                Assert.That(
+                    state.AtlasUseRefusals.Select(
+                        record => record.Cause + ": " + record.Detail),
+                    Is.Empty,
+                    "the keyword off material and its partner must admit");
                 Assert.That(state.AtlasPageCount, Is.EqualTo(1),
                     "the keyword off material must admit");
                 var pageMaterial = renderer.sharedMaterial;
@@ -1580,6 +1727,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     "fine",
                     Track(NewQuadMesh()),
                     importableMaterial);
+                AddPartnerQuad(root, "acquisition fine partner");
 
                 // The point filter puts the second source in its own
                 // group, so one withdrawal cannot take the healthy
@@ -1597,6 +1745,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     "withdraws",
                     withdrawSourceMesh,
                     withdrawingMaterial);
+                AddPartnerQuad(
+                    root, "acquisition fails partner", FilterMode.Point);
 
                 // Capture admits both sources. Only a runtime failure
                 // after an admitted capture withdraws a group, and no
@@ -1633,8 +1783,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(context.Successful, Is.True,
                     "fixture precondition: the build must complete");
                 Assert.That(state.AtlasUseRefusals.Count,
-                    Is.EqualTo(1),
-                    "exactly the one withdrawn use must be recorded");
+                    Is.EqualTo(2),
+                    "exactly the two uses of the withdrawn group must be" +
+                    " recorded");
                 Assert.That(state.AtlasUseRefusals[0].Renderer,
                     Is.SameAs(withdrawingRenderer),
                     "the unacquirable source must withdraw its group");
@@ -1864,6 +2015,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         "report fine",
                         new Color32(30, 160, 200, 255),
                         new Color32(200, 160, 30, 255)));
+                AddPartnerQuad(root, "report fine partner");
                 var withdrawingMaterial = NewAdmittedMaterial(
                     "report withdraws",
                     new Color32(200, 60, 120, 255),
@@ -1876,6 +2028,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     "withdraws",
                     Track(NewQuadMesh()),
                     withdrawingMaterial);
+                AddPartnerQuad(
+                    root, "report withdraws partner", FilterMode.Point);
                 AtlasPass.AcquireSource =
                     (Texture2D source,
                         int protectedCount,
@@ -1905,8 +2059,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     "only the healthy group reports a page set");
                 var withdrawn = EntriesWithKey(
                     reports, "amuse.atlas.SourceAcquisitionFailed");
-                Assert.That(withdrawn, Has.Count.EqualTo(1),
-                    "the withdrawn use reports one line");
+                Assert.That(withdrawn, Has.Count.EqualTo(2),
+                    "each use of the withdrawn group reports one line");
                 Assert.That(withdrawn[0].TheError.ToMessage(),
                     Does.Contain("renderer 'withdraws'"));
             }
@@ -1936,8 +2090,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     "report budget",
                     new Color32(90, 200, 90, 255),
                     new Color32(200, 90, 200, 255));
-                var limit = TextureBytesOf(
-                    (Texture2D)material.GetTexture("_MainTex")) / 1000;
+                var partner = AddPartnerQuad(root, "report budget partner");
+                var limit = (TextureBytesOf(
+                    (Texture2D)material.GetTexture("_MainTex")) +
+                    TextureBytesOf((Texture2D)partner.sharedMaterial
+                        .GetTexture("_MainTex"))) / 1000;
                 NewQuadRenderer(
                     root, "body", Track(NewQuadMesh()), material);
                 AtlasBudgetLimits.Provider = () => new AtlasBudgetLimits(
@@ -1950,14 +2107,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
                 Assert.That(context.Successful, Is.True,
                     "fixture precondition: the build must complete");
-                Assert.That(state.AtlasUseRefusals, Has.Count.EqualTo(1));
+                Assert.That(state.AtlasUseRefusals, Has.Count.EqualTo(2));
                 var value = state.AtlasUseRefusals[0].ValueBytes;
                 Assert.That(state.AtlasUseRefusals[0].LimitBytes,
                     Is.EqualTo(limit));
                 Assert.That(value, Is.GreaterThan(limit));
                 var lines = EntriesWithKey(
                     reports, "amuse.atlas.GroupBudget");
-                Assert.That(lines, Has.Count.EqualTo(1));
+                Assert.That(lines, Has.Count.EqualTo(2));
                 var message = lines[0].TheError.ToMessage();
                 Assert.That(message, Does.Contain(
                     "(" + value + " bytes). The limit is "));
@@ -2031,9 +2188,71 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(message, Does.Contain(
                     "AMUSE atlased 2 out of 3 material slots."));
                 Assert.That(message, Does.Contain(
-                    "- 1: the main texture has tiling, offset, or panning"));
+                    "- 1: a route texture has tiling, offset, or panning"));
                 Assert.That(message, Does.Not.Contain("{"),
                     "every placeholder of the summary must be filled");
+            }
+            finally
+            {
+                DestroyGenerated(state);
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
+        /// --- Falsifier 9: a pass that builds a page for a group with
+        /// one source set. Two quads share one material and one
+        /// texture. A page would only copy the texture, so the build
+        /// must keep both slots and name the cause for each. ---
+        /// </summary>
+        [Test]
+        public void SingleSourceGroupBuildsNoPageAndReportsEachSlot()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = NewAtlasOnlyRoot();
+            AmusePlatformFinishState state = null;
+            try
+            {
+                var material = NewAdmittedMaterial(
+                    "single source",
+                    new Color32(200, 80, 40, 255),
+                    new Color32(40, 80, 200, 255));
+                var firstMesh = Track(NewQuadMesh());
+                var secondMesh = Track(NewQuadMesh());
+                var firstRenderer = NewQuadRenderer(
+                    root, "first", firstMesh, material);
+                var secondRenderer = NewQuadRenderer(
+                    root, "second", secondMesh, material);
+
+                BuildContext context = null;
+                var reports = ErrorReport.CaptureErrors(
+                    () => context = Build(root));
+                state = context.GetState<AmusePlatformFinishState>();
+
+                Assert.That(context.Successful, Is.True,
+                    "fixture precondition: the build must complete");
+                Assert.That(state.AtlasPageCount, Is.EqualTo(0),
+                    "a group with one source set must build no page");
+                Assert.That(
+                    state.AtlasUseRefusals.Select(record => record.Cause),
+                    Is.EqualTo(new[]
+                    {
+                        AtlasUseRefusal.SingleSourceGroup,
+                        AtlasUseRefusal.SingleSourceGroup,
+                    }),
+                    "each slot of the group must name the cause");
+                Assert.That(firstRenderer.sharedMaterial, Is.SameAs(material));
+                Assert.That(secondRenderer.sharedMaterial, Is.SameAs(material));
+                Assert.That(SharedMeshOf(firstRenderer), Is.SameAs(firstMesh));
+                Assert.That(SharedMeshOf(secondRenderer), Is.SameAs(secondMesh));
+                Assert.That(
+                    EntriesWithKey(reports, "amuse.atlas.PageSet"),
+                    Is.Empty,
+                    "a skipped group reports no page set");
+                var summaries = EntriesWithKey(reports, "amuse.atlas.Summary");
+                Assert.That(summaries, Has.Count.EqualTo(1));
+                Assert.That(summaries[0].TheError.ToMessage(), Does.Contain(
+                    "- 2: no other texture shares a page with it"));
             }
             finally
             {
@@ -2166,7 +2385,31 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 new Color32(40, 200, 140, 255));
             var renderer = NewQuadRenderer(
                 root, name, Track(NewQuadMesh()), material);
+            AddPartnerQuad(root, name + " partner");
             return new QuadFixture { Renderer = renderer };
+        }
+
+        /// <summary>
+        /// One more quad with its own admitted material and its own
+        /// pattern texture. The material settings equal those of
+        /// <see cref="NewAdmittedMaterial"/>, so the quad joins the
+        /// group of the other default quads with the same filter. A
+        /// group needs a second source set, or it builds no page.
+        /// </summary>
+        private MeshRenderer AddPartnerQuad(
+            GameObject root,
+            string name,
+            FilterMode filter = FilterMode.Bilinear)
+        {
+            return NewQuadRenderer(
+                root,
+                name,
+                Track(NewQuadMesh()),
+                NewAdmittedMaterial(
+                    name,
+                    new Color32(90, 30, 150, 255),
+                    new Color32(150, 210, 30, 255),
+                    filter));
         }
 
         private static MeshRenderer NewQuadRenderer(

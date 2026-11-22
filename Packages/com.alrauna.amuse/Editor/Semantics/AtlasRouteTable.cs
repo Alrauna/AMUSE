@@ -112,6 +112,63 @@ namespace Alrauna.Amuse.Editor.Semantics
                 },
                 UnheldLilToonMainColorRequiredValue);
 
+        /// <summary>
+        /// The lilToon feature switches of the reviewed route. The Main2nd
+        /// layer is a companion route there, so its switch is not on
+        /// this list.
+        /// </summary>
+        private static readonly string[] LilToonReviewedFeatureSwitches =
+        {
+            "_ShiftBackfaceUV",
+            "_UseParallax",
+            "_UseMain3rdTex",
+            "_UseGlitter",
+            "_UseAudioLink",
+        };
+
+        /// <summary>
+        /// The Main2nd values that must be 0 when the layer samples
+        /// UV0. Each one turns, mirrors, copies, or decals the layer
+        /// coordinate.
+        /// </summary>
+        private static readonly string[] LilToonMain2ndZeroScalars =
+        {
+            "_Main2ndTexAngle",
+            "_Main2ndTexIsDecal",
+            "_Main2ndTexIsLeftOnly",
+            "_Main2ndTexIsRightOnly",
+            "_Main2ndTexShouldCopy",
+            "_Main2ndTexShouldFlipMirror",
+            "_Main2ndTexShouldFlipCopy",
+            "_Main2ndTexIsMSDF",
+        };
+
+        /// <summary>
+        /// The lilToon main color route with companion pages. It
+        /// follows the 2026-11-22 source review of lilToon 2.4.1, so
+        /// only rows attested at that version use it. Member copies:
+        /// <c>_BaseMap</c> and <c>_BaseColorMap</c>, which no shader
+        /// code samples. Neutral: the two matcap textures, which sample
+        /// view-space coordinates and never UV0. The companion routes
+        /// list every texture the review found on the main UV0
+        /// coordinate.
+        /// </summary>
+        internal static readonly AtlasRouteTable LilToonReviewedMainColor =
+            new AtlasRouteTable(
+                "_MainTex",
+                new[] { "_MatCapTex", "_MatCap2ndTex" },
+                Array.Empty<string>(),
+                LilToonReviewedConditionProperties(),
+                new (string, Vector4)[]
+                {
+                    ("_MainTex_ST", new Vector4(1f, 1f, 0f, 0f)),
+                    ("_MainTex_ScrollRotate", new Vector4(0f, 0f, 0f, 0f)),
+                },
+                UnheldLilToonReviewedRequiredValue,
+                new[] { "_BaseMap", "_BaseColorMap" },
+                LilToonCompanionRoutes(),
+                name => name.IndexOf("Outline", StringComparison.Ordinal) >= 0);
+
         internal string MemberProperty { get; }
 
         internal IReadOnlyCollection<string> NeutralProperties { get; }
@@ -134,7 +191,23 @@ namespace Alrauna.Amuse.Editor.Semantics
         internal IReadOnlyList<(string Property, Vector4 Identity)>
             TransformProperties { get; }
 
+        /// <summary>
+        /// Texture properties that no shader code samples. The page
+        /// material sets each one the material declares to the main
+        /// page, so it keeps naming the moved texture.
+        /// </summary>
+        internal IReadOnlyCollection<string> MemberCopyProperties { get; }
+
+        /// <summary>
+        /// The companion routes in review order. An assigned texture on
+        /// any other property that is not the member, a member copy, or
+        /// neutral refuses the use.
+        /// </summary>
+        internal IReadOnlyList<AtlasCompanionRoute> CompanionRoutes { get; }
+
         private readonly Func<Material, string> unheldRequiredValue;
+
+        private readonly Func<string, bool> hasOutlinePass;
 
         private AtlasRouteTable(
             string memberProperty,
@@ -142,7 +215,10 @@ namespace Alrauna.Amuse.Editor.Semantics
             string[] allowedKeywords,
             string[] conditionProperties,
             (string, Vector4)[] transformProperties,
-            Func<Material, string> unheldRequiredValue)
+            Func<Material, string> unheldRequiredValue,
+            string[] memberCopyProperties = null,
+            AtlasCompanionRoute[] companionRoutes = null,
+            Func<string, bool> hasOutlinePass = null)
         {
             MemberProperty = memberProperty;
             NeutralProperties = Array.AsReadOnly(neutralProperties);
@@ -150,6 +226,21 @@ namespace Alrauna.Amuse.Editor.Semantics
             ConditionProperties = Array.AsReadOnly(conditionProperties);
             TransformProperties = Array.AsReadOnly(transformProperties);
             this.unheldRequiredValue = unheldRequiredValue;
+            MemberCopyProperties = Array.AsReadOnly(
+                memberCopyProperties ?? Array.Empty<string>());
+            CompanionRoutes = Array.AsReadOnly(
+                companionRoutes ?? Array.Empty<AtlasCompanionRoute>());
+            this.hasOutlinePass = hasOutlinePass ?? (_ => false);
+        }
+
+        /// <summary>
+        /// Whether the shader row has an outline pass. A lilToon
+        /// outline pass reads every <c>sampler_MainTex</c> texture with
+        /// the sampler of <c>_OutlineTex</c>.
+        /// </summary>
+        internal bool HasOutlinePass(string shaderRowName)
+        {
+            return hasOutlinePass(shaderRowName);
         }
 
         /// <summary>
@@ -208,12 +299,21 @@ namespace Alrauna.Amuse.Editor.Semantics
         private static string UnheldLilToonMainColorRequiredValue(
             Material material)
         {
-            var feature = FirstNonZero(material, LilToonFeatureSwitches);
-            if (feature != null)
-            {
-                return feature;
-            }
+            return FirstNonZero(material, LilToonFeatureSwitches) ??
+                   UnheldLilToonSharedRequiredValue(material);
+        }
 
+        private static string UnheldLilToonReviewedRequiredValue(
+            Material material)
+        {
+            return FirstNonZero(material, LilToonReviewedFeatureSwitches) ??
+                   UnheldLilToonSharedRequiredValue(material) ??
+                   UnheldLilToonMain2ndRequiredValue(material);
+        }
+
+        private static string UnheldLilToonSharedRequiredValue(
+            Material material)
+        {
             var dissolveMode = material.GetVector("_DissolveParams").x;
             if (!(dissolveMode > -0.5f && dissolveMode < 0.5f))
             {
@@ -255,6 +355,222 @@ namespace Alrauna.Amuse.Editor.Semantics
         }
 
         /// <summary>
+        /// The Main2nd layer rule of the reviewed route. It applies only
+        /// when the layer is on. Dissolve reads UV0 as data on every UV
+        /// mode, so it must be off. On UV0 the layer coordinate must be
+        /// plain UV0 times the layer transform: no angle, no decal
+        /// flag, one animation frame that never moves, and the neutral
+        /// decal sub parameters. A NaN fails each compare.
+        /// </summary>
+        private static string UnheldLilToonMain2ndRequiredValue(
+            Material material)
+        {
+            if (material.GetFloat("_UseMain2ndTex") == 0f)
+            {
+                return null;
+            }
+
+            var dissolve = material.GetVector("_Main2ndDissolveParams").x;
+            if (dissolve != 0f)
+            {
+                return "The property '_Main2ndDissolveParams.x' is " +
+                       Number(dissolve) + ". The route needs 0.";
+            }
+
+            if (IsOtherUvMode(material.GetFloat("_Main2ndTex_UVMode")))
+            {
+                return null;
+            }
+
+            var zero = FirstNonZero(material, LilToonMain2ndZeroScalars);
+            if (zero != null)
+            {
+                return zero;
+            }
+
+            var animation = material.GetVector("_Main2ndTexDecalAnimation");
+            if (!(animation.x == 1f && animation.y == 1f &&
+                  animation.z == 1f &&
+                  (animation.w > 0f || animation.w < 0f)))
+            {
+                return "The property '_Main2ndTexDecalAnimation' is " +
+                       Vector(animation) + ". The route needs 1 on x, y," +
+                       " and z, and a w that is not 0.";
+            }
+
+            var subParam = material.GetVector("_Main2ndTexDecalSubParam");
+            if (!(subParam.x == 1f && subParam.y == 1f && subParam.z == 0f))
+            {
+                return "The property '_Main2ndTexDecalSubParam' is " +
+                       Vector(subParam) + ". The route needs 1 on x and" +
+                       " y, and 0 on z.";
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// lilToon UV modes 1 to 4 read UV1, UV2, UV3, or a rim
+        /// coordinate. Mode 0 and every other value read UV0. The
+        /// compare is exact, so a NaN mode counts as UV0.
+        /// </summary>
+        private static bool IsOtherUvMode(float mode)
+        {
+            return mode == 1f || mode == 2f || mode == 3f || mode == 4f;
+        }
+
+        // Properties, not fields: the reviewed table initializes
+        // above these lines, before a static field here would be set.
+        private static Vector4 IdentityScaleOffset =>
+            new Vector4(1f, 1f, 0f, 0f);
+
+        private static Vector4 ZeroScroll => new Vector4(0f, 0f, 0f, 0f);
+
+        private static Func<Material, bool, AtlasRouteUse> SwitchedUv0(
+            string switchProperty)
+        {
+            return (material, outlineRow) =>
+                material.GetFloat(switchProperty) != 0f
+                    ? AtlasRouteUse.Uv0
+                    : AtlasRouteUse.Inert;
+        }
+
+        private static Func<Material, bool, AtlasRouteUse> SwitchedModeUv0(
+            string switchProperty,
+            string uvModeProperty)
+        {
+            return (material, outlineRow) =>
+                material.GetFloat(switchProperty) == 0f
+                    ? AtlasRouteUse.Inert
+                    : IsOtherUvMode(material.GetFloat(uvModeProperty))
+                        ? AtlasRouteUse.OtherCoordinates
+                        : AtlasRouteUse.Uv0;
+        }
+
+        private static AtlasRouteUse OutlineUv0(
+            Material material, bool outlineRow)
+        {
+            return outlineRow ? AtlasRouteUse.Uv0 : AtlasRouteUse.Inert;
+        }
+
+        /// <summary>
+        /// The shadow border mask reads its level with
+        /// <c>max(ddxMain, _ShadowBorderMaskLOD)</c>. A page keeps the
+        /// derivative but not a constant floor, so the floor must be 0.
+        /// </summary>
+        private static string UnheldShadowBorderMaskValue(Material material)
+        {
+            var lod = material.GetFloat("_ShadowBorderMaskLOD");
+            return lod == 0f
+                ? null
+                : "The property '_ShadowBorderMaskLOD' is " + Number(lod) +
+                  ". The route needs 0.";
+        }
+
+        /// <summary>
+        /// The lilToon 2.4.1 companion routes in review order. Every
+        /// gate compares with not equal to 0, so a NaN switch counts as
+        /// on and the route fails closed.
+        /// </summary>
+        private static AtlasCompanionRoute[] LilToonCompanionRoutes()
+        {
+            return new[]
+            {
+                new AtlasCompanionRoute(
+                    "_AlphaMask",
+                    AtlasCompanionSampler.Member,
+                    new[] { ("_AlphaMask_ST", IdentityScaleOffset) },
+                    new[] { "_AlphaMaskMode" },
+                    SwitchedUv0("_AlphaMaskMode")),
+                new AtlasCompanionRoute(
+                    "_BumpMap",
+                    AtlasCompanionSampler.Member,
+                    new[] { ("_BumpMap_ST", IdentityScaleOffset) },
+                    new[] { "_UseBumpMap" },
+                    SwitchedUv0("_UseBumpMap")),
+                new AtlasCompanionRoute(
+                    "_ShadowBorderMask",
+                    AtlasCompanionSampler.InlineTrilinearRepeat,
+                    Array.Empty<(string, Vector4)>(),
+                    new[] { "_UseShadow", "_ShadowBorderMaskLOD" },
+                    SwitchedUv0("_UseShadow"),
+                    UnheldShadowBorderMaskValue),
+                new AtlasCompanionRoute(
+                    "_MatCapBlendMask",
+                    AtlasCompanionSampler.Member,
+                    new[] { ("_MatCapBlendMask_ST", IdentityScaleOffset) },
+                    new[] { "_UseMatCap" },
+                    SwitchedUv0("_UseMatCap")),
+                new AtlasCompanionRoute(
+                    "_RimColorTex",
+                    AtlasCompanionSampler.Member,
+                    new[] { ("_RimColorTex_ST", IdentityScaleOffset) },
+                    new[] { "_UseRim" },
+                    SwitchedUv0("_UseRim")),
+                new AtlasCompanionRoute(
+                    "_RimShadeMask",
+                    AtlasCompanionSampler.Member,
+                    Array.Empty<(string, Vector4)>(),
+                    new[] { "_UseRimShade" },
+                    SwitchedUv0("_UseRimShade")),
+                new AtlasCompanionRoute(
+                    "_EmissionMap",
+                    AtlasCompanionSampler.Own,
+                    new[]
+                    {
+                        ("_EmissionMap_ST", IdentityScaleOffset),
+                        ("_EmissionMap_ScrollRotate", ZeroScroll),
+                    },
+                    new[] { "_UseEmission", "_EmissionMap_UVMode" },
+                    SwitchedModeUv0("_UseEmission", "_EmissionMap_UVMode")),
+                new AtlasCompanionRoute(
+                    "_ReflectionColorTex",
+                    AtlasCompanionSampler.Member,
+                    new[] { ("_ReflectionColorTex_ST", IdentityScaleOffset) },
+                    new[] { "_UseReflection" },
+                    SwitchedUv0("_UseReflection")),
+                new AtlasCompanionRoute(
+                    "_MainColorAdjustMask",
+                    AtlasCompanionSampler.Member,
+                    Array.Empty<(string, Vector4)>(),
+                    Array.Empty<string>(),
+                    (material, outlineRow) => AtlasRouteUse.Uv0),
+                new AtlasCompanionRoute(
+                    "_Main2ndBlendMask",
+                    AtlasCompanionSampler.Member,
+                    Array.Empty<(string, Vector4)>(),
+                    new[] { "_UseMain2ndTex" },
+                    SwitchedUv0("_UseMain2ndTex")),
+                new AtlasCompanionRoute(
+                    "_OutlineTex",
+                    AtlasCompanionSampler.Own,
+                    new[]
+                    {
+                        ("_OutlineTex_ST", IdentityScaleOffset),
+                        ("_OutlineTex_ScrollRotate", ZeroScroll),
+                    },
+                    Array.Empty<string>(),
+                    OutlineUv0),
+                new AtlasCompanionRoute(
+                    "_OutlineWidthMask",
+                    AtlasCompanionSampler.InlineTrilinearRepeat,
+                    Array.Empty<(string, Vector4)>(),
+                    Array.Empty<string>(),
+                    OutlineUv0),
+                new AtlasCompanionRoute(
+                    "_Main2ndTex",
+                    AtlasCompanionSampler.Own,
+                    new[]
+                    {
+                        ("_Main2ndTex_ST", IdentityScaleOffset),
+                        ("_Main2ndTex_ScrollRotate", ZeroScroll),
+                    },
+                    new[] { "_UseMain2ndTex", "_Main2ndTex_UVMode" },
+                    SwitchedModeUv0("_UseMain2ndTex", "_Main2ndTex_UVMode")),
+            };
+        }
+
+        /// <summary>
         /// The sentence for the first property that must be zero and is
         /// not, or null when every property is zero.
         /// </summary>
@@ -286,6 +602,12 @@ namespace Alrauna.Amuse.Editor.Semantics
         {
             return value.ToString(
                 "0.######", System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        private static string Vector(Vector4 value)
+        {
+            return "(" + Number(value.x) + ", " + Number(value.y) + ", " +
+                   Number(value.z) + ", " + Number(value.w) + ")";
         }
 
         private static string[] UdimDiscardRowFlagNames()
@@ -332,6 +654,24 @@ namespace Alrauna.Amuse.Editor.Semantics
             };
             names.AddRange(LilToonUdimDiscardRowFlags);
             names.AddRange(LilToonIdMaskFlags);
+            return names.ToArray();
+        }
+
+        /// <summary>
+        /// The condition properties of the reviewed lilToon route: the
+        /// lilToon conditions, plus every Main2nd value the layer rule
+        /// reads.
+        /// </summary>
+        private static string[] LilToonReviewedConditionProperties()
+        {
+            var names = new List<string>(LilToonConditionProperties())
+            {
+                "_Main2ndTex_UVMode",
+                "_Main2ndTexDecalAnimation",
+                "_Main2ndTexDecalSubParam",
+                "_Main2ndDissolveParams",
+            };
+            names.AddRange(LilToonMain2ndZeroScalars);
             return names.ToArray();
         }
     }

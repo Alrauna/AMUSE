@@ -202,14 +202,21 @@ namespace Alrauna.Amuse.Editor.Analysis
             internal AtlasGroupKey Key { get; }
 
             private readonly Dictionary<
-                (int InstanceId, AtlasSamplerFacts Sampler),
+                (int InstanceId, AtlasSamplerFacts Sampler, string Companions),
                 PlacementBuilder> placementsByKey =
                 new Dictionary<
-                    (int InstanceId, AtlasSamplerFacts Sampler),
+                    (int InstanceId, AtlasSamplerFacts Sampler, string Companions),
                     PlacementBuilder>();
 
             private readonly List<PlacementBuilder> placements =
                 new List<PlacementBuilder>();
+
+            /// <summary>
+            /// The companions of the first use. The group key holds the
+            /// route signature, so every use of the group has the same
+            /// companion properties, formats, scales, and samplers.
+            /// </summary>
+            private IReadOnlyList<CapturedAtlasCompanion> companions;
 
             internal GroupBuilder(AtlasGroupKey key)
             {
@@ -217,24 +224,38 @@ namespace Alrauna.Amuse.Editor.Analysis
             }
 
             /// <summary>
-            /// Adds one use to the placement of its source. The uses of
-            /// one source texture with one sampler share a placement.
+            /// Adds one use to the placement of its source set. The
+            /// uses of one main source with one sampler and the same
+            /// companion sources share a placement.
             /// </summary>
             internal void AddUse(CapturedAtlasUse use, int rank)
             {
-                if (!placementsByKey.TryGetValue(
-                        (use.SourceTextureInstanceId, use.Sampler),
-                        out var placement))
+                if (companions == null)
+                {
+                    companions = use.Companions;
+                }
+
+                var companionIds = new int[use.Companions.Count];
+                for (var index = 0; index < companionIds.Length; index++)
+                {
+                    companionIds[index] =
+                        use.Companions[index].SourceTextureInstanceId;
+                }
+
+                var key = (
+                    use.SourceTextureInstanceId,
+                    use.Sampler,
+                    string.Join(",", companionIds));
+                if (!placementsByKey.TryGetValue(key, out var placement))
                 {
                     placement = new PlacementBuilder(
                         use.SourceTextureInstanceId,
                         use.Sampler,
                         use.SourceWidth,
                         use.SourceHeight,
-                        rank);
-                    placementsByKey.Add(
-                        (use.SourceTextureInstanceId, use.Sampler),
-                        placement);
+                        rank,
+                        companionIds);
+                    placementsByKey.Add(key, placement);
                     placements.Add(placement);
                 }
                 placement.UnionWith(use.UvRect, rank);
@@ -244,13 +265,37 @@ namespace Alrauna.Amuse.Editor.Analysis
                 int maximumPageSize,
                 int protectedMipLevelCount)
             {
+                var groupCompanions = companions ??
+                    Array.Empty<CapturedAtlasCompanion>();
                 var blockEdge = BlockEdgeOf(Key.SourceFormat);
                 var levelScale = 1 << (protectedMipLevelCount - 1);
                 var anisoRatio = Key.Sampler.AnisoLevel == 0
                     ? 1
                     : BorderedAnisoRatio;
                 var border = Math.Max(anisoRatio, blockEdge) * levelScale;
-                var grid = blockEdge * levelScale;
+                var gridEdge = blockEdge;
+
+                // A companion page is the main layout shifted right by
+                // its scale. Every main coordinate must therefore sit
+                // on the companion block grid at that scale, and the
+                // main border must cover the companion border at that
+                // scale. The extra texel covers the floor of the
+                // shifted region minimum.
+                foreach (var companion in groupCompanions)
+                {
+                    var shift = companion.ScaleShift;
+                    var companionEdge = BlockEdgeOf(companion.SourceFormat);
+                    gridEdge = Math.Max(gridEdge, companionEdge << shift);
+                    var companionRatio = companion.Sampler.AnisoLevel == 0
+                        ? 1
+                        : BorderedAnisoRatio;
+                    var companionBorder =
+                        ((Math.Max(companionRatio, companionEdge) *
+                          levelScale) + (shift > 0 ? 1 : 0)) << shift;
+                    border = Math.Max(border, companionBorder);
+                }
+
+                var grid = gridEdge * levelScale;
 
                 var placed = new List<PlacementBuilder>();
                 var admitted = new List<int>();
@@ -259,9 +304,11 @@ namespace Alrauna.Amuse.Editor.Analysis
                 {
                     var refusal = placement.Measure(
                         Key.SourceFormat,
+                        groupCompanions,
                         border,
                         grid,
-                        maximumPageSize);
+                        maximumPageSize,
+                        out var routeProperty);
                     if (refusal != AtlasPlacementRefusal.None)
                     {
                         var tooLarge =
@@ -272,7 +319,8 @@ namespace Alrauna.Amuse.Editor.Analysis
                                 rank,
                                 refusal,
                                 tooLarge ? placement.Width : 0,
-                                tooLarge ? placement.Height : 0));
+                                tooLarge ? placement.Height : 0,
+                                routeProperty));
                         }
 
                         continue;
@@ -286,9 +334,16 @@ namespace Alrauna.Amuse.Editor.Analysis
                 var pages = Pack(placed, maximumPageSize, grid);
 
                 var pageEntries = new List<AtlasPagePlanEntry>();
-                foreach (var page in pages)
+                var companionPages = new List<AtlasCompanionPage>();
+                for (var pageIndex = 0; pageIndex < pages.Count; pageIndex++)
                 {
-                    pageEntries.Add(page.ToEntry(Key.SourceFormat, grid));
+                    var entry = pages[pageIndex].ToEntry(Key.SourceFormat, grid);
+                    pageEntries.Add(entry);
+                    for (var index = 0; index < groupCompanions.Count; index++)
+                    {
+                        companionPages.Add(CompanionPageOf(
+                            entry, pageIndex, groupCompanions[index], index));
+                    }
                 }
 
                 // The lists grow placement by placement, so uses of
@@ -298,7 +353,51 @@ namespace Alrauna.Amuse.Editor.Analysis
                 refused.Sort((left, right) =>
                     left.UseIndex.CompareTo(right.UseIndex));
 
-                return new AtlasGroupPlan(Key, pageEntries, admitted, refused);
+                return new AtlasGroupPlan(
+                    Key, pageEntries, admitted, refused, companionPages);
+            }
+
+            /// <summary>
+            /// The companion page of one main page: every size and
+            /// coordinate shifted right by the companion scale. The
+            /// grid keeps each shift exact.
+            /// </summary>
+            private static AtlasCompanionPage CompanionPageOf(
+                AtlasPagePlanEntry main,
+                int pageIndex,
+                CapturedAtlasCompanion companion,
+                int companionIndex)
+            {
+                var shift = companion.ScaleShift;
+                var width = main.Width >> shift;
+                var height = main.Height >> shift;
+                var placements = new List<AtlasPlacement>();
+                foreach (var placement in main.Placements)
+                {
+                    placements.Add(new AtlasPlacement(
+                        placement.CompanionSourceIds[companionIndex],
+                        companion.Sampler,
+                        placement.SourceX >> shift,
+                        placement.SourceY >> shift,
+                        placement.Width >> shift,
+                        placement.Height >> shift,
+                        pageIndex,
+                        placement.PageX >> shift,
+                        placement.PageY >> shift,
+                        placement.UseIndices));
+                }
+
+                return new AtlasCompanionPage(
+                    companion.Property,
+                    pageIndex,
+                    shift,
+                    companion.Sampler,
+                    new AtlasPagePlanEntry(
+                        width,
+                        height,
+                        companion.SourceFormat,
+                        FloorLog2(Math.Max(width, height)) + 1,
+                        placements));
             }
 
             /// <summary>
@@ -407,6 +506,8 @@ namespace Alrauna.Amuse.Editor.Analysis
 
             private int SourceHeight { get; }
 
+            private IReadOnlyList<int> CompanionSourceIds { get; }
+
             internal List<int> UseRanks { get; } = new List<int>();
 
             internal int Width { get; private set; }
@@ -428,13 +529,15 @@ namespace Alrauna.Amuse.Editor.Analysis
                 AtlasSamplerFacts sampler,
                 int sourceWidth,
                 int sourceHeight,
-                int firstRank)
+                int firstRank,
+                IReadOnlyList<int> companionSourceIds)
             {
                 SourceTextureInstanceId = sourceTextureInstanceId;
                 Sampler = sampler;
                 SourceWidth = sourceWidth;
                 SourceHeight = sourceHeight;
                 FirstRank = firstRank;
+                CompanionSourceIds = companionSourceIds;
             }
 
             /// <summary>Unions the UV rectangle of one use into the region.</summary>
@@ -453,14 +556,19 @@ namespace Alrauna.Amuse.Editor.Analysis
             /// the floor of the union minimum, the ceiling of the union
             /// maximum, the border on every side, and the outward
             /// alignment to the grid. The region may cross the source
-            /// edge, because a Repeat border reads across the edge.
+            /// edge, because a Repeat border reads across the edge. A
+            /// BC7 companion refuses like a BC7 main source, under its
+            /// own sampler, and names its property.
             /// </summary>
             internal AtlasPlacementRefusal Measure(
                 GraphicsFormat format,
+                IReadOnlyList<CapturedAtlasCompanion> companions,
                 int border,
                 int grid,
-                int maximumPageSize)
+                int maximumPageSize,
+                out string routeProperty)
             {
+                routeProperty = null;
                 var x0 = AlignDown(
                     (int)Math.Floor(minU * SourceWidth) - border,
                     grid);
@@ -474,9 +582,21 @@ namespace Alrauna.Amuse.Editor.Analysis
                     (int)Math.Ceiling(maxV * SourceHeight) + border,
                     grid);
 
-                if (IsBc7(format) && CrossesTheEdgeOnAClampAxis(x0, x1, y0, y1))
+                if (IsBc7(format) &&
+                    CrossesTheEdgeOnAClampAxis(Sampler, x0, x1, y0, y1))
                 {
                     return AtlasPlacementRefusal.ClampEdgeOnBc7;
+                }
+
+                foreach (var companion in companions)
+                {
+                    if (IsBc7(companion.SourceFormat) &&
+                        CrossesTheEdgeOnAClampAxis(
+                            companion.Sampler, x0, x1, y0, y1))
+                    {
+                        routeProperty = companion.Property;
+                        return AtlasPlacementRefusal.ClampEdgeOnBc7;
+                    }
                 }
 
                 SourceX = x0;
@@ -492,19 +612,26 @@ namespace Alrauna.Amuse.Editor.Analysis
                 return AtlasPlacementRefusal.None;
             }
 
+            /// <summary>
+            /// Whether a Clamp axis of the sampler crosses the main
+            /// source edge. A companion is the main source scaled by a
+            /// power of two, so the same main coordinates decide its
+            /// edge too.
+            /// </summary>
             private bool CrossesTheEdgeOnAClampAxis(
+                AtlasSamplerFacts sampler,
                 int x0,
                 int x1,
                 int y0,
                 int y1)
             {
-                if (Sampler.WrapU == UnityEngine.TextureWrapMode.Clamp &&
+                if (sampler.WrapU == UnityEngine.TextureWrapMode.Clamp &&
                     (x0 < 0 || x1 > SourceWidth))
                 {
                     return true;
                 }
 
-                return Sampler.WrapV == UnityEngine.TextureWrapMode.Clamp &&
+                return sampler.WrapV == UnityEngine.TextureWrapMode.Clamp &&
                        (y0 < 0 || y1 > SourceHeight);
             }
 
@@ -520,7 +647,8 @@ namespace Alrauna.Amuse.Editor.Analysis
                     PageIndex,
                     PageX,
                     PageY,
-                    UseRanks);
+                    UseRanks,
+                    CompanionSourceIds);
             }
         }
 

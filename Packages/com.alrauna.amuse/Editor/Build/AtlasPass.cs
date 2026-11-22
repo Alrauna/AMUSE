@@ -199,15 +199,31 @@ namespace Alrauna.Amuse.Editor.Build
             var verdicts = analysis.Verdicts;
 
             // The first live outcome of each distinct source resolves
-            // the source texture at acquisition time.
-            var outcomeBySource =
-                new Dictionary<int, AtlasUseOutcome>();
+            // the source texture at acquisition time: the member
+            // property for a main source, the route property for a
+            // companion source.
+            var mainSourceById =
+                new Dictionary<int, (AtlasUseOutcome Outcome, string Property)>();
+            var companionSourceById =
+                new Dictionary<int, (AtlasUseOutcome Outcome, string Property)>();
             for (var index = 0; index < admittedOutcomes.Count; index++)
             {
                 var id = uses[index].SourceTextureInstanceId;
-                if (!outcomeBySource.ContainsKey(id))
+                if (!mainSourceById.ContainsKey(id))
                 {
-                    outcomeBySource.Add(id, admittedOutcomes[index]);
+                    mainSourceById.Add(
+                        id, (admittedOutcomes[index], MemberProperty));
+                }
+
+                foreach (var companion in uses[index].Companions)
+                {
+                    if (!companionSourceById.ContainsKey(
+                            companion.SourceTextureInstanceId))
+                    {
+                        companionSourceById.Add(
+                            companion.SourceTextureInstanceId,
+                            (admittedOutcomes[index], companion.Property));
+                    }
                 }
             }
 
@@ -244,7 +260,8 @@ namespace Alrauna.Amuse.Editor.Build
                 BuildGroup(
                     state,
                     analysis,
-                    outcomeBySource,
+                    mainSourceById,
+                    companionSourceById,
                     group,
                     optimizer.ProtectedMipLevelCount,
                     pageMaterialByUse,
@@ -305,16 +322,27 @@ namespace Alrauna.Amuse.Editor.Build
         }
 
         /// <summary>
-        /// Builds every page of one admitted group. A group that
-        /// loses one source acquisition withdraws whole: every use of
-        /// the group refuses with SourceAcquisitionFailed and every
-        /// page of the group goes away. A build or check failure
-        /// destroys the pages of the group and rethrows.
+        /// The member property of both admitted rows. The page material
+        /// binds the main page here.
+        /// </summary>
+        private const string MemberProperty = "_MainTex";
+
+        /// <summary>
+        /// Builds every page of one admitted group: each main page,
+        /// then the companion pages that follow it, then its page
+        /// material. A group that loses one source acquisition
+        /// withdraws whole: every use of the group refuses with
+        /// SourceAcquisitionFailed and every page of the group goes
+        /// away. A build or check failure destroys the pages of the
+        /// group and rethrows.
         /// </summary>
         private static void BuildGroup(
             AmusePlatformFinishState state,
             AtlasAnalysisResult analysis,
-            Dictionary<int, AtlasUseOutcome> outcomeBySource,
+            Dictionary<int, (AtlasUseOutcome Outcome, string Property)>
+                mainSourceById,
+            Dictionary<int, (AtlasUseOutcome Outcome, string Property)>
+                companionSourceById,
             int groupIndex,
             int protectedMipLevelCount,
             Dictionary<int, Material> pageMaterialByUse,
@@ -348,19 +376,61 @@ namespace Alrauna.Amuse.Editor.Build
                     pageIndex++)
                 {
                     var page = plan.Pages[pageIndex];
-                    var ledger = new AtlasByteLedger(
-                        AtlasBudget.PredictPagePeakBytes(
-                            page, uses, protectedMipLevelCount));
-                    var sources = new Dictionary<int, AtlasSourceImage>();
-                    try
+
+                    // The names follow the plan order, so two runs of
+                    // the same avatar name the same page.
+                    var pageName =
+                        "AMUSE atlas page " + groupIndex + "-" + pageIndex;
+                    if (!TryBuildPage(
+                            state,
+                            page,
+                            plan.Key.Sampler,
+                            mainSourceById,
+                            uses,
+                            protectedMipLevelCount,
+                            pageName,
+                            built,
+                            out var texture,
+                            out var failedTexture,
+                            out var changed))
                     {
-                        if (!TryAcquirePageSources(
-                                page,
-                                outcomeBySource,
+                        WithdrawGroup(
+                            state,
+                            plan,
+                            admittedOutcomes,
+                            built,
+                            pagesBuilt,
+                            pageMaterialByUse,
+                            placementByUse,
+                            pageByUse,
+                            changed
+                                ? AtlasRefusalDetail.SourceChanged()
+                                : AtlasRefusalDetail.SourceReadFailed(
+                                    failedTexture),
+                            failedTexture);
+                        return;
+                    }
+
+                    var routePages = new List<(string Property, Texture2D Page)>();
+                    foreach (var companionPage in plan.CompanionPages)
+                    {
+                        if (companionPage.MainPageIndex != pageIndex)
+                        {
+                            continue;
+                        }
+
+                        if (!TryBuildPage(
+                                state,
+                                companionPage.Entry,
+                                companionPage.Sampler,
+                                companionSourceById,
+                                uses,
                                 protectedMipLevelCount,
-                                sources,
-                                out var failedTexture,
-                                out var changed))
+                                pageName + " " + companionPage.Property,
+                                built,
+                                out var routeTexture,
+                                out failedTexture,
+                                out changed))
                         {
                             WithdrawGroup(
                                 state,
@@ -379,49 +449,29 @@ namespace Alrauna.Amuse.Editor.Build
                             return;
                         }
 
-                        // The names follow the plan order, so two runs
-                        // of the same avatar name the same page.
-                        var texture = AtlasPageBuilder.Build(
-                            page,
-                            plan.Key.Sampler,
-                            sources,
-                            protectedMipLevelCount,
-                            ledger);
-                        texture.name =
-                            "AMUSE atlas page " + groupIndex + "-" +
-                            pageIndex;
-                        // The texture joins the built list at once, so
-                        // a check or ledger failure below cannot leak
-                        // it.
-                        built.Add(texture);
-                        state.AmuseOwnedObjects.Add(texture);
-                        PageCheck(
-                            texture, page, sources,
-                            protectedMipLevelCount, ledger);
-                        texture.Apply(false, true);
-
-                        var pageMaterial =
-                            NewPageMaterial(firstMaterial, texture);
-                        pageMaterial.name =
-                            "AMUSE atlas material " + groupIndex + "-" +
-                            pageIndex;
-                        built.Add(pageMaterial);
-                        state.AmuseOwnedObjects.Add(pageMaterial);
-                        state.AtlasPageCount++;
-                        pagesBuilt++;
-                        foreach (var placement in page.Placements)
-                        {
-                            foreach (var useIndex in placement.UseIndices)
-                            {
-                                pageMaterialByUse[useIndex] = pageMaterial;
-                                placementByUse[useIndex] = placement;
-                                pageByUse[useIndex] = page;
-                            }
-                        }
+                        routePages.Add((companionPage.Property, routeTexture));
                     }
-                    finally
+
+                    var pageMaterial = NewPageMaterial(
+                        firstMaterial,
+                        texture,
+                        uses[firstIndex].PageAliasProperties,
+                        routePages);
+                    pageMaterial.name =
+                        "AMUSE atlas material " + groupIndex + "-" +
+                        pageIndex;
+                    built.Add(pageMaterial);
+                    state.AmuseOwnedObjects.Add(pageMaterial);
+                    state.AtlasPageCount++;
+                    pagesBuilt++;
+                    foreach (var placement in page.Placements)
                     {
-                        sources.Clear();
+                        foreach (var useIndex in placement.UseIndices)
+                        {
+                            pageMaterialByUse[useIndex] = pageMaterial;
+                            placementByUse[useIndex] = placement;
+                            pageByUse[useIndex] = page;
+                        }
                     }
                 }
 
@@ -442,21 +492,94 @@ namespace Alrauna.Amuse.Editor.Build
         }
 
         /// <summary>
-        /// One page material per page: a clone of the first use
-        /// material with the page on the member texture. Unity's
-        /// material copy constructor re-syncs drawer governed
-        /// keywords to their controlling property values, so the
-        /// clone can carry keywords the capture never checked. The
+        /// Acquires the sources of one page entry, builds the page,
+        /// names it, and checks it. The texture joins the built list
+        /// at once, so a check or ledger failure cannot leak it. It
+        /// returns false on an acquisition failure, with the same
+        /// out values as <see cref="TryAcquirePageSources"/>.
+        /// </summary>
+        private static bool TryBuildPage(
+            AmusePlatformFinishState state,
+            AtlasPagePlanEntry page,
+            Semantics.AtlasSamplerFacts sampler,
+            Dictionary<int, (AtlasUseOutcome Outcome, string Property)>
+                sourceById,
+            IReadOnlyList<CapturedAtlasUse> uses,
+            int protectedMipLevelCount,
+            string name,
+            List<UnityEngine.Object> built,
+            out Texture2D texture,
+            out Texture2D failedTexture,
+            out bool changed)
+        {
+            texture = null;
+            var ledger = new AtlasByteLedger(
+                AtlasBudget.PredictPagePeakBytes(
+                    page, uses, protectedMipLevelCount));
+            var sources = new Dictionary<int, AtlasSourceImage>();
+            try
+            {
+                if (!TryAcquirePageSources(
+                        page,
+                        sourceById,
+                        protectedMipLevelCount,
+                        sources,
+                        out failedTexture,
+                        out changed))
+                {
+                    return false;
+                }
+
+                texture = AtlasPageBuilder.Build(
+                    page,
+                    sampler,
+                    sources,
+                    protectedMipLevelCount,
+                    ledger);
+                texture.name = name;
+                built.Add(texture);
+                state.AmuseOwnedObjects.Add(texture);
+                PageCheck(
+                    texture, page, sources,
+                    protectedMipLevelCount, ledger);
+                texture.Apply(false, true);
+                return true;
+            }
+            finally
+            {
+                sources.Clear();
+            }
+        }
+
+        /// <summary>
+        /// One page material per main page: a clone of the first use
+        /// material with the main page on the member texture and on
+        /// every alias property, and each companion page on its route
+        /// property. Unity's material copy constructor re-syncs drawer
+        /// governed keywords to their controlling property values, so
+        /// the clone can carry keywords the capture never checked. The
         /// source keyword array is written back, and a remaining
         /// difference is an invariant failure.
         /// </summary>
         private static Material NewPageMaterial(
             Material firstMaterial,
-            Texture2D texture)
+            Texture2D texture,
+            IReadOnlyList<string> aliasProperties,
+            IReadOnlyList<(string Property, Texture2D Page)> routePages)
         {
             var pageMaterial = new Material(firstMaterial);
             pageMaterial.shaderKeywords = firstMaterial.shaderKeywords;
-            pageMaterial.SetTexture("_MainTex", texture);
+            pageMaterial.SetTexture(MemberProperty, texture);
+            foreach (var alias in aliasProperties)
+            {
+                pageMaterial.SetTexture(alias, texture);
+            }
+
+            foreach (var routePage in routePages)
+            {
+                pageMaterial.SetTexture(routePage.Property, routePage.Page);
+            }
+
             var sourceKeywords = new HashSet<string>(
                 firstMaterial.shaderKeywords,
                 StringComparer.Ordinal);
@@ -517,16 +640,17 @@ namespace Alrauna.Amuse.Editor.Build
         /// <summary>
         /// Acquires every distinct source of one page. The live
         /// material of the first use of each source resolves the
-        /// texture, and a missing or changed texture is an
-        /// acquisition failure, because the capture saw it live. On a
-        /// failure, <paramref name="changed"/> is true when the texture
-        /// went missing or was replaced, and
-        /// <paramref name="failedTexture"/> holds the texture that
-        /// could not be read otherwise.
+        /// texture through the property the source sits on, and a
+        /// missing or changed texture is an acquisition failure,
+        /// because the capture saw it live. On a failure,
+        /// <paramref name="changed"/> is true when the texture went
+        /// missing or was replaced, and <paramref name="failedTexture"/>
+        /// holds the texture that could not be read otherwise.
         /// </summary>
         private static bool TryAcquirePageSources(
             AtlasPagePlanEntry page,
-            Dictionary<int, AtlasUseOutcome> outcomeBySource,
+            Dictionary<int, (AtlasUseOutcome Outcome, string Property)>
+                sourceById,
             int protectedMipLevelCount,
             Dictionary<int, AtlasSourceImage> sources,
             out Texture2D failedTexture,
@@ -542,12 +666,12 @@ namespace Alrauna.Amuse.Editor.Build
                     continue;
                 }
 
-                var outcome = outcomeBySource[id];
+                var (outcome, property) = sourceById[id];
                 var material =
                     outcome.Renderer.sharedMaterials[outcome.SlotIndex];
                 var texture = material == null
                     ? null
-                    : material.GetTexture("_MainTex") as Texture2D;
+                    : material.GetTexture(property) as Texture2D;
                 if (texture == null || texture.GetInstanceID() != id)
                 {
                     changed = true;

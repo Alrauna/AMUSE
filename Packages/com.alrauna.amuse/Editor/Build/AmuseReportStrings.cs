@@ -987,8 +987,8 @@ namespace Alrauna.Amuse.Editor.Build
             ["amuse.atlas.UnsupportedFormat:description"] =
                 "The main texture has a format the page cannot " +
                 "copy. The page copies RGBA32, RGB24, DXT1, DXT5, " +
-                "and BC7 only, and never a crunched texture. The " +
-                "slot keeps its original bindings.{5}",
+                "BC4, BC5, and BC7 only, and never a crunched " +
+                "texture. The slot keeps its original bindings.{5}",
             ["amuse.atlas.UnsupportedFormat:hint"] =
                 "Import the texture in a supported format if you " +
                 "want AMUSE to atlas this slot.",
@@ -1154,6 +1154,42 @@ namespace Alrauna.Amuse.Editor.Build
                 "Remove the empty mesh part if you want AMUSE to " +
                 "atlas this slot.",
 
+            ["amuse.atlas.SingleSourceGroup"] =
+                "AMUSE did not atlas material slot {0} of renderer '{1}' ({4}).",
+            ["amuse.atlas.SingleSourceGroup:description"] =
+                "Every slot of this group uses the same source " +
+                "textures. A page would copy them and add texture " +
+                "memory, and no merge could use it. The slot keeps " +
+                "its original bindings.{5}",
+            ["amuse.atlas.SingleSourceGroup:hint"] =
+                "Nothing is wrong. Slots that share one material and " +
+                "one texture need no atlas.",
+
+            ["amuse.atlas.CompanionSizeMismatch"] =
+                "AMUSE did not atlas material slot {0} of renderer '{1}' ({4}).",
+            ["amuse.atlas.CompanionSizeMismatch:description"] =
+                "A route texture must have the size of the main " +
+                "texture, divided by the same power of two on both " +
+                "axes. Its page uses the main page layout at that " +
+                "scale. The slot keeps its original bindings.{5}",
+            ["amuse.atlas.CompanionSizeMismatch:hint"] =
+                "Import the route texture at the main texture size, or " +
+                "at one half, one quarter, or a smaller power of two " +
+                "of it.",
+
+            ["amuse.atlas.RouteSamplerMismatch"] =
+                "AMUSE did not atlas material slot {0} of renderer '{1}' ({4}).",
+            ["amuse.atlas.RouteSamplerMismatch:description"] =
+                "The outline pass reads the route textures with the " +
+                "sampler of the outline texture. That sampler differs " +
+                "from the main texture sampler, so one page border " +
+                "cannot serve both passes. The slot keeps its original " +
+                "bindings.{5}",
+            ["amuse.atlas.RouteSamplerMismatch:hint"] =
+                "Use the main texture as the outline texture, or give " +
+                "the outline texture the filter, wrap, and anisotropy " +
+                "settings of the main texture.",
+
             // --- Atlas refusal short causes ---
             // The inspector view and the summary line name a cause
             // with these lower case phrases.
@@ -1194,23 +1230,23 @@ namespace Alrauna.Amuse.Editor.Build
             ["amuse.atlas.MissingMainTexture:short"] =
                 "the material has no main texture",
             ["amuse.atlas.UnsupportedTextureDimension:short"] =
-                "the main texture is not 2D",
+                "a route texture is not 2D",
             ["amuse.atlas.SourceNotAnAsset:short"] =
-                "the main texture is not an imported asset",
+                "a route texture is not an imported asset",
             ["amuse.atlas.UnsupportedFormat:short"] =
-                "the main texture format is not supported",
+                "a route texture format is not supported",
             ["amuse.atlas.UnsupportedWrap:short"] =
-                "the main texture uses Mirror wrap",
+                "a route texture uses Mirror wrap",
             ["amuse.atlas.NonIdentityTransform:short"] =
-                "the main texture has tiling, offset, or panning",
+                "a route texture has tiling, offset, or panning",
             ["amuse.atlas.MissingRouteChannel:short"] =
                 "the mesh has no UV0",
             ["amuse.atlas.UvOutsideUnitSquare:short"] =
                 "a UV lies outside the range from 0 to 1",
             ["amuse.atlas.SourceNotAligned:short"] =
-                "the main texture size does not fit the block grid",
+                "a route texture size does not fit the block grid",
             ["amuse.atlas.SourceMipChainTooShort:short"] =
-                "the main texture has too few mip levels",
+                "a route texture has too few mip levels",
             ["amuse.atlas.ClampEdgeOnBc7:short"] =
                 "a BC7 texture needs a clamp border",
             ["amuse.atlas.PlacementTooLarge:short"] =
@@ -1229,6 +1265,12 @@ namespace Alrauna.Amuse.Editor.Build
                 "the mesh part is not triangles",
             ["amuse.atlas.EmptySubmesh:short"] =
                 "the mesh part has no triangles",
+            ["amuse.atlas.SingleSourceGroup:short"] =
+                "no other texture shares a page with it",
+            ["amuse.atlas.CompanionSizeMismatch:short"] =
+                "a route texture size does not fit the main texture size",
+            ["amuse.atlas.RouteSamplerMismatch:short"] =
+                "the outline texture sampler differs from the main texture sampler",
 
             // --- Atlas summary ---
             ["amuse.atlas.Summary"] =

@@ -840,12 +840,19 @@ namespace Alrauna.Amuse.Editor.Build
                 contexts.ToArray());
         }
 
-        /// <summary>One page of a page set as one line of text.</summary>
+        /// <summary>
+        /// One page of a page set as one line of text. A companion
+        /// page names its main page and its route property.
+        /// </summary>
         internal static string AtlasPageLine(
             int pageIndex, AtlasPageSetPage page)
         {
-            return "Page " +
-                   pageIndex.ToString(CultureInfo.InvariantCulture) + ": " +
+            var label = page.RouteProperty == null
+                ? "Page " + pageIndex.ToString(CultureInfo.InvariantCulture)
+                : "Page " +
+                  page.MainPageIndex.ToString(CultureInfo.InvariantCulture) +
+                  " for '" + page.RouteProperty + "'";
+            return label + ": " +
                    page.Width.ToString(CultureInfo.InvariantCulture) +
                    " x " +
                    page.Height.ToString(CultureInfo.InvariantCulture) +

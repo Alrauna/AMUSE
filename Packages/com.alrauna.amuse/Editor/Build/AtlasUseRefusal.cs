@@ -116,5 +116,24 @@ namespace Alrauna.Amuse.Editor.Build
 
         /// <summary>The submesh of the use has no triangles.</summary>
         EmptySubmesh,
+
+        /// <summary>
+        /// Every admitted use of the group shares one source set. A
+        /// page would only copy it.
+        /// </summary>
+        SingleSourceGroup,
+
+        /// <summary>
+        /// A companion route texture size is not the main size divided
+        /// by one power of two on both axes.
+        /// </summary>
+        CompanionSizeMismatch,
+
+        /// <summary>
+        /// An outline row reads a companion with <c>sampler_MainTex</c>,
+        /// and the outline texture sampler differs from the main
+        /// texture sampler.
+        /// </summary>
+        RouteSamplerMismatch,
     }
 }
