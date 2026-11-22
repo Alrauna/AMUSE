@@ -109,14 +109,10 @@ namespace Alrauna.Amuse.Editor.Host
             "m_CustomRenderQueue";
         private const string InvalidKeywordsPath = "m_InvalidKeywords";
         private const string SavedPropertiesPath = "m_SavedProperties";
-        private const string SavedTexEnvsPath =
-            "m_SavedProperties.m_TexEnvs";
-        private const string SavedIntsPath =
-            "m_SavedProperties.m_Ints";
-        private const string SavedFloatsPath =
-            "m_SavedProperties.m_Floats";
-        private const string SavedColorsPath =
-            "m_SavedProperties.m_Colors";
+        private const string TexEnvsSectionName = "m_TexEnvs";
+        private const string IntsSectionName = "m_Ints";
+        private const string FloatsSectionName = "m_Floats";
+        private const string ColorsSectionName = "m_Colors";
 
         /// <summary>
         /// The page formats of Milestone 2. Each is admitted in its
@@ -1744,27 +1740,68 @@ namespace Alrauna.Amuse.Editor.Host
             /// sections. The saved array order follows the property
             /// order of earlier shaders, so keying by name keeps one
             /// key for one render state when a stale entry shifts
-            /// the arrays. A dead property adds no token.
+            /// the arrays. A dead property adds no token. A section
+            /// that Unity does not write adds nothing. A direct
+            /// child with an unknown name refuses the walk, because
+            /// an unknown shape may hold a live value.
             /// </summary>
             private void AppendSavedProperties(
                 SerializedObject serialized)
             {
-                AppendNamedSection(
-                    serialized.FindProperty(SavedTexEnvsPath),
-                    "t:",
-                    TexEnvValueOf);
-                AppendNamedSection(
-                    serialized.FindProperty(SavedIntsPath),
-                    "i:",
-                    IntValueOf);
-                AppendNamedSection(
-                    serialized.FindProperty(SavedFloatsPath),
-                    "f:",
-                    FloatValueOf);
-                AppendNamedSection(
-                    serialized.FindProperty(SavedColorsPath),
-                    "c:",
-                    ColorValueOf);
+                var saved = serialized.FindProperty(SavedPropertiesPath);
+                if (saved == null)
+                {
+                    return;
+                }
+
+                SerializedProperty texEnvs = null;
+                SerializedProperty ints = null;
+                SerializedProperty floats = null;
+                SerializedProperty colors = null;
+                var child = saved.Copy();
+                var end = child.GetEndProperty();
+                var enterChildren = true;
+                while (child.Next(enterChildren) &&
+                       !SerializedProperty.EqualContents(child, end))
+                {
+                    enterChildren = false;
+                    if (string.Equals(
+                            child.name, TexEnvsSectionName,
+                            StringComparison.Ordinal))
+                    {
+                        texEnvs = child.Copy();
+                    }
+                    else if (string.Equals(
+                                 child.name, IntsSectionName,
+                                 StringComparison.Ordinal))
+                    {
+                        ints = child.Copy();
+                    }
+                    else if (string.Equals(
+                                 child.name, FloatsSectionName,
+                                 StringComparison.Ordinal))
+                    {
+                        floats = child.Copy();
+                    }
+                    else if (string.Equals(
+                                 child.name, ColorsSectionName,
+                                 StringComparison.Ordinal))
+                    {
+                        colors = child.Copy();
+                    }
+                    else
+                    {
+                        throw new InvalidOperationException(
+                            "The material key walk met the unknown " +
+                            "saved properties section '" + child.name +
+                            "' at " + child.propertyPath + ".");
+                    }
+                }
+
+                AppendNamedSection(texEnvs, "t:", TexEnvValueOf);
+                AppendNamedSection(ints, "i:", IntValueOf);
+                AppendNamedSection(floats, "f:", FloatValueOf);
+                AppendNamedSection(colors, "c:", ColorValueOf);
             }
 
             private void AppendNamedSection(
@@ -1782,7 +1819,7 @@ namespace Alrauna.Amuse.Editor.Host
                 {
                     var element = array.GetArrayElementAtIndex(index);
                     var name = SavedNameOf(element);
-                    if (name == null || deadProperties.Contains(name))
+                    if (deadProperties.Contains(name))
                     {
                         continue;
                     }
@@ -1871,29 +1908,41 @@ namespace Alrauna.Amuse.Editor.Host
             /// The saved property name of one array element. Unity
             /// stores the pair name either as a plain string under
             /// <c>first</c> or as <c>first.name</c> in the struct
-            /// shape.
+            /// shape. An element without a readable name refuses
+            /// the walk, because an unknown shape may hold a live
+            /// value.
             /// </summary>
             private static string SavedNameOf(
                 SerializedProperty element)
             {
                 var first = element.FindPropertyRelative("first");
-                if (first == null)
+                string name = null;
+                if (first != null &&
+                    first.propertyType ==
+                        SerializedPropertyType.String)
                 {
-                    return null;
+                    name = first.stringValue;
+                }
+                else if (first != null)
+                {
+                    var inner = first.FindPropertyRelative("name");
+                    if (inner != null &&
+                        inner.propertyType ==
+                            SerializedPropertyType.String)
+                    {
+                        name = inner.stringValue;
+                    }
                 }
 
-                if (first.propertyType ==
-                    SerializedPropertyType.String)
+                if (name == null)
                 {
-                    return first.stringValue;
+                    throw new InvalidOperationException(
+                        "The material key walk met a saved property " +
+                        "element without a readable name at " +
+                        element.propertyPath + ".");
                 }
 
-                var name = first.FindPropertyRelative("name");
-                return name != null &&
-                       name.propertyType ==
-                           SerializedPropertyType.String
-                    ? name.stringValue
-                    : null;
+                return name;
             }
 
             private void AppendPath(SerializedProperty property)

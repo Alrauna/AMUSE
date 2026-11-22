@@ -1328,7 +1328,7 @@ Shader ""Hidden/Alrauna/AmuseTests/AtlasUseCaptureFooDeclared""
             float _Foo;
             float4 frag(v2f_img image) : SV_Target
             {
-                return float4(_Foo, 0, 0, 1);
+                return float4(_Foo, 1, 0, 1);
             }
             ENDCG
         }
@@ -1349,7 +1349,7 @@ Shader ""Hidden/Alrauna/AmuseTests/AtlasUseCaptureFooUndeclared""
             float _Foo;
             float4 frag(v2f_img image) : SV_Target
             {
-                return float4(_Foo, 0, 0, 1);
+                return float4(_Foo, 1, 0, 1);
             }
             ENDCG
         }
@@ -1362,9 +1362,11 @@ Shader ""Hidden/Alrauna/AmuseTests/AtlasUseCaptureFooUndeclared""
             // Unity pins this fact on this editor. A saved value for
             // a property that the shader no longer lists stays in
             // the serialized data, but it never reaches the uniform
-            // that the shader code declares. The color is black, not
-            // the magenta of a broken shader. The key still counts
-            // the entry until a reviewed model declares it dead.
+            // that the shader code declares. The green channel is a
+            // shader constant. It proves that the pass ran, so the
+            // black red channel means the uniform read zero and not
+            // a broken pass. The key still counts the entry until a
+            // reviewed model declares it dead.
             var withProperty = Track(ShaderUtil.CreateShaderAsset(
                 ShaderWithADeclaredFoo));
             var withoutProperty = Track(ShaderUtil.CreateShaderAsset(
@@ -1379,7 +1381,7 @@ Shader ""Hidden/Alrauna/AmuseTests/AtlasUseCaptureFooUndeclared""
             var color = BlitColorOf(material);
 
             Assert.That(color.r, Is.EqualTo(0f).Within(0.001f));
-            Assert.That(color.g, Is.EqualTo(0f).Within(0.001f));
+            Assert.That(color.g, Is.EqualTo(1f).Within(0.001f));
             Assert.That(color.b, Is.EqualTo(0f).Within(0.001f));
         }
 
@@ -1388,6 +1390,8 @@ Shader ""Hidden/Alrauna/AmuseTests/AtlasUseCaptureFooUndeclared""
         {
             // The control of the test above. The same uniform on the
             // shader that lists the property reads the saved value.
+            // The green channel is a shader constant. It proves that
+            // the pass ran.
             var withProperty = Track(ShaderUtil.CreateShaderAsset(
                 ShaderWithADeclaredFoo));
             var material = Track(new Material(withProperty));
@@ -1399,7 +1403,7 @@ Shader ""Hidden/Alrauna/AmuseTests/AtlasUseCaptureFooUndeclared""
             var color = BlitColorOf(material);
 
             Assert.That(color.r, Is.EqualTo(1f).Within(0.001f));
-            Assert.That(color.g, Is.EqualTo(0f).Within(0.001f));
+            Assert.That(color.g, Is.EqualTo(1f).Within(0.001f));
             Assert.That(color.b, Is.EqualTo(0f).Within(0.001f));
         }
 
