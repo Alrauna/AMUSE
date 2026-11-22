@@ -6,9 +6,11 @@ namespace Alrauna.Amuse.Editor.Semantics
     /// The property names a VRChat fallback shader can read. VRChat
     /// swaps a material to a fallback shader by its VRCFallback tag.
     /// A saved value whose name matches a fallback shader property
-    /// can change rendering, so it never counts as stale and it
-    /// never joins a dead family. The names come from the two Toon
-    /// Standard shaders and the Unity Standard property surface.
+    /// can change rendering on any row, whatever tag the material
+    /// holds. So these names always count. They never turn stale,
+    /// and they never join a dead family. The names come from the
+    /// two Toon Standard shaders and the Unity Standard property
+    /// surface.
     /// </summary>
     internal static class VRChatFallbackProperties
     {
@@ -36,6 +38,9 @@ namespace Alrauna.Amuse.Editor.Semantics
                 "_ColorMaskEmissionStrength3",
                 "_ColorMaskEmissionStrength4",
                 "_Cutoff",
+                "_MatCap",
+                "_Matcap",
+                "_Mode",
                 "_DetailAlbedoMap",
                 "_DetailHueShift",
                 "_DetailMask",
@@ -77,6 +82,7 @@ namespace Alrauna.Amuse.Editor.Semantics
                 "_ShadowAlbedo",
                 "_ShadowBoost",
                 "_SmoothnessTextureChannel",
+                "_SpecColor",
                 "_SpecGlossMap",
                 "_SpecularHighlights",
                 "_SpecularSharpness",

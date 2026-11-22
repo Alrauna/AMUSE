@@ -92,6 +92,38 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         }
 
         /// <summary>
+        /// Every switch must exist as a property of every admitted
+        /// row. A switch that one row does not declare could never
+        /// turn its family back on there, and the off test would
+        /// read a value the row ignores.
+        /// </summary>
+        [Test]
+        public void FamiliesNameOnlyDeclaredSwitches()
+        {
+            var offenders = new SortedSet<string>();
+            foreach (var shader in RowShaders())
+            {
+                var rowProperties =
+                    new HashSet<string>(ShaderPropertyNames(shader));
+                foreach (var family in LilToonLiveValues.Model.Families)
+                {
+                    foreach (var name in family.Switches)
+                    {
+                        if (!rowProperties.Contains(name))
+                        {
+                            offenders.Add(shader.name + ": " + name);
+                        }
+                    }
+                }
+            }
+
+            Assert.That(
+                offenders, Is.Empty,
+                "every switch must be a property of every admitted " +
+                "row. Offenders: " + string.Join(", ", offenders));
+        }
+
+        /// <summary>
         /// Every field of every constant buffer that does not start
         /// with Unity, and every texture binding that does not start
         /// with unity_, of every compiled variant of every pass of

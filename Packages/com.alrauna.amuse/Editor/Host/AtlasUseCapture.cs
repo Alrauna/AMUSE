@@ -1555,12 +1555,22 @@ namespace Alrauna.Amuse.Editor.Host
             int slotIndex,
             RendererAnimationFacts animation)
         {
-            var rendererWide = new MaterialPropertyBlock();
-            renderer.GetPropertyBlock(rendererWide);
-            var slotBlock = new MaterialPropertyBlock();
-            renderer.GetPropertyBlock(slotBlock, slotIndex);
+            // The blocks are read on the first query only, so a row
+            // whose families are all on never pays for them.
+            MaterialPropertyBlock rendererWide = null;
+            MaterialPropertyBlock slotBlock = null;
+            var factsRead = false;
             return switchProperty =>
             {
+                if (!factsRead)
+                {
+                    rendererWide = new MaterialPropertyBlock();
+                    renderer.GetPropertyBlock(rendererWide);
+                    slotBlock = new MaterialPropertyBlock();
+                    renderer.GetPropertyBlock(slotBlock, slotIndex);
+                    factsRead = true;
+                }
+
                 foreach (var animated in animation
                     .AnimatedMaterialPropertyNames)
                 {
@@ -1576,7 +1586,6 @@ namespace Alrauna.Amuse.Editor.Host
                        BlockNamesRoute(slotBlock, switchProperty);
             };
         }
-
         /// <summary>
         /// Whether the material carries a VRCFallback tag that names
         /// the toon standard shader. VRChat swaps the shader then, so
@@ -1666,7 +1675,13 @@ namespace Alrauna.Amuse.Editor.Host
 
             internal string Walk(Material material)
             {
-                CollectShaderPropertyNames(material);
+                // The names feed the stale rule only, so a walk
+                // without that rule skips the shader query.
+                if (skipStaleSavedNames)
+                {
+                    CollectShaderPropertyNames(material);
+                }
+
                 using var serialized = new SerializedObject(material);
                 var property = serialized.GetIterator();
                 var enterChildren = true;

@@ -2375,8 +2375,7 @@ Shader ""Hidden/Alrauna/AmuseTests/AtlasUseCaptureFooUndeclared""
             var second = NewLilToonFixture();
             first.Material.SetFloat("_UseRim", 0f);
             second.Material.SetFloat("_UseRim", 0f);
-            second.Material.SetColor(
-                "_RimColor", new Color(0.1f, 0.9f, 0.4f, 1f));
+            second.Material.SetFloat("_RimBorder", 0.9f);
 
             var firstOutcome = CaptureLilToon(first);
             var secondOutcome = CaptureLilToon(second);
@@ -2398,8 +2397,7 @@ Shader ""Hidden/Alrauna/AmuseTests/AtlasUseCaptureFooUndeclared""
             var second = NewLilToonFixture();
             first.Material.SetFloat("_UseRim", 1f);
             second.Material.SetFloat("_UseRim", 1f);
-            second.Material.SetColor(
-                "_RimColor", new Color(0.1f, 0.9f, 0.4f, 1f));
+            second.Material.SetFloat("_RimBorder", 0.9f);
 
             var firstOutcome = CaptureLilToon(first);
             var secondOutcome = CaptureLilToon(second);
@@ -2426,8 +2424,7 @@ Shader ""Hidden/Alrauna/AmuseTests/AtlasUseCaptureFooUndeclared""
                 fixture.Material.SetFloat("_UseRim", 0f);
             }
 
-            second.Material.SetColor(
-                "_RimColor", new Color(0.1f, 0.9f, 0.4f, 1f));
+            second.Material.SetFloat("_RimBorder", 0.9f);
             var clip = Track(new AnimationClip { name = "RimSwitch" });
             AnimateScalar(clip, "Body", "material._UseRim");
             var graph = GraphOf(first.Root, clip);
@@ -2459,8 +2456,7 @@ Shader ""Hidden/Alrauna/AmuseTests/AtlasUseCaptureFooUndeclared""
                 fixture.Renderer.SetPropertyBlock(block);
             }
 
-            second.Material.SetColor(
-                "_RimColor", new Color(0.1f, 0.9f, 0.4f, 1f));
+            second.Material.SetFloat("_RimBorder", 0.9f);
 
             var firstOutcome = CaptureLilToon(first);
             var secondOutcome = CaptureLilToon(second);
@@ -2578,8 +2574,7 @@ Shader ""Hidden/Alrauna/AmuseTests/AtlasUseCaptureFooUndeclared""
                     "VRCFallback", "toonstandard");
             }
 
-            second.Material.SetColor(
-                "_RimColor", new Color(0.1f, 0.9f, 0.4f, 1f));
+            second.Material.SetFloat("_RimBorder", 0.9f);
 
             var firstOutcome = CaptureLilToon(first);
             var secondOutcome = CaptureLilToon(second);
@@ -2591,6 +2586,85 @@ Shader ""Hidden/Alrauna/AmuseTests/AtlasUseCaptureFooUndeclared""
                 Is.Not.EqualTo(firstOutcome.Use.MaterialKey),
                 "the fallback shader reads the rim color, so the tag " +
                 "keeps every value live");
+        }
+
+        [Test]
+        public void NaNSwitchKeepsTheFamilyLive()
+        {
+            // The source compares a switch with not equal to zero,
+            // and NaN is not zero. The family stays live.
+            var first = NewLilToonFixture();
+            var second = NewLilToonFixture();
+            first.Material.SetFloat("_UseRim", float.NaN);
+            second.Material.SetFloat("_UseRim", float.NaN);
+            second.Material.SetFloat("_RimBorder", 0.9f);
+
+            var firstOutcome = CaptureLilToon(first);
+            var secondOutcome = CaptureLilToon(second);
+
+            AssertAdmitted(firstOutcome);
+            AssertAdmitted(secondOutcome);
+            Assert.That(
+                secondOutcome.Use.MaterialKey,
+                Is.Not.EqualTo(firstOutcome.Use.MaterialKey),
+                "a NaN switch counts as on, so the rim border stays " +
+                "live");
+        }
+
+        [Test]
+        public void OutlineValuesChangeTheKeyOnlyOnOutlineRows()
+        {
+            var plain = NewLilToonFixture();
+            var plainWide = NewLilToonFixture();
+            plainWide.Material.SetFloat("_OutlineWidth", 0.9f);
+            var outlineRow = NewLilToonFixture(
+                LoadInstalledLilToonShader(
+                    LilToonSourceAttestation.OutlineShaderGuid));
+            var outlineRowWide = NewLilToonFixture(
+                LoadInstalledLilToonShader(
+                    LilToonSourceAttestation.OutlineShaderGuid));
+            outlineRowWide.Material.SetFloat("_OutlineWidth", 0.9f);
+
+            var plainOutcome = CaptureLilToon(plain);
+            var plainWideOutcome = CaptureLilToon(plainWide);
+            var outlineOutcome = CaptureLilToon(outlineRow);
+            var outlineWideOutcome = CaptureLilToon(outlineRowWide);
+
+            AssertAdmitted(plainOutcome);
+            AssertAdmitted(plainWideOutcome);
+            AssertAdmitted(outlineOutcome);
+            AssertAdmitted(outlineWideOutcome);
+            Assert.That(
+                plainWideOutcome.Use.MaterialKey,
+                Is.EqualTo(plainOutcome.Use.MaterialKey),
+                "a row without an outline pass never reads the width");
+            Assert.That(
+                outlineWideOutcome.Use.MaterialKey,
+                Is.Not.EqualTo(outlineOutcome.Use.MaterialKey),
+                "an outline row reads the width in its vertex code");
+        }
+
+        // --- Falsifier 10: a fallback name stays live even inside a
+        // dead family, because the fallback swap ignores the row. ---
+        [Test]
+        public void FallbackNameInADeadFamilyStillCounts()
+        {
+            var first = NewLilToonFixture();
+            var second = NewLilToonFixture();
+            first.Material.SetFloat("_UseReflection", 0f);
+            second.Material.SetFloat("_UseReflection", 0f);
+            second.Material.SetFloat("_Metallic", 0.8f);
+
+            var firstOutcome = CaptureLilToon(first);
+            var secondOutcome = CaptureLilToon(second);
+
+            AssertAdmitted(firstOutcome);
+            AssertAdmitted(secondOutcome);
+            Assert.That(
+                secondOutcome.Use.MaterialKey,
+                Is.Not.EqualTo(firstOutcome.Use.MaterialKey),
+                "a fallback shader reads _Metallic, so it stays live " +
+                "inside the dead reflection family");
         }
 
         private static void AppendStaleTexEnv(

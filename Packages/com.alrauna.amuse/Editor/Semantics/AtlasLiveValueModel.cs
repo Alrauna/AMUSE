@@ -52,8 +52,13 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// <summary>
         /// The union of the member lists of every family that is off
         /// and that no dynamic switch guards. A switch counts as
-        /// dynamic when the delegate accepts it. The result is fresh
-        /// on every call, so a caller can never mutate the model.
+        /// dynamic when the delegate accepts it. An empty switch
+        /// list means the shader row alone decides the family, so no
+        /// animation or property block can make it dynamic. A name a
+        /// VRChat fallback shader can read never enters the result,
+        /// because the fallback swap ignores the row. The result is
+        /// fresh on every call, so a caller can never mutate the
+        /// model.
         /// </summary>
         internal ISet<string> DeadProperties(
             Material material,
@@ -79,8 +84,12 @@ namespace Alrauna.Amuse.Editor.Semantics
                 }
             }
 
+            dead.ExceptWith(FallbackNames);
             return dead;
         }
+
+        private static readonly HashSet<string> FallbackNames =
+            new HashSet<string>(VRChatFallbackProperties.Names);
 
         private static bool AnySwitchIsDynamic(
             AtlasDeadValueFamily family,
