@@ -120,10 +120,28 @@ namespace Alrauna.Amuse.Editor.Analysis
 
         internal AtlasPlacementRefusal Refusal { get; }
 
-        internal AtlasRefusedUse(int useIndex, AtlasPlacementRefusal refusal)
+        /// <summary>
+        /// The bordered region width in texels when the placement is
+        /// too large. Zero for every other refusal.
+        /// </summary>
+        internal int RegionWidth { get; }
+
+        /// <summary>
+        /// The bordered region height in texels when the placement is
+        /// too large. Zero for every other refusal.
+        /// </summary>
+        internal int RegionHeight { get; }
+
+        internal AtlasRefusedUse(
+            int useIndex,
+            AtlasPlacementRefusal refusal,
+            int regionWidth,
+            int regionHeight)
         {
             UseIndex = useIndex;
             Refusal = refusal;
+            RegionWidth = regionWidth;
+            RegionHeight = regionHeight;
         }
     }
 

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Build;
+using Alrauna.Amuse.Editor.DryRun;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics.LilToon;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
@@ -1152,11 +1153,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(state.AtlasUseRefusals.Count,
                     Is.EqualTo(1),
                     "exactly the one refused use must be recorded");
-                Assert.That(state.AtlasUseRefusals[0].renderer,
+                Assert.That(state.AtlasUseRefusals[0].Renderer,
                     Is.SameAs(renderer));
-                Assert.That(state.AtlasUseRefusals[0].slot,
+                Assert.That(state.AtlasUseRefusals[0].Slot,
                     Is.EqualTo(0));
-                Assert.That(state.AtlasUseRefusals[0].cause,
+                Assert.That(state.AtlasUseRefusals[0].Cause,
                     Is.EqualTo(AtlasUseRefusal.NonIdentityTransform),
                     "the non identity member transform must refuse" +
                     " the use");
@@ -1276,11 +1277,11 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(state.AtlasUseRefusals.Count,
                     Is.EqualTo(1),
                     "exactly the one refused use must be recorded");
-                Assert.That(state.AtlasUseRefusals[0].renderer,
+                Assert.That(state.AtlasUseRefusals[0].Renderer,
                     Is.SameAs(renderer));
-                Assert.That(state.AtlasUseRefusals[0].slot,
+                Assert.That(state.AtlasUseRefusals[0].Slot,
                     Is.EqualTo(0));
-                Assert.That(state.AtlasUseRefusals[0].cause,
+                Assert.That(state.AtlasUseRefusals[0].Cause,
                     Is.EqualTo(AtlasUseRefusal.PlacementTooLarge),
                     "a source larger than the maximum page size must" +
                     " refuse its placement");
@@ -1634,12 +1635,12 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(state.AtlasUseRefusals.Count,
                     Is.EqualTo(1),
                     "exactly the one withdrawn use must be recorded");
-                Assert.That(state.AtlasUseRefusals[0].renderer,
+                Assert.That(state.AtlasUseRefusals[0].Renderer,
                     Is.SameAs(withdrawingRenderer),
                     "the unacquirable source must withdraw its group");
-                Assert.That(state.AtlasUseRefusals[0].slot,
+                Assert.That(state.AtlasUseRefusals[0].Slot,
                     Is.EqualTo(0));
-                Assert.That(state.AtlasUseRefusals[0].cause,
+                Assert.That(state.AtlasUseRefusals[0].Cause,
                     Is.EqualTo(AtlasUseRefusal.SourceAcquisitionFailed),
                     "the withdrawal must name the acquisition failure");
                 Assert.That(withdrawingRenderer.sharedMaterial,
@@ -1680,6 +1681,19 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             return reports
                 .Where(entry => entry.TheError is SimpleError simple &&
                     simple.TitleKey.StartsWith(prefix, StringComparison.Ordinal))
+                .ToList();
+        }
+
+        /// <summary>
+        /// The atlas entries of a build without the one summary line,
+        /// so a count reads only the use lines and the page set lines.
+        /// </summary>
+        private static List<ErrorContext> AtlasEntriesWithoutSummary(
+            IEnumerable<ErrorContext> reports)
+        {
+            return EntriesWithPrefix(reports, "amuse.atlas.")
+                .Where(entry => ((SimpleError)entry.TheError).TitleKey !=
+                    "amuse.atlas.Summary")
                 .ToList();
         }
 
@@ -1742,19 +1756,27 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(lines, Has.Count.EqualTo(1),
                     "one page set must report exactly one line");
                 Assert.That(
-                    EntriesWithPrefix(reports, "amuse.atlas."),
+                    AtlasEntriesWithoutSummary(reports),
                     Has.Count.EqualTo(1),
                     "an admitted fixture reports no use refusal");
                 var message = lines[0].TheError.ToMessage();
                 Assert.That(message, Does.Contain(
                     "moves 2 material slots onto 1 page."));
                 Assert.That(message, Does.Contain("merge-ready"));
+                Assert.That(message, Does.Contain("The pages add "));
                 Assert.That(message, Does.Contain(
-                    "The pages add " + pageBytes + " bytes"));
+                    "(" + pageBytes + " bytes) of texture memory"));
                 Assert.That(message, Does.Contain(
-                    "2 source textures with " + sourceBytes + " bytes"));
+                    "2 source textures with "));
+                Assert.That(message, Does.Contain(
+                    "(" + sourceBytes + " bytes)."));
                 Assert.That(message, Does.Contain(
                     "does not reduce draw calls"));
+                Assert.That(message, Does.Contain("Page 0: "));
+                Assert.That(message, Does.Contain(
+                    "Slot 0 of renderer 'first'"));
+                Assert.That(message, Does.Contain(
+                    "Slot 0 of renderer 'second'"));
             }
             finally
             {
@@ -1780,6 +1802,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     "report refused",
                     new Color32(180, 180, 40, 255),
                     new Color32(40, 180, 180, 255));
+                material.name = "report refused";
                 material.SetTextureScale("_MainTex", new Vector2(2f, 2f));
                 NewQuadRenderer(
                     root, "body", Track(NewQuadMesh()), material);
@@ -1796,12 +1819,19 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(lines, Has.Count.EqualTo(1),
                     "one refused use must report exactly one line");
                 Assert.That(
-                    EntriesWithPrefix(reports, "amuse.atlas."),
+                    AtlasEntriesWithoutSummary(reports),
                     Has.Count.EqualTo(1),
                     "a fixture with no admitted use reports no page set");
-                Assert.That(lines[0].TheError.ToMessage(), Does.Contain(
+                var message = lines[0].TheError.ToMessage();
+                Assert.That(message, Does.Contain(
                     "material slot 0 of renderer 'body'"));
-                Assert.That(lines[0].TheError.ToMessage(),
+                Assert.That(message, Does.Contain(
+                    "(material 'report refused')"),
+                    "the title must name the material");
+                Assert.That(message, Does.Contain(
+                    "The property '_MainTex_ST' is (2, 2, 0, 0)."),
+                    "the line must name the exact bad value");
+                Assert.That(message,
                     Does.Not.Contain("{"),
                     "every placeholder of the line must be filled");
             }
@@ -1921,8 +1951,8 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(context.Successful, Is.True,
                     "fixture precondition: the build must complete");
                 Assert.That(state.AtlasUseRefusals, Has.Count.EqualTo(1));
-                var value = state.AtlasUseRefusals[0].valueBytes;
-                Assert.That(state.AtlasUseRefusals[0].limitBytes,
+                var value = state.AtlasUseRefusals[0].ValueBytes;
+                Assert.That(state.AtlasUseRefusals[0].LimitBytes,
                     Is.EqualTo(limit));
                 Assert.That(value, Is.GreaterThan(limit));
                 var lines = EntriesWithKey(
@@ -1930,9 +1960,138 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(lines, Has.Count.EqualTo(1));
                 var message = lines[0].TheError.ToMessage();
                 Assert.That(message, Does.Contain(
-                    "The value is " + value + " bytes."));
+                    "(" + value + " bytes). The limit is "));
                 Assert.That(message, Does.Contain(
-                    "The limit is " + limit + " bytes."));
+                    "(" + limit + " bytes)."));
+            }
+            finally
+            {
+                DestroyGenerated(state);
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
+        /// Two admitted quads and one quad with tiling. A shared
+        /// three-quad fixture for the summary and the preview tests.
+        /// </summary>
+        private GameObject NewTwoAdmittedOneTiledRoot()
+        {
+            var root = NewAtlasOnlyRoot();
+            NewQuadRenderer(
+                root,
+                "first",
+                Track(NewQuadMesh()),
+                NewAdmittedMaterial(
+                    "summary first",
+                    new Color32(210, 50, 50, 255),
+                    new Color32(50, 50, 210, 255)));
+            NewQuadRenderer(
+                root,
+                "second",
+                Track(NewQuadMesh()),
+                NewAdmittedMaterial(
+                    "summary second",
+                    new Color32(50, 210, 50, 255),
+                    new Color32(210, 210, 50, 255)));
+            var tiled = NewAdmittedMaterial(
+                "summary tiled",
+                new Color32(120, 120, 220, 255),
+                new Color32(220, 120, 120, 255));
+            tiled.SetTextureScale("_MainTex", new Vector2(2f, 2f));
+            NewQuadRenderer(root, "tiled", Track(NewQuadMesh()), tiled);
+            return root;
+        }
+
+        /// <summary>
+        /// --- Falsifier 7: a summary that counts only the atlased
+        /// slots, or that drops the slots that did not atlas. The line
+        /// must count the atlased slots out of every captured slot and
+        /// name each cause with its count. ---
+        /// </summary>
+        [Test]
+        public void AtlasSummaryCountsAtlasedAndRefusedSlots()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = NewTwoAdmittedOneTiledRoot();
+            AmusePlatformFinishState state = null;
+            try
+            {
+                BuildContext context = null;
+                var reports = ErrorReport.CaptureErrors(
+                    () => context = Build(root));
+                state = context.GetState<AmusePlatformFinishState>();
+
+                Assert.That(context.Successful, Is.True,
+                    "fixture precondition: the build must complete");
+                var summaries = EntriesWithKey(reports, "amuse.atlas.Summary");
+                Assert.That(summaries, Has.Count.EqualTo(1),
+                    "one avatar must report exactly one summary line");
+                var message = summaries[0].TheError.ToMessage();
+                Assert.That(message, Does.Contain(
+                    "AMUSE atlased 2 out of 3 material slots."));
+                Assert.That(message, Does.Contain(
+                    "- 1: the main texture has tiling, offset, or panning"));
+                Assert.That(message, Does.Not.Contain("{"),
+                    "every placeholder of the summary must be filled");
+            }
+            finally
+            {
+                DestroyGenerated(state);
+                UnityEngine.Object.DestroyImmediate(root);
+            }
+        }
+
+        /// <summary>
+        /// --- Falsifier 8: an inspector view that groups or refuses
+        /// differently from the build. The view runs on the scene
+        /// avatar before the build. Its page set and its refusal must
+        /// match what the build of the same avatar reports. ---
+        /// </summary>
+        [Test]
+        public void ScenePreviewMatchesTheBuildGrouping()
+        {
+            using var assets = new OverrideTemporaryDirectoryScope(null);
+            var root = NewTwoAdmittedOneTiledRoot();
+            AmusePlatformFinishState state = null;
+            try
+            {
+                var component = root.GetComponent<
+                    Alrauna.Amuse.Runtime.AmuseAvatarOptimizer>();
+                var preview = AtlasPreview.Compute(
+                    component,
+                    PlatformAlphaSamplingPolicy.DesktopTarget,
+                    AtlasBudgetLimits.Provider());
+
+                Assert.That(preview.Errored, Is.False);
+                Assert.That(preview.BannerSentence, Is.Null,
+                    "the preview must run the analysis");
+                Assert.That(preview.PageSets, Has.Count.EqualTo(1));
+                Assert.That(
+                    preview.PageSets[0].Members
+                        .Select(member => member.Renderer.gameObject.name),
+                    Is.EqualTo(new[] { "first", "second" }));
+                Assert.That(preview.Refusals, Has.Count.EqualTo(1));
+                Assert.That(preview.Refusals[0].Cause,
+                    Is.EqualTo(AtlasUseRefusal.NonIdentityTransform));
+
+                BuildContext context = null;
+                var reports = ErrorReport.CaptureErrors(
+                    () => context = Build(root));
+                state = context.GetState<AmusePlatformFinishState>();
+
+                Assert.That(context.Successful, Is.True,
+                    "fixture precondition: the build must complete");
+                Assert.That(
+                    EntriesWithKey(reports, "amuse.atlas.PageSet"),
+                    Has.Count.EqualTo(1),
+                    "the build must keep the one page set of the preview");
+                Assert.That(state.AtlasUseRefusals, Has.Count.EqualTo(1));
+                Assert.That(
+                    state.AtlasUseRefusals[0].Renderer.gameObject.name,
+                    Is.EqualTo(preview.Refusals[0].Renderer.gameObject.name));
+                Assert.That(state.AtlasUseRefusals[0].Cause,
+                    Is.EqualTo(preview.Refusals[0].Cause));
             }
             finally
             {

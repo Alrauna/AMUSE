@@ -19,7 +19,7 @@ namespace Alrauna.Amuse.Editor.Semantics
     /// digests, so a pinned row cannot gain an unlisted feature.
     /// </para>
     /// <para>
-    /// <see cref="HoldsRequiredValues"/> covers the scalar required
+    /// <see cref="UnheldRequiredValue"/> covers the scalar required
     /// values only. The texture transform has its own capture step and
     /// its own refusal, because a moved texture with non-identity
     /// tiling needs a different hint than a wrong feature value. The
@@ -73,7 +73,7 @@ namespace Alrauna.Amuse.Editor.Semantics
                     ("_MainTex_ST", new Vector4(1f, 1f, 0f, 0f)),
                     ("_MainTexPan", new Vector4(0f, 0f, 0f, 0f)),
                 },
-                HoldsPoiyomiMainColorRequiredValues);
+                UnheldPoiyomiMainColorRequiredValue);
 
         private static readonly string[] LilToonFeatureSwitches =
         {
@@ -110,7 +110,7 @@ namespace Alrauna.Amuse.Editor.Semantics
                     ("_MainTex_ST", new Vector4(1f, 1f, 0f, 0f)),
                     ("_MainTex_ScrollRotate", new Vector4(0f, 0f, 0f, 0f)),
                 },
-                HoldsLilToonMainColorRequiredValues);
+                UnheldLilToonMainColorRequiredValue);
 
         internal string MemberProperty { get; }
 
@@ -134,7 +134,7 @@ namespace Alrauna.Amuse.Editor.Semantics
         internal IReadOnlyList<(string Property, Vector4 Identity)>
             TransformProperties { get; }
 
-        private readonly Func<Material, bool> holdsRequiredValues;
+        private readonly Func<Material, string> unheldRequiredValue;
 
         private AtlasRouteTable(
             string memberProperty,
@@ -142,35 +142,55 @@ namespace Alrauna.Amuse.Editor.Semantics
             string[] allowedKeywords,
             string[] conditionProperties,
             (string, Vector4)[] transformProperties,
-            Func<Material, bool> holdsRequiredValues)
+            Func<Material, string> unheldRequiredValue)
         {
             MemberProperty = memberProperty;
             NeutralProperties = Array.AsReadOnly(neutralProperties);
             AllowedKeywords = Array.AsReadOnly(allowedKeywords);
             ConditionProperties = Array.AsReadOnly(conditionProperties);
             TransformProperties = Array.AsReadOnly(transformProperties);
-            this.holdsRequiredValues = holdsRequiredValues;
+            this.unheldRequiredValue = unheldRequiredValue;
         }
 
         /// <summary>
-        /// Whether the material holds every scalar required value of the
-        /// row. Every flag compare is exact, because these are authored
-        /// flags and not measured values. So a NaN flag refuses.
+        /// The first scalar required value of the row that the material
+        /// does not hold, as a sentence that names the property, its
+        /// value, and the value the route needs. Null when the material
+        /// holds every value. Every flag compare is exact, because
+        /// these are authored flags and not measured values. So a NaN
+        /// flag refuses.
         /// </summary>
-        internal bool HoldsRequiredValues(Material material)
+        internal string UnheldRequiredValue(Material material)
         {
-            return holdsRequiredValues(material);
+            return unheldRequiredValue(material);
         }
 
-        private static bool HoldsPoiyomiMainColorRequiredValues(
+        private static readonly string[] PoiyomiZeroScalars =
+        {
+            "_MainTexUV",
+            "_MainPixelMode",
+            "_MainTexStochastic",
+        };
+
+        private static string UnheldPoiyomiMainColorRequiredValue(
             Material material)
         {
-            return material.GetFloat("_MainTexUV") == 0f &&
-                   material.GetFloat("_MainPixelMode") == 0f &&
-                   material.GetFloat("_MainTexStochastic") == 0f &&
-                   (material.GetFloat("_AlphaSharpenedA2C") == 0f ||
-                    material.GetFloat("_AlphaToCoverage") == 0f) &&
-                   material.GetFloat("_RenderingAOBlockerEnabled") == 0f;
+            var zero = FirstNonZero(material, PoiyomiZeroScalars);
+            if (zero != null)
+            {
+                return zero;
+            }
+
+            if (material.GetFloat("_AlphaSharpenedA2C") != 0f &&
+                material.GetFloat("_AlphaToCoverage") != 0f)
+            {
+                return "The properties '_AlphaSharpenedA2C' and" +
+                       " '_AlphaToCoverage' are both on. The route needs" +
+                       " one of them at 0.";
+            }
+
+            return FirstNonZero(
+                material, new[] { "_RenderingAOBlockerEnabled" });
         }
 
         /// <summary>
@@ -185,48 +205,87 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// that selector as an unsigned integer, and a value between
         /// zero and one can convert to zero, which reads UV0.
         /// </summary>
-        private static bool HoldsLilToonMainColorRequiredValues(
+        private static string UnheldLilToonMainColorRequiredValue(
             Material material)
         {
-            foreach (var property in LilToonFeatureSwitches)
+            var feature = FirstNonZero(material, LilToonFeatureSwitches);
+            if (feature != null)
             {
-                if (material.GetFloat(property) != 0f)
-                {
-                    return false;
-                }
+                return feature;
             }
 
             var dissolveMode = material.GetVector("_DissolveParams").x;
             if (!(dissolveMode > -0.5f && dissolveMode < 0.5f))
             {
-                return false;
+                return "The property '_DissolveParams.x' is " +
+                       Number(dissolveMode) + ". The route needs a value" +
+                       " greater than -0.5 and less than 0.5.";
             }
 
             // A NaN selector counts as UV0, so the check fails closed.
             var udimSelector = material.GetFloat("_UDIMDiscardUV");
             var udimMayReadUv0 =
                 udimSelector == 0f || float.IsNaN(udimSelector);
-            if (udimMayReadUv0 &&
-                AnyFlagSet(material, LilToonUdimDiscardRowFlags))
+            if (udimMayReadUv0)
             {
-                return false;
+                var udimFlag =
+                    FirstSetFlag(material, LilToonUdimDiscardRowFlags);
+                if (udimFlag != null)
+                {
+                    return "The property '" + udimFlag + "' is " +
+                           Number(material.GetFloat(udimFlag)) +
+                           " while '_UDIMDiscardUV' selects UV0. The" +
+                           " route needs 0.";
+                }
             }
 
-            return material.GetFloat("_IDMaskFrom") >= 1f ||
-                   !AnyFlagSet(material, LilToonIdMaskFlags);
+            var idMaskFrom = material.GetFloat("_IDMaskFrom");
+            if (idMaskFrom >= 1f)
+            {
+                return null;
+            }
+
+            var idMaskFlag = FirstSetFlag(material, LilToonIdMaskFlags);
+            return idMaskFlag == null
+                ? null
+                : "The property '" + idMaskFlag + "' is " +
+                  Number(material.GetFloat(idMaskFlag)) +
+                  " while '_IDMaskFrom' is " + Number(idMaskFrom) +
+                  ". The route needs 0, or '_IDMaskFrom' at 1 or more.";
         }
 
-        private static bool AnyFlagSet(Material material, string[] flags)
+        /// <summary>
+        /// The sentence for the first property that must be zero and is
+        /// not, or null when every property is zero.
+        /// </summary>
+        private static string FirstNonZero(
+            Material material, string[] properties)
+        {
+            var property = FirstSetFlag(material, properties);
+            return property == null
+                ? null
+                : "The property '" + property + "' is " +
+                  Number(material.GetFloat(property)) +
+                  ". The route needs 0.";
+        }
+
+        private static string FirstSetFlag(Material material, string[] flags)
         {
             foreach (var flag in flags)
             {
                 if (material.GetFloat(flag) != 0f)
                 {
-                    return true;
+                    return flag;
                 }
             }
 
-            return false;
+            return null;
+        }
+
+        private static string Number(float value)
+        {
+            return value.ToString(
+                "0.######", System.Globalization.CultureInfo.InvariantCulture);
         }
 
         private static string[] UdimDiscardRowFlagNames()

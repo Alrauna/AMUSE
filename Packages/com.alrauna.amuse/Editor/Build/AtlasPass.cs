@@ -105,15 +105,36 @@ namespace Alrauna.Amuse.Editor.Build
                 return;
             }
 
+            var gate = AvatarGate(
+                optimizer, AmusePlatformFinishPlugin.ActiveBuildTarget());
+            if (gate != AtlasUseRefusal.None)
+            {
+                Refuse(context, state, gate);
+                return;
+            }
+
+            state.ReachedAtlasAnalysis = true;
+            Run(context, state, optimizer);
+            Report(context, state);
+        }
+
+        /// <summary>
+        /// The avatar-scope settings and target gates, in contract
+        /// order: the maximum page size, the protected mip level count,
+        /// then the build target. It returns the first cause, or
+        /// <see cref="AtlasUseRefusal.None"/>. The inspector view calls
+        /// the same gate, so both name the same cause.
+        /// </summary>
+        internal static AtlasUseRefusal AvatarGate(
+            Alrauna.Amuse.Runtime.AmuseAvatarOptimizer optimizer,
+            BuildTarget target)
+        {
             if (optimizer.MaximumAtlasPageSize < 1 ||
                 optimizer.MaximumAtlasPageSize >
                     Alrauna.Amuse.Runtime.AmuseAvatarOptimizer
                         .MaximumAtlasPageSizeLimit)
             {
-                Refuse(
-                    context, state,
-                    AtlasUseRefusal.MaximumPageSizeOutOfRange);
-                return;
+                return AtlasUseRefusal.MaximumPageSizeOutOfRange;
             }
 
             if (optimizer.ProtectedMipLevelCount < 1 ||
@@ -121,24 +142,15 @@ namespace Alrauna.Amuse.Editor.Build
                     Alrauna.Amuse.Runtime.AmuseAvatarOptimizer
                         .MaximumProtectedMipLevelCount)
             {
-                Refuse(
-                    context, state,
-                    AtlasUseRefusal.ProtectedMipLevelCountOutOfRange);
-                return;
+                return AtlasUseRefusal.ProtectedMipLevelCountOutOfRange;
             }
 
-            if (AmusePlatformFinishPlugin.ActiveBuildTarget() !=
-                PlatformAlphaSamplingPolicy.DesktopTarget)
+            if (target != PlatformAlphaSamplingPolicy.DesktopTarget)
             {
-                Refuse(
-                    context, state,
-                    AtlasUseRefusal.UnsupportedBuildTarget);
-                return;
+                return AtlasUseRefusal.UnsupportedBuildTarget;
             }
 
-            state.ReachedAtlasAnalysis = true;
-            Run(context, state, optimizer);
-            Report(context, state);
+            return AtlasUseRefusal.None;
         }
 
         /// <summary>
@@ -163,81 +175,28 @@ namespace Alrauna.Amuse.Editor.Build
                 ? null
                 : CommittedControllerGraph.Enumerate(avatarRoot, bindings);
 
-            var outcomes = AtlasUseCapture.Capture(
+            var analysis = AtlasAnalysis.Analyze(
                 avatarRoot,
                 graph,
                 bindings,
-                optimizer.ProtectedMipLevelCount);
-
-            foreach (var outcome in outcomes)
+                optimizer.MaximumAtlasPageSize,
+                optimizer.ProtectedMipLevelCount,
+                AtlasBudgetLimits.Provider());
+            state.AtlasSlotCount = analysis.Outcomes.Count;
+            foreach (var refusal in analysis.Refusals)
             {
-                if (outcome.Refusal != AtlasUseRefusal.None)
-                {
-                    state.RecordAtlasUseRefusal(
-                        outcome.Renderer,
-                        outcome.SlotIndex,
-                        outcome.Refusal);
-                }
+                state.RecordAtlasUseRefusal(refusal);
             }
 
-            var admittedOutcomes = new List<AtlasUseOutcome>();
-            foreach (var outcome in outcomes)
-            {
-                if (outcome.Refusal == AtlasUseRefusal.None)
-                {
-                    admittedOutcomes.Add(outcome);
-                }
-            }
-
-            var uses = new List<CapturedAtlasUse>(admittedOutcomes.Count);
-            foreach (var outcome in admittedOutcomes)
-            {
-                uses.Add(outcome.Use);
-            }
-
-            if (uses.Count == 0)
+            if (analysis.Uses.Count == 0)
             {
                 return;
             }
 
-            var plans = AtlasPlacementPlanner.Plan(
-                uses,
-                optimizer.MaximumAtlasPageSize,
-                optimizer.ProtectedMipLevelCount);
-            foreach (var plan in plans)
-            {
-                foreach (var refused in plan.RefusedUses)
-                {
-                    state.RecordAtlasUseRefusal(
-                        admittedOutcomes[refused.UseIndex].Renderer,
-                        admittedOutcomes[refused.UseIndex].SlotIndex,
-                        MapPlacementRefusal(refused.Refusal));
-                }
-            }
-
-            var verdicts = AtlasBudgetAdmission.Admit(
-                plans,
-                uses,
-                optimizer.ProtectedMipLevelCount,
-                AtlasBudgetLimits.Provider());
-            for (var group = 0; group < plans.Count; group++)
-            {
-                var verdict = verdicts[group];
-                if (verdict.Refusal == AtlasUseRefusal.None)
-                {
-                    continue;
-                }
-
-                foreach (var useIndex in plans[group].AdmittedUseIndices)
-                {
-                    state.RecordAtlasUseRefusal(
-                        admittedOutcomes[useIndex].Renderer,
-                        admittedOutcomes[useIndex].SlotIndex,
-                        verdict.Refusal,
-                        verdict.ValueBytes,
-                        verdict.LimitBytes);
-                }
-            }
+            var uses = analysis.Uses;
+            var admittedOutcomes = analysis.AdmittedOutcomes;
+            var plans = analysis.Plans;
+            var verdicts = analysis.Verdicts;
 
             // The first live outcome of each distinct source resolves
             // the source texture at acquisition time.
@@ -284,11 +243,9 @@ namespace Alrauna.Amuse.Editor.Build
 
                 BuildGroup(
                     state,
-                    uses,
-                    admittedOutcomes,
+                    analysis,
                     outcomeBySource,
                     group,
-                    plans[group],
                     optimizer.ProtectedMipLevelCount,
                     pageMaterialByUse,
                     placementByUse,
@@ -356,16 +313,18 @@ namespace Alrauna.Amuse.Editor.Build
         /// </summary>
         private static void BuildGroup(
             AmusePlatformFinishState state,
-            IReadOnlyList<CapturedAtlasUse> uses,
-            IReadOnlyList<AtlasUseOutcome> admittedOutcomes,
+            AtlasAnalysisResult analysis,
             Dictionary<int, AtlasUseOutcome> outcomeBySource,
             int groupIndex,
-            AtlasGroupPlan plan,
             int protectedMipLevelCount,
             Dictionary<int, Material> pageMaterialByUse,
             Dictionary<int, AtlasPlacement> placementByUse,
             Dictionary<int, AtlasPagePlanEntry> pageByUse)
         {
+            var plan = analysis.Plans[groupIndex];
+            var uses = analysis.Uses;
+            var admittedOutcomes = analysis.AdmittedOutcomes;
+
             // A group whose every placement refused has no page and
             // no admitted use. Its refusals are already recorded, so
             // the build simply moves on.
@@ -399,7 +358,9 @@ namespace Alrauna.Amuse.Editor.Build
                                 page,
                                 outcomeBySource,
                                 protectedMipLevelCount,
-                                sources))
+                                sources,
+                                out var failedTexture,
+                                out var changed))
                         {
                             WithdrawGroup(
                                 state,
@@ -409,7 +370,12 @@ namespace Alrauna.Amuse.Editor.Build
                                 pagesBuilt,
                                 pageMaterialByUse,
                                 placementByUse,
-                                pageByUse);
+                                pageByUse,
+                                changed
+                                    ? AtlasRefusalDetail.SourceChanged()
+                                    : AtlasRefusalDetail.SourceReadFailed(
+                                        failedTexture),
+                                failedTexture);
                             return;
                         }
 
@@ -459,7 +425,8 @@ namespace Alrauna.Amuse.Editor.Build
                     }
                 }
 
-                state.AtlasPageSets.Add(NewPageSet(groupIndex, plan, uses));
+                state.AtlasPageSets.Add(
+                    AtlasAnalysis.PageSetOf(analysis, groupIndex));
             }
             catch
             {
@@ -520,7 +487,9 @@ namespace Alrauna.Amuse.Editor.Build
             int pagesBuilt,
             Dictionary<int, Material> pageMaterialByUse,
             Dictionary<int, AtlasPlacement> placementByUse,
-            Dictionary<int, AtlasPagePlanEntry> pageByUse)
+            Dictionary<int, AtlasPagePlanEntry> pageByUse,
+            string detail,
+            Texture failedTexture)
         {
             foreach (var owned in built)
             {
@@ -534,10 +503,14 @@ namespace Alrauna.Amuse.Editor.Build
                 pageMaterialByUse.Remove(useIndex);
                 placementByUse.Remove(useIndex);
                 pageByUse.Remove(useIndex);
-                state.RecordAtlasUseRefusal(
-                    admittedOutcomes[useIndex].Renderer,
-                    admittedOutcomes[useIndex].SlotIndex,
-                    AtlasUseRefusal.SourceAcquisitionFailed);
+                var outcome = admittedOutcomes[useIndex];
+                state.RecordAtlasUseRefusal(new AtlasUseRefusalRecord(
+                    outcome.Renderer,
+                    outcome.SlotIndex,
+                    AtlasUseRefusal.SourceAcquisitionFailed,
+                    outcome.Material,
+                    failedTexture,
+                    detail));
             }
         }
 
@@ -545,14 +518,22 @@ namespace Alrauna.Amuse.Editor.Build
         /// Acquires every distinct source of one page. The live
         /// material of the first use of each source resolves the
         /// texture, and a missing or changed texture is an
-        /// acquisition failure, because the capture saw it live.
+        /// acquisition failure, because the capture saw it live. On a
+        /// failure, <paramref name="changed"/> is true when the texture
+        /// went missing or was replaced, and
+        /// <paramref name="failedTexture"/> holds the texture that
+        /// could not be read otherwise.
         /// </summary>
         private static bool TryAcquirePageSources(
             AtlasPagePlanEntry page,
             Dictionary<int, AtlasUseOutcome> outcomeBySource,
             int protectedMipLevelCount,
-            Dictionary<int, AtlasSourceImage> sources)
+            Dictionary<int, AtlasSourceImage> sources,
+            out Texture2D failedTexture,
+            out bool changed)
         {
+            failedTexture = null;
+            changed = false;
             foreach (var placement in page.Placements)
             {
                 var id = placement.SourceTextureInstanceId;
@@ -569,12 +550,14 @@ namespace Alrauna.Amuse.Editor.Build
                     : material.GetTexture("_MainTex") as Texture2D;
                 if (texture == null || texture.GetInstanceID() != id)
                 {
+                    changed = true;
                     return false;
                 }
 
                 if (!AcquireSource(
                         texture, protectedMipLevelCount, out var image))
                 {
+                    failedTexture = texture;
                     return false;
                 }
 
@@ -635,73 +618,31 @@ namespace Alrauna.Amuse.Editor.Build
         }
 
         /// <summary>
-        /// The report facts of one group whose pages all built. The
-        /// source count and bytes cover the distinct sources of the
-        /// admitted uses, as the budget counts them.
-        /// </summary>
-        private static AtlasPageSet NewPageSet(
-            int groupIndex,
-            AtlasGroupPlan plan,
-            IReadOnlyList<CapturedAtlasUse> uses)
-        {
-            var sources = new HashSet<int>();
-            foreach (var useIndex in plan.AdmittedUseIndices)
-            {
-                sources.Add(uses[useIndex].SourceTextureInstanceId);
-            }
-
-            return new AtlasPageSet(
-                groupIndex,
-                plan.Key.ShaderRowName,
-                plan.Pages.Count,
-                plan.AdmittedUseIndices.Count,
-                AtlasBudget.GroupRetainedBytes(plan),
-                sources.Count,
-                AtlasBudget.SourceBytes(plan, uses));
-        }
-
-        /// <summary>
-        /// R4: one line per recorded use refusal in record order, then
-        /// one line per page set in plan order. The report runs after
-        /// the write, so a thrown invariant failure reports nothing.
+        /// R4: one summary line for the avatar, then one line per
+        /// recorded use refusal in record order, then one line per
+        /// page set in plan order. The report runs after the write, so
+        /// a thrown invariant failure reports nothing.
         /// </summary>
         private static void Report(
             BuildContext context,
             AmusePlatformFinishState state)
         {
+            AmuseReports.AtlasSummaryLine(
+                context.AvatarRootObject,
+                state.AtlasSlotCount,
+                state.AtlasAdmittedUseCount,
+                state.AtlasPageSets,
+                state.AtlasUseRefusals);
+
             foreach (var refusal in state.AtlasUseRefusals)
             {
-                AmuseReports.AtlasUseLine(
-                    refusal.renderer,
-                    refusal.slot,
-                    refusal.cause,
-                    refusal.valueBytes,
-                    refusal.limitBytes);
+                AmuseReports.AtlasUseLine(refusal);
             }
 
             foreach (var pageSet in state.AtlasPageSets)
             {
                 AmuseReports.AtlasPageSetLine(
                     context.AvatarRootObject, pageSet);
-            }
-        }
-
-        /// <summary>
-        /// Maps a placement refusal of the Analysis layer onto the
-        /// use refusal of the Build layer.
-        /// </summary>
-        private static AtlasUseRefusal MapPlacementRefusal(
-            AtlasPlacementRefusal refusal)
-        {
-            switch (refusal)
-            {
-                case AtlasPlacementRefusal.PlacementTooLarge:
-                    return AtlasUseRefusal.PlacementTooLarge;
-                case AtlasPlacementRefusal.ClampEdgeOnBc7:
-                    return AtlasUseRefusal.ClampEdgeOnBc7;
-                default:
-                    throw new ArgumentOutOfRangeException(
-                        nameof(refusal));
             }
         }
 

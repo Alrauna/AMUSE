@@ -61,6 +61,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 Assert.That(
                     AmuseReportStrings.Has(key + ":hint"), Is.True,
                     "missing hint for " + cause);
+                Assert.That(
+                    AmuseReportStrings.Get(key + ":short"), Is.Not.Empty,
+                    "missing short cause phrase for " + cause);
             }
         }
 

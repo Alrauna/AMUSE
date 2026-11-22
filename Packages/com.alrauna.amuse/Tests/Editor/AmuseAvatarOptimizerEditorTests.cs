@@ -113,11 +113,15 @@ namespace Alrauna.Amuse.Tests.Editor
                 var alphaSeparatorOpen = (bool)editorType.GetField("_alphaSeparatorOpen", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(editor);
                 var materialTransformationsOpen = (bool)editorType.GetField("_materialTransformationsOpen", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(editor);
                 var alphaSeparationTransformationsOpen = (bool)editorType.GetField("_alphaSeparationTransformationsOpen", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(editor);
+                var atlasTransformationsOpen = (bool)editorType.GetField("_atlasTransformationsOpen", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(editor);
+                var atlasRefusalsOpen = (bool)editorType.GetField("_atlasRefusalsOpen", BindingFlags.NonPublic | BindingFlags.Instance).GetValue(editor);
 
                 Assert.That(settingsOpen, Is.False, "settings foldout must not be expanded by default");
                 Assert.That(alphaSeparatorOpen, Is.True, "alpha separator settings foldout must be expanded by default");
                 Assert.That(materialTransformationsOpen, Is.False, "show material transformations foldout must not be expanded by default");
                 Assert.That(alphaSeparationTransformationsOpen, Is.True, "alpha separation dropdown under material transformations must be expanded by default");
+                Assert.That(atlasTransformationsOpen, Is.True, "atlasing dropdown under material transformations must be expanded by default");
+                Assert.That(atlasRefusalsOpen, Is.False, "not atlased list must not be expanded by default");
             }
             finally
             {

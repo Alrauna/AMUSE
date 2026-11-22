@@ -809,110 +809,110 @@ namespace Alrauna.Amuse.Editor.Build
                 "1 to 14.",
 
             ["amuse.atlas.AnimationGraphUnavailable"] =
-                "AMUSE did not atlas material slot {0} of renderer '{1}'.",
+                "AMUSE did not atlas material slot {0} of renderer '{1}' ({4}).",
             ["amuse.atlas.AnimationGraphUnavailable:description"] =
                 "AMUSE could not read the animation graph of the " +
-                "avatar. The slot keeps its original bindings.",
+                "avatar. The slot keeps its original bindings.{5}",
             ["amuse.atlas.AnimationGraphUnavailable:hint"] =
                 "Check the console for the animation graph error, " +
                 "then build again.",
 
             ["amuse.atlas.UnsupportedRenderer"] =
-                "AMUSE did not atlas material slot {0} of renderer '{1}'.",
+                "AMUSE did not atlas material slot {0} of renderer '{1}' ({4}).",
             ["amuse.atlas.UnsupportedRenderer:description"] =
                 "AMUSE reads mesh renderers and skinned mesh " +
                 "renderers only. This renderer type is not one of " +
-                "them. The slot keeps its original bindings.",
+                "them. The slot keeps its original bindings.{5}",
             ["amuse.atlas.UnsupportedRenderer:hint"] =
                 "Nothing is wrong. AMUSE does not support this " +
                 "renderer type yet.",
 
             ["amuse.atlas.MissingMesh"] =
-                "AMUSE did not atlas material slot {0} of renderer '{1}'.",
+                "AMUSE did not atlas material slot {0} of renderer '{1}' ({4}).",
             ["amuse.atlas.MissingMesh:description"] =
                 "The renderer has no mesh, or its mesh has no parts. " +
                 "There are no triangles to move into a page. The " +
-                "slot keeps its original bindings.",
+                "slot keeps its original bindings.{5}",
             ["amuse.atlas.MissingMesh:hint"] =
                 "Assign a mesh with at least one part to the " +
                 "renderer, or delete the renderer.",
 
             ["amuse.atlas.MissingMaterial"] =
-                "AMUSE did not atlas material slot {0} of renderer '{1}'.",
+                "AMUSE did not atlas material slot {0} of renderer '{1}' ({4}).",
             ["amuse.atlas.MissingMaterial:description"] =
                 "The slot has no material. The slot keeps its " +
-                "original bindings.",
+                "original bindings.{5}",
             ["amuse.atlas.MissingMaterial:hint"] =
                 "Assign a material to the slot.",
 
             ["amuse.atlas.AnimatedRendererShape"] =
-                "AMUSE did not atlas material slot {0} of renderer '{1}'.",
+                "AMUSE did not atlas material slot {0} of renderer '{1}' ({4}).",
             ["amuse.atlas.AnimatedRendererShape:description"] =
                 "An animation changes the mesh or the slot count of " +
                 "this renderer. AMUSE cannot follow that change. " +
                 "Every slot of the renderer keeps its original " +
-                "bindings.",
+                "bindings.{5}",
             ["amuse.atlas.AnimatedRendererShape:hint"] =
                 "Remove the mesh-swap or slot-count animation if " +
                 "you want AMUSE to atlas this renderer.",
 
             ["amuse.atlas.AnimatedMaterialSlot"] =
-                "AMUSE did not atlas material slot {0} of renderer '{1}'.",
+                "AMUSE did not atlas material slot {0} of renderer '{1}' ({4}).",
             ["amuse.atlas.AnimatedMaterialSlot:description"] =
                 "An animation swaps the material of this slot. A " +
                 "page material cannot follow a swap. The slot keeps " +
-                "its original bindings.",
+                "its original bindings.{5}",
             ["amuse.atlas.AnimatedMaterialSlot:hint"] =
                 "Remove the material-swap animation if you want " +
                 "AMUSE to atlas this slot.",
 
             ["amuse.atlas.UnattestedShader"] =
-                "AMUSE did not atlas material slot {0} of renderer '{1}'.",
+                "AMUSE did not atlas material slot {0} of renderer '{1}' ({4}).",
             ["amuse.atlas.UnattestedShader:description"] =
                 "The shader of the material matches no reviewed " +
                 "shader row. AMUSE moves textures only for shaders " +
                 "it reviewed byte for byte. The slot keeps its " +
-                "original bindings.",
+                "original bindings.{5}",
             ["amuse.atlas.UnattestedShader:hint"] =
                 "Use a supported shader version, or ask for a " +
                 "review of this shader.",
 
             ["amuse.atlas.LockedShader"] =
-                "AMUSE did not atlas material slot {0} of renderer '{1}'.",
+                "AMUSE did not atlas material slot {0} of renderer '{1}' ({4}).",
             ["amuse.atlas.LockedShader:description"] =
                 "The material is locked by the shader optimizer. " +
                 "AMUSE reads unlocked materials only. The slot keeps " +
-                "its original bindings.",
+                "its original bindings.{5}",
             ["amuse.atlas.LockedShader:hint"] =
                 "Unlock the material, build once, then lock it " +
                 "again.",
 
             ["amuse.atlas.NoRouteTable"] =
-                "AMUSE did not atlas material slot {0} of renderer '{1}'.",
+                "AMUSE did not atlas material slot {0} of renderer '{1}' ({4}).",
             ["amuse.atlas.NoRouteTable:description"] =
                 "The shader row is admitted, but AMUSE has no route " +
                 "table for it yet. The slot keeps its original " +
-                "bindings.",
+                "bindings.{5}",
             ["amuse.atlas.NoRouteTable:hint"] =
                 "Nothing is wrong with your avatar. This shader " +
                 "needs a later AMUSE version.",
 
             ["amuse.atlas.KeywordNotAllowed"] =
-                "AMUSE did not atlas material slot {0} of renderer '{1}'.",
+                "AMUSE did not atlas material slot {0} of renderer '{1}' ({4}).",
             ["amuse.atlas.KeywordNotAllowed:description"] =
                 "The material enables a shader feature that the " +
                 "atlas route does not cover. The slot keeps its " +
-                "original bindings.",
+                "original bindings.{5}",
             ["amuse.atlas.KeywordNotAllowed:hint"] =
                 "Turn the feature off if you want AMUSE to atlas " +
                 "this slot.",
 
             ["amuse.atlas.RequiredValueNotHeld"] =
-                "AMUSE did not atlas material slot {0} of renderer '{1}'.",
+                "AMUSE did not atlas material slot {0} of renderer '{1}' ({4}).",
             ["amuse.atlas.RequiredValueNotHeld:description"] =
                 "A setting of the material moves or reads the main " +
                 "texture in a way the atlas route cannot follow. " +
-                "The slot keeps its original bindings.",
+                "The slot keeps its original bindings.{5}",
             ["amuse.atlas.RequiredValueNotHeld:hint"] =
                 "Set the main texture to UV0, turn pixel mode, " +
                 "stochastic sampling, and the ambient occlusion " +
@@ -920,239 +920,326 @@ namespace Alrauna.Amuse.Editor.Build
                 "off while alpha to coverage is on.",
 
             ["amuse.atlas.UnlistedTexture"] =
-                "AMUSE did not atlas material slot {0} of renderer '{1}'.",
+                "AMUSE did not atlas material slot {0} of renderer '{1}' ({4}).",
             ["amuse.atlas.UnlistedTexture:description"] =
                 "The material assigns a texture that the atlas " +
                 "route does not know. An unlisted texture can read " +
                 "the rewritten channel. The slot keeps its original " +
-                "bindings.",
+                "bindings.{5}",
             ["amuse.atlas.UnlistedTexture:hint"] =
                 "Remove the texture if the material does not need " +
                 "it.",
 
             ["amuse.atlas.PropertyBlockOnRouteProperty"] =
-                "AMUSE did not atlas material slot {0} of renderer '{1}'.",
+                "AMUSE did not atlas material slot {0} of renderer '{1}' ({4}).",
             ["amuse.atlas.PropertyBlockOnRouteProperty:description"] =
                 "A property block sets the main texture, its " +
                 "transform, or a route condition on this slot. The " +
                 "page cannot follow a property block. The slot " +
-                "keeps its original bindings.",
+                "keeps its original bindings.{5}",
             ["amuse.atlas.PropertyBlockOnRouteProperty:hint"] =
                 "Remove the property block entry if you want AMUSE " +
                 "to atlas this slot.",
 
             ["amuse.atlas.AnimatedRouteProperty"] =
-                "AMUSE did not atlas material slot {0} of renderer '{1}'.",
+                "AMUSE did not atlas material slot {0} of renderer '{1}' ({4}).",
             ["amuse.atlas.AnimatedRouteProperty:description"] =
                 "An animation drives the main texture, its " +
                 "transform, or a route condition. The page cannot " +
                 "follow an animated route property. The slot keeps " +
-                "its original bindings.",
+                "its original bindings.{5}",
             ["amuse.atlas.AnimatedRouteProperty:hint"] =
                 "Remove the animation curves of the main texture " +
                 "if you want AMUSE to atlas this slot.",
 
             ["amuse.atlas.MissingMainTexture"] =
-                "AMUSE did not atlas material slot {0} of renderer '{1}'.",
+                "AMUSE did not atlas material slot {0} of renderer '{1}' ({4}).",
             ["amuse.atlas.MissingMainTexture:description"] =
                 "The material has no main texture. There is nothing " +
                 "to move into a page. The slot keeps its original " +
-                "bindings.",
+                "bindings.{5}",
             ["amuse.atlas.MissingMainTexture:hint"] =
                 "Assign a main texture if you want AMUSE to atlas " +
                 "this slot.",
 
             ["amuse.atlas.UnsupportedTextureDimension"] =
-                "AMUSE did not atlas material slot {0} of renderer '{1}'.",
+                "AMUSE did not atlas material slot {0} of renderer '{1}' ({4}).",
             ["amuse.atlas.UnsupportedTextureDimension:description"] =
                 "The main texture is not a 2D texture. The page " +
                 "holds 2D textures only. The slot keeps its " +
-                "original bindings.",
+                "original bindings.{5}",
             ["amuse.atlas.UnsupportedTextureDimension:hint"] =
                 "Use a 2D main texture if you want AMUSE to atlas " +
                 "this slot.",
 
             ["amuse.atlas.SourceNotAnAsset"] =
-                "AMUSE did not atlas material slot {0} of renderer '{1}'.",
+                "AMUSE did not atlas material slot {0} of renderer '{1}' ({4}).",
             ["amuse.atlas.SourceNotAnAsset:description"] =
                 "The main texture is not an asset on disk. AMUSE " +
                 "copies textures through their import settings. The " +
-                "slot keeps its original bindings.",
+                "slot keeps its original bindings.{5}",
             ["amuse.atlas.SourceNotAnAsset:hint"] =
                 "Save the texture as an asset if you want AMUSE " +
                 "to atlas this slot.",
 
             ["amuse.atlas.UnsupportedFormat"] =
-                "AMUSE did not atlas material slot {0} of renderer '{1}'.",
+                "AMUSE did not atlas material slot {0} of renderer '{1}' ({4}).",
             ["amuse.atlas.UnsupportedFormat:description"] =
                 "The main texture has a format the page cannot " +
                 "copy. The page copies RGBA32, RGB24, DXT1, DXT5, " +
                 "and BC7 only, and never a crunched texture. The " +
-                "slot keeps its original bindings.",
+                "slot keeps its original bindings.{5}",
             ["amuse.atlas.UnsupportedFormat:hint"] =
                 "Import the texture in a supported format if you " +
                 "want AMUSE to atlas this slot.",
 
             ["amuse.atlas.UnsupportedWrap"] =
-                "AMUSE did not atlas material slot {0} of renderer '{1}'.",
+                "AMUSE did not atlas material slot {0} of renderer '{1}' ({4}).",
             ["amuse.atlas.UnsupportedWrap:description"] =
                 "The main texture wraps in Mirror mode. The page " +
                 "border covers Clamp and Repeat only. The slot " +
-                "keeps its original bindings.",
+                "keeps its original bindings.{5}",
             ["amuse.atlas.UnsupportedWrap:hint"] =
                 "Set the texture wrap to Clamp or Repeat if you " +
                 "want AMUSE to atlas this slot.",
 
             ["amuse.atlas.NonIdentityTransform"] =
-                "AMUSE did not atlas material slot {0} of renderer '{1}'.",
+                "AMUSE did not atlas material slot {0} of renderer '{1}' ({4}).",
             ["amuse.atlas.NonIdentityTransform:description"] =
                 "The main texture has tiling, offset, or panning. " +
                 "The route moves one UV region, so a transform " +
                 "would render wrong. The slot keeps its original " +
-                "bindings.",
+                "bindings.{5}",
             ["amuse.atlas.NonIdentityTransform:hint"] =
                 "Set the tiling to one, the offset to zero, and " +
                 "the pan to zero if you want AMUSE to atlas this " +
                 "slot.",
 
             ["amuse.atlas.MissingRouteChannel"] =
-                "AMUSE did not atlas material slot {0} of renderer '{1}'.",
+                "AMUSE did not atlas material slot {0} of renderer '{1}' ({4}).",
             ["amuse.atlas.MissingRouteChannel:description"] =
                 "The mesh has no UV0 channel. The route rewrites " +
-                "UV0. The slot keeps its original bindings.",
+                "UV0. The slot keeps its original bindings.{5}",
             ["amuse.atlas.MissingRouteChannel:hint"] =
                 "Give the mesh a UV0 channel if you want AMUSE " +
                 "to atlas this slot.",
 
             ["amuse.atlas.UvOutsideUnitSquare"] =
-                "AMUSE did not atlas material slot {0} of renderer '{1}'.",
+                "AMUSE did not atlas material slot {0} of renderer '{1}' ({4}).",
             ["amuse.atlas.UvOutsideUnitSquare:description"] =
                 "A UV value of this slot lies outside the range " +
                 "from zero to one. The route places one rectangle " +
                 "per texture. The slot keeps its original " +
-                "bindings.",
+                "bindings.{5}",
             ["amuse.atlas.UvOutsideUnitSquare:hint"] =
                 "Fit the UVs of the mesh into the unit square if " +
                 "you want AMUSE to atlas this slot.",
 
             ["amuse.atlas.SourceNotAligned"] =
-                "AMUSE did not atlas material slot {0} of renderer '{1}'.",
+                "AMUSE did not atlas material slot {0} of renderer '{1}' ({4}).",
             ["amuse.atlas.SourceNotAligned:description"] =
                 "The main texture size does not align to the " +
                 "block grid at a protected mip level. A protected " +
                 "level is a raw block copy. The slot keeps its " +
-                "original bindings.",
+                "original bindings.{5}",
             ["amuse.atlas.SourceNotAligned:hint"] =
                 "Resize the texture to a multiple of four texels " +
                 "if you want AMUSE to atlas this slot.",
 
             ["amuse.atlas.SourceMipChainTooShort"] =
-                "AMUSE did not atlas material slot {0} of renderer '{1}'.",
+                "AMUSE did not atlas material slot {0} of renderer '{1}' ({4}).",
             ["amuse.atlas.SourceMipChainTooShort:description"] =
                 "The main texture has fewer mip levels than the " +
                 "protected level count. The page copies the " +
                 "protected levels from the source. The slot keeps " +
-                "its original bindings.",
+                "its original bindings.{5}",
             ["amuse.atlas.SourceMipChainTooShort:hint"] =
                 "Enable mip maps on the texture, or lower the " +
                 "protected mip level count.",
 
             ["amuse.atlas.ClampEdgeOnBc7"] =
-                "AMUSE did not atlas material slot {0} of renderer '{1}'.",
+                "AMUSE did not atlas material slot {0} of renderer '{1}' ({4}).",
             ["amuse.atlas.ClampEdgeOnBc7:description"] =
                 "The source is a BC7 texture that needs a clamp " +
                 "edge border. AMUSE cannot write that border " +
-                "exactly. The slot keeps its original bindings.",
+                "exactly. The slot keeps its original bindings.{5}",
             ["amuse.atlas.ClampEdgeOnBc7:hint"] =
                 "Set the texture wrap to Repeat, or use a " +
                 "different format, if you want AMUSE to atlas " +
                 "this slot.",
 
             ["amuse.atlas.PlacementTooLarge"] =
-                "AMUSE did not atlas material slot {0} of renderer '{1}'.",
+                "AMUSE did not atlas material slot {0} of renderer '{1}' ({4}).",
             ["amuse.atlas.PlacementTooLarge:description"] =
                 "The source region does not fit a page of the " +
                 "maximum page size. The slot keeps its original " +
-                "bindings.",
+                "bindings.{5}",
             ["amuse.atlas.PlacementTooLarge:hint"] =
                 "Raise the maximum page size, use a smaller source " +
                 "texture, or shrink the UV area the mesh uses.",
 
             ["amuse.atlas.GroupBudget"] =
-                "AMUSE did not atlas material slot {0} of renderer '{1}'.",
+                "AMUSE did not atlas material slot {0} of renderer '{1}' ({4}).",
             ["amuse.atlas.GroupBudget:description"] =
                 "The pages of this group would hold more bytes " +
-                "than the group limit allows. The value is {2} " +
-                "bytes. The limit is {3} bytes. Every use of the " +
-                "group keeps its original bindings.",
+                "than the group limit allows. The value is {2}. " +
+                "The limit is {3}. Every use of the " +
+                "group keeps its original bindings.{5}",
             ["amuse.atlas.GroupBudget:hint"] =
                 "Reduce the textures of the group, or raise the " +
                 "limit.",
 
             ["amuse.atlas.AvatarBudget"] =
-                "AMUSE did not atlas material slot {0} of renderer '{1}'.",
+                "AMUSE did not atlas material slot {0} of renderer '{1}' ({4}).",
             ["amuse.atlas.AvatarBudget:description"] =
                 "The pages of this avatar would hold more bytes " +
-                "than the avatar limit allows. The value is {2} " +
-                "bytes. The limit is {3} bytes. Every use of the " +
-                "group keeps its original bindings.",
+                "than the avatar limit allows. The value is {2}. " +
+                "The limit is {3}. Every use of the " +
+                "group keeps its original bindings.{5}",
             ["amuse.atlas.AvatarBudget:hint"] =
                 "Reduce the textures of the avatar, or raise the " +
                 "limit.",
 
             ["amuse.atlas.PeakBudget"] =
-                "AMUSE did not atlas material slot {0} of renderer '{1}'.",
+                "AMUSE did not atlas material slot {0} of renderer '{1}' ({4}).",
             ["amuse.atlas.PeakBudget:description"] =
                 "Building the pages of this group would need more " +
                 "temporary memory than the peak limit allows. The " +
-                "value is {2} bytes. The limit is {3} bytes. Every " +
-                "use of the group keeps its original bindings.",
+                "value is {2}. The limit is {3}. Every " +
+                "use of the group keeps its original bindings.{5}",
             ["amuse.atlas.PeakBudget:hint"] =
                 "Reduce the textures of the group, or raise the " +
                 "limit.",
 
             ["amuse.atlas.SourceAcquisitionFailed"] =
-                "AMUSE did not atlas material slot {0} of renderer '{1}'.",
+                "AMUSE did not atlas material slot {0} of renderer '{1}' ({4}).",
             ["amuse.atlas.SourceAcquisitionFailed:description"] =
                 "AMUSE could not open a readable copy of a source " +
                 "texture of this group. Every use of the group " +
-                "keeps its original bindings.",
+                "keeps its original bindings.{5}",
             ["amuse.atlas.SourceAcquisitionFailed:hint"] =
                 "AMUSE could not read a copy of the texture. " +
                 "Reimport the texture, then build again.",
 
             ["amuse.atlas.SlotSharesSubmesh"] =
-                "AMUSE did not atlas material slot {0} of renderer '{1}'.",
+                "AMUSE did not atlas material slot {0} of renderer '{1}' ({4}).",
             ["amuse.atlas.SlotSharesSubmesh:description"] =
                 "The renderer has more material slots than the " +
                 "mesh has parts. The extra slots draw the last " +
                 "part again, so one submesh would need two " +
                 "different UV regions. The slot keeps its " +
-                "original bindings.",
+                "original bindings.{5}",
             ["amuse.atlas.SlotSharesSubmesh:hint"] =
                 "Give the mesh one part per material slot, or " +
                 "remove the extra slots.",
 
             ["amuse.atlas.NonTriangleTopology"] =
-                "AMUSE did not atlas material slot {0} of renderer '{1}'.",
+                "AMUSE did not atlas material slot {0} of renderer '{1}' ({4}).",
             ["amuse.atlas.NonTriangleTopology:description"] =
                 "The mesh part of this slot is not made of " +
                 "triangles. The route moves triangles only. The " +
-                "slot keeps its original bindings.",
+                "slot keeps its original bindings.{5}",
             ["amuse.atlas.NonTriangleTopology:hint"] =
                 "Convert the mesh part to triangles if you want " +
                 "AMUSE to atlas this slot.",
 
             ["amuse.atlas.EmptySubmesh"] =
-                "AMUSE did not atlas material slot {0} of renderer '{1}'.",
+                "AMUSE did not atlas material slot {0} of renderer '{1}' ({4}).",
             ["amuse.atlas.EmptySubmesh:description"] =
                 "The mesh part of this slot has no triangles. The " +
                 "route moves triangles, so an empty part has no " +
                 "region to move. The slot keeps its original " +
-                "bindings.",
+                "bindings.{5}",
             ["amuse.atlas.EmptySubmesh:hint"] =
                 "Remove the empty mesh part if you want AMUSE to " +
                 "atlas this slot.",
+
+            // --- Atlas refusal short causes ---
+            // The inspector view and the summary line name a cause
+            // with these lower case phrases.
+            ["amuse.atlas.UnsupportedBuildTarget:short"] =
+                "the build target is not Windows",
+            ["amuse.atlas.MaximumPageSizeOutOfRange:short"] =
+                "the maximum page size is out of range",
+            ["amuse.atlas.ProtectedMipLevelCountOutOfRange:short"] =
+                "the protected mip level count is out of range",
+            ["amuse.atlas.AnimationGraphUnavailable:short"] =
+                "the animation graph could not be read",
+            ["amuse.atlas.UnsupportedRenderer:short"] =
+                "the renderer type is not supported",
+            ["amuse.atlas.MissingMesh:short"] =
+                "the renderer has no mesh",
+            ["amuse.atlas.MissingMaterial:short"] =
+                "the slot has no material",
+            ["amuse.atlas.AnimatedRendererShape:short"] =
+                "an animation changes the mesh or the slot count",
+            ["amuse.atlas.AnimatedMaterialSlot:short"] =
+                "an animation swaps the material",
+            ["amuse.atlas.UnattestedShader:short"] =
+                "the shader is not a reviewed version",
+            ["amuse.atlas.LockedShader:short"] =
+                "the material is locked",
+            ["amuse.atlas.NoRouteTable:short"] =
+                "the shader has no atlas route yet",
+            ["amuse.atlas.KeywordNotAllowed:short"] =
+                "a shader feature is outside the atlas route",
+            ["amuse.atlas.RequiredValueNotHeld:short"] =
+                "a material setting moves or reads the main texture",
+            ["amuse.atlas.UnlistedTexture:short"] =
+                "the material uses another texture",
+            ["amuse.atlas.PropertyBlockOnRouteProperty:short"] =
+                "a property block sets a route property",
+            ["amuse.atlas.AnimatedRouteProperty:short"] =
+                "an animation drives a route property",
+            ["amuse.atlas.MissingMainTexture:short"] =
+                "the material has no main texture",
+            ["amuse.atlas.UnsupportedTextureDimension:short"] =
+                "the main texture is not 2D",
+            ["amuse.atlas.SourceNotAnAsset:short"] =
+                "the main texture is not an imported asset",
+            ["amuse.atlas.UnsupportedFormat:short"] =
+                "the main texture format is not supported",
+            ["amuse.atlas.UnsupportedWrap:short"] =
+                "the main texture uses Mirror wrap",
+            ["amuse.atlas.NonIdentityTransform:short"] =
+                "the main texture has tiling, offset, or panning",
+            ["amuse.atlas.MissingRouteChannel:short"] =
+                "the mesh has no UV0",
+            ["amuse.atlas.UvOutsideUnitSquare:short"] =
+                "a UV lies outside the range from 0 to 1",
+            ["amuse.atlas.SourceNotAligned:short"] =
+                "the main texture size does not fit the block grid",
+            ["amuse.atlas.SourceMipChainTooShort:short"] =
+                "the main texture has too few mip levels",
+            ["amuse.atlas.ClampEdgeOnBc7:short"] =
+                "a BC7 texture needs a clamp border",
+            ["amuse.atlas.PlacementTooLarge:short"] =
+                "the UV region is larger than a page",
+            ["amuse.atlas.GroupBudget:short"] =
+                "the group memory limit",
+            ["amuse.atlas.AvatarBudget:short"] =
+                "the avatar memory limit",
+            ["amuse.atlas.PeakBudget:short"] =
+                "the build memory limit",
+            ["amuse.atlas.SourceAcquisitionFailed:short"] =
+                "a source texture could not be read",
+            ["amuse.atlas.SlotSharesSubmesh:short"] =
+                "the slot shares a mesh part with another slot",
+            ["amuse.atlas.NonTriangleTopology:short"] =
+                "the mesh part is not triangles",
+            ["amuse.atlas.EmptySubmesh:short"] =
+                "the mesh part has no triangles",
+
+            // --- Atlas summary ---
+            ["amuse.atlas.Summary"] =
+                "AMUSE atlased {0} out of {1} material slots.",
+            ["amuse.atlas.Summary:description"] =
+                "AMUSE built {2} with {3}. The pages add {4} of " +
+                "texture memory. The source textures of the atlased " +
+                "slots use {5}. They stay in the avatar.{6}",
+            ["amuse.atlas.Summary:hint"] =
+                "Each slot that did not atlas has its own entry with " +
+                "the exact cause.",
 
             // --- Atlas page sets ---
             ["amuse.atlas.PageSet"] =
@@ -1162,11 +1249,12 @@ namespace Alrauna.Amuse.Editor.Build
                 "The set moves {3} onto {2}. The set is merge-ready. " +
                 "One material configuration serves every slot of the " +
                 "set. Only the page texture differs between pages. " +
-                "The pages add {4} bytes of texture memory. The set " +
-                "copies from {5} with {6} bytes. These sources stay " +
+                "The pages add {4} of texture memory. The set " +
+                "copies from {5} with {6}. These sources stay " +
                 "in the avatar, because AMUSE cannot prove that " +
                 "nothing else uses them. Atlasing in AMUSE 0.2.0 " +
-                "does not reduce draw calls or material slots.",
+                "does not reduce draw calls or material slots." +
+                "\n\nPages:\n{7}\n\nSlots:\n{8}",
             ["amuse.atlas.PageSet:hint"] =
                 "Nothing is wrong. Texture memory can grow with " +
                 "atlasing. A later AMUSE version can merge the " +

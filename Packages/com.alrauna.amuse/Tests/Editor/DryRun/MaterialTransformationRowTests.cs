@@ -148,8 +148,8 @@ namespace Alrauna.Amuse.Tests.Editor.DryRun
             Assert.That(
                 RowText.DisclosureSentence(2),
                 Is.EqualTo(
-                    "This view excludes atlasing. The build console " +
-                    "lists the atlas results."));
+                    "This view excludes atlasing. The Atlasing view " +
+                    "below lists the atlas results."));
         }
 
         [Test]

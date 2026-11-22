@@ -420,9 +420,17 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     Is.EqualTo(AtlasUseRefusal.None));
                 Assert.That(recorder.CallCount, Is.Zero,
                     "a verified host raises no consent ask");
-                Assert.That(CountEntriesWithPrefix(reports, "amuse."),
+                Assert.That(
+                    CountEntriesWithPrefix(reports, "amuse.") -
+                        CountEntriesWithPrefix(reports, "amuse.atlas.Summary"),
                     Is.Zero,
-                    "an admitted atlas-only build reports nothing");
+                    "an admitted atlas-only build reports nothing but" +
+                    " its atlas summary");
+                Assert.That(
+                    CountEntriesWithPrefix(reports, "amuse.atlas.Summary"),
+                    Is.EqualTo(1),
+                    "a build that reaches the atlas analysis reports one" +
+                    " atlas summary");
                 Assert.That(state.AnalyzedRendererCount, Is.Zero,
                     "no renderer enters alpha analysis while alpha" +
                     " separation is off");
