@@ -29,32 +29,21 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         private const float PerturbStep = 0.37f;
 
         /// <summary>
-        /// The families whose switch the reviewed route requires at
-        /// zero. Admitted uses can never turn them on, so the oracle
-        /// cannot prove them live.
-        /// </summary>
-        private static readonly HashSet<string> FamiliesTheRouteRequiresOff =
-            new HashSet<string>
-            {
-                "Main3rd",
-                "Glitter",
-                "AudioLink",
-                "Parallax",
-            };
-
-        /// <summary>
-        /// Families whose live values the oracle cannot show under
-        /// the fixture of the controller ruling of 2026-11-22. The
+        /// Families whose live values the oracle cannot show. The
         /// render stays byte for byte equal with the switch on and
-        /// every member perturbed, on every one of the ten rows.
-        /// The finding is reported with the task. The dead cases of
-        /// these families still run, and they still hold.
+        /// every member perturbed. Observed on 2026-11-22. The
+        /// Anisotropy family held on all ten admitted rows under the
+        /// standard fixture, under an isolated fixture with Main2nd
+        /// off and the reflection dependents on, with a flat bump
+        /// map, and at smoothness 0.35, 0.5, and 1. No member moved
+        /// the render. A fixture that shows the family live should
+        /// remove it from this set. The dead cases still run, and
+        /// they still hold.
         /// </summary>
         private static readonly HashSet<string> FamiliesTheOracleCannotShow =
             new HashSet<string>
             {
                 "Anisotropy",
-                "Main gradation",
             };
 
         /// <summary>
@@ -88,11 +77,27 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
 
         /// <summary>
         /// The family switches that the reviewed route lets an
-        /// admitted use hold on. The probe asks the required value
-        /// rule of the route itself, so the list can never drift from
-        /// the rule. Computed on the main thread on first use.
+        /// admitted use hold on, keyed by row shader. The probe asks
+        /// the required value rule of the route itself, so the list
+        /// can never drift from the rule. Computed on the main
+        /// thread on first use per shader.
         /// </summary>
-        private static string[] switchesTheRouteMayHoldOn;
+        private static readonly Dictionary<Shader, string[]>
+            switchesTheRouteMayHoldOn = new Dictionary<Shader, string[]>();
+
+        /// <summary>
+        /// Fixture overrides per family. The override runs after the
+        /// switch list, so it can turn a switch back off. The Main
+        /// gradation family needs Main2nd off, because the Main2nd
+        /// layer replaces the main stage color and hides the
+        /// gradation under it. Observed on 2026-11-22.
+        /// </summary>
+        private static readonly Dictionary<string, Action<Material>>
+            FamilyFixtureOverrides = new Dictionary<string, Action<Material>>
+            {
+                ["Main gradation"] = material =>
+                    material.SetFloat("_UseMain2ndTex", 0f),
+            };
 
         private readonly List<UnityEngine.Object> tracked =
             new List<UnityEngine.Object>();
@@ -106,11 +111,22 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         private Texture2D noiseTexture;
         private Texture2D rampTexture;
         private Texture2D darkTexture;
+        private Texture2D flatNormalTexture;
         private Cubemap noiseCubemap;
+        private Light sun;
+        private Light lamp;
+        private bool previousAllowAsyncCompilation;
 
         [SetUp]
         public void SetUp()
         {
+            // A case must never compare placeholder frames of an
+            // async shader compile. The editor setting allows it by
+            // default, so the test forces synchronous compiles.
+            previousAllowAsyncCompilation =
+                ShaderUtil.allowAsyncCompilation;
+            ShaderUtil.allowAsyncCompilation = false;
+
             // The scene sits far below the origin. Geometry of the
             // open scene stays out of the frame and out of the
             // shadow maps.
@@ -121,6 +137,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             mainTexture = Track(NewPatternTexture());
             rampTexture = Track(NewRampTexture());
             darkTexture = Track(NewDarkTexture());
+            flatNormalTexture = Track(NewFlatNormalTexture());
             noiseCubemap = Track(NewNoiseCubemap());
             readback = Track(new Texture2D(
                 TargetSize, TargetSize, TextureFormat.RGBA32, false));
@@ -129,8 +146,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
 
             var cameraObject = NewChild("oracle camera");
             camera = cameraObject.AddComponent<Camera>();
-            camera.transform.localPosition = new Vector3(0f, 0.35f, -2.4f);
-            camera.transform.localRotation = Quaternion.identity;
+            // The camera looks down at the sphere. The shadow of the
+            // sphere then lands on the visible part of the plane.
+            camera.transform.localPosition =
+                new Vector3(0f, 1.1f, -2.6f);
+            camera.transform.localRotation =
+                Quaternion.Euler(22f, 0f, 0f);
             camera.fieldOfView = 55f;
             camera.nearClipPlane = 0.1f;
             camera.farClipPlane = 50f;
@@ -155,17 +176,21 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                     "Default-Diffuse.mat");
 
             // One directional light with soft shadows runs ForwardBase
-            // and ShadowCaster. One point light runs ForwardAdd.
+            // and ShadowCaster. One point light runs ForwardAdd. The
+            // sun sits low at the right side. The camera then sees a
+            // backlit rim and a long shadow on the visible plane.
             var sunObject = NewChild("oracle sun");
             var sun = sunObject.AddComponent<Light>();
+            this.sun = sun;
             sun.type = LightType.Directional;
             sun.intensity = 1f;
             sun.shadows = LightShadows.Soft;
             sunObject.transform.localRotation =
-                Quaternion.Euler(50f, -30f, 0f);
+                Quaternion.Euler(18f, 90f, 0f);
 
             var lampObject = NewChild("oracle point light");
             var lamp = lampObject.AddComponent<Light>();
+            this.lamp = lamp;
             lamp.type = LightType.Point;
             lamp.intensity = 0.8f;
             lamp.range = 12f;
@@ -207,6 +232,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             camera = null;
             sphereRenderer = null;
             root = null;
+            sun = null;
+            lamp = null;
+            ShaderUtil.allowAsyncCompilation =
+                previousAllowAsyncCompilation;
         }
 
         // --- the cases ------------------------------------------------
@@ -242,14 +271,23 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                     continue;
                 }
 
-                if (FamiliesTheRouteRequiresOff.Contains(family.Name) ||
-                    FamiliesTheOracleCannotShow.Contains(family.Name))
+                if (FamiliesTheOracleCannotShow.Contains(family.Name))
                 {
                     continue;
                 }
 
                 yield return new TestCaseData(family.Name)
                     .SetName("Live family '" + family.Name +
+                             "' changes the render");
+            }
+        }
+
+        private static IEnumerable<TestCaseData> PassControlCases()
+        {
+            foreach (var row in AdmittedRows)
+            {
+                yield return new TestCaseData(row.Guid)
+                    .SetName("Every pass of row '" + row.Name +
                              "' changes the render");
             }
         }
@@ -297,6 +335,14 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                     "of the family under test");
             }
 
+            if (DeclaredPerturbedCount(shader, perturbed) == 0)
+            {
+                Assert.Ignore(
+                    "no perturbed name of the family '" + familyName +
+                    "' is a property or a declared uniform of row '" +
+                    shader.name + "'. The case would pass vacuously.");
+            }
+
             Assert.That(
                 AtlasRouteTable.LilToonReviewedMainColor
                     .UnheldRequiredValue(material),
@@ -308,6 +354,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             // row. Its result is discarded.
             RenderSubject();
             var before = RenderSubject();
+            AssertFrameLooksRendered(
+                before,
+                "row '" + shader.name + "', family '" + familyName + "'");
             foreach (var name in perturbed)
             {
                 PerturbOneValue(material, name);
@@ -328,7 +377,32 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                     "The live members are: " +
                     string.Join(", ", liveMembers) + ".");
             }
+
+            // The row control proves the case is not vacuous. A live
+            // value must move the render of the same material. The
+            // Main2nd layer replaces the main stage color, so the
+            // layer color is the live value while the layer is on.
+            var controlProperty = material.GetFloat("_UseMain2ndTex") != 0f
+                ? "_Color2nd"
+                : "_Color";
+            var color = material.GetColor(controlProperty);
+            material.SetColor(
+                controlProperty,
+                new Color(
+                    color.r + PerturbStep,
+                    color.g + PerturbStep,
+                    color.b + PerturbStep,
+                    color.a));
+            var control = RenderSubject();
+            Assert.That(
+                BytesEqual(before, control),
+                Is.False,
+                "row control: the live value '" + controlProperty +
+                "' must change the render of row '" + shader.name +
+                "'. The row shader may not have compiled or the " +
+                "subject may be out of frame.");
         }
+
 
         /// <summary>
         /// The liveness guard of the controller ruling of 2026-11-22.
@@ -343,6 +417,17 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             string familyName)
         {
             var family = FamilyByName(familyName);
+            var probeShader =
+                LoadRowShader(LilToonSourceAttestation.SupportedShaderGuid);
+            if (!TheRouteMayHold(
+                    probeShader, family.Switches[0]))
+            {
+                Assert.Ignore(
+                    "the reviewed route requires the switch '" +
+                    family.Switches[0] + "' of the family '" + familyName +
+                    "' at zero. No admitted use can turn the family on.");
+            }
+
             var differingRows = new List<string>();
             foreach (var row in AdmittedRows)
             {
@@ -355,10 +440,15 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
 
                 RenderSubject();
                 var before = RenderSubject();
+                AssertFrameLooksRendered(
+                    before,
+                    "row '" + shader.name + "', family '" + familyName +
+                    "' with its switch on");
                 foreach (var name in perturbed)
                 {
                     PerturbOneValue(material, name);
                 }
+
 
                 var after = RenderSubject();
                 if (!BytesEqual(before, after))
@@ -398,6 +488,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
 
             RenderSubject();
             var before = RenderSubject();
+            AssertFrameLooksRendered(
+                before, "row '" + shader.name + "', the Rim family with " +
+                "its switch on");
             foreach (var name in perturbed)
             {
                 PerturbOneValue(material, name);
@@ -413,6 +506,78 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 string.Join(", ", perturbed) + ".");
         }
 
+        /// <summary>
+        /// Every pass of one row must contribute pixels. The control
+        /// turns one pass off at a time and asserts that the render
+        /// changes. The ForwardAdd control disables the point light.
+        /// The ShadowCaster control drops the sun shadows. The
+        /// outline control sets the outline width to zero on outline
+        /// rows.
+        /// </summary>
+        [Test]
+        [TestCaseSource(nameof(PassControlCases))]
+        public void EveryPassOfTheRowChangesTheRender(string shaderGuid)
+        {
+            Assert.That(
+                QualitySettings.shadows,
+                Is.Not.EqualTo(ShadowQuality.Disable),
+                "fixture precondition: the active quality level must " +
+                "allow shadows. The ShadowCaster control cannot run " +
+                "otherwise.");
+            foreach (var sceneLight in UnityEngine.Object
+                .FindObjectsOfType<Light>())
+            {
+                Assert.That(
+                    sceneLight.transform.IsChildOf(root.transform),
+                    Is.True,
+                    "fixture precondition: a light outside the fixture " +
+                    "reaches the subject. The test scene must hold no " +
+                    "other light.");
+            }
+
+            var shader = LoadRowShader(shaderGuid);
+            var material = NewCaseMaterial(shader, null);
+            sphereRenderer.sharedMaterial = material;
+
+            RenderSubject();
+            var baseline = RenderSubject();
+            AssertFrameLooksRendered(baseline, "row '" + shader.name + "'");
+
+            lamp.enabled = false;
+            var withoutAdd = RenderSubject();
+            lamp.enabled = true;
+            Assert.That(
+                BytesEqual(baseline, withoutAdd),
+                Is.False,
+                "the point light must change the render of row '" +
+                shader.name + "'. The ForwardAdd pass contributed " +
+                "nothing.");
+
+            sun.shadows = LightShadows.None;
+            var withoutShadows = RenderSubject();
+            sun.shadows = LightShadows.Soft;
+            Assert.That(
+                BytesEqual(baseline, withoutShadows),
+                Is.False,
+                "the sun shadow must change the render of row '" +
+                shader.name + "'. The ShadowCaster pass or the shadow " +
+                "receive contributed nothing. The shadow may fall " +
+                "outside the frame.");
+
+            if (shader.name.IndexOf("Outline", StringComparison.Ordinal)
+                >= 0)
+            {
+                material.SetFloat("_OutlineWidth", 0f);
+                var withoutOutline = RenderSubject();
+                Assert.That(
+                    BytesEqual(baseline, withoutOutline),
+                    Is.False,
+                    "the outline width must change the render of row '" +
+                    shader.name + "'. The outline pass contributed " +
+                    "nothing.");
+            }
+        }
+
         // --- the case material ----------------------------------------
 
         /// <summary>
@@ -423,7 +588,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         /// time. Some textures of the pinned on families are pinned
         /// too. A null layer texture samples white in the editor,
         /// and the white would wash out the whole render and hide
-        /// every other family.
+        /// every other family. The normal maps are pinned flat, so
+        /// the white never reaches the normal path. The family
+        /// fixture override runs last.
         /// </summary>
         private Material NewCaseMaterial(
             Shader shader,
@@ -437,9 +604,17 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 SetSwitchOn(material, name);
             }
 
-            foreach (var name in family.Switches)
+            // The Bump family left the model with the data fix of
+            // 2026-11-22, so its switch no longer comes from the
+            // family list. The fixture keeps the normal path on.
+            material.SetFloat("_UseBumpMap", 1f);
+
+            if (family != null)
             {
-                SetSwitchOff(material, name);
+                foreach (var name in family.Switches)
+                {
+                    SetSwitchOff(material, name);
+                }
             }
 
             material.SetVector("_EmissionBlink", Vector4.zero);
@@ -450,27 +625,45 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             material.SetTexture("_EmissionMap", darkTexture);
             material.SetTexture("_Emission2ndMap", darkTexture);
             material.SetTexture("_MainGradationTex", rampTexture);
+            material.SetTexture("_BumpMap", flatNormalTexture);
+            material.SetTexture("_Bump2ndMap", flatNormalTexture);
             // The alpha mask in replace mode with a varied mask
             // gives the render varied alpha. The dither of lilToon
             // only thresholds alpha, so a full alpha everywhere
-            // would hide the family.
+            // would hide the family. The dither runs on cutout rows
+            // only. The default maximum puts the dither threshold
+            // above almost every alpha, which would clip the whole
+            // subject away. The pinned maximum puts the threshold at
+            // one half, so the varied alpha keeps the subject
+            // visible.
             material.SetTexture("_AlphaMask", mainTexture);
+            material.SetFloat("_DitherMaxValue", 510f);
+            if (family != null &&
+                FamilyFixtureOverrides.TryGetValue(
+                    family.Name, out var overrideAction))
+            {
+                overrideAction(material);
+            }
+
             return material;
         }
 
         private static string[] SwitchesTheRouteMayHoldOn(Shader shader)
         {
-            if (switchesTheRouteMayHoldOn == null)
+            if (!switchesTheRouteMayHoldOn.TryGetValue(
+                    shader, out var switches))
             {
-                switchesTheRouteMayHoldOn = LilToonLiveValues.Model.Families
+                switches = LilToonLiveValues.Model.Families
                     .SelectMany(family => family.Switches)
                     .Distinct()
                     .Where(name => TheRouteMayHold(shader, name))
                     .ToArray();
+                switchesTheRouteMayHoldOn[shader] = switches;
             }
 
-            return switchesTheRouteMayHoldOn;
+            return switches;
         }
+
 
         private static bool TheRouteMayHold(Shader shader, string name)
         {
@@ -702,6 +895,61 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             }
         }
 
+        /// <summary>
+        /// The frame must show a rendered subject. A uniform frame
+        /// means the subject never entered the view. The magenta of
+        /// the error shader means the row shader never compiled.
+        /// </summary>
+        private static void AssertFrameLooksRendered(
+            Color32[] render,
+            string context)
+        {
+            var distinct = new HashSet<int>();
+            var magenta = 0;
+            foreach (var pixel in render)
+            {
+                distinct.Add(
+                    pixel.r << 16 | pixel.g << 8 | pixel.b);
+                if (pixel.r == 255 && pixel.g == 0 && pixel.b == 255)
+                {
+                    magenta++;
+                }
+            }
+
+            Assert.That(
+                distinct.Count,
+                Is.GreaterThan(1),
+                context + ": the frame must not be uniform. The subject " +
+                "may be out of frame.");
+            Assert.That(
+                magenta,
+                Is.EqualTo(0),
+                context + ": the frame must not hold the magenta of the " +
+                "error shader.");
+        }
+
+        /// <summary>
+        /// How many perturbed names the row declares as a property or
+        /// the model declares as a uniform. A case with none is
+        /// vacuous, because no shader can read the perturbed values.
+        /// </summary>
+        private static int DeclaredPerturbedCount(
+            Shader shader,
+            List<string> perturbed)
+        {
+            var count = 0;
+            foreach (var name in perturbed)
+            {
+                if (shader.FindPropertyIndex(name) >= 0 ||
+                    LilToonLiveValues.Model.Declares(name))
+                {
+                    count++;
+                }
+            }
+
+            return count;
+        }
+
         private static bool BytesEqual(Color32[] first, Color32[] second)
         {
             if (first.Length != second.Length)
@@ -787,6 +1035,28 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                         (byte)checker,
                         255);
                 }
+            }
+
+            texture.SetPixels32(pixels);
+            texture.Apply(false, false);
+            return texture;
+        }
+
+        /// <summary>
+        /// A flat normal map. Every texel unpacks to the unchanged
+        /// surface normal, so the pinned on normal paths stay calm.
+        /// </summary>
+        private static Texture2D NewFlatNormalTexture()
+        {
+            var texture = new Texture2D(
+                16, 16, TextureFormat.RGBA32, false)
+            {
+                name = "AMUSE render oracle flat normal texture",
+            };
+            var pixels = new Color32[16 * 16];
+            for (var index = 0; index < pixels.Length; index++)
+            {
+                pixels[index] = new Color32(128, 128, 255, 255);
             }
 
             texture.SetPixels32(pixels);
