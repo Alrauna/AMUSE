@@ -1308,6 +1308,369 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 "one key");
         }
 
+        // --- the generic key tier ----------------------------------------
+
+        private const string ShaderWithADeclaredFoo = @"
+Shader ""Hidden/Alrauna/AmuseTests/AtlasUseCaptureFooDeclared""
+{
+    Properties
+    {
+        _Foo (""Foo"", Float) = 0
+    }
+    SubShader
+    {
+        Pass
+        {
+            CGPROGRAM
+            #pragma vertex vert_img
+            #pragma fragment frag
+            #include ""UnityCG.cginc""
+            float _Foo;
+            float4 frag(v2f_img image) : SV_Target
+            {
+                return float4(_Foo, 0, 0, 1);
+            }
+            ENDCG
+        }
+    }
+}";
+
+        private const string ShaderWithoutADeclaredFoo = @"
+Shader ""Hidden/Alrauna/AmuseTests/AtlasUseCaptureFooUndeclared""
+{
+    SubShader
+    {
+        Pass
+        {
+            CGPROGRAM
+            #pragma vertex vert_img
+            #pragma fragment frag
+            #include ""UnityCG.cginc""
+            float _Foo;
+            float4 frag(v2f_img image) : SV_Target
+            {
+                return float4(_Foo, 0, 0, 1);
+            }
+            ENDCG
+        }
+    }
+}";
+
+        [Test]
+        public void StaleSavedValueDoesNotReachAnUndeclaredUniform()
+        {
+            // Unity pins this fact on this editor. A saved value for
+            // a property that the shader no longer lists stays in
+            // the serialized data, but it never reaches the uniform
+            // that the shader code declares. The color is black, not
+            // the magenta of a broken shader. The key still counts
+            // the entry until a reviewed model declares it dead.
+            var withProperty = Track(ShaderUtil.CreateShaderAsset(
+                ShaderWithADeclaredFoo));
+            var withoutProperty = Track(ShaderUtil.CreateShaderAsset(
+                ShaderWithoutADeclaredFoo));
+            var material = Track(new Material(withProperty));
+            material.SetFloat("_Foo", 1f);
+            material.shader = withoutProperty;
+
+            Assert.That(
+                material.HasProperty("_Foo"), Is.False,
+                "fixture guard: the second shader must not declare _Foo");
+            var color = BlitColorOf(material);
+
+            Assert.That(color.r, Is.EqualTo(0f).Within(0.001f));
+            Assert.That(color.g, Is.EqualTo(0f).Within(0.001f));
+            Assert.That(color.b, Is.EqualTo(0f).Within(0.001f));
+        }
+
+        [Test]
+        public void DeclaredSavedValueReachesTheShader()
+        {
+            // The control of the test above. The same uniform on the
+            // shader that lists the property reads the saved value.
+            var withProperty = Track(ShaderUtil.CreateShaderAsset(
+                ShaderWithADeclaredFoo));
+            var material = Track(new Material(withProperty));
+            material.SetFloat("_Foo", 1f);
+
+            Assert.That(
+                material.HasProperty("_Foo"), Is.True,
+                "fixture guard: the first shader must declare _Foo");
+            var color = BlitColorOf(material);
+
+            Assert.That(color.r, Is.EqualTo(1f).Within(0.001f));
+            Assert.That(color.g, Is.EqualTo(0f).Within(0.001f));
+            Assert.That(color.b, Is.EqualTo(0f).Within(0.001f));
+        }
+
+        [Test]
+        public void ExplicitQueueEqualToTheShaderQueueLeavesTheKey()
+        {
+            var plain = NewLilToonFixture();
+            var queued = NewLilToonFixture();
+            queued.Material.renderQueue =
+                queued.Material.shader.renderQueue;
+
+            var plainOutcome = CaptureLilToon(plain);
+            var queuedOutcome = CaptureLilToon(queued);
+
+            AssertAdmitted(plainOutcome);
+            AssertAdmitted(queuedOutcome);
+            Assert.That(
+                CustomRenderQueueOf(queued.Material),
+                Is.Not.EqualTo(CustomRenderQueueOf(plain.Material)),
+                "fixture guard: the explicit queue must be serialized");
+            Assert.That(
+                queuedOutcome.Use.MaterialKey,
+                Is.EqualTo(plainOutcome.Use.MaterialKey),
+                "an explicit queue that equals the shader queue is the " +
+                "same render state");
+        }
+
+        // --- Falsifier 1: a queue that differs from the shader queue
+        // changes rendering, so it must change the key. ---
+        [Test]
+        public void ExplicitQueueDifferentFromTheShaderQueueChangesTheKey()
+        {
+            var plain = NewLilToonFixture();
+            var queued = NewLilToonFixture();
+            queued.Material.renderQueue = 2001;
+
+            var plainOutcome = CaptureLilToon(plain);
+            var queuedOutcome = CaptureLilToon(queued);
+
+            AssertAdmitted(plainOutcome);
+            AssertAdmitted(queuedOutcome);
+            Assert.That(
+                queuedOutcome.Use.MaterialKey,
+                Is.Not.EqualTo(plainOutcome.Use.MaterialKey),
+                "a queue of 2001 draws after a queue of 2000");
+        }
+
+        [Test]
+        public void InvalidKeywordLeavesTheKey()
+        {
+            var plain = NewLilToonFixture();
+            var flagged = NewLilToonFixture();
+            flagged.Material.EnableKeyword("AMUSE_TEST_UNDECLARED");
+
+            var plainOutcome = CaptureLilToon(plain);
+            var flaggedOutcome = CaptureLilToon(flagged);
+
+            AssertAdmitted(plainOutcome);
+            AssertAdmitted(flaggedOutcome);
+            Assert.That(
+                InvalidKeywordsOf(flagged.Material),
+                Does.Contain("AMUSE_TEST_UNDECLARED"),
+                "fixture guard: the keyword must be serialized as " +
+                "invalid");
+            Assert.That(
+                InvalidKeywordsOf(plain.Material),
+                Is.Empty,
+                "fixture guard: the plain fixture holds no invalid " +
+                "keyword");
+            Assert.That(
+                flaggedOutcome.Use.MaterialKey,
+                Is.EqualTo(plainOutcome.Use.MaterialKey),
+                "a keyword that the shader does not declare cannot " +
+                "change rendering");
+        }
+
+        // --- Falsifier 2: no reviewed model has declared the stale
+        // entry dead, so it must still change the key. ---
+        [Test]
+        public void StaleSavedEntryStillChangesTheKeyWithoutAReviewedModel()
+        {
+            var root = Track(new GameObject("stale key root"));
+            var mainTexture = ImportMainTexture("stale key main");
+            var plain = NewAdmittedMaterial(mainTexture);
+            var stale = NewAdmittedMaterial(mainTexture);
+            WriteStaleFloat(stale, "_DetailMask", 1f);
+            var mesh = Track(NewTriangleMesh(2));
+            AddSkinnedRenderer(
+                root, "Body", mesh, new[] { plain, stale });
+
+            var outcomes = CaptureUses(root);
+
+            Assert.That(outcomes, Has.Count.EqualTo(2));
+            AssertAdmitted(outcomes[0]);
+            AssertAdmitted(outcomes[1]);
+            Assert.That(
+                outcomes[1].Use.MaterialKey,
+                Is.Not.EqualTo(outcomes[0].Use.MaterialKey),
+                "the Poiyomi row has no dead property set, so the " +
+                "stale saved entry still counts");
+        }
+
+        [Test]
+        public void SavedPropertyOrderDoesNotShiftLaterTokens()
+        {
+            var plain = NewLilToonFixture();
+            var reordered = NewLilToonFixture();
+            InsertStaleTexEnvBeforeMainTex(
+                reordered.Material, "_AmuseStaleBeforeMainTex");
+
+            var plainOutcome = CaptureLilToon(plain);
+            var reorderedOutcome = CaptureLilToon(reordered);
+
+            AssertAdmitted(plainOutcome);
+            AssertAdmitted(reorderedOutcome);
+            Assert.That(
+                SingleMainTexTokenOf(reorderedOutcome.Use.MaterialKey),
+                Is.EqualTo(SingleMainTexTokenOf(plainOutcome.Use.MaterialKey)),
+                "a stale entry before the member must not shift the " +
+                "token of the member");
+        }
+
+        private static Color BlitColorOf(Material material)
+        {
+            var renderTexture = RenderTexture.GetTemporary(
+                4, 4, 0, RenderTextureFormat.ARGB32);
+            var previous = RenderTexture.active;
+            Texture2D read = null;
+            try
+            {
+                Graphics.Blit(
+                    Texture2D.whiteTexture, renderTexture, material);
+                RenderTexture.active = renderTexture;
+                read = new Texture2D(4, 4, TextureFormat.RGBA32, false);
+                read.ReadPixels(new Rect(0, 0, 4, 4), 0, 0, false);
+                read.Apply(false, false);
+                return read.GetPixel(0, 0);
+            }
+            finally
+            {
+                RenderTexture.active = previous;
+                RenderTexture.ReleaseTemporary(renderTexture);
+                if (read != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(read);
+                }
+            }
+        }
+
+        private static int CustomRenderQueueOf(Material material)
+        {
+            using var serialized = new SerializedObject(material);
+            return serialized.FindProperty("m_CustomRenderQueue").intValue;
+        }
+
+        private static List<string> InvalidKeywordsOf(Material material)
+        {
+            using var serialized = new SerializedObject(material);
+            var keywords = serialized.FindProperty("m_InvalidKeywords");
+            var names = new List<string>();
+            for (var index = 0; index < keywords.arraySize; index++)
+            {
+                names.Add(
+                    keywords.GetArrayElementAtIndex(index).stringValue);
+            }
+
+            return names;
+        }
+
+        private const string SavedTexEnvsPath =
+            "m_SavedProperties.m_TexEnvs";
+
+        private const string SavedFloatsPath =
+            "m_SavedProperties.m_Floats";
+
+        private static void WriteStaleFloat(
+            Material material, string name, float value)
+        {
+            using var serialized = new SerializedObject(material);
+            var floats = serialized.FindProperty(SavedFloatsPath);
+            var index = floats.arraySize;
+            floats.arraySize = index + 1;
+            var entry = floats.GetArrayElementAtIndex(index);
+            entry.FindPropertyRelative("first").stringValue = name;
+            entry.FindPropertyRelative("second").floatValue = value;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            using var verify = new SerializedObject(material);
+            var verified = verify.FindProperty(SavedFloatsPath);
+            Assert.That(
+                SavedFloatNamesOf(verified), Does.Contain(name),
+                "fixture guard: the stale float entry must persist");
+        }
+
+        private static List<string> SavedFloatNamesOf(
+            SerializedProperty floats)
+        {
+            var names = new List<string>();
+            for (var index = 0; index < floats.arraySize; index++)
+            {
+                names.Add(SavedNameOf(
+                    floats.GetArrayElementAtIndex(index)));
+            }
+
+            return names;
+        }
+
+        private static void InsertStaleTexEnvBeforeMainTex(
+            Material material, string name)
+        {
+            using var serialized = new SerializedObject(material);
+            var texEnvs = serialized.FindProperty(SavedTexEnvsPath);
+            var mainIndex = SavedTexEnvIndexOf(texEnvs, "_MainTex");
+            Assert.That(
+                mainIndex, Is.GreaterThanOrEqualTo(0),
+                "fixture precondition: the member entry must exist");
+            var staleIndex = texEnvs.arraySize;
+            texEnvs.arraySize = staleIndex + 1;
+            var entry = texEnvs.GetArrayElementAtIndex(staleIndex);
+            entry.FindPropertyRelative("first").stringValue = name;
+            entry.FindPropertyRelative("second.m_Texture")
+                .objectReferenceValue = null;
+            entry.FindPropertyRelative("second.m_Scale").vector2Value =
+                Vector2.one;
+            entry.FindPropertyRelative("second.m_Offset").vector2Value =
+                Vector2.zero;
+            texEnvs.MoveArrayElement(staleIndex, mainIndex);
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            using var verify = new SerializedObject(material);
+            var verified = verify.FindProperty(SavedTexEnvsPath);
+            Assert.That(
+                SavedTexEnvIndexOf(verified, name),
+                Is.LessThan(SavedTexEnvIndexOf(verified, "_MainTex")),
+                "fixture guard: the stale entry must sit before the " +
+                "member entry");
+        }
+
+        private static int SavedTexEnvIndexOf(
+            SerializedProperty texEnvs, string name)
+        {
+            for (var index = 0; index < texEnvs.arraySize; index++)
+            {
+                if (string.Equals(
+                        SavedNameOf(texEnvs.GetArrayElementAtIndex(index)),
+                        name,
+                        StringComparison.Ordinal))
+                {
+                    return index;
+                }
+            }
+
+            return -1;
+        }
+
+        private static string SavedNameOf(SerializedProperty element)
+        {
+            var first = element.FindPropertyRelative("first");
+            return first == null ? null : first.stringValue;
+        }
+
+        private static string SingleMainTexTokenOf(string key)
+        {
+            var tokens = key
+                .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
+                .Where(token => token.Contains("_MainTex="))
+                .ToList();
+            Assert.That(
+                tokens, Has.Count.EqualTo(1),
+                "the key must hold exactly one saved token for _MainTex");
+            return tokens[0];
+        }
+
         // --- lilToon rows ----------------------------------------------------
 
         private const string LilToonPackageShaderFolder =

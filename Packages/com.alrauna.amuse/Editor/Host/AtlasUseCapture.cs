@@ -104,10 +104,19 @@ namespace Alrauna.Amuse.Editor.Host
         private const string MeshPropertyName = "m_Mesh";
         private const string SlotCountPropertyName =
             "m_Materials.Array.size";
-        private const string TexEnvStringNameSuffix = ".first";
-        private const string TexEnvStructNameSuffix = ".first.name";
-        private const string TexEnvTextureSuffix = ".second.m_Texture";
         private const string MaterialNamePath = "m_Name";
+        private const string CustomRenderQueuePath =
+            "m_CustomRenderQueue";
+        private const string InvalidKeywordsPath = "m_InvalidKeywords";
+        private const string SavedPropertiesPath = "m_SavedProperties";
+        private const string SavedTexEnvsPath =
+            "m_SavedProperties.m_TexEnvs";
+        private const string SavedIntsPath =
+            "m_SavedProperties.m_Ints";
+        private const string SavedFloatsPath =
+            "m_SavedProperties.m_Floats";
+        private const string SavedColorsPath =
+            "m_SavedProperties.m_Colors";
 
         /// <summary>
         /// The page formats of Milestone 2. Each is admitted in its
@@ -507,7 +516,8 @@ namespace Alrauna.Amuse.Editor.Host
                 texture2D.mipmapCount,
                 sampler,
                 uvRect,
-                MaterialKeyOf(material, resolution.KeySkipped),
+                MaterialKeyOf(
+                    material, resolution.KeySkipped, NoDeadProperties),
                 animation.AnimatedMaterialPropertyNames,
                 captureOrder,
                 companions,
@@ -1520,36 +1530,52 @@ namespace Alrauna.Amuse.Editor.Host
 
         /// <summary>
         /// The material key of one use. The key is a deterministic
-        /// string from one <see cref="SerializedObject"/> walk of the
-        /// material. The walk skips the asset name, because two uses of
-        /// the same state under different names must share a page. It
-        /// records each skipped texture reference as <c>member</c>: the
-        /// member and every UV0 companion move into pages that serve
-        /// every source of the group, and an inert or member copy
-        /// texture is never sampled. Every float enters as its exact
-        /// bits and every other object reference as its instance id, so
-        /// near-equal states stay distinct. The key is build-local. No
-        /// consumer stores it.
+        /// string from one <see cref="SerializedObject"/> walk of
+        /// the material, one token for the effective render queue,
+        /// and the saved properties keyed by name. The walk skips
+        /// the asset name, because two uses of the same state under
+        /// different names must share a page. It skips the custom
+        /// render queue and the invalid keywords, because the queue
+        /// token holds the effective queue and a keyword the shader
+        /// does not declare cannot change rendering. It records each
+        /// skipped texture reference as <c>member</c>: the member and
+        /// every UV0 companion move into pages that serve every
+        /// source of the group, and an inert or member copy texture
+        /// is never sampled. Every float enters as its exact bits and
+        /// every other object reference as its instance id, so
+        /// near-equal states stay distinct. The key is build-local.
+        /// No consumer stores it.
         /// </summary>
         private static string MaterialKeyOf(
             Material material,
-            ISet<string> skippedTextureProperties)
+            ISet<string> skippedTextureProperties,
+            ISet<string> deadProperties)
         {
-            return new MaterialKeyWalker(skippedTextureProperties)
+            return new MaterialKeyWalker(
+                    skippedTextureProperties, deadProperties)
                 .Walk(material);
         }
+
+        /// <summary>
+        /// No reviewed model has declared a dead property yet, so
+        /// every saved entry still counts in the key.
+        /// </summary>
+        private static readonly ISet<string> NoDeadProperties =
+            new HashSet<string>();
 
         private sealed class MaterialKeyWalker
         {
             private readonly ISet<string> skippedTextureProperties;
+            private readonly ISet<string> deadProperties;
             private readonly StringBuilder builder =
                 new StringBuilder(4096);
-            private readonly Dictionary<string, string> texEnvNames =
-                new Dictionary<string, string>(StringComparer.Ordinal);
 
-            internal MaterialKeyWalker(ISet<string> skippedTextureProperties)
+            internal MaterialKeyWalker(
+                ISet<string> skippedTextureProperties,
+                ISet<string> deadProperties)
             {
                 this.skippedTextureProperties = skippedTextureProperties;
+                this.deadProperties = deadProperties;
             }
 
             internal string Walk(Material material)
@@ -1562,15 +1588,37 @@ namespace Alrauna.Amuse.Editor.Host
                     enterChildren = Visit(property);
                 }
 
+                AppendEffectiveQueue(material);
+                AppendSavedProperties(serialized);
                 return builder.ToString();
+            }
+
+            /// <summary>
+            /// Whether one path names a subtree that the generic walk
+            /// must skip. The name is identity. The custom queue
+            /// enters as the effective queue. An undeclared keyword
+            /// cannot change rendering. The saved properties enter by
+            /// name after the walk.
+            /// </summary>
+            private static bool IsSkippedSubtree(string path)
+            {
+                return string.Equals(
+                           path, MaterialNamePath,
+                           StringComparison.Ordinal) ||
+                       string.Equals(
+                           path, CustomRenderQueuePath,
+                           StringComparison.Ordinal) ||
+                       string.Equals(
+                           path, InvalidKeywordsPath,
+                           StringComparison.Ordinal) ||
+                       string.Equals(
+                           path, SavedPropertiesPath,
+                           StringComparison.Ordinal);
             }
 
             private bool Visit(SerializedProperty property)
             {
-                if (string.Equals(
-                        property.propertyPath,
-                        MaterialNamePath,
-                        StringComparison.Ordinal))
+                if (IsSkippedSubtree(property.propertyPath))
                 {
                     return false;
                 }
@@ -1582,24 +1630,14 @@ namespace Alrauna.Amuse.Editor.Host
                         return true;
                     case SerializedPropertyType.ObjectReference:
                         builder.Append(property.propertyPath).Append('=');
-                        if (IsMemberTextureReference(property.propertyPath))
-                        {
-                            builder.Append("member");
-                        }
-                        else
-                        {
-                            var reference = property.objectReferenceValue;
-                            builder.Append(
-                                reference == null
-                                    ? "null"
-                                    : "o" + reference.GetInstanceID());
-                        }
-
+                        var reference = property.objectReferenceValue;
+                        builder.Append(
+                            reference == null
+                                ? "null"
+                                : "o" + reference.GetInstanceID());
                         builder.Append(';');
                         return false;
                     case SerializedPropertyType.String:
-                        RecordTexEnvName(
-                            property.propertyPath, property.stringValue);
                         builder.Append(property.propertyPath)
                             .Append("=s")
                             .Append(property.stringValue ?? string.Empty)
@@ -1690,63 +1728,177 @@ namespace Alrauna.Amuse.Editor.Host
                 }
             }
 
+            private void AppendEffectiveQueue(Material material)
+            {
+                // The shader reference is already in the key, so the
+                // effective queue alone separates two page materials.
+                // An explicit queue that equals the shader queue is
+                // the same render state as no explicit queue.
+                builder.Append("queue=i")
+                    .Append(material.renderQueue)
+                    .Append(';');
+            }
+
+            /// <summary>
+            /// Appends the saved properties by name in four fixed
+            /// sections. The saved array order follows the property
+            /// order of earlier shaders, so keying by name keeps one
+            /// key for one render state when a stale entry shifts
+            /// the arrays. A dead property adds no token.
+            /// </summary>
+            private void AppendSavedProperties(
+                SerializedObject serialized)
+            {
+                AppendNamedSection(
+                    serialized.FindProperty(SavedTexEnvsPath),
+                    "t:",
+                    TexEnvValueOf);
+                AppendNamedSection(
+                    serialized.FindProperty(SavedIntsPath),
+                    "i:",
+                    IntValueOf);
+                AppendNamedSection(
+                    serialized.FindProperty(SavedFloatsPath),
+                    "f:",
+                    FloatValueOf);
+                AppendNamedSection(
+                    serialized.FindProperty(SavedColorsPath),
+                    "c:",
+                    ColorValueOf);
+            }
+
+            private void AppendNamedSection(
+                SerializedProperty array,
+                string prefix,
+                Func<string, SerializedProperty, string> formatValue)
+            {
+                if (array == null)
+                {
+                    return;
+                }
+
+                var tokens = new List<(string Name, string Value)>();
+                for (var index = 0; index < array.arraySize; index++)
+                {
+                    var element = array.GetArrayElementAtIndex(index);
+                    var name = SavedNameOf(element);
+                    if (name == null || deadProperties.Contains(name))
+                    {
+                        continue;
+                    }
+
+                    tokens.Add((name, formatValue(name, element)));
+                }
+
+                tokens.Sort((left, right) =>
+                {
+                    var byName = string.Compare(
+                        left.Name, right.Name, StringComparison.Ordinal);
+                    return byName != 0
+                        ? byName
+                        : string.Compare(
+                            left.Value, right.Value,
+                            StringComparison.Ordinal);
+                });
+                foreach (var token in tokens)
+                {
+                    builder.Append(prefix)
+                        .Append(token.Name)
+                        .Append('=')
+                        .Append(token.Value)
+                        .Append(';');
+                }
+            }
+
+            private string TexEnvValueOf(
+                string name, SerializedProperty element)
+            {
+                var second = element.FindPropertyRelative("second");
+                var texture = second
+                    .FindPropertyRelative("m_Texture")
+                    .objectReferenceValue;
+                var scale = second
+                    .FindPropertyRelative("m_Scale").vector2Value;
+                var offset = second
+                    .FindPropertyRelative("m_Offset").vector2Value;
+                return TextureIdentityOf(name, texture) +
+                       "," + Bits(scale.x) + "," + Bits(scale.y) +
+                       "," + Bits(offset.x) + "," + Bits(offset.y);
+            }
+
+            /// <summary>
+            /// The texture identity of one saved pair. A skipped
+            /// texture is <c>member</c>, assigned or not, because the
+            /// page serves every source of the group.
+            /// </summary>
+            private string TextureIdentityOf(
+                string name, UnityEngine.Object texture)
+            {
+                if (skippedTextureProperties.Contains(name))
+                {
+                    return "member";
+                }
+
+                return texture == null
+                    ? "null"
+                    : "o" + texture.GetInstanceID();
+            }
+
+            private static string IntValueOf(
+                string name, SerializedProperty element)
+            {
+                return element.FindPropertyRelative("second")
+                    .intValue.ToString();
+            }
+
+            private static string FloatValueOf(
+                string name, SerializedProperty element)
+            {
+                return Bits(element.FindPropertyRelative("second")
+                    .floatValue);
+            }
+
+            private static string ColorValueOf(
+                string name, SerializedProperty element)
+            {
+                var color = element.FindPropertyRelative("second")
+                    .colorValue;
+                return Bits(color.r) + "," + Bits(color.g) + "," +
+                       Bits(color.b) + "," + Bits(color.a);
+            }
+
+            /// <summary>
+            /// The saved property name of one array element. Unity
+            /// stores the pair name either as a plain string under
+            /// <c>first</c> or as <c>first.name</c> in the struct
+            /// shape.
+            /// </summary>
+            private static string SavedNameOf(
+                SerializedProperty element)
+            {
+                var first = element.FindPropertyRelative("first");
+                if (first == null)
+                {
+                    return null;
+                }
+
+                if (first.propertyType ==
+                    SerializedPropertyType.String)
+                {
+                    return first.stringValue;
+                }
+
+                var name = first.FindPropertyRelative("name");
+                return name != null &&
+                       name.propertyType ==
+                           SerializedPropertyType.String
+                    ? name.stringValue
+                    : null;
+            }
+
             private void AppendPath(SerializedProperty property)
             {
                 builder.Append(property.propertyPath).Append('=');
-            }
-
-            /// <summary>
-            /// Records the property name of one texture environment
-            /// element. The serialized pair stores the name either as
-            /// a plain string under <c>.first</c> or, in the struct
-            /// shape, as <c>.first.name</c>. Both shapes are recorded
-            /// under the element path prefix, so the texture reference
-            /// of that element can be matched later.
-            /// </summary>
-            private void RecordTexEnvName(string path, string name)
-            {
-                if (path.EndsWith(
-                        TexEnvStringNameSuffix, StringComparison.Ordinal))
-                {
-                    texEnvNames[PathPrefix(
-                        path, TexEnvStringNameSuffix.Length)] =
-                        name ?? string.Empty;
-                }
-                else if (path.EndsWith(
-                             TexEnvStructNameSuffix,
-                             StringComparison.Ordinal))
-                {
-                    texEnvNames[PathPrefix(
-                        path, TexEnvStructNameSuffix.Length)] =
-                        name ?? string.Empty;
-                }
-            }
-
-            /// <summary>
-            /// Whether one object reference property is the texture
-            /// reference of a skipped texture environment. The element
-            /// prefix of the reference path names the element, and the
-            /// recorded name must be in the skipped set.
-            /// </summary>
-            private bool IsMemberTextureReference(string path)
-            {
-                if (!path.EndsWith(
-                        TexEnvTextureSuffix, StringComparison.Ordinal))
-                {
-                    return false;
-                }
-
-                return texEnvNames.TryGetValue(
-                    PathPrefix(path, TexEnvTextureSuffix.Length),
-                    out var elementName) &&
-                    skippedTextureProperties.Contains(elementName);
-            }
-
-            private static string PathPrefix(
-                string path,
-                int suffixLength)
-            {
-                return path.Substring(0, path.Length - suffixLength);
             }
 
             private static string Bits(float value)
