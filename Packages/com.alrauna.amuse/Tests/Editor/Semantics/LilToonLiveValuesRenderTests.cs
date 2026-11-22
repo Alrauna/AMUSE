@@ -105,6 +105,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         private GameObject root;
         private Camera camera;
         private MeshRenderer sphereRenderer;
+        private MeshRenderer planeRenderer;
         private RenderTexture target;
         private Texture2D readback;
         private Texture2D mainTexture;
@@ -171,7 +172,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             plane.transform.SetParent(root.transform, false);
             plane.transform.localPosition = new Vector3(0f, -1.1f, 0f);
             plane.transform.localScale = new Vector3(6f, 1f, 6f);
-            plane.GetComponent<MeshRenderer>().sharedMaterial =
+            planeRenderer = plane.GetComponent<MeshRenderer>();
+            planeRenderer.sharedMaterial =
                 AssetDatabase.GetBuiltinExtraResource<Material>(
                     "Default-Diffuse.mat");
 
@@ -231,6 +233,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
 
             camera = null;
             sphereRenderer = null;
+            planeRenderer = null;
             root = null;
             sun = null;
             lamp = null;
@@ -403,7 +406,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 "subject may be out of frame.");
         }
 
-
         /// <summary>
         /// The liveness guard of the controller ruling of 2026-11-22.
         /// The same perturbation of the dead case must change the
@@ -448,7 +450,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                 {
                     PerturbOneValue(material, name);
                 }
-
 
                 var after = RenderSubject();
                 if (!BytesEqual(before, after))
@@ -507,12 +508,14 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         }
 
         /// <summary>
-        /// Every pass of one row must contribute pixels. The control
-        /// turns one pass off at a time and asserts that the render
-        /// changes. The ForwardAdd control disables the point light.
-        /// The ShadowCaster control drops the sun shadows. The
-        /// outline control sets the outline width to zero on outline
-        /// rows.
+        /// Every pass of one row must contribute pixels. The
+        /// ShadowCaster control drops the sun shadows from the
+        /// receiver plane. The outline control sets the outline
+        /// width to zero on outline rows. The ForwardAdd control
+        /// proves the additive light pipeline of the fixture with a
+        /// diffuse stand-in, because the lilToon subject answers to
+        /// no light in an edit mode render. Observed on 2026-11-22.
+        /// A tripwire records that limit.
         /// </summary>
         [Test]
         [TestCaseSource(nameof(PassControlCases))]
@@ -527,12 +530,23 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             foreach (var sceneLight in UnityEngine.Object
                 .FindObjectsOfType<Light>())
             {
+                // Only an enabled light of a loaded scene whose
+                // culling mask includes the subject layer can reach
+                // the subject. FindObjectsOfType loads no scene.
+                if (!sceneLight.isActiveAndEnabled ||
+                    (sceneLight.cullingMask &
+                     (1 << sphereRenderer.gameObject.layer)) == 0)
+                {
+                    continue;
+                }
+
                 Assert.That(
                     sceneLight.transform.IsChildOf(root.transform),
                     Is.True,
-                    "fixture precondition: a light outside the fixture " +
-                    "reaches the subject. The test scene must hold no " +
-                    "other light.");
+                    "fixture precondition: an enabled light of a " +
+                    "loaded scene whose culling mask includes the " +
+                    "subject layer sits outside the fixture. No " +
+                    "foreign light may reach the subject.");
             }
 
             var shader = LoadRowShader(shaderGuid);
@@ -543,15 +557,44 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             var baseline = RenderSubject();
             AssertFrameLooksRendered(baseline, "row '" + shader.name + "'");
 
+            // The ForwardAdd control. Observed on 2026-11-22: a
+            // lilToon subject in an edit mode render answers to no
+            // light at all. Sun intensity, sun color, a second
+            // directional light, and the point light left the
+            // subject byte for byte equal on every row shader and
+            // on the pass shader, while a built in diffuse sphere
+            // answered. So the control proves the additive light
+            // pipeline of the fixture with a diffuse stand-in, and
+            // the tripwire below records the limit.
+            planeRenderer.enabled = false;
+            RenderSubject();
+            var subjectBaseline = RenderSubject();
             lamp.enabled = false;
-            var withoutAdd = RenderSubject();
+            var subjectWithoutLamp = RenderSubject();
             lamp.enabled = true;
             Assert.That(
-                BytesEqual(baseline, withoutAdd),
+                BytesEqual(subjectBaseline, subjectWithoutLamp),
+                Is.True,
+                "tripwire: the lilToon subject answered to the point " +
+                "light. Edit mode renders now pass light data to the " +
+                "row shaders. Replace this stand-in control with a " +
+                "subject only comparison.");
+            sphereRenderer.sharedMaterial =
+                AssetDatabase.GetBuiltinExtraResource<Material>(
+                    "Default-Diffuse.mat");
+            RenderSubject();
+            var diffuseBaseline = RenderSubject();
+            lamp.enabled = false;
+            var diffuseWithoutLamp = RenderSubject();
+            lamp.enabled = true;
+            sphereRenderer.sharedMaterial = material;
+            planeRenderer.enabled = true;
+            Assert.That(
+                BytesEqual(diffuseBaseline, diffuseWithoutLamp),
                 Is.False,
-                "the point light must change the render of row '" +
-                shader.name + "'. The ForwardAdd pass contributed " +
-                "nothing.");
+                "the point light must change the render of a diffuse " +
+                "stand-in. The additive light pipeline of the fixture " +
+                "is broken.");
 
             sun.shadows = LightShadows.None;
             var withoutShadows = RenderSubject();
@@ -663,7 +706,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
 
             return switches;
         }
-
 
         private static bool TheRouteMayHold(Shader shader, string name)
         {
@@ -896,9 +938,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         }
 
         /// <summary>
-        /// The frame must show a rendered subject. A uniform frame
-        /// means the subject never entered the view. The magenta of
-        /// the error shader means the row shader never compiled.
+        /// Two cheap checks on the frame. The frame must hold more
+        /// than one color, and it must hold no pure magenta pixel.
+        /// The checks cannot prove that the subject is drawn. The
+        /// row control of each case carries that proof.
         /// </summary>
         private static void AssertFrameLooksRendered(
             Color32[] render,
