@@ -313,17 +313,13 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
                         "_AlphaMaskScale",
                         "_AlphaMaskValue",
                     }),
-                // Gate: if(_UseBumpMap) at
-                // lil_common_frag.hlsl:567.
-                new AtlasDeadValueFamily(
-                    "Bump",
-                    new[] { "_UseBumpMap" },
-                    SwitchIsOff("_UseBumpMap"),
-                    new[]
-                    {
-                        "_BumpMap",
-                        "_BumpScale",
-                    }),
+                // No Bump family. The render oracle of 2026-11-22
+                // observed that every member of the family is also a
+                // VRChat fallback name. DeadProperties never returns
+                // a fallback name, so the family could never drop a
+                // value from a key. The gate at
+                // lil_common_frag.hlsl:567 stays correct, but the
+                // data entry was unreachable.
                 // Gate: if(_UseBump2ndMap) at
                 // lil_common_frag.hlsl:586.
                 new AtlasDeadValueFamily(
