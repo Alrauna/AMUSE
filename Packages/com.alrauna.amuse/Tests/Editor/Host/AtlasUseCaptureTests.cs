@@ -1948,6 +1948,24 @@ Shader ""Hidden/Alrauna/AmuseTests/AtlasUseCaptureFooUndeclared""
             Assert.That(outcome.Detail, Does.Contain("'_Emission2ndMap'"));
         }
 
+        // A characterization test: a fallback name never joins a
+        // dead family, because the fallback swap ignores the row.
+        // The texture below sits in the dead reflection family, but
+        // it has no route. So it still refuses as unlisted.
+        [Test]
+        public void DeadFallbackTextureWithoutARouteStillRefuses()
+        {
+            var fixture = NewLilToonFixture();
+            fixture.Material.SetFloat("_UseReflection", 0f);
+            fixture.Material.SetTexture(
+                "_MetallicGlossMap", ImportRouteTexture("metallic gloss", 64));
+
+            var outcome = SingleOutcome(CaptureUses(fixture.Root));
+
+            AssertRefused(outcome, AtlasUseRefusal.UnlistedTexture);
+            Assert.That(outcome.Detail, Does.Contain("'_MetallicGlossMap'"));
+        }
+
         [Test]
         public void LilToonAnimatedConditionPropertyRefuses()
         {
@@ -2092,6 +2110,35 @@ Shader ""Hidden/Alrauna/AmuseTests/AtlasUseCaptureFooUndeclared""
                 Is.Not.EqualTo(firstOutcome.Use.MaterialKey),
                 "the fallback shader shows the bump map, so the texture " +
                 "must split groups even behind an off switch");
+        }
+
+        // A characterization test: _AlphaMask is not a fallback
+        // name. An inert route without a fallback name still drops
+        // the texture from the key, so different textures share a
+        // page and the page binds none of them.
+        [Test]
+        public void InertNonFallbackRouteTextureLeavesTheKey()
+        {
+            var first = NewLilToonFixture();
+            var second = NewLilToonFixture();
+            first.Material.SetFloat("_AlphaMaskMode", 0f);
+            second.Material.SetFloat("_AlphaMaskMode", 0f);
+            first.Material.SetTexture(
+                "_AlphaMask", ImportRouteTexture("inert alpha first", 64));
+            second.Material.SetTexture(
+                "_AlphaMask", ImportRouteTexture("inert alpha second", 64));
+
+            var firstOutcome = CaptureLilToon(first);
+            var secondOutcome = CaptureLilToon(second);
+
+            AssertAdmitted(firstOutcome);
+            AssertAdmitted(secondOutcome);
+            Assert.That(firstOutcome.Use.Companions, Is.Empty);
+            Assert.That(
+                secondOutcome.Use.MaterialKey,
+                Is.EqualTo(firstOutcome.Use.MaterialKey),
+                "an inert texture that no fallback shader reads must " +
+                "not split groups");
         }
 
         [Test]
