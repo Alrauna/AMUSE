@@ -117,6 +117,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         private Light sun;
         private Light lamp;
         private bool previousAllowAsyncCompilation;
+        private AmbientMode previousAmbientMode;
+        private Color previousAmbientLight;
+        private float previousAmbientIntensity;
+        private SphericalHarmonicsL2 previousAmbientProbe;
 
         [SetUp]
         public void SetUp()
@@ -127,6 +131,21 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             previousAllowAsyncCompilation =
                 ShaderUtil.allowAsyncCompilation;
             ShaderUtil.allowAsyncCompilation = false;
+
+            // The ambient must sit at black. A bright ambient probe
+            // saturates the toon light clamp of lilToon, and then
+            // no light change can move the subject. RenderSettings
+            // is scene state. The scene is never saved.
+            previousAmbientMode = RenderSettings.ambientMode;
+            previousAmbientLight = RenderSettings.ambientLight;
+            previousAmbientIntensity = RenderSettings.ambientIntensity;
+            previousAmbientProbe = RenderSettings.ambientProbe;
+            RenderSettings.ambientMode = AmbientMode.Flat;
+            RenderSettings.ambientLight = Color.black;
+            RenderSettings.ambientIntensity = 1f;
+            RenderSettings.ambientProbe =
+                new SphericalHarmonicsL2();
+
 
             // The scene sits far below the origin. Geometry of the
             // open scene stays out of the frame and out of the
@@ -185,7 +204,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             var sun = sunObject.AddComponent<Light>();
             this.sun = sun;
             sun.type = LightType.Directional;
-            sun.intensity = 1f;
+            sun.intensity = 0.6f;
             sun.shadows = LightShadows.Soft;
             sunObject.transform.localRotation =
                 Quaternion.Euler(18f, 90f, 0f);
@@ -194,7 +213,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             var lamp = lampObject.AddComponent<Light>();
             this.lamp = lamp;
             lamp.type = LightType.Point;
-            lamp.intensity = 0.8f;
+            lamp.intensity = 0.6f;
             lamp.range = 12f;
             lamp.shadows = LightShadows.None;
             lamp.renderMode = LightRenderMode.ForcePixel;
@@ -237,6 +256,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             root = null;
             sun = null;
             lamp = null;
+            RenderSettings.ambientMode = previousAmbientMode;
+            RenderSettings.ambientLight = previousAmbientLight;
+            RenderSettings.ambientIntensity = previousAmbientIntensity;
+            RenderSettings.ambientProbe = previousAmbientProbe;
             ShaderUtil.allowAsyncCompilation =
                 previousAllowAsyncCompilation;
         }
@@ -508,14 +531,13 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         }
 
         /// <summary>
-        /// Every pass of one row must contribute pixels. The
+        /// Every pass of one row must contribute pixels. The control
+        /// turns one pass off at a time on a plain row material and
+        /// asserts that the render changes. The ForwardAdd control
+        /// disables the point light with the plane hidden. The
         /// ShadowCaster control drops the sun shadows from the
         /// receiver plane. The outline control sets the outline
-        /// width to zero on outline rows. The ForwardAdd control
-        /// proves the additive light pipeline of the fixture with a
-        /// diffuse stand-in, because the lilToon subject answers to
-        /// no light in an edit mode render. Observed on 2026-11-22.
-        /// A tripwire records that limit.
+        /// width to zero on outline rows.
         /// </summary>
         [Test]
         [TestCaseSource(nameof(PassControlCases))]
@@ -550,51 +572,44 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             }
 
             var shader = LoadRowShader(shaderGuid);
-            var material = NewCaseMaterial(shader, null);
+            // The pass control uses a plain row material. The case
+            // material with every switch on stacks enough additive
+            // layers to clamp the light out of the frame.
+            var material = Track(new Material(shader));
+            material.SetTexture("_MainTex", mainTexture);
             sphereRenderer.sharedMaterial = material;
 
             RenderSubject();
             var baseline = RenderSubject();
             AssertFrameLooksRendered(baseline, "row '" + shader.name + "'");
 
-            // The ForwardAdd control. Observed on 2026-11-22: a
-            // lilToon subject in an edit mode render answers to no
-            // light at all. Sun intensity, sun color, a second
-            // directional light, and the point light left the
-            // subject byte for byte equal on every row shader and
-            // on the pass shader, while a built in diffuse sphere
-            // answered. So the control proves the additive light
-            // pipeline of the fixture with a diffuse stand-in, and
-            // the tripwire below records the limit.
-            planeRenderer.enabled = false;
-            RenderSubject();
-            var subjectBaseline = RenderSubject();
-            lamp.enabled = false;
-            var subjectWithoutLamp = RenderSubject();
-            lamp.enabled = true;
-            Assert.That(
-                BytesEqual(subjectBaseline, subjectWithoutLamp),
-                Is.True,
-                "tripwire: the lilToon subject answered to the point " +
-                "light. Edit mode renders now pass light data to the " +
-                "row shaders. Replace this stand-in control with a " +
-                "subject only comparison.");
-            sphereRenderer.sharedMaterial =
-                AssetDatabase.GetBuiltinExtraResource<Material>(
-                    "Default-Diffuse.mat");
-            RenderSubject();
-            var diffuseBaseline = RenderSubject();
-            lamp.enabled = false;
-            var diffuseWithoutLamp = RenderSubject();
-            lamp.enabled = true;
-            sphereRenderer.sharedMaterial = material;
-            planeRenderer.enabled = true;
-            Assert.That(
-                BytesEqual(diffuseBaseline, diffuseWithoutLamp),
-                Is.False,
-                "the point light must change the render of a diffuse " +
-                "stand-in. The additive light pipeline of the fixture " +
-                "is broken.");
+            // The ForwardAdd control hides the plane. Only the
+            // subject can carry the difference. The toon step of the
+            // additive pass needs a strong light. Observed on
+            // 2026-11-22: a lamp at 0.6 changed 0 pixels, and a lamp
+            // at 3 changed 382 pixels with the same material. The
+            // one-pass transparent rows import FORWARD,
+            // SHADOW_CASTER, and META only, so they hold no additive
+            // pass. The control skips them.
+            if (shader.name.IndexOf(
+                    "OnePassTransparent", StringComparison.Ordinal) < 0)
+            {
+                planeRenderer.enabled = false;
+                lamp.intensity = 3f;
+                RenderSubject();
+                var subjectBaseline = RenderSubject();
+                lamp.enabled = false;
+                var subjectWithoutLamp = RenderSubject();
+                lamp.enabled = true;
+                lamp.intensity = 0.6f;
+                planeRenderer.enabled = true;
+                Assert.That(
+                    BytesEqual(subjectBaseline, subjectWithoutLamp),
+                    Is.False,
+                    "the point light must change the render of row '" +
+                    shader.name + "'. The ForwardAdd pass contributed " +
+                    "nothing.");
+            }
 
             sun.shadows = LightShadows.None;
             var withoutShadows = RenderSubject();
@@ -670,16 +685,19 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             material.SetTexture("_MainGradationTex", rampTexture);
             material.SetTexture("_BumpMap", flatNormalTexture);
             material.SetTexture("_Bump2ndMap", flatNormalTexture);
-            // The alpha mask in replace mode with a varied mask
-            // gives the render varied alpha. The dither of lilToon
-            // only thresholds alpha, so a full alpha everywhere
-            // would hide the family. The dither runs on cutout rows
-            // only. The default maximum puts the dither threshold
-            // above almost every alpha, which would clip the whole
-            // subject away. The pinned maximum puts the threshold at
-            // one half, so the varied alpha keeps the subject
-            // visible.
-            material.SetTexture("_AlphaMask", mainTexture);
+            // The alpha mask mode stays off in the fixture. Mode one
+            // with a null mask forces alpha to one, which erases the
+            // alpha variety that the dither family needs. Mode one
+            // with an assigned mask makes the whole subject vanish
+            // on cutout and transparent rows under black ambient.
+            // Observed on 2026-11-22. The main texture carries the
+            // varied alpha instead. The alpha mask family keeps its
+            // dead case, because its own switch holds the mode at
+            // zero there, and its liveness turns the mode on. The
+            // dither runs on cutout rows only. The pinned maximum
+            // puts the dither threshold at one half, so the varied
+            // alpha keeps the subject visible.
+            material.SetFloat("_AlphaMaskMode", 0f);
             material.SetFloat("_DitherMaxValue", 510f);
             if (family != null &&
                 FamilyFixtureOverrides.TryGetValue(
@@ -1065,20 +1083,26 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             {
                 name = "AMUSE render oracle main texture",
             };
+            // The color values stay near mid grey. Neither black
+            // nor white may saturate, so the light stays visible in
+            // the clamped toon output. The alpha spans the full
+            // range, because the cutout dither and the cutoff both
+            // threshold alpha near one half.
             var pixels =
                 new Color32[MainTextureSize * MainTextureSize];
             for (var y = 0; y < MainTextureSize; y++)
             {
                 for (var x = 0; x < MainTextureSize; x++)
                 {
-                    var checker = (x / 8 + y / 8) % 2 == 0 ? 200 : 60;
+                    var checker = (x / 8 + y / 8) % 2 == 0 ? 150 : 90;
                     pixels[y * MainTextureSize + x] = new Color32(
-                        (byte)(x * 4),
-                        (byte)(y * 4),
+                        (byte)(96 + x),
+                        (byte)(96 + y),
                         (byte)checker,
-                        255);
+                        (byte)(x * 4));
                 }
             }
+
 
             texture.SetPixels32(pixels);
             texture.Apply(false, false);
