@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using Alrauna.Amuse.Editor.Semantics.LilToon;
 using UnityEngine;
 
 namespace Alrauna.Amuse.Editor.Semantics
@@ -151,7 +152,8 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// code samples. Neutral: the two matcap textures, which sample
         /// view-space coordinates and never UV0. The companion routes
         /// list every texture the review found on the main UV0
-        /// coordinate.
+        /// coordinate. The live value model holds the reviewed
+        /// families of dead values and the declared uniforms.
         /// </summary>
         internal static readonly AtlasRouteTable LilToonReviewedMainColor =
             new AtlasRouteTable(
@@ -167,7 +169,15 @@ namespace Alrauna.Amuse.Editor.Semantics
                 UnheldLilToonReviewedRequiredValue,
                 new[] { "_BaseMap", "_BaseColorMap" },
                 LilToonCompanionRoutes(),
-                name => name.IndexOf("Outline", StringComparison.Ordinal) >= 0);
+                name => name.IndexOf("Outline", StringComparison.Ordinal) >= 0,
+                LilToonLiveValues.Model);
+
+        /// <summary>
+        /// The reviewed live value model of the row. It is null on
+        /// every table that no source review covers. The capture
+        /// consults it when it builds the material key.
+        /// </summary>
+        internal AtlasLiveValueModel LiveValues { get; }
 
         internal string MemberProperty { get; }
 
@@ -218,7 +228,8 @@ namespace Alrauna.Amuse.Editor.Semantics
             Func<Material, string> unheldRequiredValue,
             string[] memberCopyProperties = null,
             AtlasCompanionRoute[] companionRoutes = null,
-            Func<string, bool> hasOutlinePass = null)
+            Func<string, bool> hasOutlinePass = null,
+            AtlasLiveValueModel liveValues = null)
         {
             MemberProperty = memberProperty;
             NeutralProperties = Array.AsReadOnly(neutralProperties);
@@ -231,6 +242,7 @@ namespace Alrauna.Amuse.Editor.Semantics
             CompanionRoutes = Array.AsReadOnly(
                 companionRoutes ?? Array.Empty<AtlasCompanionRoute>());
             this.hasOutlinePass = hasOutlinePass ?? (_ => false);
+            LiveValues = liveValues;
         }
 
         /// <summary>

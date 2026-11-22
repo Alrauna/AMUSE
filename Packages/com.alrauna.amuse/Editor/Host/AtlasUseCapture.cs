@@ -500,6 +500,24 @@ namespace Alrauna.Amuse.Editor.Host
                 return;
             }
 
+            // A model exists only on a reviewed row. A toon standard
+            // fallback tag swaps the shader at runtime, so every
+            // value counts and no stale name is skipped there.
+            var liveValues = table.LiveValues;
+            var deadProperties = NoDeadProperties;
+            var skipStaleSavedNames = false;
+            if (liveValues != null)
+            {
+                skipStaleSavedNames = !IsToonStandardFallback(material);
+                if (skipStaleSavedNames)
+                {
+                    deadProperties = liveValues.DeadProperties(
+                        material,
+                        shaderRowName,
+                        SwitchIsDynamicOf(renderer, slotIndex, animation));
+                }
+            }
+
             use = new CapturedAtlasUse(
                 rendererIndex,
                 slotIndex,
@@ -513,7 +531,11 @@ namespace Alrauna.Amuse.Editor.Host
                 sampler,
                 uvRect,
                 MaterialKeyOf(
-                    material, resolution.KeySkipped, NoDeadProperties),
+                    material,
+                    resolution.KeySkipped,
+                    deadProperties,
+                    liveValues,
+                    skipStaleSavedNames),
                 animation.AnimatedMaterialPropertyNames,
                 captureOrder,
                 companions,
@@ -1522,6 +1544,51 @@ namespace Alrauna.Amuse.Editor.Host
                    block.HasFloat(propertyName);
         }
 
+        /// <summary>
+        /// Whether a family switch may hold any value at runtime. The
+        /// rule reads the same facts as the refusal gates: an animated
+        /// material binding with the shared prefix rule, and the two
+        /// renderer property blocks with the shared block lookup.
+        /// </summary>
+        private static Func<string, bool> SwitchIsDynamicOf(
+            Renderer renderer,
+            int slotIndex,
+            RendererAnimationFacts animation)
+        {
+            var rendererWide = new MaterialPropertyBlock();
+            renderer.GetPropertyBlock(rendererWide);
+            var slotBlock = new MaterialPropertyBlock();
+            renderer.GetPropertyBlock(slotBlock, slotIndex);
+            return switchProperty =>
+            {
+                foreach (var animated in animation
+                    .AnimatedMaterialPropertyNames)
+                {
+                    if (animated.StartsWith(
+                            switchProperty,
+                            StringComparison.Ordinal))
+                    {
+                        return true;
+                    }
+                }
+
+                return BlockNamesRoute(rendererWide, switchProperty) ||
+                       BlockNamesRoute(slotBlock, switchProperty);
+            };
+        }
+
+        /// <summary>
+        /// Whether the material carries a VRCFallback tag that names
+        /// the toon standard shader. VRChat swaps the shader then, so
+        /// the fallback shader reads values that the row never reads.
+        /// </summary>
+        private static bool IsToonStandardFallback(Material material)
+        {
+            return material
+                .GetTag("VRCFallback", false, string.Empty)
+                .StartsWith("toonstandard", StringComparison.Ordinal);
+        }
+
         // --- the material key ----------------------------------------------
 
         /// <summary>
@@ -1537,45 +1604,69 @@ namespace Alrauna.Amuse.Editor.Host
         /// skipped texture reference as <c>member</c>: the member and
         /// every UV0 companion move into pages that serve every
         /// source of the group, and an inert or member copy texture
-        /// is never sampled. Every float enters as its exact bits and
-        /// every other object reference as its instance id, so
-        /// near-equal states stay distinct. The key is build-local.
-        /// No consumer stores it.
+        /// is never sampled. When a live value model covers the row,
+        /// the walk also drops each dead family value, each stale
+        /// saved name that no shader declares, and each fallback
+        /// texture entry with no texture. Every float enters as its
+        /// exact bits and every other object reference as its
+        /// instance id, so near-equal states stay distinct. The key
+        /// is build-local. No consumer stores it.
         /// </summary>
         private static string MaterialKeyOf(
             Material material,
             ISet<string> skippedTextureProperties,
-            ISet<string> deadProperties)
+            ISet<string> deadProperties,
+            AtlasLiveValueModel liveValues,
+            bool skipStaleSavedNames)
         {
             return new MaterialKeyWalker(
-                    skippedTextureProperties, deadProperties)
+                    skippedTextureProperties,
+                    deadProperties,
+                    liveValues,
+                    skipStaleSavedNames)
                 .Walk(material);
         }
 
         /// <summary>
-        /// No reviewed model has declared a dead property yet, so
+        /// The dead set for every row without a reviewed model, so
         /// every saved entry still counts in the key.
         /// </summary>
         private static readonly ISet<string> NoDeadProperties =
             new HashSet<string>();
 
+        /// <summary>
+        /// The fallback names as a set, because the walk queries one
+        /// saved name at a time.
+        /// </summary>
+        private static readonly HashSet<string> FallbackPropertyNames =
+            new HashSet<string>(Semantics.VRChatFallbackProperties.Names);
+
         private sealed class MaterialKeyWalker
         {
             private readonly ISet<string> skippedTextureProperties;
             private readonly ISet<string> deadProperties;
+            private readonly AtlasLiveValueModel liveValues;
+            private readonly bool skipStaleSavedNames;
+            private readonly HashSet<string> shaderPropertyNames =
+                new HashSet<string>();
             private readonly StringBuilder builder =
                 new StringBuilder(4096);
 
             internal MaterialKeyWalker(
                 ISet<string> skippedTextureProperties,
-                ISet<string> deadProperties)
+                ISet<string> deadProperties,
+                AtlasLiveValueModel liveValues,
+                bool skipStaleSavedNames)
             {
                 this.skippedTextureProperties = skippedTextureProperties;
                 this.deadProperties = deadProperties;
+                this.liveValues = liveValues;
+                this.skipStaleSavedNames = skipStaleSavedNames;
             }
 
             internal string Walk(Material material)
             {
+                CollectShaderPropertyNames(material);
                 using var serialized = new SerializedObject(material);
                 var property = serialized.GetIterator();
                 var enterChildren = true;
@@ -1587,6 +1678,26 @@ namespace Alrauna.Amuse.Editor.Host
                 AppendEffectiveQueue(material);
                 AppendSavedProperties(serialized);
                 return builder.ToString();
+            }
+
+            /// <summary>
+            /// The property names of the row shader. A saved name
+            /// that the row declares is live, whatever any model
+            /// says about other rows.
+            /// </summary>
+            private void CollectShaderPropertyNames(Material material)
+            {
+                var shader = material.shader;
+                if (shader == null)
+                {
+                    return;
+                }
+
+                var count = shader.GetPropertyCount();
+                for (var index = 0; index < count; index++)
+                {
+                    shaderPropertyNames.Add(shader.GetPropertyName(index));
+                }
             }
 
             /// <summary>
@@ -1798,16 +1909,25 @@ namespace Alrauna.Amuse.Editor.Host
                     }
                 }
 
-                AppendNamedSection(texEnvs, "t:", TexEnvValueOf);
-                AppendNamedSection(ints, "i:", IntValueOf);
-                AppendNamedSection(floats, "f:", FloatValueOf);
-                AppendNamedSection(colors, "c:", ColorValueOf);
+                AppendNamedSection(texEnvs, "t:", TexEnvValueOf, true);
+                AppendNamedSection(ints, "i:", IntValueOf, false);
+                AppendNamedSection(floats, "f:", FloatValueOf, false);
+                AppendNamedSection(colors, "c:", ColorValueOf, false);
             }
 
+            /// <summary>
+            /// Appends one saved section by name. The walk drops a
+            /// dead family value, a stale saved name, and a fallback
+            /// texture entry that holds no texture. A stale name is
+            /// one that the row does not declare, that no reviewed
+            /// uniform list declares, and that no VRChat fallback
+            /// shader reads. Such a value cannot reach a shader.
+            /// </summary>
             private void AppendNamedSection(
                 SerializedProperty array,
                 string prefix,
-                Func<string, SerializedProperty, string> formatValue)
+                Func<string, SerializedProperty, string> formatValue,
+                bool texEnvSection)
             {
                 if (array == null)
                 {
@@ -1820,6 +1940,16 @@ namespace Alrauna.Amuse.Editor.Host
                     var element = array.GetArrayElementAtIndex(index);
                     var name = SavedNameOf(element);
                     if (deadProperties.Contains(name))
+                    {
+                        continue;
+                    }
+
+                    if (skipStaleSavedNames && IsStaleSavedName(name))
+                    {
+                        continue;
+                    }
+
+                    if (texEnvSection && HoldsNoFallbackTexture(name, element))
                     {
                         continue;
                     }
@@ -1845,6 +1975,36 @@ namespace Alrauna.Amuse.Editor.Host
                         .Append(token.Value)
                         .Append(';');
                 }
+            }
+
+            private bool IsStaleSavedName(string name)
+            {
+                return !shaderPropertyNames.Contains(name) &&
+                       !liveValues.Declares(name) &&
+                       !FallbackPropertyNames.Contains(name);
+            }
+
+            /// <summary>
+            /// Whether the entry names a fallback texture property
+            /// and holds no texture. A missing entry and a null entry
+            /// are the same material state, so the pair adds no
+            /// token. The rule needs a model, because only a
+            /// reviewed row knows the fallback names.
+            /// </summary>
+            private bool HoldsNoFallbackTexture(
+                string name, SerializedProperty element)
+            {
+                if (liveValues == null ||
+                    !FallbackPropertyNames.Contains(name))
+                {
+                    return false;
+                }
+
+                var texture = element
+                    .FindPropertyRelative("second")
+                    .FindPropertyRelative("m_Texture")
+                    .objectReferenceValue;
+                return texture == null;
             }
 
             private string TexEnvValueOf(
