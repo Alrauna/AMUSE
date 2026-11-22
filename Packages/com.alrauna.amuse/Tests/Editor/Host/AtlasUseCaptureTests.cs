@@ -1931,16 +1931,21 @@ Shader ""Hidden/Alrauna/AmuseTests/AtlasUseCaptureFooUndeclared""
             AssertRefused(outcome, AtlasUseRefusal.NonIdentityTransform);
         }
 
+        // --- Falsifier 9: the second emission layer is on, so its
+        // texture is live and no route lists it. A dead texture must
+        // admit, but a live unlisted texture must still refuse. ---
         [Test]
-        public void LilToonUnlistedTextureRefuses()
+        public void LiveUnlistedTextureStillRefuses()
         {
             var fixture = NewLilToonFixture();
             // The second emission layer has no companion route.
+            fixture.Material.SetFloat("_UseEmission2nd", 1f);
             fixture.Material.SetTexture("_Emission2ndMap", fixture.MainTexture);
 
             var outcome = SingleOutcome(CaptureUses(fixture.Root));
 
             AssertRefused(outcome, AtlasUseRefusal.UnlistedTexture);
+            Assert.That(outcome.Detail, Does.Contain("'_Emission2ndMap'"));
         }
 
         [Test]
@@ -2059,8 +2064,13 @@ Shader ""Hidden/Alrauna/AmuseTests/AtlasUseCaptureFooUndeclared""
                 "a neutral texture stays bound, so it must split groups");
         }
 
+        // --- Falsifier 11: the bump route is inert, but a VRChat
+        // fallback shader still reads the texture under the name
+        // _BumpMap. An implementation that drops the texture from
+        // the key would let one page carry the texture of the first
+        // member. ---
         [Test]
-        public void GatedOffBumpMapIsInertAndLeavesTheKey()
+        public void InertFallbackRouteTextureStillChangesTheKey()
         {
             var first = NewLilToonFixture();
             var second = NewLilToonFixture();
@@ -2079,8 +2089,9 @@ Shader ""Hidden/Alrauna/AmuseTests/AtlasUseCaptureFooUndeclared""
             Assert.That(firstOutcome.Use.Companions, Is.Empty);
             Assert.That(
                 secondOutcome.Use.MaterialKey,
-                Is.EqualTo(firstOutcome.Use.MaterialKey),
-                "a texture behind an off switch must not split groups");
+                Is.Not.EqualTo(firstOutcome.Use.MaterialKey),
+                "the fallback shader shows the bump map, so the texture " +
+                "must split groups even behind an off switch");
         }
 
         [Test]
@@ -2386,6 +2397,28 @@ Shader ""Hidden/Alrauna/AmuseTests/AtlasUseCaptureFooUndeclared""
                 secondOutcome.Use.MaterialKey,
                 Is.EqualTo(firstOutcome.Use.MaterialKey),
                 "a rim color behind an off switch must not split groups");
+        }
+
+        [Test]
+        public void DeadFamilyTextureAdmitsAndLeavesTheKey()
+        {
+            var plain = NewLilToonFixture();
+            var glitter = NewLilToonFixture();
+            glitter.Material.SetFloat("_UseGlitter", 0f);
+            glitter.Material.SetTexture(
+                "_GlitterShapeTex", ImportRouteTexture("dead glitter", 64));
+
+            var plainOutcome = CaptureLilToon(plain);
+            var glitterOutcome = CaptureLilToon(glitter);
+
+            AssertAdmitted(plainOutcome);
+            AssertAdmitted(glitterOutcome);
+            Assert.That(glitterOutcome.Use.Companions, Is.Empty);
+            Assert.That(
+                glitterOutcome.Use.MaterialKey,
+                Is.EqualTo(plainOutcome.Use.MaterialKey),
+                "a texture behind an off switch must neither refuse the " +
+                "slot nor split groups");
         }
 
         // --- Falsifier 3: the same rim color difference with the

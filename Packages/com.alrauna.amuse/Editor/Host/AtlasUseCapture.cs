@@ -331,8 +331,28 @@ namespace Alrauna.Amuse.Editor.Host
                 return;
             }
 
+            // A model exists only on a reviewed row. A toon standard
+            // fallback tag swaps the shader at runtime, so every value
+            // counts and no stale name is skipped there. The dead set
+            // feeds the route walk, so it is computed before the walk.
+            var liveValues = table.LiveValues;
+            var deadProperties = NoDeadProperties;
+            var skipStaleSavedNames = false;
+            if (liveValues != null)
+            {
+                skipStaleSavedNames = !IsToonStandardFallback(material);
+                if (skipStaleSavedNames)
+                {
+                    deadProperties = liveValues.DeadProperties(
+                        material,
+                        shaderRowName,
+                        SwitchIsDynamicOf(renderer, slotIndex, animation));
+                }
+            }
+
             var outlineRow = table.HasOutlinePass(shaderRowName);
-            var resolution = ResolveRouteTextures(material, table, outlineRow);
+            var resolution = ResolveRouteTextures(
+                material, table, outlineRow, deadProperties);
             if (resolution.Unlisted.Count > 0)
             {
                 refusal = AtlasUseRefusal.UnlistedTexture;
@@ -498,24 +518,6 @@ namespace Alrauna.Amuse.Editor.Host
             if (refusal != AtlasUseRefusal.None)
             {
                 return;
-            }
-
-            // A model exists only on a reviewed row. A toon standard
-            // fallback tag swaps the shader at runtime, so every
-            // value counts and no stale name is skipped there.
-            var liveValues = table.LiveValues;
-            var deadProperties = NoDeadProperties;
-            var skipStaleSavedNames = false;
-            if (liveValues != null)
-            {
-                skipStaleSavedNames = !IsToonStandardFallback(material);
-                if (skipStaleSavedNames)
-                {
-                    deadProperties = liveValues.DeadProperties(
-                        material,
-                        shaderRowName,
-                        SwitchIsDynamicOf(renderer, slotIndex, animation));
-                }
             }
 
             use = new CapturedAtlasUse(
@@ -1329,8 +1331,9 @@ namespace Alrauna.Amuse.Editor.Host
 
             /// <summary>
             /// The texture properties the material key records as
-            /// <c>member</c>: the member, the member copies, the inert
-            /// routes, and the assigned UV0 routes.
+            /// <c>member</c>: the member, the member copies, the dead
+            /// textures, the inert routes that no fallback shader
+            /// reads, and the assigned UV0 routes.
             /// </summary>
             internal readonly HashSet<string> KeySkipped =
                 new HashSet<string>(StringComparer.Ordinal);
@@ -1359,19 +1362,23 @@ namespace Alrauna.Amuse.Editor.Host
         /// <summary>
         /// Sorts every texture property of the shader by its route.
         /// The enumeration walks the shader properties, so a texture
-        /// that reachable code samples can never be missed. An assigned
-        /// texture that is not the member, a member copy, neutral, or a
-        /// companion route is unlisted. A companion route asks the
-        /// material how it uses the texture. An inert texture leaves
-        /// the key. A UV0 texture leaves the key and waits for the
-        /// companion checks. A null texture on a UV0 route stays in the
-        /// key, so a material without the texture never joins a group
-        /// whose page material binds one.
+        /// that reachable code samples can never be missed. A dead
+        /// texture that is not the member, a member copy, neutral, or
+        /// a companion route leaves the key instead of refusing the
+        /// slot, because no shader code samples it. Any other assigned
+        /// texture without a route is unlisted. A companion route asks
+        /// the material how it uses the texture. An inert texture
+        /// leaves the key, unless a VRChat fallback shader can read
+        /// the texture under its Standard name. A UV0 texture leaves
+        /// the key and waits for the companion checks. A null texture
+        /// on a UV0 route stays in the key, so a material without the
+        /// texture never joins a group whose page material binds one.
         /// </summary>
         private static AtlasRouteResolution ResolveRouteTextures(
             Material material,
             AtlasRouteTable table,
-            bool outlineRow)
+            bool outlineRow,
+            ISet<string> deadProperties)
         {
             var resolution = new AtlasRouteResolution();
             var shader = material.shader;
@@ -1410,7 +1417,14 @@ namespace Alrauna.Amuse.Editor.Host
                 {
                     if (texture != null)
                     {
-                        resolution.Unlisted.Add((name, texture));
+                        if (deadProperties.Contains(name))
+                        {
+                            resolution.KeySkipped.Add(name);
+                        }
+                        else
+                        {
+                            resolution.Unlisted.Add((name, texture));
+                        }
                     }
 
                     continue;
@@ -1431,7 +1445,15 @@ namespace Alrauna.Amuse.Editor.Host
                 switch (route.UseOf(material, outlineRow))
                 {
                     case AtlasRouteUse.Inert:
-                        resolution.KeySkipped.Add(name);
+                        // A fallback shader reads the texture under
+                        // its Standard name even behind an off switch,
+                        // so the texture stays keyed and still splits
+                        // groups.
+                        if (!FallbackPropertyNames.Contains(name))
+                        {
+                            resolution.KeySkipped.Add(name);
+                        }
+
                         break;
                     case AtlasRouteUse.OtherCoordinates:
                         break;
