@@ -81,13 +81,15 @@ The budget has three values, set on 2026-11-21 from measurements of production c
 - Avatar limit. The pages of one avatar may hold at most 524,288,000 bytes in total. This is 500 MiB. It is the VRChat SDK limit for the uncompressed size of a PC avatar bundle.
 - Peak limit. Building one group may hold at most 4,294,967,296 bytes of editor memory at one time. This is 4 GiB. A full 8192 page with up to five distinct 8192 by 8192 RGBA32 sources stays inside the limit. A sixth such source refuses the group.
 
-A budget refusal line states its value and its limit in bytes.
+A budget refusal line states its value and its limit in megabytes and in bytes.
+
+The build console shows one summary entry per avatar. It counts the atlased material slots out of all slots. It counts the slots that did not atlas per cause. Each page set entry lists its pages and its slots. Each refused slot entry names the slot, the renderer, and the material. Its description ends with the exact value that stopped the slot, for example a property and its value. Click the renderer, the material, or the texture under an entry to select it.
 
 The **Atlasing** switch sits below the **Alpha Separator** block on the component. It is on by default. Turn it off to skip atlasing for that avatar. Open **Settings**, turn on **Advanced Settings**, and open **Atlas Settings** for the numeric settings. **Maximum Page Size** defaults to 8192. Its range is 1 to 8192. **Protected Mip Levels** defaults to 1. Its range is 1 to 14. A stored value outside its range shows a warning in the inspector. The build refuses it. Presets do not read or write the atlas settings.
 
 Each placement on a page gets a border of copied texels. The border keeps anisotropic sampling away from neighboring regions. The border is sized for an anisotropy ratio of 16. Ratio 16 is the highest anisotropic level in Unity. The anisotropy part of the border is 1 texel at anisotropy level 0 and 16 texels at any other level. The reach measurement of 2026-11-20 gave 1.326 texels at anisotropy level 0 and 14.564 texels at anisotropy level 16. Each value is a Euclidean distance in base level texels. This evidence comes from one GPU. That one measurement is the stated limit of the border guarantee.
 
-The **Show Material Transformations** view excludes atlasing. Its label states this. The build console lists the atlas results.
+The **Show Material Transformations** view has an **Atlasing** view below the **Alpha Separator** view. The Alpha Separator view excludes atlasing, and its label states this. The Atlasing view is described in [Show Material Transformations](#show-material-transformations). The build console lists the final atlas results.
 
 ## Proof modes and acceptance
 
@@ -143,6 +145,8 @@ replaced once by the transparent values. Every later edit sticks.
 Open the Show Material Transformations foldout on the AMUSE component to see what the Alpha Separator would do on this avatar. The nested Alpha Separator view runs the same proof on the avatar in the scene. Each material slot displays as two lines: the top line displays the target mesh renderer and source material side by side, and the bottom line reports the transformation status.
 The view reads the scene state. Other tools can change the avatar later during a build, and some tools add animations the build must obey. This view cannot see those changes. A run in Play mode or an upload shows the true result. The first open measures textures on the GPU. It can take a moment. The Refresh button recomputes everything.
 If a setting changes after a preview run starts, the preview rejects that run and hides its results. It shows the settings-changed message. Changing the setting back does not restore the rejected results. Select Refresh to compute new results.
+
+The nested Atlasing view runs the atlas analysis of a build on the avatar in the scene. It shows a summary sentence and one box per page set. A box lists the pages and the renderer and material of each slot. The **S** button selects the materials of the set. The **Not atlased** list shows each slot that did not atlas with its cause. Point at a cause to read the full console text and the hint. The view computes when it opens, when an atlas setting changes, and on Refresh. A build can still differ, because other tools change the avatar first and a build drops a group when it cannot read a texture.
 
 ### Play mode results
 

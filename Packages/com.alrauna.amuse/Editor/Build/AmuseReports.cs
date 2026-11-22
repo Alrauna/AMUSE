@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using Alrauna.Amuse.Editor.Analysis;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
@@ -703,64 +704,274 @@ namespace Alrauna.Amuse.Editor.Build
         }
 
         /// <summary>
-        /// One Information entry per refused atlas use, with the
-        /// renderer as its clickable context. The title names the slot
-        /// and the renderer, because the build copy is gone after Play
-        /// mode ends. A budget cause states its value and limit in
-        /// bytes. Every other cause ignores them.
+        /// One Information entry per refused atlas use. The title names
+        /// the slot, the renderer, and the material, because the build
+        /// copy is gone after Play mode ends. The description ends with
+        /// the detail that names the exact bad value. A budget cause
+        /// states its value and limit. The renderer, the material, and
+        /// the texture are clickable, in that order. A
+        /// <see cref="AtlasUseRefusal.None"/> cannot reach here, because
+        /// the record rejects it.
         /// </summary>
-        internal static void AtlasUseLine(
-            Renderer renderer,
-            int slotIndex,
-            AtlasUseRefusal cause,
-            long valueBytes,
-            long limitBytes)
+        internal static void AtlasUseLine(AtlasUseRefusalRecord record)
         {
-            if (cause == AtlasUseRefusal.None)
+            if (record == null)
             {
-                throw new InvalidOperationException(
-                    "AtlasUseRefusal.None is not a refusal.");
+                throw new ArgumentNullException(nameof(record));
             }
 
-            using (ErrorReport.WithContextObject(renderer))
-            {
-                ErrorReport.ReportError(
-                    Localizer,
-                    ErrorSeverity.Information,
-                    AmuseReportStrings.AtlasKey(cause),
-                    slotIndex,
-                    renderer != null ? renderer.gameObject.name : null,
-                    valueBytes,
-                    limitBytes);
-            }
+            ReportWithContexts(
+                AmuseReportStrings.AtlasKey(record.Cause),
+                AtlasUseArguments(record),
+                record.Texture,
+                record.Material,
+                record.Renderer);
         }
 
         /// <summary>
-        /// One Information entry per atlas page set, with the avatar
-        /// root as its context. The entry states the merge-ready
-        /// result, the allocation change with its cause, and that
-        /// atlasing alone does not reduce draw calls (design sections
-        /// 1, 10, and 11).
+        /// The substitution arguments of one use refusal line. The
+        /// console and the inspector view share them, so both show the
+        /// same text.
+        /// </summary>
+        internal static string[] AtlasUseArguments(
+            AtlasUseRefusalRecord record)
+        {
+            return new[]
+            {
+                record.Slot.ToString(CultureInfo.InvariantCulture),
+                record.Renderer != null
+                    ? record.Renderer.gameObject.name
+                    : "a removed renderer",
+                ByteSizePhrase(record.ValueBytes),
+                ByteSizePhrase(record.LimitBytes),
+                MaterialPhrase(record.Material),
+                record.Detail.Length == 0 ? "" : " " + record.Detail,
+            };
+        }
+
+        /// <summary>
+        /// A byte count in megabytes with one decimal, followed by the
+        /// exact byte count, so a reader sees both the size and the
+        /// exact number.
+        /// </summary>
+        internal static string ByteSizePhrase(long bytes)
+        {
+            return (bytes / 1048576.0).ToString(
+                       "0.0", CultureInfo.InvariantCulture) +
+                   " MB (" + bytes.ToString(CultureInfo.InvariantCulture) +
+                   " bytes)";
+        }
+
+        internal static string MaterialPhrase(Material material)
+        {
+            if (material == null)
+            {
+                return "no material";
+            }
+
+            return string.IsNullOrEmpty(material.name)
+                ? "an unnamed material"
+                : "material '" + material.name + "'";
+        }
+
+        /// <summary>
+        /// One Information entry per atlas page set. The entry states
+        /// the merge-ready result, the allocation change with its
+        /// cause, and that atlasing alone does not reduce draw calls
+        /// (design sections 1, 10, and 11). It lists every page and
+        /// every slot of the set. The avatar root, the member
+        /// materials, and the member textures are clickable.
         /// </summary>
         internal static void AtlasPageSetLine(
             GameObject avatarRoot, AtlasPageSet pageSet)
         {
-            using (ErrorReport.WithContextObject(avatarRoot))
+            var pageLines = new List<string>(pageSet.Pages.Count);
+            for (var index = 0; index < pageSet.Pages.Count; index++)
             {
-                ErrorReport.ReportError(
-                    Localizer,
-                    ErrorSeverity.Information,
-                    "amuse.atlas.PageSet",
+                pageLines.Add(AtlasPageLine(index, pageSet.Pages[index]));
+            }
+
+            var slotLines = new List<string>(pageSet.Members.Count);
+            var textures = new List<UnityEngine.Object>();
+            var materials = new List<UnityEngine.Object>();
+            foreach (var member in pageSet.Members)
+            {
+                slotLines.Add(
+                    "Slot " +
+                    member.SlotIndex.ToString(CultureInfo.InvariantCulture) +
+                    " of renderer '" +
+                    (member.Renderer != null
+                        ? member.Renderer.gameObject.name
+                        : "a removed renderer") +
+                    "': " + MaterialPhrase(member.Material) +
+                    ", texture '" +
+                    (member.Texture != null ? member.Texture.name : "") +
+                    "' (" +
+                    member.TextureWidth.ToString(CultureInfo.InvariantCulture) +
+                    " x " +
+                    member.TextureHeight.ToString(CultureInfo.InvariantCulture) +
+                    "), page " +
+                    member.PageIndex.ToString(CultureInfo.InvariantCulture) +
+                    ".");
+                AddDistinct(textures, member.Texture);
+                AddDistinct(materials, member.Material);
+            }
+
+            var contexts = new List<UnityEngine.Object>(textures);
+            contexts.AddRange(materials);
+            contexts.Add(avatarRoot);
+            ReportWithContexts(
+                "amuse.atlas.PageSet",
+                new object[]
+                {
                     pageSet.GroupIndex,
                     pageSet.ShaderRowName,
                     CountPhrase(pageSet.PageCount, "page", "pages"),
                     SlotCountPhrase(pageSet.UseCount),
-                    pageSet.PageBytes,
+                    ByteSizePhrase(pageSet.PageBytes),
                     CountPhrase(
                         pageSet.SourceCount,
                         "source texture",
                         "source textures"),
-                    pageSet.SourceBytes);
+                    ByteSizePhrase(pageSet.SourceBytes),
+                    string.Join("\n", pageLines),
+                    string.Join("\n", slotLines),
+                },
+                contexts.ToArray());
+        }
+
+        /// <summary>One page of a page set as one line of text.</summary>
+        internal static string AtlasPageLine(
+            int pageIndex, AtlasPageSetPage page)
+        {
+            return "Page " +
+                   pageIndex.ToString(CultureInfo.InvariantCulture) + ": " +
+                   page.Width.ToString(CultureInfo.InvariantCulture) +
+                   " x " +
+                   page.Height.ToString(CultureInfo.InvariantCulture) +
+                   ", " + page.Format + ", " +
+                   page.MipCount.ToString(CultureInfo.InvariantCulture) +
+                   " mip levels, " +
+                   CountPhrase(page.RegionCount, "region", "regions") + ".";
+        }
+
+        /// <summary>
+        /// One Information entry per avatar that reached the atlas
+        /// analysis. It counts the atlased slots out of every captured
+        /// slot, states the page totals, and counts the slots that did
+        /// not atlas per cause, the most frequent cause first.
+        /// </summary>
+        internal static void AtlasSummaryLine(
+            GameObject avatarRoot,
+            int slotCount,
+            int atlasedSlotCount,
+            IReadOnlyList<AtlasPageSet> pageSets,
+            IReadOnlyList<AtlasUseRefusalRecord> refusals)
+        {
+            var pageCount = 0;
+            long pageBytes = 0;
+            long sourceBytes = 0;
+            foreach (var pageSet in pageSets)
+            {
+                pageCount += pageSet.PageCount;
+                pageBytes += pageSet.PageBytes;
+                sourceBytes += pageSet.SourceBytes;
+            }
+
+            ReportWithContexts(
+                "amuse.atlas.Summary",
+                new object[]
+                {
+                    atlasedSlotCount.ToString(CultureInfo.InvariantCulture),
+                    slotCount.ToString(CultureInfo.InvariantCulture),
+                    CountPhrase(pageSets.Count, "page set", "page sets"),
+                    CountPhrase(pageCount, "page", "pages"),
+                    ByteSizePhrase(pageBytes),
+                    ByteSizePhrase(sourceBytes),
+                    CauseCountLines(refusals),
+                },
+                avatarRoot);
+        }
+
+        private static string CauseCountLines(
+            IReadOnlyList<AtlasUseRefusalRecord> refusals)
+        {
+            if (refusals.Count == 0)
+            {
+                return "";
+            }
+
+            var counts = new Dictionary<AtlasUseRefusal, int>();
+            foreach (var refusal in refusals)
+            {
+                counts.TryGetValue(refusal.Cause, out var count);
+                counts[refusal.Cause] = count + 1;
+            }
+
+            var causes = new List<AtlasUseRefusal>(counts.Keys);
+            causes.Sort((left, right) =>
+            {
+                var byCount = counts[right].CompareTo(counts[left]);
+                return byCount != 0
+                    ? byCount
+                    : ((int)left).CompareTo((int)right);
+            });
+
+            var lines = new List<string>(causes.Count);
+            foreach (var cause in causes)
+            {
+                lines.Add(
+                    "- " +
+                    counts[cause].ToString(CultureInfo.InvariantCulture) +
+                    ": " +
+                    AmuseReportStrings.Get(
+                        AmuseReportStrings.AtlasKey(cause) + ":short"));
+            }
+
+            return "\n\nSlots that did not atlas, by cause:\n" +
+                   string.Join("\n", lines);
+        }
+
+        private static void AddDistinct(
+            List<UnityEngine.Object> objects, UnityEngine.Object item)
+        {
+            if (item != null && !objects.Contains(item))
+            {
+                objects.Add(item);
+            }
+        }
+
+        /// <summary>
+        /// Reports one entry with every context object clickable. NDMF
+        /// shows the context pushed last first, so the caller passes
+        /// the most important object last. A null context opens the
+        /// no-op scope of NDMF and adds nothing.
+        /// </summary>
+        private static void ReportWithContexts(
+            string key,
+            object[] args,
+            params UnityEngine.Object[] contexts)
+        {
+            var scopes = new List<IDisposable>(contexts.Length);
+            try
+            {
+                foreach (var context in contexts)
+                {
+                    scopes.Add(ErrorReport.WithContextObject(context));
+                }
+
+                ErrorReport.ReportError(
+                    Localizer,
+                    ErrorSeverity.Information,
+                    key,
+                    args);
+            }
+            finally
+            {
+                for (var index = scopes.Count - 1; index >= 0; index--)
+                {
+                    scopes[index].Dispose();
+                }
             }
         }
 

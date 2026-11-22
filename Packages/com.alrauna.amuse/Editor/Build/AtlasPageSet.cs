@@ -1,3 +1,6 @@
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+
 namespace Alrauna.Amuse.Editor.Build
 {
     /// <summary>
@@ -17,7 +20,9 @@ namespace Alrauna.Amuse.Editor.Build
             int useCount,
             long pageBytes,
             int sourceCount,
-            long sourceBytes)
+            long sourceBytes,
+            IReadOnlyList<AtlasPageSetPage> pages,
+            IReadOnlyList<AtlasPageSetMember> members)
         {
             GroupIndex = groupIndex;
             ShaderRowName = shaderRowName;
@@ -26,6 +31,10 @@ namespace Alrauna.Amuse.Editor.Build
             PageBytes = pageBytes;
             SourceCount = sourceCount;
             SourceBytes = sourceBytes;
+            Pages = new ReadOnlyCollection<AtlasPageSetPage>(
+                new List<AtlasPageSetPage>(pages));
+            Members = new ReadOnlyCollection<AtlasPageSetMember>(
+                new List<AtlasPageSetMember>(members));
         }
 
         /// <summary>The plan index of the group. Page names use it.</summary>
@@ -46,5 +55,14 @@ namespace Alrauna.Amuse.Editor.Build
 
         /// <summary>The texture bytes of the distinct sources.</summary>
         internal long SourceBytes { get; }
+
+        /// <summary>Every page of the set, in plan order.</summary>
+        internal IReadOnlyList<AtlasPageSetPage> Pages { get; }
+
+        /// <summary>
+        /// Every material slot of the set, in the admitted use order of
+        /// the plan.
+        /// </summary>
+        internal IReadOnlyList<AtlasPageSetMember> Members { get; }
     }
 }

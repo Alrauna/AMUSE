@@ -33,16 +33,36 @@ namespace Alrauna.Amuse.Editor.Host
         /// </summary>
         internal AtlasUseRefusal Refusal { get; }
 
+        /// <summary>The slot material, or null when the slot has none.</summary>
+        internal Material Material { get; }
+
+        /// <summary>
+        /// The member texture when the capture read it, or null.
+        /// </summary>
+        internal Texture MemberTexture { get; }
+
+        /// <summary>
+        /// The sentence that names the exact bad value. It is empty when
+        /// the use was admitted or when the cause has no detail.
+        /// </summary>
+        internal string Detail { get; }
+
         internal AtlasUseOutcome(
             Renderer renderer,
             int slotIndex,
             CapturedAtlasUse use,
-            AtlasUseRefusal refusal)
+            AtlasUseRefusal refusal,
+            Material material,
+            Texture memberTexture,
+            string detail)
         {
             Renderer = renderer;
             SlotIndex = slotIndex;
             Use = use;
             Refusal = refusal;
+            Material = material;
+            MemberTexture = memberTexture;
+            Detail = detail ?? string.Empty;
         }
     }
 
@@ -145,6 +165,8 @@ namespace Alrauna.Amuse.Editor.Host
                 {
                     CapturedAtlasUse use = null;
                     var refusal = AtlasUseRefusal.None;
+                    Texture memberTexture = null;
+                    var detail = string.Empty;
                     if (!graphReady)
                     {
                         refusal =
@@ -163,11 +185,19 @@ namespace Alrauna.Amuse.Editor.Host
                             declaredKeywords,
                             captureOrder,
                             out use,
-                            out refusal);
+                            out refusal,
+                            out memberTexture,
+                            out detail);
                     }
 
                     outcomes.Add(new AtlasUseOutcome(
-                        renderer, slotIndex, use, refusal));
+                        renderer,
+                        slotIndex,
+                        use,
+                        refusal,
+                        slots[slotIndex],
+                        memberTexture,
+                        detail));
                     captureOrder++;
                 }
             }
@@ -186,15 +216,20 @@ namespace Alrauna.Amuse.Editor.Host
             Dictionary<Shader, HashSet<string>> declaredKeywords,
             int captureOrder,
             out CapturedAtlasUse use,
-            out AtlasUseRefusal refusal)
+            out AtlasUseRefusal refusal,
+            out Texture memberTexture,
+            out string detail)
         {
             use = null;
             refusal = AtlasUseRefusal.None;
+            memberTexture = null;
+            detail = string.Empty;
 
             if (!(renderer is MeshRenderer) &&
                 !(renderer is SkinnedMeshRenderer))
             {
                 refusal = AtlasUseRefusal.UnsupportedRenderer;
+                detail = AtlasRefusalDetail.UnsupportedRenderer(renderer);
                 return;
             }
 
@@ -204,6 +239,7 @@ namespace Alrauna.Amuse.Editor.Host
             if (mesh == null || mesh.subMeshCount == 0)
             {
                 refusal = AtlasUseRefusal.MissingMesh;
+                detail = AtlasRefusalDetail.MissingMesh(mesh);
                 return;
             }
 
@@ -211,15 +247,20 @@ namespace Alrauna.Amuse.Editor.Host
             // so its submesh read stays in range for the checks below.
             var submeshCount = mesh.subMeshCount;
             var submeshIndex = Math.Min(slotIndex, submeshCount - 1);
-            if (mesh.GetTopology(submeshIndex) != MeshTopology.Triangles)
+            var topology = mesh.GetTopology(submeshIndex);
+            if (topology != MeshTopology.Triangles)
             {
                 refusal = AtlasUseRefusal.NonTriangleTopology;
+                detail = AtlasRefusalDetail.NonTriangleTopology(
+                    mesh, submeshIndex, topology);
                 return;
             }
 
             if (animation.ShapeAnimated)
             {
                 refusal = AtlasUseRefusal.AnimatedRendererShape;
+                detail = AtlasRefusalDetail.AnimatedProperty(
+                    animation.ShapeProperty);
                 return;
             }
 
@@ -227,6 +268,8 @@ namespace Alrauna.Amuse.Editor.Host
                 slotIndex >= submeshCount - 1)
             {
                 refusal = AtlasUseRefusal.SlotSharesSubmesh;
+                detail = AtlasRefusalDetail.SlotSharesSubmesh(
+                    slots.Length, mesh, submeshCount);
                 return;
             }
 
@@ -247,6 +290,7 @@ namespace Alrauna.Amuse.Editor.Host
                     SerializationOf(material)).IsLocked)
             {
                 refusal = AtlasUseRefusal.LockedShader;
+                detail = AtlasRefusalDetail.Shader(material.shader);
                 return;
             }
 
@@ -255,45 +299,64 @@ namespace Alrauna.Amuse.Editor.Host
             if (rowRefusal != AtlasUseRefusal.None)
             {
                 refusal = rowRefusal;
+                detail = AtlasRefusalDetail.Shader(material.shader);
                 return;
             }
 
-            if (!KeywordsAllowed(
-                    material, table, DeclaredKeywordsOf(
-                        material.shader, declaredKeywords)))
+            var disallowedKeywords = DisallowedKeywords(
+                material, table, DeclaredKeywordsOf(
+                    material.shader, declaredKeywords));
+            if (disallowedKeywords.Count > 0)
             {
                 refusal = AtlasUseRefusal.KeywordNotAllowed;
+                detail = AtlasRefusalDetail.KeywordNotAllowed(
+                    disallowedKeywords);
                 return;
             }
 
-            if (!table.HoldsRequiredValues(material))
+            var unheldValue = table.UnheldRequiredValue(material);
+            if (unheldValue != null)
             {
                 refusal = AtlasUseRefusal.RequiredValueNotHeld;
+                detail = unheldValue;
                 return;
             }
 
-            if (!AllTexturesListed(material, table))
+            var unlistedTextures = UnlistedTextures(material, table);
+            if (unlistedTextures.Count > 0)
             {
                 refusal = AtlasUseRefusal.UnlistedTexture;
+                detail = AtlasRefusalDetail.UnlistedTextures(
+                    unlistedTextures);
                 return;
             }
 
-            if (PropertyBlockTouchesRoute(renderer, slotIndex, table))
+            var blockProperty = PropertyBlockRouteProperty(
+                renderer, slotIndex, table, out var rendererWide);
+            if (blockProperty != null)
             {
                 refusal = AtlasUseRefusal.PropertyBlockOnRouteProperty;
+                detail = AtlasRefusalDetail.PropertyBlock(
+                    blockProperty, rendererWide, slotIndex);
                 return;
             }
 
-            if (RoutePropertyAnimated(animation, table))
+            var animatedProperty = AnimatedRouteProperty(animation, table);
+            if (animatedProperty != null)
             {
                 refusal = AtlasUseRefusal.AnimatedRouteProperty;
+                detail = AtlasRefusalDetail.AnimatedProperty(
+                    animatedProperty);
                 return;
             }
 
             var texture = material.GetTexture(table.MemberProperty);
+            memberTexture = texture;
             if (texture == null)
             {
                 refusal = AtlasUseRefusal.MissingMainTexture;
+                detail = AtlasRefusalDetail.MissingMainTexture(
+                    table.MemberProperty);
                 return;
             }
 
@@ -302,18 +365,23 @@ namespace Alrauna.Amuse.Editor.Host
                     UnityEngine.Rendering.TextureDimension.Tex2D)
             {
                 refusal = AtlasUseRefusal.UnsupportedTextureDimension;
+                detail = AtlasRefusalDetail.UnsupportedTextureDimension(
+                    texture);
                 return;
             }
 
-            if (!SourceIsImportedTextureAsset(texture2D))
+            var sourceProblem = SourceAssetProblem(texture2D);
+            if (sourceProblem != null)
             {
                 refusal = AtlasUseRefusal.SourceNotAnAsset;
+                detail = sourceProblem;
                 return;
             }
 
             if (!SupportedPageFormats.Contains(texture2D.format))
             {
                 refusal = AtlasUseRefusal.UnsupportedFormat;
+                detail = AtlasRefusalDetail.UnsupportedFormat(texture2D);
                 return;
             }
 
@@ -321,18 +389,25 @@ namespace Alrauna.Amuse.Editor.Host
                     texture2D, out var sampler))
             {
                 refusal = AtlasUseRefusal.UnsupportedWrap;
+                detail = AtlasRefusalDetail.UnsupportedWrap(texture2D);
                 return;
             }
 
             if (texture2D.mipmapCount < protectedMipLevelCount)
             {
                 refusal = AtlasUseRefusal.SourceMipChainTooShort;
+                detail = AtlasRefusalDetail.SourceMipChainTooShort(
+                    texture2D, protectedMipLevelCount);
                 return;
             }
 
             if (!SourceIsBlockAligned(texture2D, protectedMipLevelCount))
             {
                 refusal = AtlasUseRefusal.SourceNotAligned;
+                detail = AtlasRefusalDetail.SourceNotAligned(
+                    texture2D,
+                    protectedMipLevelCount,
+                    BlockSizeOf(texture2D.format));
                 return;
             }
 
@@ -345,6 +420,8 @@ namespace Alrauna.Amuse.Editor.Host
                     value.w != transform.Identity.w)
                 {
                     refusal = AtlasUseRefusal.NonIdentityTransform;
+                    detail = AtlasRefusalDetail.NonIdentityTransform(
+                        transform.Property, value, transform.Identity);
                     return;
                 }
             }
@@ -354,19 +431,27 @@ namespace Alrauna.Amuse.Editor.Host
             if (channel.Count == 0)
             {
                 refusal = AtlasUseRefusal.MissingRouteChannel;
+                detail = AtlasRefusalDetail.MissingRouteChannel(mesh);
                 return;
             }
 
             if (mesh.GetIndexCount(submeshIndex) == 0)
             {
                 refusal = AtlasUseRefusal.EmptySubmesh;
+                detail = AtlasRefusalDetail.EmptySubmesh(mesh, submeshIndex);
                 return;
             }
 
             if (!TryCaptureUvRect(
-                    mesh, submeshIndex, channel, out var uvRect))
+                    mesh,
+                    submeshIndex,
+                    channel,
+                    out var uvRect,
+                    out var offendingVertex))
             {
                 refusal = AtlasUseRefusal.UvOutsideUnitSquare;
+                detail = AtlasRefusalDetail.UvOutsideUnitSquare(
+                    offendingVertex, channel[offendingVertex]);
                 return;
             }
 
@@ -415,9 +500,11 @@ namespace Alrauna.Amuse.Editor.Host
             Mesh mesh,
             int submeshIndex,
             List<Vector2> channel,
-            out AtlasUvRect uvRect)
+            out AtlasUvRect uvRect,
+            out int offendingVertex)
         {
             uvRect = default;
+            offendingVertex = -1;
             var triangles = mesh.GetTriangles(submeshIndex);
 
             double minU = 1, minV = 1, maxU = 0, maxV = 0;
@@ -428,6 +515,7 @@ namespace Alrauna.Amuse.Editor.Host
                 var v = coordinate.y;
                 if (!(u >= 0 && u <= 1) || !(v >= 0 && v <= 1))
                 {
+                    offendingVertex = vertexIndex;
                     return false;
                 }
 
@@ -452,28 +540,30 @@ namespace Alrauna.Amuse.Editor.Host
         }
 
         /// <summary>
-        /// True when the texture is the main asset of a file a texture
-        /// importer owns. A native asset, a sub-asset, or a texture
-        /// inside a model or scene file has a path, but no importer
-        /// reproduces it, so the runtime acquisition cannot clone it.
-        /// The rule is per use. Design section 4 condition 6.
+        /// Null when the texture is the main asset of a file a texture
+        /// importer owns. Otherwise the sentence that names the
+        /// problem. A native asset, a sub-asset, or a texture inside a
+        /// model or scene file has a path, but no importer reproduces
+        /// it, so the runtime acquisition cannot clone it. The rule is
+        /// per use. Design section 4 condition 6.
         /// </summary>
-        private static bool SourceIsImportedTextureAsset(
-            Texture2D texture)
+        private static string SourceAssetProblem(Texture2D texture)
         {
             var path = AssetDatabase.GetAssetPath(texture);
             if (string.IsNullOrEmpty(path))
             {
-                return false;
+                return AtlasRefusalDetail.SourceOnlyInMemory(texture);
             }
 
             if (!(AssetImporter.GetAtPath(path) is TextureImporter))
             {
-                return false;
+                return AtlasRefusalDetail.SourceWithoutImporter(path);
             }
 
             return ReferenceEquals(
-                AssetDatabase.LoadMainAssetAtPath(path), texture);
+                AssetDatabase.LoadMainAssetAtPath(path), texture)
+                ? null
+                : AtlasRefusalDetail.SourceNotMainAsset(texture, path);
         }
 
         private static int BlockSizeOf(TextureFormat format)
@@ -497,7 +587,21 @@ namespace Alrauna.Amuse.Editor.Host
         /// </summary>
         private sealed class RendererAnimationFacts
         {
-            internal bool ShapeAnimated { get; set; }
+            internal bool ShapeAnimated => ShapeProperty != null;
+
+            /// <summary>
+            /// The first renderer shape property an animation drives,
+            /// or null when no animation drives one.
+            /// </summary>
+            internal string ShapeProperty { get; private set; }
+
+            internal void MarkShapeAnimated(string property)
+            {
+                if (ShapeProperty == null)
+                {
+                    ShapeProperty = property;
+                }
+            }
 
             internal HashSet<int> SwappedSlots { get; } =
                 new HashSet<int>();
@@ -580,7 +684,7 @@ namespace Alrauna.Amuse.Editor.Host
                             SlotCountPropertyName,
                             StringComparison.Ordinal))
                     {
-                        facts.ShapeAnimated = true;
+                        facts.MarkShapeAnimated(floated.PropertyName);
                         continue;
                     }
 
@@ -604,7 +708,7 @@ namespace Alrauna.Amuse.Editor.Host
                             MeshPropertyName,
                             StringComparison.Ordinal))
                     {
-                        facts.ShapeAnimated = true;
+                        facts.MarkShapeAnimated(referenced.PropertyName);
                         continue;
                     }
 
@@ -620,7 +724,11 @@ namespace Alrauna.Amuse.Editor.Host
             return facts;
         }
 
-        private static bool RoutePropertyAnimated(
+        /// <summary>
+        /// The first animated property that names the member or a
+        /// condition property, or null when no animation drives one.
+        /// </summary>
+        private static string AnimatedRouteProperty(
             RendererAnimationFacts animation,
             AtlasRouteTable table)
         {
@@ -629,7 +737,7 @@ namespace Alrauna.Amuse.Editor.Host
                 if (stripped.StartsWith(
                         table.MemberProperty, StringComparison.Ordinal))
                 {
-                    return true;
+                    return stripped;
                 }
 
                 foreach (var condition in table.ConditionProperties)
@@ -637,12 +745,12 @@ namespace Alrauna.Amuse.Editor.Host
                     if (stripped.StartsWith(
                             condition, StringComparison.Ordinal))
                     {
-                        return true;
+                        return stripped;
                     }
                 }
             }
 
-            return false;
+            return null;
         }
 
         /// <summary>
@@ -867,7 +975,11 @@ namespace Alrauna.Amuse.Editor.Host
             return false;
         }
 
-        private static bool KeywordsAllowed(
+        /// <summary>
+        /// Every enabled keyword the shader declares that the route
+        /// does not allow, sorted ordinal. An empty list admits.
+        /// </summary>
+        private static List<string> DisallowedKeywords(
             Material material,
             AtlasRouteTable table,
             HashSet<string> declaredKeywords)
@@ -875,6 +987,7 @@ namespace Alrauna.Amuse.Editor.Host
             // Only a keyword the shader declares can change what the
             // shader samples. A keyword on the material that the shader
             // does not declare has no effect, so the capture ignores it.
+            var disallowed = new List<string>();
             foreach (var keyword in material.enabledKeywords)
             {
                 if (!declaredKeywords.Contains(keyword.name))
@@ -895,11 +1008,12 @@ namespace Alrauna.Amuse.Editor.Host
 
                 if (!allowed)
                 {
-                    return false;
+                    disallowed.Add(keyword.name);
                 }
             }
 
-            return true;
+            disallowed.Sort(StringComparer.Ordinal);
+            return disallowed;
         }
 
         private static HashSet<string> DeclaredKeywordsOf(
@@ -921,11 +1035,15 @@ namespace Alrauna.Amuse.Editor.Host
         /// Every assigned texture must be the member or a neutral
         /// texture. The enumeration walks the shader properties, so a
         /// texture that reachable code samples can never be missed.
+        /// The result lists every other assigned texture in shader
+        /// property order. An empty list admits.
         /// </summary>
-        private static bool AllTexturesListed(
-            Material material,
-            AtlasRouteTable table)
+        private static List<(string Property, Texture Texture)>
+            UnlistedTextures(
+                Material material,
+                AtlasRouteTable table)
         {
+            var unlisted = new List<(string Property, Texture Texture)>();
             var shader = material.shader;
             var count = ShaderUtil.GetPropertyCount(shader);
             for (var index = 0; index < count; index++)
@@ -962,53 +1080,58 @@ namespace Alrauna.Amuse.Editor.Host
 
                 if (!neutral)
                 {
-                    return false;
+                    unlisted.Add((name, texture));
                 }
             }
 
-            return true;
+            return unlisted;
         }
 
         /// <summary>
         /// The property block gate. The renderer-wide block is read
         /// first, because its entries apply to every slot. The per-slot
         /// block is read second, and Unity keeps the two stores apart,
-        /// so a slot block refuses only its own slot.
+        /// so a slot block refuses only its own slot. The result is the
+        /// first route property a block sets, or null.
         /// </summary>
-        private static bool PropertyBlockTouchesRoute(
+        private static string PropertyBlockRouteProperty(
             Renderer renderer,
             int slotIndex,
-            AtlasRouteTable table)
+            AtlasRouteTable table,
+            out bool rendererWide)
         {
             var block = new MaterialPropertyBlock();
             renderer.GetPropertyBlock(block);
-            if (BlockTouchesRoute(block, table))
+            var property = BlockRouteProperty(block, table);
+            if (property != null)
             {
-                return true;
+                rendererWide = true;
+                return property;
             }
 
+            rendererWide = false;
             renderer.GetPropertyBlock(block, slotIndex);
-            return BlockTouchesRoute(block, table);
+            return BlockRouteProperty(block, table);
         }
 
-        private static bool BlockTouchesRoute(
+        private static string BlockRouteProperty(
             MaterialPropertyBlock block,
             AtlasRouteTable table)
         {
             if (BlockNamesRoute(block, table.MemberProperty))
             {
-                return true;
+                return table.MemberProperty;
             }
 
             foreach (var condition in table.ConditionProperties)
             {
                 if (BlockNamesRoute(block, condition))
                 {
-                    return true;
+                    return condition;
                 }
             }
 
-            return false;
+            return null;
         }
 
         private static bool BlockNamesRoute(

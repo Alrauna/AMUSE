@@ -490,6 +490,12 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var outcome = SingleOutcome(CaptureUses(fixture.Root));
 
             AssertRefused(outcome, AtlasUseRefusal.RequiredValueNotHeld);
+            Assert.That(
+                outcome.Detail,
+                Is.EqualTo(
+                    "The property '" + property + "' is 1. The route" +
+                    " needs 0."),
+                "the detail must name the property and its value");
         }
 
         [Test]
@@ -502,6 +508,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var outcome = SingleOutcome(CaptureUses(fixture.Root));
 
             AssertRefused(outcome, AtlasUseRefusal.RequiredValueNotHeld);
+            Assert.That(outcome.Detail, Does.Contain("are both on"));
         }
 
         [Test]
@@ -527,6 +534,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var outcome = SingleOutcome(CaptureUses(fixture.Root));
 
             AssertRefused(outcome, AtlasUseRefusal.KeywordNotAllowed);
+            Assert.That(outcome.Detail, Does.Contain("POI_UDIMDISCARD"));
         }
 
         [Test]
@@ -570,6 +578,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var outcome = SingleOutcome(CaptureUses(fixture.Root));
 
             AssertRefused(outcome, AtlasUseRefusal.UnlistedTexture);
+            Assert.That(outcome.Detail, Does.Contain("'_MatcapMask'"));
         }
 
         // --- the texture transform ----------------------------------------
@@ -584,6 +593,17 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var outcome = SingleOutcome(CaptureUses(fixture.Root));
 
             AssertRefused(outcome, AtlasUseRefusal.NonIdentityTransform);
+            Assert.That(
+                outcome.Detail,
+                Is.EqualTo(
+                    "The property '_MainTex_ST' is (2, 1, 0, 0). The" +
+                    " route needs (1, 1, 0, 0)."));
+            Assert.That(
+                outcome.Material, Is.SameAs(fixture.Material),
+                "a refused outcome must keep its slot material");
+            Assert.That(
+                outcome.MemberTexture, Is.SameAs(fixture.MainTexture),
+                "a refusal after the texture read must keep the texture");
         }
 
         [Test]
@@ -657,6 +677,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var outcome = SingleOutcome(CaptureUses(root));
 
             AssertRefused(outcome, AtlasUseRefusal.UvOutsideUnitSquare);
+            Assert.That(outcome.Detail, Does.Contain("(1.0001, 0)"));
         }
 
         [Test]
@@ -1088,6 +1109,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var outcome = SingleOutcome(CaptureUses(root));
 
             AssertRefused(outcome, AtlasUseRefusal.UnsupportedWrap);
+            Assert.That(outcome.Detail, Does.Contain("Mirror"));
         }
 
         [Test]
@@ -1418,6 +1440,7 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             var outcome = SingleOutcome(CaptureUses(fixture.Root));
 
             AssertRefused(outcome, AtlasUseRefusal.RequiredValueNotHeld);
+            Assert.That(outcome.Detail, Does.Contain("_DissolveParams.x"));
         }
 
         [Test]

@@ -54,19 +54,22 @@ namespace Alrauna.Amuse.Editor.Build
 
         /// <summary>
         /// Every use refusal the atlas pass recorded, in record order.
-        /// Each entry names the renderer, the slot, and the cause. A
-        /// budget refusal also holds the value and the limit of its
-        /// number in bytes. Every other cause holds zero bytes. The
-        /// atlas report emits one line per entry.
+        /// Each entry names the renderer, the slot, the cause, the
+        /// material, the texture, and the detail. A budget refusal
+        /// also holds the value and the limit of its number in bytes.
+        /// The atlas report emits one line per entry.
         /// </summary>
-        internal IReadOnlyList<(Renderer renderer, int slot,
-            AtlasUseRefusal cause, long valueBytes, long limitBytes)>
-            AtlasUseRefusals => atlasUseRefusals;
+        internal IReadOnlyList<AtlasUseRefusalRecord> AtlasUseRefusals =>
+            atlasUseRefusals;
 
-        private readonly List<(Renderer renderer, int slot,
-            AtlasUseRefusal cause, long valueBytes, long limitBytes)>
-            atlasUseRefusals =
-                new List<(Renderer, int, AtlasUseRefusal, long, long)>();
+        private readonly List<AtlasUseRefusalRecord> atlasUseRefusals =
+            new List<AtlasUseRefusalRecord>();
+
+        /// <summary>
+        /// How many renderer slots the atlas capture saw. The summary
+        /// line counts the atlased slots out of this number.
+        /// </summary>
+        internal int AtlasSlotCount { get; set; }
 
         /// <summary>
         /// Every page set the atlas pass built and kept, in plan
@@ -76,26 +79,17 @@ namespace Alrauna.Amuse.Editor.Build
             new List<AtlasPageSet>();
 
         /// <summary>
-        /// Records one use-scope atlas refusal.
-        /// <see cref="AtlasUseRefusal.None"/> is not a refusal and
-        /// throws, because a recorded None hides a missing cause.
+        /// Records one use-scope atlas refusal. The record itself
+        /// rejects <see cref="AtlasUseRefusal.None"/>.
         /// </summary>
-        internal void RecordAtlasUseRefusal(
-            Renderer renderer,
-            int slot,
-            AtlasUseRefusal cause,
-            long valueBytes = 0,
-            long limitBytes = 0)
+        internal void RecordAtlasUseRefusal(AtlasUseRefusalRecord record)
         {
-            if (cause == AtlasUseRefusal.None)
+            if (record == null)
             {
-                throw new ArgumentException(
-                    "AtlasUseRefusal.None is not a refusal.",
-                    nameof(cause));
+                throw new ArgumentNullException(nameof(record));
             }
 
-            atlasUseRefusals.Add(
-                (renderer, slot, cause, valueBytes, limitBytes));
+            atlasUseRefusals.Add(record);
         }
 
         /// <summary>

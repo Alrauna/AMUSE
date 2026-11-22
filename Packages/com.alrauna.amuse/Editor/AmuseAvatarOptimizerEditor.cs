@@ -45,6 +45,21 @@ namespace Alrauna.Amuse.Editor
         private bool _alphaSeparationTransformationsOpen = true;
 
         /// <summary>
+        /// The Atlasing view states live in the editor session, like
+        /// the states above. The view starts open, and its Not atlased
+        /// list starts closed.
+        /// </summary>
+        private bool _atlasTransformationsOpen = true;
+        private bool _atlasRefusalsOpen;
+
+        /// <summary>
+        /// The last atlas view result and the input key it was computed
+        /// for. A changed key or Refresh computes again.
+        /// </summary>
+        private AtlasPreviewResult _atlasPreview;
+        private string _atlasPreviewKey;
+
+        /// <summary>
         /// The current dry run instance. It owns its own renderer
         /// index, so replacing it restarts the pass sequence, and
         /// keeping it across passes lets one renderer compute per
@@ -70,6 +85,8 @@ namespace Alrauna.Amuse.Editor
         internal static Action<bool> OnCutoutSeparatorToggleDrawnForTest;
         internal static Action<bool> OnTransparentSeparatorToggleDrawnForTest;
         internal static Action<bool> OnAtlasingToggleDrawnForTest;
+        internal static Action<AtlasPageSet> OnAtlasPageSetDrawnForTest;
+        internal static Action<AtlasUseRefusalRecord> OnAtlasRefusalDrawnForTest;
 
         private void OnEnable()
         {
@@ -85,12 +102,14 @@ namespace Alrauna.Amuse.Editor
             EditorApplication.update -= OnEditorUpdate;
             _dryRun?.Cancel(timeoutMs: 200);
             _dryRun = null;
+            _atlasPreview = null;
         }
 
         internal void OnBeforeAssemblyReload()
         {
             _dryRun?.Cancel(timeoutMs: 200);
             _dryRun = null;
+            _atlasPreview = null;
         }
 
         internal void OnPlayModeStateChanged(PlayModeStateChange stateChange)
@@ -99,6 +118,7 @@ namespace Alrauna.Amuse.Editor
             {
                 _dryRun?.Cancel(timeoutMs: 100);
                 _dryRun = null;
+                _atlasPreview = null;
             }
         }
 
@@ -265,8 +285,25 @@ namespace Alrauna.Amuse.Editor
                     AmuseSessionCaches.Clear();
                     _dryRun = null;
                     _dryRunCompletedLatched = false;
+                    _atlasPreview = null;
                 }
 
+                DrawAlphaSeparatorTransformations(
+                    optimizer, avatarRoot, avatarKey);
+                DrawAtlasTransformations(optimizer);
+            }
+        }
+
+        /// <summary>
+        /// The nested Alpha Separator view. Its early returns leave
+        /// only this view, so the Atlasing view below always draws.
+        /// </summary>
+        private void DrawAlphaSeparatorTransformations(
+            AmuseAvatarOptimizer optimizer,
+            Transform avatarRoot,
+            string avatarKey)
+        {
+            {
                 _alphaSeparationTransformationsOpen = EditorGUILayout.Foldout(
                     _alphaSeparationTransformationsOpen,
                     "Alpha Separator",
@@ -396,6 +433,241 @@ namespace Alrauna.Amuse.Editor
                 {
                     DrawTransformationRow(row, avatarRoot);
                 }
+            }
+        }
+
+        /// <summary>
+        /// The nested Atlasing view. It shows which slots atlas
+        /// together and which slots do not, each with its cause. It
+        /// computes on the layout pass when it opens, when an input
+        /// changes, and after Refresh. It never calls the alpha view
+        /// test hooks, so the alpha view counts stay exact.
+        /// </summary>
+        private void DrawAtlasTransformations(AmuseAvatarOptimizer optimizer)
+        {
+            _atlasTransformationsOpen = EditorGUILayout.Foldout(
+                _atlasTransformationsOpen,
+                "Atlasing",
+                EditorStyles.foldoutHeader);
+            OnFoldoutHeaderDrawnForTest?.Invoke("Atlasing");
+            if (!_atlasTransformationsOpen || optimizer == null)
+            {
+                return;
+            }
+
+            EditorGUILayout.LabelField(
+                RowText.AtlasDisclosureSentence(),
+                EditorStyles.wordWrappedLabel);
+
+            if (Event.current.type == EventType.Layout)
+            {
+                var activeTarget = EditorUserBuildSettings.activeBuildTarget;
+                var key = AtlasPreview.InputKey(optimizer, activeTarget);
+                if (_atlasPreview == null || key != _atlasPreviewKey)
+                {
+                    try
+                    {
+                        _atlasPreview = AtlasPreview.Compute(
+                            optimizer,
+                            activeTarget,
+                            AtlasBudgetLimits.Provider());
+                    }
+                    catch (Exception e)
+                    {
+                        // The same handling as the errored row of the
+                        // alpha view: the console keeps the stack, and
+                        // the view offers Refresh.
+                        Debug.LogException(e);
+                        _atlasPreview = AtlasPreviewResult.Error();
+                    }
+
+                    _atlasPreviewKey = key;
+                }
+            }
+
+            var preview = _atlasPreview;
+            if (preview == null)
+            {
+                return;
+            }
+
+            if (preview.Errored)
+            {
+                EditorGUILayout.HelpBox(
+                    RowText.AtlasErroredSentence(), MessageType.Warning);
+                return;
+            }
+
+            if (preview.BannerSentence != null)
+            {
+                EditorGUILayout.HelpBox(
+                    preview.BannerSentence, MessageType.Info);
+                return;
+            }
+
+            var pageCount = 0;
+            long pageBytes = 0;
+            foreach (var pageSet in preview.PageSets)
+            {
+                pageCount += pageSet.PageCount;
+                pageBytes += pageSet.PageBytes;
+            }
+
+            EditorGUILayout.LabelField(
+                RowText.AtlasSummarySentence(
+                    preview.AtlasedSlotCount,
+                    preview.SlotCount,
+                    preview.PageSets.Count,
+                    pageCount,
+                    pageBytes),
+                EditorStyles.wordWrappedLabel);
+
+            foreach (var pageSet in preview.PageSets)
+            {
+                DrawAtlasPageSet(pageSet);
+            }
+
+            if (preview.Refusals.Count > 0)
+            {
+                _atlasRefusalsOpen = EditorGUILayout.Foldout(
+                    _atlasRefusalsOpen,
+                    RowText.AtlasNotAtlasedHeader(preview.Refusals.Count),
+                    true,
+                    EditorStyles.foldout);
+                if (_atlasRefusalsOpen)
+                {
+                    foreach (var record in preview.Refusals)
+                    {
+                        DrawAtlasRefusal(record);
+                    }
+                }
+            }
+
+            if (preview.PageSets.Count == 0 && preview.Refusals.Count == 0)
+            {
+                EditorGUILayout.LabelField(RowText.NoRenderersSentence());
+            }
+        }
+
+        /// <summary>
+        /// One page set as a box: the title, one line per page, the
+        /// added memory, then the member rows beside a select button.
+        /// </summary>
+        private static void DrawAtlasPageSet(AtlasPageSet pageSet)
+        {
+            OnAtlasPageSetDrawnForTest?.Invoke(pageSet);
+            using (new EditorGUILayout.VerticalScope(EditorStyles.helpBox))
+            {
+                EditorGUILayout.LabelField(
+                    "Page set " + pageSet.GroupIndex + ": " +
+                    pageSet.ShaderRowName,
+                    EditorStyles.boldLabel);
+                for (var index = 0; index < pageSet.Pages.Count; index++)
+                {
+                    EditorGUILayout.LabelField(
+                        AmuseReports.AtlasPageLine(index, pageSet.Pages[index]),
+                        EditorStyles.miniLabel);
+                }
+
+                EditorGUILayout.LabelField(
+                    "Adds " + AmuseReports.ByteSizePhrase(pageSet.PageBytes));
+
+                var materials = new List<UnityEngine.Object>();
+                foreach (var member in pageSet.Members)
+                {
+                    if (member.Material != null &&
+                        !materials.Contains(member.Material))
+                    {
+                        materials.Add(member.Material);
+                    }
+                }
+
+                using (new EditorGUILayout.HorizontalScope())
+                {
+                    using (new EditorGUILayout.VerticalScope())
+                    {
+                        for (var index = 0;
+                            index < pageSet.Members.Count;
+                            index++)
+                        {
+                            var member = pageSet.Members[index];
+                            DrawAtlasSlotFields(
+                                member.Renderer, member.Material, index > 0);
+                        }
+                    }
+
+                    if (GUILayout.Button(
+                            new GUIContent(
+                                "S",
+                                "Selects the " + materials.Count +
+                                " materials of this page set"),
+                            GUILayout.Width(20)))
+                    {
+                        Selection.objects = materials.ToArray();
+                    }
+                }
+            }
+
+            EditorGUILayout.Space(8);
+        }
+
+        /// <summary>
+        /// One slot that did not atlas: the renderer and material
+        /// fields, then the cause with its detail. The tooltip holds
+        /// the full console description and the hint.
+        /// </summary>
+        private static void DrawAtlasRefusal(AtlasUseRefusalRecord record)
+        {
+            OnAtlasRefusalDrawnForTest?.Invoke(record);
+            DrawAtlasSlotFields(record.Renderer, record.Material, false);
+
+            var key = AmuseReportStrings.AtlasKey(record.Cause);
+            var cause = AmuseReportStrings.Get(key + ":short");
+            var text = (cause.Length == 0
+                    ? cause
+                    : char.ToUpperInvariant(cause[0]) + cause.Substring(1)) +
+                "." + (record.Detail.Length == 0 ? "" : " " + record.Detail);
+            var tooltip = AmuseReportStrings.Format(
+                    key + ":description",
+                    AmuseReports.AtlasUseArguments(record)) +
+                "\n\n" + AmuseReportStrings.Get(key + ":hint");
+
+            EditorGUI.indentLevel++;
+            EditorGUILayout.LabelField(
+                new GUIContent(text, tooltip),
+                EditorStyles.wordWrappedLabel);
+            EditorGUI.indentLevel--;
+        }
+
+        /// <summary>
+        /// The renderer field and the material field of one slot, laid
+        /// out like a slot row of the alpha view. A later row of a page
+        /// set starts with a small space, as the grouping view of
+        /// d4rkAvatarOptimizer does.
+        /// </summary>
+        private static void DrawAtlasSlotFields(
+            Renderer renderer,
+            Material material,
+            bool indentRow)
+        {
+            int indentOffset = EditorGUI.indentLevel * 15;
+            float halfWidth = Mathf.Max(
+                60f,
+                (EditorGUIUtility.currentViewWidth - indentOffset - 30f) / 2f -
+                    20f);
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                if (indentRow)
+                {
+                    GUILayout.Space(15);
+                }
+
+                EditorGUILayout.ObjectField(
+                    renderer, typeof(Renderer), true, GUILayout.Width(halfWidth));
+                int originalIndent = EditorGUI.indentLevel;
+                EditorGUI.indentLevel = 0;
+                EditorGUILayout.ObjectField(material, typeof(Material), false);
+                EditorGUI.indentLevel = originalIndent;
             }
         }
 

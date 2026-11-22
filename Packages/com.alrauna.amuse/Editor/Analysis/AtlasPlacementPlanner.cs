@@ -264,9 +264,15 @@ namespace Alrauna.Amuse.Editor.Analysis
                         maximumPageSize);
                     if (refusal != AtlasPlacementRefusal.None)
                     {
+                        var tooLarge =
+                            refusal == AtlasPlacementRefusal.PlacementTooLarge;
                         foreach (var rank in placement.UseRanks)
                         {
-                            refused.Add(new AtlasRefusedUse(rank, refusal));
+                            refused.Add(new AtlasRefusedUse(
+                                rank,
+                                refusal,
+                                tooLarge ? placement.Width : 0,
+                                tooLarge ? placement.Height : 0));
                         }
 
                         continue;

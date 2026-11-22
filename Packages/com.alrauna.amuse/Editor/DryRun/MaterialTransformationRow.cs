@@ -293,10 +293,11 @@ namespace Alrauna.Amuse.Editor.DryRun
                     return "The first open measures textures on the GPU. "
                         + "It can take a moment.";
                 case 2:
-                    // Atlasing design section 11: the view shows no
-                    // atlas rows, and its label says so.
-                    return "This view excludes atlasing. The build console "
-                        + "lists the atlas results.";
+                    // Atlasing design section 11: the alpha view shows
+                    // no atlas rows, and its label points to the
+                    // separate atlas view.
+                    return "This view excludes atlasing. The Atlasing view "
+                        + "below lists the atlas results.";
                 default:
                     throw new ArgumentOutOfRangeException(
                         nameof(index), index, "Unknown disclosure row.");
@@ -312,6 +313,57 @@ namespace Alrauna.Amuse.Editor.DryRun
         internal static string NoRenderersSentence()
         {
             return "No renderer on this avatar.";
+        }
+
+        internal static string AtlasDisclosureSentence()
+        {
+            return "This view runs the atlas analysis of a build on the "
+                + "avatar in the scene. Other tools and the Alpha Separator "
+                + "can change the avatar during build time. A build can also "
+                + "drop a group when it cannot read a texture. The build "
+                + "console lists the final atlas results.";
+        }
+
+        internal static string AtlasOffSentence()
+        {
+            return "Atlasing is off. Turn it on to see results.";
+        }
+
+        internal static string AtlasPlayModeSentence()
+        {
+            return "The atlas view does not run in Play mode.";
+        }
+
+        internal static string AtlasErroredSentence()
+        {
+            return "The atlas view could not be computed. Press Refresh to "
+                + "try again.";
+        }
+
+        internal static string AtlasSummarySentence(
+            int atlased, int total, int pageSets, int pages, long pageBytes)
+        {
+            return atlased.ToString(CultureInfo.InvariantCulture)
+                + " out of " + total.ToString(CultureInfo.InvariantCulture)
+                + " material slots atlas into "
+                + CountPhrase(pageSets, "page set", "page sets") + " with "
+                + CountPhrase(pages, "page", "pages") + ". The pages add "
+                + AmuseReports.ByteSizePhrase(pageBytes)
+                + " of texture memory.";
+        }
+
+        internal static string AtlasNotAtlasedHeader(int count)
+        {
+            return "Not atlased ("
+                + count.ToString(CultureInfo.InvariantCulture) + ")";
+        }
+
+        private static string CountPhrase(
+            int count, string singular, string plural)
+        {
+            return count == 1
+                ? "1 " + singular
+                : count.ToString(CultureInfo.InvariantCulture) + " " + plural;
         }
 
         /// <summary>
