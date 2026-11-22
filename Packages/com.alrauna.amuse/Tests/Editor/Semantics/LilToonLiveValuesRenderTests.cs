@@ -122,6 +122,13 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         private float previousAmbientIntensity;
         private SphericalHarmonicsL2 previousAmbientProbe;
 
+        /// <summary>
+        /// Foreign lights that SetUp disabled because they can reach
+        /// the subject. TearDown enables them again.
+        /// </summary>
+        private readonly List<Light> disabledForeignLights =
+            new List<Light>();
+
         [SetUp]
         public void SetUp()
         {
@@ -219,11 +226,40 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             lamp.renderMode = LightRenderMode.ForcePixel;
             lampObject.transform.localPosition =
                 new Vector3(1.2f, 1f, -1.5f);
+
+            // A test must not depend on the open scene. Every
+            // enabled light of a loaded scene that is not part of
+            // the fixture and whose culling mask includes the
+            // subject layer turns off here and back on in teardown.
+            // The scene file stays untouched.
+            foreach (var sceneLight in UnityEngine.Object
+                .FindObjectsOfType<Light>())
+            {
+                if (!sceneLight.isActiveAndEnabled ||
+                    sceneLight.transform.IsChildOf(root.transform) ||
+                    (sceneLight.cullingMask &
+                     (1 << sphereRenderer.gameObject.layer)) == 0)
+                {
+                    continue;
+                }
+
+                sceneLight.enabled = false;
+                disabledForeignLights.Add(sceneLight);
+            }
         }
 
         [TearDown]
         public void TearDown()
         {
+            foreach (var sceneLight in disabledForeignLights)
+            {
+                if (sceneLight != null)
+                {
+                    sceneLight.enabled = true;
+                }
+            }
+
+            disabledForeignLights.Clear();
             if (camera != null)
             {
                 camera.targetTexture = null;
@@ -567,7 +603,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
                     Is.True,
                     "fixture precondition: an enabled light of a " +
                     "loaded scene whose culling mask includes the " +
-                    "subject layer sits outside the fixture. No " +
+                    "subject layer sits outside the fixture. The " +
+                    "isolation of SetUp should have disabled it. No " +
                     "foreign light may reach the subject.");
             }
 
