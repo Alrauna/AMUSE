@@ -45,7 +45,7 @@ namespace Alrauna.Amuse.Editor.Analysis
 
         /// <summary>
         /// The deterministic material key of the slot material. It
-        /// holds every non-texture material fact of the slot.
+        /// holds every material fact that can change a render.
         /// </summary>
         internal string MaterialKey { get; }
 

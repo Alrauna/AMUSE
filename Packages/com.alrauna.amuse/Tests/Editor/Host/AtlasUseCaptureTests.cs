@@ -1308,6 +1308,373 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 "one key");
         }
 
+        // --- the generic key tier ----------------------------------------
+
+        private const string ShaderWithADeclaredFoo = @"
+Shader ""Hidden/Alrauna/AmuseTests/AtlasUseCaptureFooDeclared""
+{
+    Properties
+    {
+        _Foo (""Foo"", Float) = 0
+    }
+    SubShader
+    {
+        Pass
+        {
+            CGPROGRAM
+            #pragma vertex vert_img
+            #pragma fragment frag
+            #include ""UnityCG.cginc""
+            float _Foo;
+            float4 frag(v2f_img image) : SV_Target
+            {
+                return float4(_Foo, 1, 0, 1);
+            }
+            ENDCG
+        }
+    }
+}";
+
+        private const string ShaderWithoutADeclaredFoo = @"
+Shader ""Hidden/Alrauna/AmuseTests/AtlasUseCaptureFooUndeclared""
+{
+    SubShader
+    {
+        Pass
+        {
+            CGPROGRAM
+            #pragma vertex vert_img
+            #pragma fragment frag
+            #include ""UnityCG.cginc""
+            float _Foo;
+            float4 frag(v2f_img image) : SV_Target
+            {
+                return float4(_Foo, 1, 0, 1);
+            }
+            ENDCG
+        }
+    }
+}";
+
+        [Test]
+        public void StaleSavedValueDoesNotReachAnUndeclaredUniform()
+        {
+            // Unity pins this fact on this editor. A saved value for
+            // a property that the shader no longer lists stays in
+            // the serialized data, but it never reaches the uniform
+            // that the shader code declares. The green channel is a
+            // shader constant. It proves that the pass ran, so the
+            // black red channel means the uniform read zero and not
+            // a broken pass. The key still counts the entry until a
+            // reviewed model declares it dead.
+            var withProperty = Track(ShaderUtil.CreateShaderAsset(
+                ShaderWithADeclaredFoo));
+            var withoutProperty = Track(ShaderUtil.CreateShaderAsset(
+                ShaderWithoutADeclaredFoo));
+            var material = Track(new Material(withProperty));
+            material.SetFloat("_Foo", 1f);
+            material.shader = withoutProperty;
+
+            Assert.That(
+                material.HasProperty("_Foo"), Is.False,
+                "fixture guard: the second shader must not declare _Foo");
+            var color = BlitColorOf(material);
+
+            Assert.That(color.r, Is.EqualTo(0f).Within(0.001f));
+            Assert.That(color.g, Is.EqualTo(1f).Within(0.001f));
+            Assert.That(color.b, Is.EqualTo(0f).Within(0.001f));
+        }
+
+        [Test]
+        public void DeclaredSavedValueReachesTheShader()
+        {
+            // The control of the test above. The same uniform on the
+            // shader that lists the property reads the saved value.
+            // The green channel is a shader constant. It proves that
+            // the pass ran.
+            var withProperty = Track(ShaderUtil.CreateShaderAsset(
+                ShaderWithADeclaredFoo));
+            var material = Track(new Material(withProperty));
+            material.SetFloat("_Foo", 1f);
+
+            Assert.That(
+                material.HasProperty("_Foo"), Is.True,
+                "fixture guard: the first shader must declare _Foo");
+            var color = BlitColorOf(material);
+
+            Assert.That(color.r, Is.EqualTo(1f).Within(0.001f));
+            Assert.That(color.g, Is.EqualTo(1f).Within(0.001f));
+            Assert.That(color.b, Is.EqualTo(0f).Within(0.001f));
+        }
+
+        [Test]
+        public void ExplicitQueueEqualToTheShaderQueueLeavesTheKey()
+        {
+            var plain = NewLilToonFixture();
+            var queued = NewLilToonFixture();
+            queued.Material.renderQueue =
+                queued.Material.shader.renderQueue;
+
+            var plainOutcome = CaptureLilToon(plain);
+            var queuedOutcome = CaptureLilToon(queued);
+
+            AssertAdmitted(plainOutcome);
+            AssertAdmitted(queuedOutcome);
+            Assert.That(
+                CustomRenderQueueOf(queued.Material),
+                Is.Not.EqualTo(CustomRenderQueueOf(plain.Material)),
+                "fixture guard: the explicit queue must be serialized");
+            Assert.That(
+                queuedOutcome.Use.MaterialKey,
+                Is.EqualTo(plainOutcome.Use.MaterialKey),
+                "an explicit queue that equals the shader queue is the " +
+                "same render state");
+        }
+
+        // --- Falsifier 1: a queue that differs from the shader queue
+        // changes rendering, so it must change the key. ---
+        [Test]
+        public void ExplicitQueueDifferentFromTheShaderQueueChangesTheKey()
+        {
+            var plain = NewLilToonFixture();
+            var queued = NewLilToonFixture();
+            queued.Material.renderQueue = 2001;
+
+            var plainOutcome = CaptureLilToon(plain);
+            var queuedOutcome = CaptureLilToon(queued);
+
+            AssertAdmitted(plainOutcome);
+            AssertAdmitted(queuedOutcome);
+            Assert.That(
+                queuedOutcome.Use.MaterialKey,
+                Is.Not.EqualTo(plainOutcome.Use.MaterialKey),
+                "a queue of 2001 draws after a queue of 2000");
+        }
+
+        [Test]
+        public void InvalidKeywordLeavesTheKey()
+        {
+            var plain = NewLilToonFixture();
+            var flagged = NewLilToonFixture();
+            flagged.Material.EnableKeyword("AMUSE_TEST_UNDECLARED");
+
+            var plainOutcome = CaptureLilToon(plain);
+            var flaggedOutcome = CaptureLilToon(flagged);
+
+            AssertAdmitted(plainOutcome);
+            AssertAdmitted(flaggedOutcome);
+            Assert.That(
+                InvalidKeywordsOf(flagged.Material),
+                Does.Contain("AMUSE_TEST_UNDECLARED"),
+                "fixture guard: the keyword must be serialized as " +
+                "invalid");
+            Assert.That(
+                InvalidKeywordsOf(plain.Material),
+                Is.Empty,
+                "fixture guard: the plain fixture holds no invalid " +
+                "keyword");
+            Assert.That(
+                flaggedOutcome.Use.MaterialKey,
+                Is.EqualTo(plainOutcome.Use.MaterialKey),
+                "a keyword that the shader does not declare cannot " +
+                "change rendering");
+        }
+
+        // --- Falsifier 2: no reviewed model has declared the stale
+        // entry dead, so it must still change the key. ---
+        [Test]
+        public void StaleSavedEntryStillChangesTheKeyWithoutAReviewedModel()
+        {
+            var root = Track(new GameObject("stale key root"));
+            var mainTexture = ImportMainTexture("stale key main");
+            var plain = NewAdmittedMaterial(mainTexture);
+            var stale = NewAdmittedMaterial(mainTexture);
+            WriteStaleFloat(stale, "_DetailMask", 1f);
+            var mesh = Track(NewTriangleMesh(2));
+            AddSkinnedRenderer(
+                root, "Body", mesh, new[] { plain, stale });
+
+            var outcomes = CaptureUses(root);
+
+            Assert.That(outcomes, Has.Count.EqualTo(2));
+            AssertAdmitted(outcomes[0]);
+            AssertAdmitted(outcomes[1]);
+            Assert.That(
+                outcomes[1].Use.MaterialKey,
+                Is.Not.EqualTo(outcomes[0].Use.MaterialKey),
+                "the Poiyomi row has no dead property set, so the " +
+                "stale saved entry still counts");
+        }
+
+        [Test]
+        public void SavedPropertyOrderDoesNotShiftLaterTokens()
+        {
+            var plain = NewLilToonFixture();
+            var reordered = NewLilToonFixture();
+            InsertStaleTexEnvBeforeMainTex(
+                reordered.Material, "_AmuseStaleBeforeMainTex");
+
+            var plainOutcome = CaptureLilToon(plain);
+            var reorderedOutcome = CaptureLilToon(reordered);
+
+            AssertAdmitted(plainOutcome);
+            AssertAdmitted(reorderedOutcome);
+            Assert.That(
+                SingleMainTexTokenOf(reorderedOutcome.Use.MaterialKey),
+                Is.EqualTo(SingleMainTexTokenOf(plainOutcome.Use.MaterialKey)),
+                "a stale entry before the member must not shift the " +
+                "token of the member");
+        }
+
+        private static Color BlitColorOf(Material material)
+        {
+            var renderTexture = RenderTexture.GetTemporary(
+                4, 4, 0, RenderTextureFormat.ARGB32);
+            var previous = RenderTexture.active;
+            Texture2D read = null;
+            try
+            {
+                Graphics.Blit(
+                    Texture2D.whiteTexture, renderTexture, material);
+                RenderTexture.active = renderTexture;
+                read = new Texture2D(4, 4, TextureFormat.RGBA32, false);
+                read.ReadPixels(new Rect(0, 0, 4, 4), 0, 0, false);
+                read.Apply(false, false);
+                return read.GetPixel(0, 0);
+            }
+            finally
+            {
+                RenderTexture.active = previous;
+                RenderTexture.ReleaseTemporary(renderTexture);
+                if (read != null)
+                {
+                    UnityEngine.Object.DestroyImmediate(read);
+                }
+            }
+        }
+
+        private static int CustomRenderQueueOf(Material material)
+        {
+            using var serialized = new SerializedObject(material);
+            return serialized.FindProperty("m_CustomRenderQueue").intValue;
+        }
+
+        private static List<string> InvalidKeywordsOf(Material material)
+        {
+            using var serialized = new SerializedObject(material);
+            var keywords = serialized.FindProperty("m_InvalidKeywords");
+            var names = new List<string>();
+            for (var index = 0; index < keywords.arraySize; index++)
+            {
+                names.Add(
+                    keywords.GetArrayElementAtIndex(index).stringValue);
+            }
+
+            return names;
+        }
+
+        private const string SavedTexEnvsPath =
+            "m_SavedProperties.m_TexEnvs";
+
+        private const string SavedFloatsPath =
+            "m_SavedProperties.m_Floats";
+
+        private static void WriteStaleFloat(
+            Material material, string name, float value)
+        {
+            using var serialized = new SerializedObject(material);
+            var floats = serialized.FindProperty(SavedFloatsPath);
+            var index = floats.arraySize;
+            floats.arraySize = index + 1;
+            var entry = floats.GetArrayElementAtIndex(index);
+            entry.FindPropertyRelative("first").stringValue = name;
+            entry.FindPropertyRelative("second").floatValue = value;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            using var verify = new SerializedObject(material);
+            var verified = verify.FindProperty(SavedFloatsPath);
+            Assert.That(
+                SavedFloatNamesOf(verified), Does.Contain(name),
+                "fixture guard: the stale float entry must persist");
+        }
+
+        private static List<string> SavedFloatNamesOf(
+            SerializedProperty floats)
+        {
+            var names = new List<string>();
+            for (var index = 0; index < floats.arraySize; index++)
+            {
+                names.Add(SavedNameOf(
+                    floats.GetArrayElementAtIndex(index)));
+            }
+
+            return names;
+        }
+
+        private static void InsertStaleTexEnvBeforeMainTex(
+            Material material, string name)
+        {
+            using var serialized = new SerializedObject(material);
+            var texEnvs = serialized.FindProperty(SavedTexEnvsPath);
+            var mainIndex = SavedTexEnvIndexOf(texEnvs, "_MainTex");
+            Assert.That(
+                mainIndex, Is.GreaterThanOrEqualTo(0),
+                "fixture precondition: the member entry must exist");
+            var staleIndex = texEnvs.arraySize;
+            texEnvs.arraySize = staleIndex + 1;
+            var entry = texEnvs.GetArrayElementAtIndex(staleIndex);
+            entry.FindPropertyRelative("first").stringValue = name;
+            entry.FindPropertyRelative("second.m_Texture")
+                .objectReferenceValue = null;
+            entry.FindPropertyRelative("second.m_Scale").vector2Value =
+                Vector2.one;
+            entry.FindPropertyRelative("second.m_Offset").vector2Value =
+                Vector2.zero;
+            texEnvs.MoveArrayElement(staleIndex, mainIndex);
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            using var verify = new SerializedObject(material);
+            var verified = verify.FindProperty(SavedTexEnvsPath);
+            Assert.That(
+                SavedTexEnvIndexOf(verified, name),
+                Is.LessThan(SavedTexEnvIndexOf(verified, "_MainTex")),
+                "fixture guard: the stale entry must sit before the " +
+                "member entry");
+        }
+
+        private static int SavedTexEnvIndexOf(
+            SerializedProperty texEnvs, string name)
+        {
+            for (var index = 0; index < texEnvs.arraySize; index++)
+            {
+                if (string.Equals(
+                        SavedNameOf(texEnvs.GetArrayElementAtIndex(index)),
+                        name,
+                        StringComparison.Ordinal))
+                {
+                    return index;
+                }
+            }
+
+            return -1;
+        }
+
+        private static string SavedNameOf(SerializedProperty element)
+        {
+            var first = element.FindPropertyRelative("first");
+            return first == null ? null : first.stringValue;
+        }
+
+        private static string SingleMainTexTokenOf(string key)
+        {
+            var tokens = key
+                .Split(new[] { ';' }, StringSplitOptions.RemoveEmptyEntries)
+                .Where(token => token.Contains("_MainTex="))
+                .ToList();
+            Assert.That(
+                tokens, Has.Count.EqualTo(1),
+                "the key must hold exactly one saved token for _MainTex");
+            return tokens[0];
+        }
+
         // --- lilToon rows ----------------------------------------------------
 
         private const string LilToonPackageShaderFolder =
@@ -1564,16 +1931,39 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             AssertRefused(outcome, AtlasUseRefusal.NonIdentityTransform);
         }
 
+        // --- Falsifier 9: the second emission layer is on, so its
+        // texture is live and no route lists it. A dead texture must
+        // admit, but a live unlisted texture must still refuse. ---
         [Test]
-        public void LilToonUnlistedTextureRefuses()
+        public void LiveUnlistedTextureStillRefuses()
         {
             var fixture = NewLilToonFixture();
             // The second emission layer has no companion route.
+            fixture.Material.SetFloat("_UseEmission2nd", 1f);
             fixture.Material.SetTexture("_Emission2ndMap", fixture.MainTexture);
 
             var outcome = SingleOutcome(CaptureUses(fixture.Root));
 
             AssertRefused(outcome, AtlasUseRefusal.UnlistedTexture);
+            Assert.That(outcome.Detail, Does.Contain("'_Emission2ndMap'"));
+        }
+
+        // A characterization test: a fallback name never joins a
+        // dead family, because the fallback swap ignores the row.
+        // The texture below sits in the dead reflection family, but
+        // it has no route. So it still refuses as unlisted.
+        [Test]
+        public void DeadFallbackTextureWithoutARouteStillRefuses()
+        {
+            var fixture = NewLilToonFixture();
+            fixture.Material.SetFloat("_UseReflection", 0f);
+            fixture.Material.SetTexture(
+                "_MetallicGlossMap", ImportRouteTexture("metallic gloss", 64));
+
+            var outcome = SingleOutcome(CaptureUses(fixture.Root));
+
+            AssertRefused(outcome, AtlasUseRefusal.UnlistedTexture);
+            Assert.That(outcome.Detail, Does.Contain("'_MetallicGlossMap'"));
         }
 
         [Test]
@@ -1692,8 +2082,13 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 "a neutral texture stays bound, so it must split groups");
         }
 
+        // --- Falsifier 11: the bump route is inert, but a VRChat
+        // fallback shader still reads the texture under the name
+        // _BumpMap. An implementation that drops the texture from
+        // the key would let one page carry the texture of the first
+        // member. ---
         [Test]
-        public void GatedOffBumpMapIsInertAndLeavesTheKey()
+        public void InertFallbackRouteTextureStillChangesTheKey()
         {
             var first = NewLilToonFixture();
             var second = NewLilToonFixture();
@@ -1712,8 +2107,38 @@ namespace Alrauna.Amuse.Tests.Editor.Host
             Assert.That(firstOutcome.Use.Companions, Is.Empty);
             Assert.That(
                 secondOutcome.Use.MaterialKey,
+                Is.Not.EqualTo(firstOutcome.Use.MaterialKey),
+                "the fallback shader shows the bump map, so the texture " +
+                "must split groups even behind an off switch");
+        }
+
+        // A characterization test: _AlphaMask is not a fallback
+        // name. An inert route without a fallback name still drops
+        // the texture from the key, so different textures share a
+        // page and the page binds none of them.
+        [Test]
+        public void InertNonFallbackRouteTextureLeavesTheKey()
+        {
+            var first = NewLilToonFixture();
+            var second = NewLilToonFixture();
+            first.Material.SetFloat("_AlphaMaskMode", 0f);
+            second.Material.SetFloat("_AlphaMaskMode", 0f);
+            first.Material.SetTexture(
+                "_AlphaMask", ImportRouteTexture("inert alpha first", 64));
+            second.Material.SetTexture(
+                "_AlphaMask", ImportRouteTexture("inert alpha second", 64));
+
+            var firstOutcome = CaptureLilToon(first);
+            var secondOutcome = CaptureLilToon(second);
+
+            AssertAdmitted(firstOutcome);
+            AssertAdmitted(secondOutcome);
+            Assert.That(firstOutcome.Use.Companions, Is.Empty);
+            Assert.That(
+                secondOutcome.Use.MaterialKey,
                 Is.EqualTo(firstOutcome.Use.MaterialKey),
-                "a texture behind an off switch must not split groups");
+                "an inert texture that no fallback shader reads must " +
+                "not split groups");
         }
 
         [Test]
@@ -1997,6 +2422,396 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 outcome.Use.SourceFormat,
                 Is.EqualTo(UnityEngine.Experimental.Rendering.GraphicsFormat
                     .RG_BC5_UNorm));
+        }
+
+        // --- the reviewed live value model (lilToon 2.4.1) ----------
+
+        [Test]
+        public void DeadFamilyValueLeavesTheKey()
+        {
+            var first = NewLilToonFixture();
+            var second = NewLilToonFixture();
+            first.Material.SetFloat("_UseRim", 0f);
+            second.Material.SetFloat("_UseRim", 0f);
+            second.Material.SetFloat("_RimBorder", 0.9f);
+
+            var firstOutcome = CaptureLilToon(first);
+            var secondOutcome = CaptureLilToon(second);
+
+            AssertAdmitted(firstOutcome);
+            AssertAdmitted(secondOutcome);
+            Assert.That(
+                secondOutcome.Use.MaterialKey,
+                Is.EqualTo(firstOutcome.Use.MaterialKey),
+                "a rim border behind an off switch must not split " +
+                "groups");
+        }
+
+        [Test]
+        public void DeadFamilyTextureAdmitsAndLeavesTheKey()
+        {
+            var plain = NewLilToonFixture();
+            var glitter = NewLilToonFixture();
+            glitter.Material.SetFloat("_UseGlitter", 0f);
+            glitter.Material.SetTexture(
+                "_GlitterShapeTex", ImportRouteTexture("dead glitter", 64));
+
+            var plainOutcome = CaptureLilToon(plain);
+            var glitterOutcome = CaptureLilToon(glitter);
+
+            AssertAdmitted(plainOutcome);
+            AssertAdmitted(glitterOutcome);
+            Assert.That(glitterOutcome.Use.Companions, Is.Empty);
+            Assert.That(
+                glitterOutcome.Use.MaterialKey,
+                Is.EqualTo(plainOutcome.Use.MaterialKey),
+                "a texture behind an off switch must neither refuse the " +
+                "slot nor split groups");
+        }
+
+        // --- Falsifier 3: the same rim color difference with the
+        // switch on changes rendering, so it must change the key. ---
+        [Test]
+        public void LiveFamilyValueChangesTheKey()
+        {
+            var first = NewLilToonFixture();
+            var second = NewLilToonFixture();
+            first.Material.SetFloat("_UseRim", 1f);
+            second.Material.SetFloat("_UseRim", 1f);
+            second.Material.SetFloat("_RimBorder", 0.9f);
+
+            var firstOutcome = CaptureLilToon(first);
+            var secondOutcome = CaptureLilToon(second);
+
+            AssertAdmitted(firstOutcome);
+            AssertAdmitted(secondOutcome);
+            Assert.That(
+                secondOutcome.Use.MaterialKey,
+                Is.Not.EqualTo(firstOutcome.Use.MaterialKey),
+                "a rim border behind an on switch must split groups");
+        }
+
+        // --- Falsifier 4: an animated switch may hold any value at
+        // runtime, so the family must stay live. The falsifier
+        // assigns no rim texture, because a rim texture would make
+        // the switch a route condition and refuse the slot. ---
+        [Test]
+        public void AnimatedSwitchKeepsTheFamilyLive()
+        {
+            var first = NewLilToonFixture();
+            var second = NewLilToonFixture();
+            foreach (var fixture in new[] { first, second })
+            {
+                fixture.Material.SetFloat("_UseRim", 0f);
+            }
+
+            second.Material.SetFloat("_RimBorder", 0.9f);
+            var clip = Track(new AnimationClip { name = "RimSwitch" });
+            AnimateScalar(clip, "Body", "material._UseRim");
+            var graph = GraphOf(first.Root, clip);
+            var secondGraph = GraphOf(second.Root, clip);
+
+            var firstOutcome =
+                SingleOutcome(CaptureUses(first.Root, graph));
+            var secondOutcome =
+                SingleOutcome(CaptureUses(second.Root, secondGraph));
+
+            AssertAdmitted(firstOutcome);
+            AssertAdmitted(secondOutcome);
+            Assert.That(
+                secondOutcome.Use.MaterialKey,
+                Is.Not.EqualTo(firstOutcome.Use.MaterialKey),
+                "an animated switch keeps the rim color live");
+        }
+
+        [Test]
+        public void PropertyBlockOnASwitchKeepsTheFamilyLive()
+        {
+            var first = NewLilToonFixture();
+            var second = NewLilToonFixture();
+            foreach (var fixture in new[] { first, second })
+            {
+                fixture.Material.SetFloat("_UseRim", 0f);
+                var block = new MaterialPropertyBlock();
+                block.SetFloat("_UseRim", 0f);
+                fixture.Renderer.SetPropertyBlock(block);
+            }
+
+            second.Material.SetFloat("_RimBorder", 0.9f);
+
+            var firstOutcome = CaptureLilToon(first);
+            var secondOutcome = CaptureLilToon(second);
+
+            AssertAdmitted(firstOutcome);
+            AssertAdmitted(secondOutcome);
+            Assert.That(
+                secondOutcome.Use.MaterialKey,
+                Is.Not.EqualTo(firstOutcome.Use.MaterialKey),
+                "a property block on the switch keeps the rim color live");
+        }
+
+        [Test]
+        public void StaleUndeclaredEntryLeavesTheKey()
+        {
+            var plain = NewLilToonFixture();
+            var stale = NewLilToonFixture();
+            WriteStaleFloat(stale.Material, "_AmuseTestStale", 1f);
+
+            var plainOutcome = CaptureLilToon(plain);
+            var staleOutcome = CaptureLilToon(stale);
+
+            AssertAdmitted(plainOutcome);
+            AssertAdmitted(staleOutcome);
+            Assert.That(
+                staleOutcome.Use.MaterialKey,
+                Is.EqualTo(plainOutcome.Use.MaterialKey),
+                "a saved float that no shader declares cannot change " +
+                "rendering");
+        }
+
+        // --- Falsifier 5: a stale float under a declared uniform
+        // name may reach the shader, so it must change the key. ---
+        [Test]
+        public void StaleEntryWithADeclaredUniformNameChangesTheKey()
+        {
+            const string name = "_MatCapMul";
+            var plain = NewLilToonFixture();
+            Assert.That(
+                plain.Material.HasProperty(name), Is.False,
+                "fixture precondition: the row must not declare the " +
+                "name as a property");
+            Assert.That(
+                LilToonLiveValues.Model.DeclaredUniforms,
+                Does.Contain(name),
+                "fixture precondition: the model must declare the " +
+                "uniform name");
+            var stale = NewLilToonFixture();
+            WriteStaleFloat(stale.Material, name, 1f);
+
+            var plainOutcome = CaptureLilToon(plain);
+            var staleOutcome = CaptureLilToon(stale);
+
+            AssertAdmitted(plainOutcome);
+            AssertAdmitted(staleOutcome);
+            Assert.That(
+                staleOutcome.Use.MaterialKey,
+                Is.Not.EqualTo(plainOutcome.Use.MaterialKey),
+                "a declared uniform name stays live even when the row " +
+                "has no such property");
+        }
+
+        // --- Falsifier 6: a VRChat fallback shader reads
+        // _Glossiness, so the saved float must change the key. ---
+        [Test]
+        public void FallbackNameAlwaysCounts()
+        {
+            var plain = NewLilToonFixture();
+            var stale = NewLilToonFixture();
+            WriteStaleFloat(stale.Material, "_Glossiness", 0.75f);
+
+            var plainOutcome = CaptureLilToon(plain);
+            var staleOutcome = CaptureLilToon(stale);
+
+            AssertAdmitted(plainOutcome);
+            AssertAdmitted(staleOutcome);
+            Assert.That(
+                staleOutcome.Use.MaterialKey,
+                Is.Not.EqualTo(plainOutcome.Use.MaterialKey),
+                "a fallback shader property name never counts as stale");
+        }
+
+        [Test]
+        public void NullFallbackTextureEqualsAnAbsentOne()
+        {
+            var plain = NewLilToonFixture();
+            var stale = NewLilToonFixture();
+            AppendStaleTexEnv(
+                stale.Material, "_DetailAlbedoMap", null,
+                new Vector2(2f, 2f), Vector2.zero);
+
+            var plainOutcome = CaptureLilToon(plain);
+            var staleOutcome = CaptureLilToon(stale);
+
+            AssertAdmitted(plainOutcome);
+            AssertAdmitted(staleOutcome);
+            Assert.That(
+                staleOutcome.Use.MaterialKey,
+                Is.EqualTo(plainOutcome.Use.MaterialKey),
+                "a fallback texture entry with no texture is the same " +
+                "state as no entry");
+        }
+
+        // --- Falsifier 7: a toon standard fallback tag makes VRChat
+        // swap the shader, so every value must stay in the key. ---
+        [Test]
+        public void ToonStandardFallbackTagKeepsEveryValue()
+        {
+            var first = NewLilToonFixture();
+            var second = NewLilToonFixture();
+            foreach (var fixture in new[] { first, second })
+            {
+                fixture.Material.SetFloat("_UseRim", 0f);
+                fixture.Material.SetOverrideTag(
+                    "VRCFallback", "toonstandard");
+            }
+
+            second.Material.SetFloat("_RimBorder", 0.9f);
+
+            var firstOutcome = CaptureLilToon(first);
+            var secondOutcome = CaptureLilToon(second);
+
+            AssertAdmitted(firstOutcome);
+            AssertAdmitted(secondOutcome);
+            Assert.That(
+                secondOutcome.Use.MaterialKey,
+                Is.Not.EqualTo(firstOutcome.Use.MaterialKey),
+                "the fallback shader reads the rim color, so the tag " +
+                "keeps every value live");
+        }
+
+        // --- Falsifier 12: a toon standard fallback shader copies
+        // every same-named keyword, so an invalid keyword must
+        // change the key. ---
+        [Test]
+        public void ToonStandardFallbackTagKeepsInvalidKeywords()
+        {
+            var plain = NewLilToonFixture();
+            var flagged = NewLilToonFixture();
+            foreach (var fixture in new[] { plain, flagged })
+            {
+                fixture.Material.SetOverrideTag(
+                    "VRCFallback", "toonstandard");
+            }
+
+            flagged.Material.EnableKeyword("AMUSE_TEST_UNDECLARED");
+
+            var plainOutcome = CaptureLilToon(plain);
+            var flaggedOutcome = CaptureLilToon(flagged);
+
+            AssertAdmitted(plainOutcome);
+            AssertAdmitted(flaggedOutcome);
+            Assert.That(
+                InvalidKeywordsOf(flagged.Material),
+                Does.Contain("AMUSE_TEST_UNDECLARED"),
+                "fixture guard: the keyword must be serialized as " +
+                "invalid");
+            Assert.That(
+                InvalidKeywordsOf(plain.Material),
+                Is.Empty,
+                "fixture guard: the plain fixture holds no invalid " +
+                "keyword");
+            Assert.That(
+                flaggedOutcome.Use.MaterialKey,
+                Is.Not.EqualTo(plainOutcome.Use.MaterialKey),
+                "the fallback shader copies the keyword, so the tag " +
+                "keeps every keyword counted");
+        }
+
+        [Test]
+        public void NaNSwitchKeepsTheFamilyLive()
+        {
+            // The source compares a switch with not equal to zero,
+            // and NaN is not zero. The family stays live.
+            var first = NewLilToonFixture();
+            var second = NewLilToonFixture();
+            first.Material.SetFloat("_UseRim", float.NaN);
+            second.Material.SetFloat("_UseRim", float.NaN);
+            second.Material.SetFloat("_RimBorder", 0.9f);
+
+            var firstOutcome = CaptureLilToon(first);
+            var secondOutcome = CaptureLilToon(second);
+
+            AssertAdmitted(firstOutcome);
+            AssertAdmitted(secondOutcome);
+            Assert.That(
+                secondOutcome.Use.MaterialKey,
+                Is.Not.EqualTo(firstOutcome.Use.MaterialKey),
+                "a NaN switch counts as on, so the rim border stays " +
+                "live");
+        }
+
+        [Test]
+        public void OutlineValuesChangeTheKeyOnlyOnOutlineRows()
+        {
+            var plain = NewLilToonFixture();
+            var plainWide = NewLilToonFixture();
+            plainWide.Material.SetFloat("_OutlineWidth", 0.9f);
+            var outlineRow = NewLilToonFixture(
+                LoadInstalledLilToonShader(
+                    LilToonSourceAttestation.OutlineShaderGuid));
+            var outlineRowWide = NewLilToonFixture(
+                LoadInstalledLilToonShader(
+                    LilToonSourceAttestation.OutlineShaderGuid));
+            outlineRowWide.Material.SetFloat("_OutlineWidth", 0.9f);
+
+            var plainOutcome = CaptureLilToon(plain);
+            var plainWideOutcome = CaptureLilToon(plainWide);
+            var outlineOutcome = CaptureLilToon(outlineRow);
+            var outlineWideOutcome = CaptureLilToon(outlineRowWide);
+
+            AssertAdmitted(plainOutcome);
+            AssertAdmitted(plainWideOutcome);
+            AssertAdmitted(outlineOutcome);
+            AssertAdmitted(outlineWideOutcome);
+            Assert.That(
+                plainWideOutcome.Use.MaterialKey,
+                Is.EqualTo(plainOutcome.Use.MaterialKey),
+                "a row without an outline pass never reads the width");
+            Assert.That(
+                outlineWideOutcome.Use.MaterialKey,
+                Is.Not.EqualTo(outlineOutcome.Use.MaterialKey),
+                "an outline row reads the width in its vertex code");
+        }
+
+        // --- Falsifier 10: a fallback name stays live even inside a
+        // dead family, because the fallback swap ignores the row. ---
+        [Test]
+        public void FallbackNameInADeadFamilyStillCounts()
+        {
+            var first = NewLilToonFixture();
+            var second = NewLilToonFixture();
+            first.Material.SetFloat("_UseReflection", 0f);
+            second.Material.SetFloat("_UseReflection", 0f);
+            second.Material.SetFloat("_Metallic", 0.8f);
+
+            var firstOutcome = CaptureLilToon(first);
+            var secondOutcome = CaptureLilToon(second);
+
+            AssertAdmitted(firstOutcome);
+            AssertAdmitted(secondOutcome);
+            Assert.That(
+                secondOutcome.Use.MaterialKey,
+                Is.Not.EqualTo(firstOutcome.Use.MaterialKey),
+                "a fallback shader reads _Metallic, so it stays live " +
+                "inside the dead reflection family");
+        }
+
+        private static void AppendStaleTexEnv(
+            Material material,
+            string name,
+            Texture texture,
+            Vector2 scale,
+            Vector2 offset)
+        {
+            using var serialized = new SerializedObject(material);
+            var texEnvs = serialized.FindProperty(SavedTexEnvsPath);
+            var index = texEnvs.arraySize;
+            texEnvs.arraySize = index + 1;
+            var entry = texEnvs.GetArrayElementAtIndex(index);
+            entry.FindPropertyRelative("first").stringValue = name;
+            entry.FindPropertyRelative("second.m_Texture")
+                .objectReferenceValue = texture;
+            entry.FindPropertyRelative("second.m_Scale").vector2Value =
+                scale;
+            entry.FindPropertyRelative("second.m_Offset").vector2Value =
+                offset;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+            using var verify = new SerializedObject(material);
+            var verified = verify.FindProperty(SavedTexEnvsPath);
+            Assert.That(
+                SavedTexEnvIndexOf(verified, name),
+                Is.GreaterThanOrEqualTo(0),
+                "fixture guard: the stale texture entry must persist");
         }
     }
 }

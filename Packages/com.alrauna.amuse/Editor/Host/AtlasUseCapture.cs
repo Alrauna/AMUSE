@@ -104,10 +104,15 @@ namespace Alrauna.Amuse.Editor.Host
         private const string MeshPropertyName = "m_Mesh";
         private const string SlotCountPropertyName =
             "m_Materials.Array.size";
-        private const string TexEnvStringNameSuffix = ".first";
-        private const string TexEnvStructNameSuffix = ".first.name";
-        private const string TexEnvTextureSuffix = ".second.m_Texture";
         private const string MaterialNamePath = "m_Name";
+        private const string CustomRenderQueuePath =
+            "m_CustomRenderQueue";
+        private const string InvalidKeywordsPath = "m_InvalidKeywords";
+        private const string SavedPropertiesPath = "m_SavedProperties";
+        private const string TexEnvsSectionName = "m_TexEnvs";
+        private const string IntsSectionName = "m_Ints";
+        private const string FloatsSectionName = "m_Floats";
+        private const string ColorsSectionName = "m_Colors";
 
         /// <summary>
         /// The page formats of Milestone 2. Each is admitted in its
@@ -326,8 +331,30 @@ namespace Alrauna.Amuse.Editor.Host
                 return;
             }
 
+            // A model exists only on a reviewed row. A toon standard
+            // fallback tag swaps the shader at runtime, so every value
+            // and every keyword counts and no stale name is skipped
+            // there. The dead set feeds the route walk, so it is
+            // computed before the walk.
+            var liveValues = table.LiveValues;
+            var deadProperties = NoDeadProperties;
+            var toonStandardFallback = IsToonStandardFallback(material);
+            var skipStaleSavedNames = false;
+            if (liveValues != null)
+            {
+                skipStaleSavedNames = !toonStandardFallback;
+                if (skipStaleSavedNames)
+                {
+                    deadProperties = liveValues.DeadProperties(
+                        material,
+                        shaderRowName,
+                        SwitchIsDynamicOf(renderer, slotIndex, animation));
+                }
+            }
+
             var outlineRow = table.HasOutlinePass(shaderRowName);
-            var resolution = ResolveRouteTextures(material, table, outlineRow);
+            var resolution = ResolveRouteTextures(
+                material, table, outlineRow, deadProperties);
             if (resolution.Unlisted.Count > 0)
             {
                 refusal = AtlasUseRefusal.UnlistedTexture;
@@ -507,7 +534,13 @@ namespace Alrauna.Amuse.Editor.Host
                 texture2D.mipmapCount,
                 sampler,
                 uvRect,
-                MaterialKeyOf(material, resolution.KeySkipped),
+                MaterialKeyOf(
+                    material,
+                    resolution.KeySkipped,
+                    deadProperties,
+                    liveValues,
+                    skipStaleSavedNames,
+                    toonStandardFallback),
                 animation.AnimatedMaterialPropertyNames,
                 captureOrder,
                 companions,
@@ -1301,8 +1334,9 @@ namespace Alrauna.Amuse.Editor.Host
 
             /// <summary>
             /// The texture properties the material key records as
-            /// <c>member</c>: the member, the member copies, the inert
-            /// routes, and the assigned UV0 routes.
+            /// <c>member</c>: the member, the member copies, the dead
+            /// textures, the inert routes that no fallback shader
+            /// reads, and the assigned UV0 routes.
             /// </summary>
             internal readonly HashSet<string> KeySkipped =
                 new HashSet<string>(StringComparer.Ordinal);
@@ -1331,19 +1365,23 @@ namespace Alrauna.Amuse.Editor.Host
         /// <summary>
         /// Sorts every texture property of the shader by its route.
         /// The enumeration walks the shader properties, so a texture
-        /// that reachable code samples can never be missed. An assigned
-        /// texture that is not the member, a member copy, neutral, or a
-        /// companion route is unlisted. A companion route asks the
-        /// material how it uses the texture. An inert texture leaves
-        /// the key. A UV0 texture leaves the key and waits for the
-        /// companion checks. A null texture on a UV0 route stays in the
-        /// key, so a material without the texture never joins a group
-        /// whose page material binds one.
+        /// that reachable code samples can never be missed. A dead
+        /// texture that is not the member, a member copy, neutral, or
+        /// a companion route leaves the key instead of refusing the
+        /// slot, because no shader code samples it. Any other assigned
+        /// texture without a route is unlisted. A companion route asks
+        /// the material how it uses the texture. An inert texture
+        /// leaves the key, unless a VRChat fallback shader can read
+        /// the texture under its Standard name. A UV0 texture leaves
+        /// the key and waits for the companion checks. A null texture
+        /// on a UV0 route stays in the key, so a material without the
+        /// texture never joins a group whose page material binds one.
         /// </summary>
         private static AtlasRouteResolution ResolveRouteTextures(
             Material material,
             AtlasRouteTable table,
-            bool outlineRow)
+            bool outlineRow,
+            ISet<string> deadProperties)
         {
             var resolution = new AtlasRouteResolution();
             var shader = material.shader;
@@ -1382,7 +1420,14 @@ namespace Alrauna.Amuse.Editor.Host
                 {
                     if (texture != null)
                     {
-                        resolution.Unlisted.Add((name, texture));
+                        if (deadProperties.Contains(name))
+                        {
+                            resolution.KeySkipped.Add(name);
+                        }
+                        else
+                        {
+                            resolution.Unlisted.Add((name, texture));
+                        }
                     }
 
                     continue;
@@ -1403,7 +1448,15 @@ namespace Alrauna.Amuse.Editor.Host
                 switch (route.UseOf(material, outlineRow))
                 {
                     case AtlasRouteUse.Inert:
-                        resolution.KeySkipped.Add(name);
+                        // A fallback shader reads the texture under
+                        // its Standard name even behind an off switch,
+                        // so the texture stays keyed and still splits
+                        // groups.
+                        if (!FallbackPropertyNames.Contains(name))
+                        {
+                            resolution.KeySkipped.Add(name);
+                        }
+
                         break;
                     case AtlasRouteUse.OtherCoordinates:
                         break;
@@ -1516,44 +1569,153 @@ namespace Alrauna.Amuse.Editor.Host
                    block.HasFloat(propertyName);
         }
 
+        /// <summary>
+        /// Whether a family switch may hold any value at runtime. The
+        /// rule reads the same facts as the refusal gates: an animated
+        /// material binding with the shared prefix rule, and the two
+        /// renderer property blocks with the shared block lookup.
+        /// </summary>
+        private static Func<string, bool> SwitchIsDynamicOf(
+            Renderer renderer,
+            int slotIndex,
+            RendererAnimationFacts animation)
+        {
+            // The blocks are read on the first query only, so a row
+            // whose families are all on never pays for them.
+            MaterialPropertyBlock rendererWide = null;
+            MaterialPropertyBlock slotBlock = null;
+            var factsRead = false;
+            return switchProperty =>
+            {
+                if (!factsRead)
+                {
+                    rendererWide = new MaterialPropertyBlock();
+                    renderer.GetPropertyBlock(rendererWide);
+                    slotBlock = new MaterialPropertyBlock();
+                    renderer.GetPropertyBlock(slotBlock, slotIndex);
+                    factsRead = true;
+                }
+
+                foreach (var animated in animation
+                    .AnimatedMaterialPropertyNames)
+                {
+                    if (animated.StartsWith(
+                            switchProperty,
+                            StringComparison.Ordinal))
+                    {
+                        return true;
+                    }
+                }
+
+                return BlockNamesRoute(rendererWide, switchProperty) ||
+                       BlockNamesRoute(slotBlock, switchProperty);
+            };
+        }
+        /// <summary>
+        /// Whether the material carries a VRCFallback tag that names
+        /// the toon standard shader. VRChat swaps the shader then, so
+        /// the fallback shader reads values that the row never reads.
+        /// </summary>
+        private static bool IsToonStandardFallback(Material material)
+        {
+            return material
+                .GetTag("VRCFallback", false, string.Empty)
+                .StartsWith(
+                    "toonstandard",
+                    StringComparison.OrdinalIgnoreCase);
+        }
+
         // --- the material key ----------------------------------------------
 
         /// <summary>
         /// The material key of one use. The key is a deterministic
-        /// string from one <see cref="SerializedObject"/> walk of the
-        /// material. The walk skips the asset name, because two uses of
-        /// the same state under different names must share a page. It
-        /// records each skipped texture reference as <c>member</c>: the
-        /// member and every UV0 companion move into pages that serve
-        /// every source of the group, and an inert or member copy
-        /// texture is never sampled. Every float enters as its exact
-        /// bits and every other object reference as its instance id, so
-        /// near-equal states stay distinct. The key is build-local. No
-        /// consumer stores it.
+        /// string from one <see cref="SerializedObject"/> walk of
+        /// the material, one token for the effective render queue,
+        /// and the saved properties keyed by name. The walk skips
+        /// the asset name, because two uses of the same state under
+        /// different names must share a page. It skips the custom
+        /// render queue and the invalid keywords, because the queue
+        /// token holds the effective queue and a keyword the shader
+        /// does not declare cannot change rendering. A toon standard
+        /// fallback tag makes VRChat copy same-named keywords, so the
+        /// walk keeps the invalid keywords there. It records each
+        /// skipped texture reference as <c>member</c>: the member and
+        /// every UV0 companion move into pages that serve every
+        /// source of the group, and an inert or member copy texture
+        /// is never sampled. When a live value model covers the row,
+        /// the walk also drops each dead family value, each stale
+        /// saved name that no shader declares, and each fallback
+        /// texture entry with no texture. Every float enters as its
+        /// exact bits and every other object reference as its
+        /// instance id, so near-equal states stay distinct. The key
+        /// is build-local. No consumer stores it.
         /// </summary>
         private static string MaterialKeyOf(
             Material material,
-            ISet<string> skippedTextureProperties)
+            ISet<string> skippedTextureProperties,
+            ISet<string> deadProperties,
+            AtlasLiveValueModel liveValues,
+            bool skipStaleSavedNames,
+            bool keepInvalidKeywords)
         {
-            return new MaterialKeyWalker(skippedTextureProperties)
+            return new MaterialKeyWalker(
+                    skippedTextureProperties,
+                    deadProperties,
+                    liveValues,
+                    skipStaleSavedNames,
+                    keepInvalidKeywords)
                 .Walk(material);
         }
+
+        /// <summary>
+        /// The dead set for every row without a reviewed model, so
+        /// every saved entry still counts in the key.
+        /// </summary>
+        private static readonly ISet<string> NoDeadProperties =
+            new HashSet<string>();
+
+        /// <summary>
+        /// The fallback names as a set, because the walk queries one
+        /// saved name at a time.
+        /// </summary>
+        private static readonly HashSet<string> FallbackPropertyNames =
+            new HashSet<string>(Semantics.VRChatFallbackProperties.Names);
 
         private sealed class MaterialKeyWalker
         {
             private readonly ISet<string> skippedTextureProperties;
+            private readonly ISet<string> deadProperties;
+            private readonly AtlasLiveValueModel liveValues;
+            private readonly bool skipStaleSavedNames;
+            private readonly bool keepInvalidKeywords;
+            private readonly HashSet<string> shaderPropertyNames =
+                new HashSet<string>();
             private readonly StringBuilder builder =
                 new StringBuilder(4096);
-            private readonly Dictionary<string, string> texEnvNames =
-                new Dictionary<string, string>(StringComparer.Ordinal);
 
-            internal MaterialKeyWalker(ISet<string> skippedTextureProperties)
+            internal MaterialKeyWalker(
+                ISet<string> skippedTextureProperties,
+                ISet<string> deadProperties,
+                AtlasLiveValueModel liveValues,
+                bool skipStaleSavedNames,
+                bool keepInvalidKeywords)
             {
                 this.skippedTextureProperties = skippedTextureProperties;
+                this.deadProperties = deadProperties;
+                this.liveValues = liveValues;
+                this.skipStaleSavedNames = skipStaleSavedNames;
+                this.keepInvalidKeywords = keepInvalidKeywords;
             }
 
             internal string Walk(Material material)
             {
+                // The names feed the stale rule only, so a walk
+                // without that rule skips the shader query.
+                if (skipStaleSavedNames)
+                {
+                    CollectShaderPropertyNames(material);
+                }
+
                 using var serialized = new SerializedObject(material);
                 var property = serialized.GetIterator();
                 var enterChildren = true;
@@ -1562,15 +1724,60 @@ namespace Alrauna.Amuse.Editor.Host
                     enterChildren = Visit(property);
                 }
 
+                AppendEffectiveQueue(material);
+                AppendSavedProperties(serialized);
                 return builder.ToString();
+            }
+
+            /// <summary>
+            /// The property names of the row shader. A saved name
+            /// that the row declares is live, whatever any model
+            /// says about other rows.
+            /// </summary>
+            private void CollectShaderPropertyNames(Material material)
+            {
+                var shader = material.shader;
+                if (shader == null)
+                {
+                    return;
+                }
+
+                var count = shader.GetPropertyCount();
+                for (var index = 0; index < count; index++)
+                {
+                    shaderPropertyNames.Add(shader.GetPropertyName(index));
+                }
+            }
+
+            /// <summary>
+            /// Whether one path names a subtree that the generic walk
+            /// must skip. The name is identity. The custom queue
+            /// enters as the effective queue. An undeclared keyword
+            /// cannot change rendering, unless a toon standard
+            /// fallback tag makes VRChat copy it to the fallback
+            /// shader. The saved properties enter by name after the
+            /// walk.
+            /// </summary>
+            private bool IsSkippedSubtree(string path)
+            {
+                return string.Equals(
+                           path, MaterialNamePath,
+                           StringComparison.Ordinal) ||
+                       string.Equals(
+                           path, CustomRenderQueuePath,
+                           StringComparison.Ordinal) ||
+                       (!keepInvalidKeywords &&
+                           string.Equals(
+                               path, InvalidKeywordsPath,
+                               StringComparison.Ordinal)) ||
+                       string.Equals(
+                           path, SavedPropertiesPath,
+                           StringComparison.Ordinal);
             }
 
             private bool Visit(SerializedProperty property)
             {
-                if (string.Equals(
-                        property.propertyPath,
-                        MaterialNamePath,
-                        StringComparison.Ordinal))
+                if (IsSkippedSubtree(property.propertyPath))
                 {
                     return false;
                 }
@@ -1582,24 +1789,14 @@ namespace Alrauna.Amuse.Editor.Host
                         return true;
                     case SerializedPropertyType.ObjectReference:
                         builder.Append(property.propertyPath).Append('=');
-                        if (IsMemberTextureReference(property.propertyPath))
-                        {
-                            builder.Append("member");
-                        }
-                        else
-                        {
-                            var reference = property.objectReferenceValue;
-                            builder.Append(
-                                reference == null
-                                    ? "null"
-                                    : "o" + reference.GetInstanceID());
-                        }
-
+                        var reference = property.objectReferenceValue;
+                        builder.Append(
+                            reference == null
+                                ? "null"
+                                : "o" + reference.GetInstanceID());
                         builder.Append(';');
                         return false;
                     case SerializedPropertyType.String:
-                        RecordTexEnvName(
-                            property.propertyPath, property.stringValue);
                         builder.Append(property.propertyPath)
                             .Append("=s")
                             .Append(property.stringValue ?? string.Empty)
@@ -1690,63 +1887,279 @@ namespace Alrauna.Amuse.Editor.Host
                 }
             }
 
-            private void AppendPath(SerializedProperty property)
+            private void AppendEffectiveQueue(Material material)
             {
-                builder.Append(property.propertyPath).Append('=');
+                // The shader reference is already in the key, so the
+                // effective queue alone separates two page materials.
+                // An explicit queue that equals the shader queue is
+                // the same render state as no explicit queue.
+                builder.Append("queue=i")
+                    .Append(material.renderQueue)
+                    .Append(';');
             }
 
             /// <summary>
-            /// Records the property name of one texture environment
-            /// element. The serialized pair stores the name either as
-            /// a plain string under <c>.first</c> or, in the struct
-            /// shape, as <c>.first.name</c>. Both shapes are recorded
-            /// under the element path prefix, so the texture reference
-            /// of that element can be matched later.
+            /// Appends the saved properties by name in four fixed
+            /// sections. The saved array order follows the property
+            /// order of earlier shaders, so keying by name keeps one
+            /// key for one render state when a stale entry shifts
+            /// the arrays. A dead property adds no token. A section
+            /// that Unity does not write adds nothing. A direct
+            /// child with an unknown name refuses the walk, because
+            /// an unknown shape may hold a live value.
             /// </summary>
-            private void RecordTexEnvName(string path, string name)
+            private void AppendSavedProperties(
+                SerializedObject serialized)
             {
-                if (path.EndsWith(
-                        TexEnvStringNameSuffix, StringComparison.Ordinal))
+                var saved = serialized.FindProperty(SavedPropertiesPath);
+                if (saved == null)
                 {
-                    texEnvNames[PathPrefix(
-                        path, TexEnvStringNameSuffix.Length)] =
-                        name ?? string.Empty;
+                    return;
                 }
-                else if (path.EndsWith(
-                             TexEnvStructNameSuffix,
-                             StringComparison.Ordinal))
+
+                SerializedProperty texEnvs = null;
+                SerializedProperty ints = null;
+                SerializedProperty floats = null;
+                SerializedProperty colors = null;
+                var child = saved.Copy();
+                var end = child.GetEndProperty();
+                var enterChildren = true;
+                while (child.Next(enterChildren) &&
+                       !SerializedProperty.EqualContents(child, end))
                 {
-                    texEnvNames[PathPrefix(
-                        path, TexEnvStructNameSuffix.Length)] =
-                        name ?? string.Empty;
+                    enterChildren = false;
+                    if (string.Equals(
+                            child.name, TexEnvsSectionName,
+                            StringComparison.Ordinal))
+                    {
+                        texEnvs = child.Copy();
+                    }
+                    else if (string.Equals(
+                                 child.name, IntsSectionName,
+                                 StringComparison.Ordinal))
+                    {
+                        ints = child.Copy();
+                    }
+                    else if (string.Equals(
+                                 child.name, FloatsSectionName,
+                                 StringComparison.Ordinal))
+                    {
+                        floats = child.Copy();
+                    }
+                    else if (string.Equals(
+                                 child.name, ColorsSectionName,
+                                 StringComparison.Ordinal))
+                    {
+                        colors = child.Copy();
+                    }
+                    else
+                    {
+                        throw new InvalidOperationException(
+                            "The material key walk met the unknown " +
+                            "saved properties section '" + child.name +
+                            "' at " + child.propertyPath + ".");
+                    }
                 }
+
+                AppendNamedSection(texEnvs, "t:", TexEnvValueOf, true);
+                AppendNamedSection(ints, "i:", IntValueOf, false);
+                AppendNamedSection(floats, "f:", FloatValueOf, false);
+                AppendNamedSection(colors, "c:", ColorValueOf, false);
             }
 
             /// <summary>
-            /// Whether one object reference property is the texture
-            /// reference of a skipped texture environment. The element
-            /// prefix of the reference path names the element, and the
-            /// recorded name must be in the skipped set.
+            /// Appends one saved section by name. The walk drops a
+            /// dead family value, a stale saved name, and a fallback
+            /// texture entry that holds no texture. A stale name is
+            /// one that the row does not declare, that no reviewed
+            /// uniform list declares, and that no VRChat fallback
+            /// shader reads. Such a value cannot reach a shader.
             /// </summary>
-            private bool IsMemberTextureReference(string path)
+            private void AppendNamedSection(
+                SerializedProperty array,
+                string prefix,
+                Func<string, SerializedProperty, string> formatValue,
+                bool texEnvSection)
             {
-                if (!path.EndsWith(
-                        TexEnvTextureSuffix, StringComparison.Ordinal))
+                if (array == null)
+                {
+                    return;
+                }
+
+                var tokens = new List<(string Name, string Value)>();
+                for (var index = 0; index < array.arraySize; index++)
+                {
+                    var element = array.GetArrayElementAtIndex(index);
+                    var name = SavedNameOf(element);
+                    if (deadProperties.Contains(name))
+                    {
+                        continue;
+                    }
+
+                    if (skipStaleSavedNames && IsStaleSavedName(name))
+                    {
+                        continue;
+                    }
+
+                    if (texEnvSection && HoldsNoFallbackTexture(name, element))
+                    {
+                        continue;
+                    }
+
+                    tokens.Add((name, formatValue(name, element)));
+                }
+
+                tokens.Sort((left, right) =>
+                {
+                    var byName = string.Compare(
+                        left.Name, right.Name, StringComparison.Ordinal);
+                    return byName != 0
+                        ? byName
+                        : string.Compare(
+                            left.Value, right.Value,
+                            StringComparison.Ordinal);
+                });
+                foreach (var token in tokens)
+                {
+                    builder.Append(prefix)
+                        .Append(token.Name)
+                        .Append('=')
+                        .Append(token.Value)
+                        .Append(';');
+                }
+            }
+
+            private bool IsStaleSavedName(string name)
+            {
+                return !shaderPropertyNames.Contains(name) &&
+                       !liveValues.Declares(name) &&
+                       !FallbackPropertyNames.Contains(name);
+            }
+
+            /// <summary>
+            /// Whether the entry names a fallback texture property
+            /// and holds no texture. A missing entry and a null entry
+            /// are the same material state, so the pair adds no
+            /// token. The rule needs a model, because only a
+            /// reviewed row knows the fallback names.
+            /// </summary>
+            private bool HoldsNoFallbackTexture(
+                string name, SerializedProperty element)
+            {
+                if (liveValues == null ||
+                    !FallbackPropertyNames.Contains(name))
                 {
                     return false;
                 }
 
-                return texEnvNames.TryGetValue(
-                    PathPrefix(path, TexEnvTextureSuffix.Length),
-                    out var elementName) &&
-                    skippedTextureProperties.Contains(elementName);
+                var texture = element
+                    .FindPropertyRelative("second")
+                    .FindPropertyRelative("m_Texture")
+                    .objectReferenceValue;
+                return texture == null;
             }
 
-            private static string PathPrefix(
-                string path,
-                int suffixLength)
+            private string TexEnvValueOf(
+                string name, SerializedProperty element)
             {
-                return path.Substring(0, path.Length - suffixLength);
+                var second = element.FindPropertyRelative("second");
+                var texture = second
+                    .FindPropertyRelative("m_Texture")
+                    .objectReferenceValue;
+                var scale = second
+                    .FindPropertyRelative("m_Scale").vector2Value;
+                var offset = second
+                    .FindPropertyRelative("m_Offset").vector2Value;
+                return TextureIdentityOf(name, texture) +
+                       "," + Bits(scale.x) + "," + Bits(scale.y) +
+                       "," + Bits(offset.x) + "," + Bits(offset.y);
+            }
+
+            /// <summary>
+            /// The texture identity of one saved pair. A skipped
+            /// texture is <c>member</c>, assigned or not, because the
+            /// page serves every source of the group.
+            /// </summary>
+            private string TextureIdentityOf(
+                string name, UnityEngine.Object texture)
+            {
+                if (skippedTextureProperties.Contains(name))
+                {
+                    return "member";
+                }
+
+                return texture == null
+                    ? "null"
+                    : "o" + texture.GetInstanceID();
+            }
+
+            private static string IntValueOf(
+                string name, SerializedProperty element)
+            {
+                return element.FindPropertyRelative("second")
+                    .intValue.ToString();
+            }
+
+            private static string FloatValueOf(
+                string name, SerializedProperty element)
+            {
+                return Bits(element.FindPropertyRelative("second")
+                    .floatValue);
+            }
+
+            private static string ColorValueOf(
+                string name, SerializedProperty element)
+            {
+                var color = element.FindPropertyRelative("second")
+                    .colorValue;
+                return Bits(color.r) + "," + Bits(color.g) + "," +
+                       Bits(color.b) + "," + Bits(color.a);
+            }
+
+            /// <summary>
+            /// The saved property name of one array element. Unity
+            /// stores the pair name either as a plain string under
+            /// <c>first</c> or as <c>first.name</c> in the struct
+            /// shape. An element without a readable name refuses
+            /// the walk, because an unknown shape may hold a live
+            /// value.
+            /// </summary>
+            private static string SavedNameOf(
+                SerializedProperty element)
+            {
+                var first = element.FindPropertyRelative("first");
+                string name = null;
+                if (first != null &&
+                    first.propertyType ==
+                        SerializedPropertyType.String)
+                {
+                    name = first.stringValue;
+                }
+                else if (first != null)
+                {
+                    var inner = first.FindPropertyRelative("name");
+                    if (inner != null &&
+                        inner.propertyType ==
+                            SerializedPropertyType.String)
+                    {
+                        name = inner.stringValue;
+                    }
+                }
+
+                if (name == null)
+                {
+                    throw new InvalidOperationException(
+                        "The material key walk met a saved property " +
+                        "element without a readable name at " +
+                        element.propertyPath + ".");
+                }
+
+                return name;
+            }
+
+            private void AppendPath(SerializedProperty property)
+            {
+                builder.Append(property.propertyPath).Append('=');
             }
 
             private static string Bits(float value)
