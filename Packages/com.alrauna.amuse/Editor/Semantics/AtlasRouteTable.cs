@@ -77,6 +77,23 @@ namespace Alrauna.Amuse.Editor.Semantics
             "_VertexGlitchMap",
         };
 
+        // The reviewed companion routes, built once. The field sits
+        // above the tables, because the reviewed table initializer
+        // reads it. Its build touches only the group classes, so the
+        // initialization order stays safe.
+        private static readonly AtlasCompanionRoute[]
+            PoiyomiReviewedRoutes = CollectPoiyomiCompanionRoutes();
+
+        private static AtlasCompanionRoute[] CollectPoiyomiCompanionRoutes()
+        {
+            var routes = new List<AtlasCompanionRoute>();
+            routes.AddRange(PoiyomiAlwaysOnRoutes.Routes());
+            routes.AddRange(PoiyomiLightingRoutes.Routes());
+            routes.AddRange(PoiyomiMatcapRimEmissionRoutes.Routes());
+            routes.AddRange(PoiyomiColorEffectsRoutes.Routes());
+            return routes.ToArray();
+        }
+
         /// <summary>
         /// The Poiyomi 9.3 main color route. The four admitted rows of
         /// <see cref="Poiyomi.PoiyomiSourceAttestation"/> share it,
@@ -147,7 +164,7 @@ namespace Alrauna.Amuse.Editor.Semantics
                 },
                 UnheldPoiyomiReviewedRequiredValue,
                 null,
-                PoiyomiReviewedCompanionRoutes(),
+                PoiyomiReviewedRoutes,
                 null,
                 PoiyomiLiveValues.Model);
 
@@ -161,7 +178,7 @@ namespace Alrauna.Amuse.Editor.Semantics
         private static string[] PoiyomiReviewedNeutralProperties()
         {
             var routed = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var route in PoiyomiReviewedCompanionRoutes())
+            foreach (var route in PoiyomiReviewedRoutes)
             {
                 routed.Add(route.Property);
             }
@@ -216,16 +233,6 @@ namespace Alrauna.Amuse.Editor.Semantics
             AppendNew(
                 names, PoiyomiColorEffectsRoutes.ConditionProperties, null);
             return names.ToArray();
-        }
-
-        private static AtlasCompanionRoute[] PoiyomiReviewedCompanionRoutes()
-        {
-            var routes = new List<AtlasCompanionRoute>();
-            routes.AddRange(PoiyomiAlwaysOnRoutes.Routes());
-            routes.AddRange(PoiyomiLightingRoutes.Routes());
-            routes.AddRange(PoiyomiMatcapRimEmissionRoutes.Routes());
-            routes.AddRange(PoiyomiColorEffectsRoutes.Routes());
-            return routes.ToArray();
         }
 
         /// <summary>

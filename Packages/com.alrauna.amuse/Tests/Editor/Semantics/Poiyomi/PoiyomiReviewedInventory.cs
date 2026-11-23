@@ -1,4 +1,9 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
+using Alrauna.Amuse.Editor.Semantics;
+using Alrauna.Amuse.Editor.Semantics.Poiyomi;
+using NUnit.Framework;
 
 namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 {
@@ -15,153 +20,160 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
     /// pass. The two engine keywords of the record stay separate.
     /// The texture list holds the 138 unique texture names of the
     /// 139 declaration lines, including the commented declaration of
-    /// _Udon_VideoTex.
+    /// _Udon_VideoTex. The sampler column carries the verified
+    /// sampler of record section 4.3 for the 107 companion rows,
+    /// with the <c>_MainTex</c> sampler mapped to
+    /// <see cref="AtlasCompanionSampler.Member"/>, and null for every
+    /// row that is not a companion. The stochastic column is true
+    /// when the record names a stochastic property for the texture.
     /// </para>
     /// </summary>
     internal static class PoiyomiReviewedInventory
     {
         internal static readonly IReadOnlyList<
-            (string Texture, string Group, string Class)> Textures =
-            new (string, string, string)[]
+            (string Texture, string Group, string Class,
+                AtlasCompanionSampler? Sampler, bool Stochastic)> Textures =
+            new (string, string, string, AtlasCompanionSampler?, bool)[]
             {
-            ("_MainTex", "Always on", "member"),
-            ("_BumpMap", "Always on", "companion"),
-            ("_AlphaMask", "Always on", "companion"),
-            ("_MainColorAdjustTexture", "Color effects UV", "companion"),
-            ("_MainGradationTex", "KeyOnly", "neutral"),
-            ("_DetailMask", "Color effects UV", "companion"),
-            ("_DetailTex", "Color effects UV", "companion"),
-            ("_DetailNormalMap", "Color effects UV", "companion"),
-            ("_DecalMask", "Refused", "refused feature"),
-            ("_Udon_VideoTex", "Refused", "refused feature"),
-            ("_DecalTexture", "Refused", "refused feature"),
-            ("_DecalTexture1", "Refused", "refused feature"),
-            ("_DecalTexture2", "Refused", "refused feature"),
-            ("_DecalTexture3", "Refused", "refused feature"),
-            ("_BackFaceTexture", "Color effects UV", "companion"),
-            ("_BackFaceMask", "Color effects UV", "companion"),
-            ("_RGBMask", "Color effects UV", "companion"),
-            ("_RGBAMetallicMaps", "Color effects UV", "companion"),
-            ("_RGBASmoothnessMaps", "Color effects UV", "companion"),
-            ("_RedTexture", "Color effects UV", "companion"),
-            ("_RgbNormalR", "Color effects UV", "companion"),
-            ("_GreenTexture", "Color effects UV", "companion"),
-            ("_RgbNormalG", "Color effects UV", "companion"),
-            ("_BlueTexture", "Color effects UV", "companion"),
-            ("_RgbNormalB", "Color effects UV", "companion"),
-            ("_AlphaTexture", "Color effects UV", "companion"),
-            ("_RgbNormalA", "Color effects UV", "companion"),
-            ("_LightingAOMaps", "Always on", "companion"),
-            ("_LightingDetailShadowMaps", "Always on", "companion"),
-            ("_LightingShadowMasks", "Always on", "companion"),
-            ("_LightDataSDFMap", "Always on", "companion"),
-            ("_ToonRamp", "KeyOnly", "neutral"),
-            ("_ShadowColorTex", "Lighting", "companion"),
-            ("_Shadow2ndColorTex", "Lighting", "companion"),
-            ("_Shadow3rdColorTex", "Lighting", "companion"),
-            ("_ShadowStrengthMask", "Lighting", "companion"),
-            ("_ShadowBorderMask", "Lighting", "companion"),
-            ("_MultilayerMathBlurMap", "Lighting", "companion"),
-            ("_1st_ShadeMap", "Lighting", "companion"),
-            ("_2nd_ShadeMap", "Lighting", "companion"),
-            ("_SkinLUT", "KeyOnly", "neutral"),
-            ("_SkinThicknessMap", "Lighting", "companion"),
-            ("_ClothDFG", "KeyOnly", "neutral"),
-            ("_ClothMetallicSmoothnessMap", "Lighting", "companion"),
-            ("_SDFShadingTexture", "Lighting", "companion"),
-            ("_AnisoColorMap", "Lighting", "companion"),
-            ("_Matcap", "KeyOnly", "neutral"),
-            ("_MatcapMask", "Matcap rim emission masks", "companion"),
-            ("_Matcap0NormalMap", "Matcap rim emission masks", "companion"),
-            ("_Matcap2", "KeyOnly", "neutral"),
-            ("_Matcap2Mask", "Matcap rim emission masks", "companion"),
-            ("_Matcap1NormalMap", "Matcap rim emission masks", "companion"),
-            ("_Matcap3", "KeyOnly", "neutral"),
-            ("_Matcap3Mask", "Matcap rim emission masks", "companion"),
-            ("_Matcap2NormalMap", "Matcap rim emission masks", "companion"),
-            ("_Matcap4", "KeyOnly", "neutral"),
-            ("_Matcap4Mask", "Matcap rim emission masks", "companion"),
-            ("_Matcap3NormalMap", "Matcap rim emission masks", "companion"),
-            ("_CubeMap", "KeyOnly", "neutral"),
-            ("_CubeMapMask", "Lighting", "companion"),
-            ("_Set_RimLightMask", "Matcap rim emission masks", "companion"),
-            ("_RimMask", "Matcap rim emission masks", "companion"),
-            ("_RimTex", "Matcap rim emission masks", "companion"),
-            ("_RimColorTex", "Matcap rim emission masks", "companion"),
-            ("_Set_Rim2LightMask", "Matcap rim emission masks", "companion"),
-            ("_Rim2Mask", "Matcap rim emission masks", "companion"),
-            ("_Rim2Tex", "Matcap rim emission masks", "companion"),
-            ("_Rim2ColorTex", "Matcap rim emission masks", "companion"),
-            ("_SSSThicknessMap", "Lighting", "companion"),
-            ("_MochieMetallicMaps", "Lighting", "companion"),
-            ("_MochieReflCube", "KeyOnly", "neutral"),
-            ("_AnisotropyMap", "Lighting", "companion"),
-            ("_ClearCoatMaps", "Lighting", "companion"),
-            ("_ClearCoatFallback", "KeyOnly", "neutral"),
-            ("_RimEnviroMask", "Lighting", "companion"),
-            ("_HighColor_Tex", "Lighting", "companion"),
-            ("_Set_HighColorMask", "Lighting", "companion"),
-            ("_SmoothnessTex", "Lighting", "companion"),
-            ("_MetallicGlossMap", "KeyOnly", "neutral"),
-            ("_ReflectionColorTex", "Lighting", "companion"),
-            ("_ReflectionCubeTex", "KeyOnly", "neutral"),
-            ("_BacklightColorTex", "Lighting", "companion"),
-            ("_OutlineMask", "Always on", "companion"),
-            ("_OutlineTexture", "Always on", "companion"),
-            ("_DepthBulgeMask", "Color effects UV", "companion"),
-            ("_DissolveEdgeGradient", "KeyOnly", "neutral"),
-            ("_DissolveToTexture", "Color effects UV", "companion"),
-            ("_DissolveNoiseTexture", "Color effects UV", "companion"),
-            ("_DissolveDetailNoise", "Color effects UV", "companion"),
-            ("_DissolveMask", "Color effects UV", "companion"),
-            ("_FlipbookTexArray", "Refused", "refused feature"),
-            ("_FlipbookMask", "Refused", "refused feature"),
-            ("_EmissionMask", "Matcap rim emission masks", "companion"),
-            ("_EmissionMap", "Matcap rim emission masks", "companion"),
-            ("_EmissionScrollingCurve", "Matcap rim emission masks", "companion"),
-            ("_EmissionMask1", "Matcap rim emission masks", "companion"),
-            ("_EmissionMap1", "Matcap rim emission masks", "companion"),
-            ("_EmissionScrollingCurve1", "Matcap rim emission masks", "companion"),
-            ("_EmissionMask2", "Matcap rim emission masks", "companion"),
-            ("_EmissionMap2", "Matcap rim emission masks", "companion"),
-            ("_EmissionScrollingCurve2", "Matcap rim emission masks", "companion"),
-            ("_EmissionMask3", "Matcap rim emission masks", "companion"),
-            ("_EmissionMap3", "Matcap rim emission masks", "companion"),
-            ("_EmissionScrollingCurve3", "Matcap rim emission masks", "companion"),
-            ("_GlitterTexture", "Refused", "refused feature"),
-            ("_GlitterColorMap", "Refused", "refused feature"),
-            ("_GlitterMask", "Refused", "refused feature"),
-            ("_PathingMap", "Color effects UV", "companion"),
-            ("_PathingColorMap", "Color effects UV", "companion"),
-            ("_MirrorTexture", "Color effects UV", "companion"),
-            ("_DepthMask", "Color effects UV", "companion"),
-            ("_DepthTexture", "Color effects UV", "companion"),
-            ("_TextGlyphs", "KeyOnly", "neutral"),
-            ("_ParallaxInternalMap", "Refused", "refused feature"),
-            ("_ParallaxInternalMapMask", "Refused", "refused feature"),
-            ("_VideoPixelTexture", "Color effects UV", "companion"),
-            ("_VideoMaskTexture", "Color effects UV", "companion"),
-            ("_VideoGameboyRamp", "KeyOnly", "neutral"),
-            ("_VoronoiMask", "Color effects UV", "companion"),
-            ("_VoronoiNoise", "Color effects UV", "companion"),
-            ("_TruchetTex", "Color effects UV", "companion"),
-            ("_TruchetMask", "Color effects UV", "companion"),
-            ("_ALDecalColorMask", "Color effects UV", "companion"),
-            ("_VertexBasicsMask", "Color effects UV", "companion"),
-            ("_VertexManipulationHeightMask", "Color effects UV", "companion"),
-            ("_LookAtMask", "Color effects UV", "companion"),
-            ("_VertexGlitchMap", "KeyOnly", "neutral"),
-            ("_UzumoreMask", "Color effects UV", "companion"),
-            ("_GlobalMaskTexture0", "Matcap rim emission masks", "companion"),
-            ("_GlobalMaskTexture1", "Matcap rim emission masks", "companion"),
-            ("_GlobalMaskTexture2", "Matcap rim emission masks", "companion"),
-            ("_GlobalMaskTexture3", "Matcap rim emission masks", "companion"),
-            ("_DistortionMask", "Color effects UV", "companion"),
-            ("_DistortionFlowTexture", "Color effects UV", "companion"),
-            ("_DistortionFlowTexture1", "Color effects UV", "companion"),
-            ("_HeightMap", "Color effects UV", "companion"),
-            ("_Heightmask", "Color effects UV", "companion"),
-            ("_PPMask", "Color effects UV", "companion"),
+            ("_MainTex", "Always on", "member", null, true),
+            ("_BumpMap", "Always on", "companion", AtlasCompanionSampler.Member, true),
+            ("_AlphaMask", "Always on", "companion", AtlasCompanionSampler.Member, false),
+            ("_MainColorAdjustTexture", "Color effects UV", "companion", AtlasCompanionSampler.Member, false),
+            ("_MainGradationTex", "KeyOnly", "neutral", null, false),
+            ("_DetailMask", "Color effects UV", "companion", AtlasCompanionSampler.Member, true),
+            ("_DetailTex", "Color effects UV", "companion", AtlasCompanionSampler.Member, true),
+            ("_DetailNormalMap", "Color effects UV", "companion", AtlasCompanionSampler.Member, true),
+            ("_DecalMask", "Refused", "refused feature", null, false),
+            ("_Udon_VideoTex", "Refused", "refused feature", null, false),
+            ("_DecalTexture", "Refused", "refused feature", null, false),
+            ("_DecalTexture1", "Refused", "refused feature", null, false),
+            ("_DecalTexture2", "Refused", "refused feature", null, false),
+            ("_DecalTexture3", "Refused", "refused feature", null, false),
+            ("_BackFaceTexture", "Color effects UV", "companion", AtlasCompanionSampler.Member, false),
+            ("_BackFaceMask", "Color effects UV", "companion", AtlasCompanionSampler.Member, false),
+            ("_RGBMask", "Color effects UV", "companion", AtlasCompanionSampler.InlineTrilinearRepeat, false),
+            ("_RGBAMetallicMaps", "Color effects UV", "companion", AtlasCompanionSampler.InlineTrilinearRepeat, true),
+            ("_RGBASmoothnessMaps", "Color effects UV", "companion", AtlasCompanionSampler.InlineTrilinearRepeat, true),
+            ("_RedTexture", "Color effects UV", "companion", AtlasCompanionSampler.InlineTrilinearRepeat, true),
+            ("_RgbNormalR", "Color effects UV", "companion", AtlasCompanionSampler.InlineTrilinearRepeat, true),
+            ("_GreenTexture", "Color effects UV", "companion", AtlasCompanionSampler.InlineTrilinearRepeat, true),
+            ("_RgbNormalG", "Color effects UV", "companion", AtlasCompanionSampler.InlineTrilinearRepeat, true),
+            ("_BlueTexture", "Color effects UV", "companion", AtlasCompanionSampler.InlineTrilinearRepeat, true),
+            ("_RgbNormalB", "Color effects UV", "companion", AtlasCompanionSampler.InlineTrilinearRepeat, true),
+            ("_AlphaTexture", "Color effects UV", "companion", AtlasCompanionSampler.InlineTrilinearRepeat, true),
+            ("_RgbNormalA", "Color effects UV", "companion", AtlasCompanionSampler.InlineTrilinearRepeat, true),
+            ("_LightingAOMaps", "Always on", "companion", AtlasCompanionSampler.Member, false),
+            ("_LightingDetailShadowMaps", "Always on", "companion", AtlasCompanionSampler.Member, false),
+            ("_LightingShadowMasks", "Always on", "companion", AtlasCompanionSampler.Member, false),
+            ("_LightDataSDFMap", "Always on", "companion", AtlasCompanionSampler.InlineLinearRepeat, false),
+            ("_ToonRamp", "KeyOnly", "neutral", null, false),
+            ("_ShadowColorTex", "Lighting", "companion", AtlasCompanionSampler.Member, false),
+            ("_Shadow2ndColorTex", "Lighting", "companion", AtlasCompanionSampler.Member, false),
+            ("_Shadow3rdColorTex", "Lighting", "companion", AtlasCompanionSampler.Member, false),
+            ("_ShadowStrengthMask", "Lighting", "companion", AtlasCompanionSampler.Member, false),
+            ("_ShadowBorderMask", "Lighting", "companion", AtlasCompanionSampler.InlineLinearRepeat, false),
+            ("_MultilayerMathBlurMap", "Lighting", "companion", AtlasCompanionSampler.Member, false),
+            ("_1st_ShadeMap", "Lighting", "companion", AtlasCompanionSampler.Member, false),
+            ("_2nd_ShadeMap", "Lighting", "companion", AtlasCompanionSampler.Member, false),
+            ("_SkinLUT", "KeyOnly", "neutral", null, false),
+            ("_SkinThicknessMap", "Lighting", "companion", AtlasCompanionSampler.Member, false),
+            ("_ClothDFG", "KeyOnly", "neutral", null, false),
+            ("_ClothMetallicSmoothnessMap", "Lighting", "companion", AtlasCompanionSampler.Member, false),
+            ("_SDFShadingTexture", "Lighting", "companion", AtlasCompanionSampler.Member, false),
+            ("_AnisoColorMap", "Lighting", "companion", AtlasCompanionSampler.Member, false),
+            ("_Matcap", "KeyOnly", "neutral", null, false),
+            ("_MatcapMask", "Matcap rim emission masks", "companion", AtlasCompanionSampler.Member, false),
+            ("_Matcap0NormalMap", "Matcap rim emission masks", "companion", AtlasCompanionSampler.Member, false),
+            ("_Matcap2", "KeyOnly", "neutral", null, false),
+            ("_Matcap2Mask", "Matcap rim emission masks", "companion", AtlasCompanionSampler.Member, false),
+            ("_Matcap1NormalMap", "Matcap rim emission masks", "companion", AtlasCompanionSampler.Member, false),
+            ("_Matcap3", "KeyOnly", "neutral", null, false),
+            ("_Matcap3Mask", "Matcap rim emission masks", "companion", AtlasCompanionSampler.Member, false),
+            ("_Matcap2NormalMap", "Matcap rim emission masks", "companion", AtlasCompanionSampler.Member, false),
+            ("_Matcap4", "KeyOnly", "neutral", null, false),
+            ("_Matcap4Mask", "Matcap rim emission masks", "companion", AtlasCompanionSampler.Member, false),
+            ("_Matcap3NormalMap", "Matcap rim emission masks", "companion", AtlasCompanionSampler.Member, false),
+            ("_CubeMap", "KeyOnly", "neutral", null, false),
+            ("_CubeMapMask", "Lighting", "companion", AtlasCompanionSampler.Member, false),
+            ("_Set_RimLightMask", "Matcap rim emission masks", "companion", AtlasCompanionSampler.Member, false),
+            ("_RimMask", "Matcap rim emission masks", "companion", AtlasCompanionSampler.Member, false),
+            ("_RimTex", "Matcap rim emission masks", "companion", AtlasCompanionSampler.Member, false),
+            ("_RimColorTex", "Matcap rim emission masks", "companion", AtlasCompanionSampler.Member, false),
+            ("_Set_Rim2LightMask", "Matcap rim emission masks", "companion", AtlasCompanionSampler.Member, false),
+            ("_Rim2Mask", "Matcap rim emission masks", "companion", AtlasCompanionSampler.Member, false),
+            ("_Rim2Tex", "Matcap rim emission masks", "companion", AtlasCompanionSampler.Member, false),
+            ("_Rim2ColorTex", "Matcap rim emission masks", "companion", AtlasCompanionSampler.Member, false),
+            ("_SSSThicknessMap", "Lighting", "companion", AtlasCompanionSampler.Member, false),
+            ("_MochieMetallicMaps", "Lighting", "companion", AtlasCompanionSampler.Member, true),
+            ("_MochieReflCube", "KeyOnly", "neutral", null, false),
+            ("_AnisotropyMap", "Lighting", "companion", AtlasCompanionSampler.Member, false),
+            ("_ClearCoatMaps", "Lighting", "companion", AtlasCompanionSampler.Member, true),
+            ("_ClearCoatFallback", "KeyOnly", "neutral", null, false),
+            ("_RimEnviroMask", "Lighting", "companion", AtlasCompanionSampler.Member, false),
+            ("_HighColor_Tex", "Lighting", "companion", AtlasCompanionSampler.Member, false),
+            ("_Set_HighColorMask", "Lighting", "companion", AtlasCompanionSampler.Member, false),
+            ("_SmoothnessTex", "Lighting", "companion", AtlasCompanionSampler.InlineLinearRepeat, false),
+            ("_MetallicGlossMap", "KeyOnly", "neutral", null, false),
+            ("_ReflectionColorTex", "Lighting", "companion", AtlasCompanionSampler.InlineLinearRepeat, false),
+            ("_ReflectionCubeTex", "KeyOnly", "neutral", null, false),
+            ("_BacklightColorTex", "Lighting", "companion", AtlasCompanionSampler.Member, false),
+            ("_OutlineMask", "Always on", "companion", AtlasCompanionSampler.InlineLinearRepeat, false),
+            ("_OutlineTexture", "Always on", "companion", AtlasCompanionSampler.Member, false),
+            ("_DepthBulgeMask", "Color effects UV", "companion", AtlasCompanionSampler.InlineLinearRepeat, false),
+            ("_DissolveEdgeGradient", "KeyOnly", "neutral", null, false),
+            ("_DissolveToTexture", "Color effects UV", "companion", AtlasCompanionSampler.Member, false),
+            ("_DissolveNoiseTexture", "Color effects UV", "companion", AtlasCompanionSampler.Member, false),
+            ("_DissolveDetailNoise", "Color effects UV", "companion", AtlasCompanionSampler.Member, false),
+            ("_DissolveMask", "Color effects UV", "companion", AtlasCompanionSampler.Member, false),
+            ("_FlipbookTexArray", "Refused", "refused feature", null, false),
+            ("_FlipbookMask", "Refused", "refused feature", null, false),
+            ("_EmissionMask", "Matcap rim emission masks", "companion", AtlasCompanionSampler.Member, false),
+            ("_EmissionMap", "Matcap rim emission masks", "companion", AtlasCompanionSampler.Member, false),
+            ("_EmissionScrollingCurve", "Matcap rim emission masks", "companion", AtlasCompanionSampler.Member, false),
+            ("_EmissionMask1", "Matcap rim emission masks", "companion", AtlasCompanionSampler.Member, false),
+            ("_EmissionMap1", "Matcap rim emission masks", "companion", AtlasCompanionSampler.Member, false),
+            ("_EmissionScrollingCurve1", "Matcap rim emission masks", "companion", AtlasCompanionSampler.Member, false),
+            ("_EmissionMask2", "Matcap rim emission masks", "companion", AtlasCompanionSampler.Member, false),
+            ("_EmissionMap2", "Matcap rim emission masks", "companion", AtlasCompanionSampler.Member, false),
+            ("_EmissionScrollingCurve2", "Matcap rim emission masks", "companion", AtlasCompanionSampler.Member, false),
+            ("_EmissionMask3", "Matcap rim emission masks", "companion", AtlasCompanionSampler.Member, false),
+            ("_EmissionMap3", "Matcap rim emission masks", "companion", AtlasCompanionSampler.Member, false),
+            ("_EmissionScrollingCurve3", "Matcap rim emission masks", "companion", AtlasCompanionSampler.Member, false),
+            ("_GlitterTexture", "Refused", "refused feature", null, false),
+            ("_GlitterColorMap", "Refused", "refused feature", null, false),
+            ("_GlitterMask", "Refused", "refused feature", null, false),
+            ("_PathingMap", "Color effects UV", "companion", AtlasCompanionSampler.InlinePointRepeat, false),
+            ("_PathingColorMap", "Color effects UV", "companion", AtlasCompanionSampler.Member, false),
+            ("_MirrorTexture", "Color effects UV", "companion", AtlasCompanionSampler.Member, false),
+            ("_DepthMask", "Color effects UV", "companion", AtlasCompanionSampler.Member, false),
+            ("_DepthTexture", "Color effects UV", "companion", AtlasCompanionSampler.Member, false),
+            ("_TextGlyphs", "KeyOnly", "neutral", null, false),
+            ("_ParallaxInternalMap", "Refused", "refused feature", null, false),
+            ("_ParallaxInternalMapMask", "Refused", "refused feature", null, false),
+            ("_VideoPixelTexture", "Color effects UV", "companion", AtlasCompanionSampler.Own, false),
+            ("_VideoMaskTexture", "Color effects UV", "companion", AtlasCompanionSampler.Member, false),
+            ("_VideoGameboyRamp", "KeyOnly", "neutral", null, false),
+            ("_VoronoiMask", "Color effects UV", "companion", AtlasCompanionSampler.Member, false),
+            ("_VoronoiNoise", "Color effects UV", "companion", AtlasCompanionSampler.Member, false),
+            ("_TruchetTex", "Color effects UV", "companion", AtlasCompanionSampler.Member, false),
+            ("_TruchetMask", "Color effects UV", "companion", AtlasCompanionSampler.Member, false),
+            ("_ALDecalColorMask", "Color effects UV", "companion", AtlasCompanionSampler.Member, false),
+            ("_VertexBasicsMask", "Color effects UV", "companion", AtlasCompanionSampler.InlineLinearRepeat, false),
+            ("_VertexManipulationHeightMask", "Color effects UV", "companion", AtlasCompanionSampler.InlineLinearRepeat, false),
+            ("_LookAtMask", "Color effects UV", "companion", AtlasCompanionSampler.InlineLinearRepeat, false),
+            ("_VertexGlitchMap", "KeyOnly", "neutral", null, false),
+            ("_UzumoreMask", "Color effects UV", "companion", AtlasCompanionSampler.InlineClamp, false),
+            ("_GlobalMaskTexture0", "Matcap rim emission masks", "companion", AtlasCompanionSampler.Member, false),
+            ("_GlobalMaskTexture1", "Matcap rim emission masks", "companion", AtlasCompanionSampler.Member, false),
+            ("_GlobalMaskTexture2", "Matcap rim emission masks", "companion", AtlasCompanionSampler.Member, false),
+            ("_GlobalMaskTexture3", "Matcap rim emission masks", "companion", AtlasCompanionSampler.Member, false),
+            ("_DistortionMask", "Color effects UV", "companion", AtlasCompanionSampler.Member, false),
+            ("_DistortionFlowTexture", "Color effects UV", "companion", AtlasCompanionSampler.Member, false),
+            ("_DistortionFlowTexture1", "Color effects UV", "companion", AtlasCompanionSampler.Member, false),
+            ("_HeightMap", "Color effects UV", "companion", AtlasCompanionSampler.Member, false),
+            ("_Heightmask", "Color effects UV", "companion", AtlasCompanionSampler.InlineLinearRepeat, false),
+            ("_PPMask", "Color effects UV", "companion", AtlasCompanionSampler.Member, false),
+
             };
 
         internal static readonly IReadOnlyList<
@@ -272,18 +284,89 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             ("POI_VORONOI", "Color effects UV", "Conditional"),
             ("POI_TRUCHET", "Color effects UV", "Conditional"),
             ("POI_UZUMORE", "Color effects UV", "Conditional"),
+
             };
 
         /// <summary>
         /// The two engine keywords of the base pass pragma. They sit
         /// outside the allowed and refused lists. A material that
-        /// enables one refuses as it does today.
+        /// enables one refuses the use with
+        /// <c>KeywordNotAllowed</c>.
         /// </summary>
         internal static readonly IReadOnlyCollection<string>
             EngineKeywords = new string[]
             {
             "FOG_EXP2",
             "VERTEXLIGHT_ON",
+
             };
+
+        /// <summary>
+        /// The shared sampler and stochastic pin of the reviewed
+        /// route. Every group test calls it from its inventory test.
+        /// For every route of the group, the record must class the
+        /// texture as a companion of that group, the route must name
+        /// the verified sampler of the record, and the route must
+        /// carry the stochastic condition exactly when the record
+        /// names a stochastic property. A wrong sampler kind is a
+        /// false positive, so a mismatch fails the group inventory
+        /// test.
+        /// </summary>
+        internal static void AssertRoutesMatchInventory(
+            string group,
+            IReadOnlyList<AtlasCompanionRoute> routes)
+        {
+            var byName = new Dictionary<string,
+                (string Group, string Class,
+                    AtlasCompanionSampler? Sampler, bool Stochastic)>();
+            foreach (var row in Textures)
+            {
+                byName[row.Texture] =
+                    (row.Group, row.Class, row.Sampler, row.Stochastic);
+            }
+
+            Assert.That(
+                routes, Is.Not.Empty,
+                "fixture precondition: the group carries routes");
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var route in routes)
+            {
+                Assert.That(
+                    seen.Add(route.Property), Is.True,
+                    "the route '" + route.Property +
+                    "' appears twice in the group '" + group + "'");
+                Assert.That(
+                    byName.TryGetValue(
+                        route.Property,
+                        out var row), Is.True,
+                    "the route '" + route.Property +
+                    "' has no inventory row");
+                Assert.That(
+                    row.Class, Is.EqualTo("companion"),
+                    "the route '" + route.Property +
+                    "' must be a companion in the record");
+                Assert.That(
+                    row.Group, Is.EqualTo(group),
+                    "the route '" + route.Property +
+                    "' must belong to the group '" + group + "'");
+                Assert.That(
+                    row.Sampler, Is.Not.Null,
+                    "the companion '" + route.Property +
+                    "' carries a verified sampler in the record");
+                Assert.That(
+                    route.Sampler, Is.EqualTo(row.Sampler),
+                    "the route '" + route.Property +
+                    "' must use the verified sampler of the record");
+                var stochasticCondition =
+                    route.Property + "Stochastic";
+                Assert.That(
+                    route.ConditionProperties.Contains(
+                        stochasticCondition),
+                    Is.EqualTo(row.Stochastic),
+                    "the route '" + route.Property +
+                    "' carries the stochastic condition exactly when" +
+                    " the record names " + stochasticCondition);
+            }
+        }
     }
 }

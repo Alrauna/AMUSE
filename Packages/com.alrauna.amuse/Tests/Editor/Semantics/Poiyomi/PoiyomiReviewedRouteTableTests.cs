@@ -23,7 +23,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         /// pipeline declares on every shader. They are not pragma
         /// keywords of the base pass, so the record does not class
         /// them. They stay outside both lists, and a material that
-        /// enables one refuses as it does today.
+        /// enables one refuses the use with
+        /// <c>KeywordNotAllowed</c>.
         /// </summary>
         private static readonly string[] UnityGlobalKeywords =
         {

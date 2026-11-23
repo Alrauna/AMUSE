@@ -457,7 +457,16 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// counts as stale. The list was extracted once from the two
         /// installed bundled files of 2026-11-23 and pinned here. The
         /// DeclaredUniformsCoverTheSource test re-checks it against
-        /// the installed source.
+        /// the installed source with the same extraction rules.
+        /// <para>
+        /// The extraction excludes the script-set global textures
+        /// that the two files declare in the
+        /// <c>uniform Texture2D &lt;name&gt;;</c> form. Those names
+        /// name render-global bindings that scripts fill with
+        /// <c>Shader.SetGlobalTexture</c>. A global binding holds no
+        /// material saved value, so an excluded name can never hide
+        /// a live saved value behind a stale name.
+        /// </para>
         /// </summary>
         internal static readonly string[] DeclaredUniforms =
         {

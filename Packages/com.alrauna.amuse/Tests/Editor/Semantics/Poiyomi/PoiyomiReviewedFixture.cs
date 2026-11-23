@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
@@ -79,10 +80,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         /// An imported PNG asset of the given square size. The
         /// texture is a project asset with a texture importer and a
         /// deterministic pattern, so the capture accepts it as a
-        /// route source. Each call imports its own file, because a
-        /// synchronous import can reset the keyword state of a
-        /// material that a vendor tool manages. A test therefore
-        /// imports its textures before it sets keywords.
+        /// route source. Each call imports its own file. A test
+        /// imports its textures before it sets keyword state, and
+        /// enables keywords after the last import.
         /// </summary>
         internal Texture2D NewRouteTexture(int size)
         {
@@ -197,6 +197,33 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 outcome.Refusal, Is.EqualTo(AtlasUseRefusal.None),
                 "the use must be admitted, detail: " + outcome.Detail);
             Assert.That(outcome.Use, Is.Not.Null);
+        }
+
+        /// <summary>
+        /// The use must be admitted, and every named texture property
+        /// must have moved into a companion page. Admission alone
+        /// does not prove that a route fired, because an inert route
+        /// is admitted too. A group admitted test asserts the
+        /// companions by name, so a wrong gate or a keyword that is
+        /// off at capture time fails the test.
+        /// </summary>
+        internal static void AssertCompanion(
+            AtlasUseOutcome outcome, params string[] properties)
+        {
+            AssertAdmitted(outcome);
+            Assert.That(
+                outcome.Use.Companions, Is.Not.Empty,
+                "the admitted use must carry companions");
+            var moved = outcome.Use.Companions
+                .Select(companion => companion.Property)
+                .ToList();
+            foreach (var property in properties)
+            {
+                Assert.That(
+                    moved, Does.Contain(property),
+                    "the texture '" + property +
+                    "' must have moved into a companion page");
+            }
         }
 
         internal static void AssertRefused(

@@ -182,7 +182,17 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         /// An assigned texture of a refused feature with the keyword
         /// off is a dead value. The use is admitted, and the key
         /// equals the key of the same material without the texture,
-        /// so both can share one page.
+        /// so both can share one page. The control pair at the end
+        /// differs in a live value and must produce different keys,
+        /// so the equality above cannot pass vacuously.
+        /// <para>
+        /// This test is also the capture-level proof that a bundled
+        /// row takes the reviewed table. Only the reviewed table
+        /// carries the refused family of the decal keyword, so only
+        /// the reviewed table admits the decal texture with the
+        /// keyword off and drops it from the key. The plain table
+        /// refuses the same material with <c>UnlistedTexture</c>.
+        /// </para>
         /// </summary>
         [Test]
         public void RefusedFeatureTextureWithItsKeywordOffLeavesTheKey(
@@ -223,6 +233,25 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 Is.EqualTo(outcomeWithout.Use.MaterialKey),
                 "the dead decal texture and its transform leave" +
                 " the material key");
+
+            // The control pair changes _BumpScale, which no refused
+            // family holds. The bump strength is live on the
+            // reviewed table, so the two keys must differ.
+            var control = fixture.NewMaterial(twoPass);
+            control.SetTexture("_MainTex", main);
+            control.SetTexture("_DecalTexture", decal);
+            control.SetTextureScale(
+                "_DecalTexture", new Vector2(2f, 3f));
+            control.SetTextureOffset(
+                "_DecalTexture", new Vector2(0.25f, 0.5f));
+            control.SetFloat("_BumpScale", 5f);
+            var outcomeControl = fixture.CaptureSingle(control);
+            PoiyomiReviewedFixture.AssertAdmitted(outcomeControl);
+
+            Assert.That(
+                outcomeControl.Use.MaterialKey,
+                Is.Not.EqualTo(outcomeWith.Use.MaterialKey),
+                "a live value change must produce a different key");
         }
 
         // --- Falsifier 8: RefusedKeywordOnStillRefuses ---------------
@@ -269,6 +298,16 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         /// texture and sampler declarations. The extraction covers
         /// commented declarations too, because a material can still
         /// carry a saved value under such a name.
+        /// <para>
+        /// The extraction excludes the script-set global textures of
+        /// the shader. Those declarations use the form
+        /// <c>uniform Texture2D &lt;name&gt;;</c>, which the texture
+        /// declaration regex does not admit. The excluded names name
+        /// render-global textures that scripts bind with
+        /// <c>Shader.SetGlobalTexture</c>. A global binding holds no
+        /// material saved value, so an excluded name can never hide
+        /// a live saved value behind a stale name.
+        /// </para>
         /// </summary>
         private static IEnumerable<string> DeclaredNamesOf(
             string source)

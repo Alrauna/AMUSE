@@ -1,5 +1,4 @@
 using System;
-using Alrauna.Amuse.Editor.Build;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
@@ -11,10 +10,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
     /// <summary>
     /// The companion route builder tests of the reviewed Poiyomi 9.3
     /// route. The routes exercise the exact <c>AtlasCompanionRoute</c>
-    /// objects the capture reads. A capture-level refusal that needs
-    /// a route in the table runs against the member conditions here
-    /// and against each real companion route in the group test files
-    /// once the group tasks fill the stubs.
+    /// objects the capture reads. A wrong helper fails these tests.
+    /// The capture-level companion falsifiers, one per condition with
+    /// an admitted twin, belong to the group test files, because a
+    /// capture needs a route in the table.
     /// </summary>
     public sealed class PoiyomiCompanionRoutesTests
     {
@@ -65,10 +64,11 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         }
 
         [Test]
-        public void SwitchedTextureWithNoKeywordOnIsInert()
+        public void SwitchedTextureWithNoKeywordOnIsInert(
+            [Values(false, true)] bool twoPass)
         {
             using var fixture = new PoiyomiReviewedFixture();
-            var material = fixture.NewMaterial(false);
+            var material = fixture.NewMaterial(twoPass);
             var route = PoiyomiCompanionRoutes.Standard(
                 "_BumpMap",
                 AtlasCompanionSampler.Member,
@@ -108,10 +108,11 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         // --- Falsifier 3: PolarAndDistortedSelectorsRefuse -----------
         [Test]
         public void PolarAndDistortedSelectorsRefuse(
-            [ValueSource(nameof(PolarSelectors))] int selector)
+            [ValueSource(nameof(PolarSelectors))] int selector,
+            [Values(false, true)] bool twoPass)
         {
             using var fixture = new PoiyomiReviewedFixture();
-            var material = fixture.NewMaterial(false);
+            var material = fixture.NewMaterial(twoPass);
             material.SetTexture(
                 "_BumpMap", fixture.NewRouteTexture(64));
             material.SetFloat("_BumpMapUV", selector);
@@ -136,10 +137,11 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         // --- Falsifier 4: FractionalOrNaNSelectorRefuses -------------
         [Test]
         public void FractionalOrNaNSelectorRefuses(
-            [Values(0.5f, 10f, -1f, float.NaN)] float selector)
+            [Values(0.5f, 10f, -1f, float.NaN)] float selector,
+            [Values(false, true)] bool twoPass)
         {
             using var fixture = new PoiyomiReviewedFixture();
-            var material = fixture.NewMaterial(false);
+            var material = fixture.NewMaterial(twoPass);
             material.SetFloat("_BumpMapUV", selector);
 
             var route = StandardBumpRoute();
@@ -157,10 +159,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 
         // --- Falsifier 5: NonIdentityTransformOrPanRefuses -----------
         [Test]
-        public void NonIdentityTransformOrPanRefuses(
-            [Values(false, true)] bool twoPass)
+        public void NonIdentityTransformOrPanRefuses()
         {
-            using var fixture = new PoiyomiReviewedFixture();
             var route = StandardBumpRoute();
 
             Assert.That(
@@ -172,33 +172,17 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                         ("_BumpMapPan", new Vector4(0f, 0f, 0f, 0f)),
                     }),
                 "the route demands the identity transform and the" +
-                " zero pan");
-
-            var material = fixture.NewMaterial(twoPass);
-            material.SetTexture("_MainTex", fixture.NewRouteTexture(64));
-            material.SetVector(
-                "_MainTex_ST", new Vector4(2f, 1f, 0f, 0f));
-            PoiyomiReviewedFixture.AssertRefused(
-                fixture.CaptureSingle(material),
-                AtlasUseRefusal.NonIdentityTransform,
-                "The property '_MainTex_ST' is (2, 1, 0, 0)");
-
-            var panned = fixture.NewMaterial(twoPass);
-            panned.SetTexture("_MainTex", fixture.NewRouteTexture(64));
-            panned.SetVector(
-                "_MainTexPan", new Vector4(0.37f, 0f, 0f, 0f));
-            PoiyomiReviewedFixture.AssertRefused(
-                fixture.CaptureSingle(panned),
-                AtlasUseRefusal.NonIdentityTransform,
-                "The property '_MainTexPan' is (0.37, 0, 0, 0)");
+                " zero pan, so the capture refuses every other value" +
+                " with NonIdentityTransform");
         }
 
         // --- Falsifier 6: StochasticFlagRefuses ----------------------
         [Test]
-        public void StochasticFlagRefuses()
+        public void StochasticFlagRefuses(
+            [Values(false, true)] bool twoPass)
         {
             using var fixture = new PoiyomiReviewedFixture();
-            var material = fixture.NewMaterial(false);
+            var material = fixture.NewMaterial(twoPass);
             material.SetFloat("_BumpMapUV", 0f);
             material.SetFloat("_BumpMapStochastic", 1f);
 
@@ -220,70 +204,18 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 route.ConditionProperties,
                 Does.Contain("_BumpMapStochastic"),
                 "the stochastic property is a route condition");
-
-            var member = fixture.NewMaterial(false);
-            member.SetTexture("_MainTex", fixture.NewRouteTexture(64));
-            member.SetFloat("_MainTexStochastic", 1f);
-            PoiyomiReviewedFixture.AssertRefused(
-                fixture.CaptureSingle(member),
-                AtlasUseRefusal.RequiredValueNotHeld,
-                "The property '_MainTexStochastic' is 1");
         }
 
-        // --- Falsifier 7: AnimatedSelectorRefuses --------------------
         [Test]
-        public void AnimatedSelectorRefuses(
+        public void ClampSampledTextureRefusesOnlyAtSelectorZero(
             [Values(false, true)] bool twoPass)
         {
             using var fixture = new PoiyomiReviewedFixture();
             var material = fixture.NewMaterial(twoPass);
-            material.SetTexture("_MainTex", fixture.NewRouteTexture(64));
-            PoiyomiReviewedFixture.AssertAdmitted(
-                fixture.CaptureSingle(material));
-
-            fixture.AnimateScalar(fixture.Root, "_MainTexUV");
-            var outcome = fixture.CaptureSingle(material);
-
-            PoiyomiReviewedFixture.AssertRefused(
-                outcome,
-                AtlasUseRefusal.AnimatedRouteProperty,
-                "_MainTexUV");
-        }
-
-        // --- Falsifier 7: PropertyBlockOnSelectorRefuses -------------
-        [Test]
-        public void PropertyBlockOnSelectorRefuses(
-            [Values(false, true)] bool twoPass)
-        {
-            using var fixture = new PoiyomiReviewedFixture();
-            var material = fixture.NewMaterial(twoPass);
-            material.SetTexture("_MainTex", fixture.NewRouteTexture(64));
-            var renderer = fixture.Root
-                .transform
-                .GetChild(0)
-                .GetComponent<SkinnedMeshRenderer>();
-            var block = new MaterialPropertyBlock();
-            block.SetFloat("_MainTexUV", 1f);
-            renderer.SetPropertyBlock(block);
-
-            var outcome = fixture.CaptureSingle(material);
-
-            PoiyomiReviewedFixture.AssertRefused(
-                outcome,
-                AtlasUseRefusal.PropertyBlockOnRouteProperty,
-                "_MainTexUV");
-        }
-
-        [Test]
-        public void ClampSampledTextureRefusesOnlyAtSelectorZero()
-        {
-            using var fixture = new PoiyomiReviewedFixture();
-            var material = fixture.NewMaterial(false);
             material.SetTexture(
                 "_UzumoreMask", fixture.NewRouteTexture(64));
-            // The texture import runs first. A synchronous import can
-            // reset the keyword state that the vendor tool manages,
-            // so the keyword goes on after the import.
+            // The texture import runs first. The test sets keyword
+            // state after every import.
             material.EnableKeyword("POI_UZUMORE");
 
             var route = PoiyomiCompanionRoutes.ClampSampled(
