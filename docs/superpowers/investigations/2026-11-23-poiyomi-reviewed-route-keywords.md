@@ -21,6 +21,8 @@ Sampler words used in this record:
 - `Own`: the sample uses the sampler state bound to the texture itself.
 - `sampler_linear_repeat`, `sampler_trilinear_repeat`, `sampler_point_repeat`, `sampler_linear_clamp`, `sampler_point_clamp`: the named inline sampler states of the shader, read at the sample line.
 
+The dead family gate walk of section 6 ran on 2026-11-23. A script walked every conditional compilation directive of the whole file and recorded, for each code line, the stack of enclosing conditions. A line inside an else branch carries the negated condition of its if branch. The property universe held 3113 names: every Properties block entry, every Unity managed transform entry of the form `<texture>_ST`, and the audio debug uniforms of section 5. A property entered the family of a keyword only when every one of its read lines carries a stack that requires that keyword. A stack requires the keyword when one condition names it in an and form without an or and without a negation. A stack that names the keyword only inside an or form, or in a negated form, or that misses the keyword, rejects the property. Pass defines such as `POI_PASS_BASE` are neutral facts and never gate a family. The walk kept 3187 keyword property memberships over the 104 families and compressed them to the prefix rows of section 6. Where a session report claimed a property that the gate walk rejects, this record drops the property. Section 3 item 14 lists the notable removals.
+
 ## 3. Corrections against the reports
 
 1. `KEYWORD` is not a declared keyword of the base pass. Its pragma is a comment at 9995. The reports and the spec list it under KeyOnly. The keyword space holds 104 local keywords without it. This record carries no row for it. `GEOM_TYPE_MESH` is declared, at 10054.
@@ -36,6 +38,7 @@ Sampler words used in this record:
 11. The base pass declares 106 pragma keywords: 104 local shader feature keywords and the 2 engine keywords. This matches the spec and the plan.
 12. The texture typed declarations number 139 lines per bundled file. Two are comments: `_Udon_VideoTex` at 242 and a duplicate `_VertexGlitchMap` at 3830 next to the active declaration at 3836. Unique names number 138. The Two Pass file carries the same 139 declarations and the same 106 keywords. The texture table below carries one row per unique name, 138 rows. The two rows for the commented lines are the refused `_Udon_VideoTex` row and the shared `_VertexGlitchMap` row that names both lines.
 13. `_MetallicGlossMap` is dead code. Its only sample site sits behind a never defined test at 27315. The record classes it neutral. `_VideoGameboyRamp` samples a brightness scalar at 28394, never a mesh UV. The record classes it neutral. Both facts are additions to the spec neutral list, which names 15 of the 17 neutrals.
+14. The gate walk of section 6 removed report claims that the gates reject. The three global mask pairs of the lighting texture keywords stay live, because their reads sit outside the texture gates at 29263 to 29266, 29280 to 29283, and 29292 to 29295. `_MainGradationStrength` stays live, because both its reads at 29849 and 29866 sit outside the gradation texture gate. The shared RGBA values `_RGBARedScaleOffset`, the red enable, and the channel emission and blend settings stay live, because their reads sit outside the texture keyword gates. `_PPLightingMultiplier` and `_PPLightingAddition` stay live, because a copy of their reads at 29621 sits outside the realistic mode gate. `_CustomColors` has no code read at all and stays keyed. The RGB mask channel properties and the `_Rgb*AlphaAdd` and blend settings stay live for the same reason.
 
 ## 4. Decision
 
@@ -100,13 +103,13 @@ Columns: keyword, group, verdict, gate lines. The gate names the base pass pragm
 | DISTORT | Color effects UV | Conditional | pragma 10098, toggle 2295 |
 | POI_ANISOTROPICS | Lighting | Companion | pragma 10102, toggle 1110 |
 | POI_MATCAP0 | Matcap rim emission masks | Conditional | pragma 10106, toggle 1158 |
-| POI_MATCAP0_CUSTOM_NORMAL | Matcap rim emission masks | Companion | pragma 10107, parent toggle 1158 |
+| POI_MATCAP0_CUSTOM_NORMAL | Matcap rim emission masks | Companion | pragma 10107, toggle 1198 |
 | COLOR_GRADING_HDR_3D | Matcap rim emission masks | Conditional | pragma 10110, toggle 1250 |
-| POI_MATCAP1_CUSTOM_NORMAL | Matcap rim emission masks | Companion | pragma 10111, parent toggle 1250 |
+| POI_MATCAP1_CUSTOM_NORMAL | Matcap rim emission masks | Companion | pragma 10111, toggle 1290 |
 | POI_MATCAP2 | Matcap rim emission masks | Conditional | pragma 10114, toggle 1342 |
-| POI_MATCAP2_CUSTOM_NORMAL | Matcap rim emission masks | Companion | pragma 10115, parent toggle 1342 |
+| POI_MATCAP2_CUSTOM_NORMAL | Matcap rim emission masks | Companion | pragma 10115, toggle 1382 |
 | POI_MATCAP3 | Matcap rim emission masks | Conditional | pragma 10118, toggle 1434 |
-| POI_MATCAP3_CUSTOM_NORMAL | Matcap rim emission masks | Companion | pragma 10119, parent toggle 1434 |
+| POI_MATCAP3_CUSTOM_NORMAL | Matcap rim emission masks | Companion | pragma 10119, toggle 1474 |
 | _CUBEMAP | Lighting | Companion | pragma 10123, toggle 1525 |
 | POI_AL_DECAL | Color effects UV | Conditional | pragma 10127, toggle 3482 |
 | POI_AL_VOLUMECOLOR | Color effects UV | Conditional | pragma 10131, toggle 3543 |
@@ -205,7 +208,7 @@ Columns: texture, declaration line, group, class, sampler, selector property, tr
 | _Shadow2ndColorTex | 955 | Lighting | companion | Member | _Shadow2ndColorTexUV | _Shadow2ndColorTex_ST | _Shadow2ndColorTexPan | none | Samples only when the alpha of _Shadow2ndColor is above 0. | 22450 | yes |
 | _Shadow3rdColorTex | 967 | Lighting | companion | Member | _Shadow3rdColorTexUV | _Shadow3rdColorTex_ST | _Shadow3rdColorTexPan | none | Samples only when the alpha of _Shadow3rdColor is above 0. | 22462 | yes |
 | _ShadowStrengthMask | 985 | Lighting | companion | Member | _ShadowStrengthMaskUV | _ShadowStrengthMask_ST | _ShadowStrengthMaskPan | none | The pan property is a float4. | 22417 | yes |
-| _ShadowBorderMask | 995 | Lighting | companion | sampler_trilinear_repeat | _ShadowBorderMaskUV | _ShadowBorderMask_ST | _ShadowBorderMaskPan | none | LOD branch uses sampler_trilinear_repeat at 22375. Plain branch uses sampler_linear_repeat at 22379. _ShadowBorderMaskLOD must be 0, and _ShadowBorderMapToggle 1 turns the sample on. | 22375, 22379 | yes |
+| _ShadowBorderMask | 995 | Lighting | companion | sampler_linear_repeat | _ShadowBorderMaskUV | _ShadowBorderMask_ST | _ShadowBorderMaskPan | none | The plain branch samples `sampler_linear_repeat` at 22379 and is the admitted branch. The LOD branch at 22375 samples `sampler_trilinear_repeat` with explicit derivatives and refuses through the rule `_ShadowBorderMaskLOD` 0. `_ShadowBorderMapToggle` 1 turns the sample on. | 22375, 22379 | yes |
 | _MultilayerMathBlurMap | 1004 | Lighting | companion | Member | _MultilayerMathBlurMapUV | _MultilayerMathBlurMap_ST | _MultilayerMathBlurMapPan | none | Always sampled while _LIGHTINGMODE_MULTILAYER_MATH is on. The selector property sits at 947. | 22321 | yes |
 | _1st_ShadeMap | 1022 | Lighting | companion | Member | _1st_ShadeMapUV | _1st_ShadeMap_ST | _1st_ShadeMapPan | none | None. | 22050 | yes |
 | _2nd_ShadeMap | 1029 | Lighting | companion | Member | _2nd_ShadeMapUV | _2nd_ShadeMap_ST | _2nd_ShadeMapPan | none | None. | 22057 | yes |
@@ -215,19 +218,19 @@ Columns: texture, declaration line, group, class, sampler, selector property, tr
 | _ClothMetallicSmoothnessMap | 1064 | Lighting | companion | Member | _ClothMetallicSmoothnessMapUV | _ClothMetallicSmoothnessMap_ST | _ClothMetallicSmoothnessMapPan | none | None. | 22525 | yes |
 | _SDFShadingTexture | 1076 | Lighting | companion | Member | _SDFShadingTextureUV | _SDFShadingTexture_ST | _SDFShadingTexturePan | none | The sample multiplies the coordinate x by a light driven flip, so the texture must never move. Selector 0 refuses when _LIGHTINGMODE_SDF is on and the texture is assigned. | 22654 | yes |
 | _AnisoColorMap | 1111 | Lighting | companion | Member | _AnisoColorMapUV | _AnisoColorMap_ST | _AnisoColorMapPan | none | None. | 24032 | yes |
-| _Matcap | 1162 | KeyOnly | neutral | sampler_trilinear_repeat | none | none | _MatcapPan | none | Matcap coordinates come from view vectors with an explicit LOD. The UV blend at 24169 refuses through the matcap rule of section 5. | 24233 | yes |
+| _Matcap | 1162 | KeyOnly | neutral | sampler_trilinear_repeat | none | _Matcap_ST | _MatcapPan | none | Matcap coordinates come from view vectors with an explicit LOD. The transform applies to the matcap coordinate, not to a mesh UV. The UV blend at 24169 refuses through the matcap rule of section 5. | 24233 | yes |
 | _MatcapMask | 1175 | Matcap rim emission masks | companion | Member | _MatcapMaskUV | _MatcapMask_ST | _MatcapMaskPan | none | Second sample at 24229 for the smoothness path. | 24261 | yes |
 | _Matcap0NormalMap | 1199 | Matcap rim emission masks | companion | Member | _Matcap0NormalMapUV | _Matcap0NormalMap_ST | _Matcap0NormalMapPan | none | Sampled through calculateNormal, which reads sampler_MainTex. Gate POI_MATCAP0_CUSTOM_NORMAL under POI_MATCAP0. | 24214 | yes |
-| _Matcap2 | 1254 | KeyOnly | neutral | sampler_trilinear_repeat | none | none | _Matcap2Pan | none | Matcap 1 slot texture. Same matcap blend rule. | 24352 | yes |
+| _Matcap2 | 1254 | KeyOnly | neutral | sampler_trilinear_repeat | none | _Matcap2_ST | _Matcap2Pan | none | Matcap 1 slot texture. The transform applies to the matcap coordinate. Same matcap blend rule. | 24352 | yes |
 | _Matcap2Mask | 1267 | Matcap rim emission masks | companion | Member | _Matcap2MaskUV | _Matcap2Mask_ST | _Matcap2MaskPan | none | Second sample at 24348. | 24373 | yes |
 | _Matcap1NormalMap | 1291 | Matcap rim emission masks | companion | Member | _Matcap1NormalMapUV | _Matcap1NormalMap_ST | _Matcap1NormalMapPan | none | Sampled through calculateNormal. | 24325 | yes |
-| _Matcap3 | 1346 | KeyOnly | neutral | sampler_trilinear_repeat | none | none | _Matcap3Pan | none | Matcap 2 slot texture. Same matcap blend rule. | 24466 | yes |
+| _Matcap3 | 1346 | KeyOnly | neutral | sampler_trilinear_repeat | none | _Matcap3_ST | _Matcap3Pan | none | Matcap 2 slot texture. The transform applies to the matcap coordinate. Same matcap blend rule. | 24466 | yes |
 | _Matcap3Mask | 1359 | Matcap rim emission masks | companion | Member | _Matcap3MaskUV | _Matcap3Mask_ST | _Matcap3MaskPan | none | Second sample at 24462. | 24487 | yes |
 | _Matcap2NormalMap | 1383 | Matcap rim emission masks | companion | Member | _Matcap2NormalMapUV | _Matcap2NormalMap_ST | _Matcap2NormalMapPan | none | Sampled through calculateNormal. | 24439 | yes |
-| _Matcap4 | 1438 | KeyOnly | neutral | sampler_trilinear_repeat | none | none | _Matcap4Pan | none | Matcap 3 slot texture. Same matcap blend rule. | 24580 | yes |
+| _Matcap4 | 1438 | KeyOnly | neutral | sampler_trilinear_repeat | none | _Matcap4_ST | _Matcap4Pan | none | Matcap 3 slot texture. The transform applies to the matcap coordinate. Same matcap blend rule. | 24580 | yes |
 | _Matcap4Mask | 1451 | Matcap rim emission masks | companion | Member | _Matcap4MaskUV | _Matcap4Mask_ST | _Matcap4MaskPan | none | Second sample at 24576. | 24601 | yes |
 | _Matcap3NormalMap | 1475 | Matcap rim emission masks | companion | Member | _Matcap3NormalMapUV | _Matcap3NormalMap_ST | _Matcap3NormalMapPan | none | Sampled through calculateNormal. | 24553 | yes |
-| _CubeMap | 1530 | KeyOnly | neutral | Own | none | none | none | none | Cube sampled by view, reflection, or normal vector. | 24674 | yes |
+| _CubeMap | 1530 | KeyOnly | neutral | sampler_linear_clamp | none | none | none | none | Cube sampled by view, reflection, or normal vector. | 24698 | yes |
 | _CubeMapMask | 1542 | Lighting | companion | Member | _CubeMapMaskUV | _CubeMapMask_ST | _CubeMapMaskPan | none | None. | 24707 | yes |
 | _Set_RimLightMask | 1571 | Matcap rim emission masks | companion | Member | _Set_RimLightMaskUV | _Set_RimLightMask_ST | _Set_RimLightMaskPan | none | Gate _RIMSTYLE_UTS2. | 30071 | yes |
 | _RimMask | 1575 | Matcap rim emission masks | companion | Member | _RimMaskUV | _RimMask_ST | _RimMaskPan | none | Gate _RIMSTYLE_POIYOMI. | 30034 | yes |
@@ -237,7 +240,7 @@ Columns: texture, declaration line, group, class, sampler, selector property, tr
 | _Rim2Mask | 1695 | Matcap rim emission masks | companion | Member | _Rim2MaskUV | _Rim2Mask_ST | _Rim2MaskPan | none | Gate _RIM2STYLE_POIYOMI. | 30084 | yes |
 | _Rim2Tex | 1703 | Matcap rim emission masks | companion | Member | _Rim2TexUV | _Rim2Tex_ST | _Rim2TexPan | none | Gate _RIM2STYLE_POIYOMI. | 30098 | yes |
 | _Rim2ColorTex | 1751 | Matcap rim emission masks | companion | Member | _Rim2ColorTexUV | _Rim2ColorTex_ST | _Rim2ColorTexPan | none | Gate _RIM2STYLE_LILTOON. | 30350 | yes |
-| _SSSThicknessMap | 1839 | Lighting | companion | Member | _SSSThicknessMapUV | _SSSThicknessMap_ST | _SSSThicknessMapPan | none | The selector enum is UV0 to UV3 plus DistortedUV1 at 4. Value 4 reads a distorted coordinate built from UV1, never UV0. | 26348 | yes |
+| _SSSThicknessMap | 1839 | Lighting | companion | Member | _SSSThicknessMapUV | _SSSThicknessMap_ST | _SSSThicknessMapPan | none | The selector enum labels value 4 DistortedUV1, but the code reads mesh slot 4, which is the panosphere slot. Value 4 never reads UV0. | 26348 | yes |
 | _MochieMetallicMaps | 1862 | Lighting | companion | Member | _MochieMetallicMapsUV | _MochieMetallicMaps_ST | _MochieMetallicMapsPan | _MochieMetallicMapsStochastic | The split sample at 26600 adds _MochieMetallicMasksUV, merged transform _PBRMaskScaleTiling, _MochieMetallicMasksPan, and _PBRSplitMaskStochastic. All must hold when the split sample runs on selector 0. | 26596, 26600 | yes |
 | _MochieReflCube | 1880 | KeyOnly | neutral | Own | none | none | none | none | Cube sampled by view. | 26580 family | yes |
 | _AnisotropyMap | 1891 | Lighting | companion | Member | _AnisotropyMapUV | _AnisotropyMap_ST | _AnisotropyMapPan | none | None. | 26733 | yes |
@@ -263,20 +266,20 @@ Columns: texture, declaration line, group, class, sampler, selector property, tr
 | _FlipbookMask | 2456 | Refused | refused feature | Member | _FlipbookMaskUV | _FlipbookMask_ST | _FlipbookMaskPan | none | Belongs to the refused flipbook feature. | 24883 | yes |
 | _EmissionMask | 2529 | Matcap rim emission masks | companion | Member | _EmissionMaskUV | _EmissionMask_ST | _EmissionMaskPan | none | Gate _EMISSION. | 25200 | yes |
 | _EmissionMap | 2539 | Matcap rim emission masks | companion | Member | _EmissionMapUV | _EmissionMap_ST | _EmissionMapPan | none | Center-out branch at 25152 reads the whole 0 to 1 space. _EmissionCenterOutEnabled must be 0 when the map moves. | 25148, 25152 | yes |
-| _EmissionScrollingCurve | 2585 | Matcap rim emission masks | companion | Member | none | _EmissionScrollingCurve_ST | none | none | Never moves. The sample offset adds a position term. _EmissionScrollingUseCurve must be 0 or the texture unassigned. | 25179 | yes |
+| _EmissionScrollingCurve | 2585 | Matcap rim emission masks | companion | Member | _EmissionMapUV | _EmissionScrollingCurve_ST | none | none | Never moves. The sample follows the map selector `_EmissionMapUV`. The sample offset adds a position term. _EmissionScrollingUseCurve must be 0 or the texture unassigned. | 25179 | yes |
 | _EmissionMask1 | 2619 | Matcap rim emission masks | companion | Member | _EmissionMask1UV | _EmissionMask1_ST | _EmissionMask1Pan | none | Gate POI_EMISSION_1. | 25378 | yes |
 | _EmissionMap1 | 2629 | Matcap rim emission masks | companion | Member | _EmissionMap1UV | _EmissionMap1_ST | _EmissionMap1Pan | none | Center-out at 25330. _EmissionCenterOutEnabled1 must be 0 when the map moves. | 25326 | yes |
-| _EmissionScrollingCurve1 | 2675 | Matcap rim emission masks | companion | Member | none | _EmissionScrollingCurve_ST__1 uniform only | none | none | Never moves. _EmissionScrollingUseCurve1 0 or unassigned. | 25357 | yes |
+| _EmissionScrollingCurve1 | 2675 | Matcap rim emission masks | companion | Member | _EmissionMap1UV | _EmissionScrollingCurve_ST__1 uniform only | none | none | Never moves. The sample follows the map selector `_EmissionMap1UV`. _EmissionScrollingUseCurve1 0 or unassigned. | 25357 | yes |
 | _EmissionMask2 | 2709 | Matcap rim emission masks | companion | Member | _EmissionMask2UV | _EmissionMask2_ST | _EmissionMask2Pan | none | Gate POI_EMISSION_2. | 25556 | yes |
 | _EmissionMap2 | 2719 | Matcap rim emission masks | companion | Member | _EmissionMap2UV | _EmissionMap2_ST | _EmissionMap2Pan | none | Center-out at 25508. _EmissionCenterOutEnabled2 must be 0 when the map moves. | 25504 | yes |
-| _EmissionScrollingCurve2 | 2765 | Matcap rim emission masks | companion | Member | none | _EmissionScrollingCurve_ST__2 uniform only | none | none | Never moves. _EmissionScrollingUseCurve2 0 or unassigned. | 25535 | yes |
+| _EmissionScrollingCurve2 | 2765 | Matcap rim emission masks | companion | Member | _EmissionMap2UV | _EmissionScrollingCurve_ST__2 uniform only | none | none | Never moves. The sample follows the map selector `_EmissionMap2UV`. _EmissionScrollingUseCurve2 0 or unassigned. | 25535 | yes |
 | _EmissionMask3 | 2799 | Matcap rim emission masks | companion | Member | _EmissionMask3UV | _EmissionMask3_ST | _EmissionMask3Pan | none | Gate POI_EMISSION_3. | 25734 | yes |
 | _EmissionMap3 | 2809 | Matcap rim emission masks | companion | Member | _EmissionMap3UV | _EmissionMap3_ST | _EmissionMap3Pan | none | Center-out at 25686. _EmissionCenterOutEnabled3 must be 0 when the map moves. | 25682 | yes |
-| _EmissionScrollingCurve3 | 2855 | Matcap rim emission masks | companion | Member | none | _EmissionScrollingCurve_ST__3 uniform only | none | none | Never moves. _EmissionScrollingUseCurve3 0 or unassigned. | 25713 | yes |
+| _EmissionScrollingCurve3 | 2855 | Matcap rim emission masks | companion | Member | _EmissionMap3UV | _EmissionScrollingCurve_ST__3 uniform only | none | none | Never moves. The sample follows the map selector `_EmissionMap3UV`. _EmissionScrollingUseCurve3 0 or unassigned. | 25713 | yes |
 | _GlitterTexture | 2897 | Refused | refused feature | sampler_linear_clamp | none | _GlitterTexture_ST | _GlitterTexturePan | none | Glitter cells read the UV as data and the sample gradients track UV0. | 26276 | yes |
 | _GlitterColorMap | 2898 | Refused | refused feature | Member | _GlitterColorMapUV | _GlitterColorMap_ST | _GlitterColorMapPan | none | Belongs to the refused glitter feature. | 26249 | yes |
 | _GlitterMask | 2936 | Refused | refused feature | Member | _GlitterMaskUV | _GlitterMask_ST | _GlitterMaskPan | none | Belongs to the refused glitter feature. | 26283 | yes |
-| _PathingMap | 2986 | Color effects UV | companion | sampler_point_repeat | _PathingMapUV | _PathingMap_ST | _PathingMapPan | none | _PathPointSampling 1 reads sampler_point_repeat at 27392. _PathPointSampling 0 reads sampler_linear_repeat at 27396. Both are repeat samplers. | 27392, 27396 | yes |
+| _PathingMap | 2986 | Color effects UV | companion | sampler_point_repeat | _PathingMapUV | _PathingMap_ST | _PathingMapPan | none | `_PathPointSampling` 1 selects `sampler_point_repeat` at 27392. `_PathPointSampling` 0 selects `sampler_linear_repeat` at 27396. The rule of section 5 requires `_PathPointSampling` 1 when the texture moves on selector 0, so the admitted sampler is the point repeat one. | 27392, 27396 | yes |
 | _PathingColorMap | 2989 | Color effects UV | companion | Member | _PathingColorMapUV | _PathingColorMap_ST | _PathingColorMapPan | none | None. | 27438 | yes |
 | _MirrorTexture | 3138 | Color effects UV | companion | Member | _MirrorTextureUV | _MirrorTexture_ST | _MirrorTexturePan | none | Gate POI_MIRROR_TEXTURE. | 27737 | yes |
 | _DepthMask | 3151 | Color effects UV | companion | Member | _DepthMaskUV | _DepthMask_ST | _DepthMaskPan | none | Gate GRAIN. | 27779 | yes |
@@ -289,7 +292,7 @@ Columns: texture, declaration line, group, class, sampler, selector property, tr
 | _VideoGameboyRamp | 3339 | KeyOnly | neutral | sampler_linear_clamp | none | none | none | none | Sampled by a brightness scalar, never by a mesh UV. | 28394 | yes |
 | _VoronoiMask | 3353 | Color effects UV | companion | Member | _VoronoiMaskUV | _VoronoiMask_ST | _VoronoiMaskPan | none | _VoronoiSpace must not be 2. | 28783 | yes |
 | _VoronoiNoise | 3361 | Color effects UV | companion | Member | _VoronoiNoiseUV | _VoronoiNoise_ST | _VoronoiNoisePan | none | Same space rule. | 28794 | yes |
-| _TruchetTex | 3418 | Color effects UV | companion | Member | none | _TruchetTex_ST | _TruchetTexPan | none | Sampled at the pattern coordinate with explicit gradients. Never moves. _TruchetUV must not be 0. No selector property exists. | 28966 | yes |
+| _TruchetTex | 3418 | Color effects UV | companion | Member | none | _TruchetTex_ST | _TruchetTexPan | none | Stays bound. Never moves and never joins a page. The sample reads the pattern coordinate with explicit gradients, not a mesh UV. `_TruchetUV` must not be 0. No selector property exists. | 28966 | yes |
 | _TruchetMask | 3421 | Color effects UV | companion | Member | _TruchetMaskUV | _TruchetMask_ST | _TruchetMaskPan | none | Same pattern rule. | 28910 | yes |
 | _ALDecalColorMask | 3519 | Color effects UV | companion | Member | _ALDecalColorMaskUV | _ALDecalColorMask_ST | _ALDecalColorMaskPan | none | _ALDecalUV must not be 0. | 24747 | yes |
 | _VertexBasicsMask | 3569 | Color effects UV | companion | sampler_linear_repeat | VertexBasicsMaskUV | _VertexBasicsMask_ST | _VertexBasicsMaskUVPan | none | Vertex stage sample at LOD 0. The selector property has no leading underscore. _VertexWindEnabled must be 0 when the mask is a page, because the wind branch at 18348 reads world coordinates. | 18241, 18348 | yes |
@@ -298,9 +301,9 @@ Columns: texture, declaration line, group, class, sampler, selector property, tr
 | _VertexGlitchMap | 3836 | KeyOnly | neutral | sampler_linear_repeat | none | none | none | none | Sampled at world height coordinates. A commented duplicate declaration sits at 3830. | 18761 | yes |
 | _UzumoreMask | 3869 | Color effects UV | companion | sampler_point_clamp | _UzumoreMaskUV | none | none | none | The clamp sampler refuses selector 0. The property doubles as the channel index. Default 3 reads UV3 and channel A. No transform or pan exists. | 18081 | yes |
 | _GlobalMaskTexture0 | 3944 | Matcap rim emission masks | companion | Member | _GlobalMaskTexture0UV | _GlobalMaskTexture0_ST | _GlobalMaskTexture0Pan | none | Split mode adds _GlobalMaskTexture0SplitTilingOffset_G, _B, and _A transforms plus _GlobalMaskTexture0SplitPan_G, _B, and _A. Split on requires identity transforms and zero split pans. | 19265 | yes |
-| _GlobalMaskTexture1 | 3958 | Matcap rim emission masks | companion | Member | _GlobalMaskTexture1UV | _GlobalMaskTexture1_ST | _GlobalMaskTexture1Pan | none | Split properties as for slot 0. | 19278 family | yes |
-| _GlobalMaskTexture2 | 3972 | Matcap rim emission masks | companion | Member | _GlobalMaskTexture2UV | _GlobalMaskTexture2_ST | _GlobalMaskTexture2Pan | none | Split properties as for slot 0. | 19291 family | yes |
-| _GlobalMaskTexture3 | 3986 | Matcap rim emission masks | companion | Member | _GlobalMaskTexture3UV | _GlobalMaskTexture3_ST | _GlobalMaskTexture3Pan | none | Split properties as for slot 0. | 19304 family | yes |
+| _GlobalMaskTexture1 | 3958 | Matcap rim emission masks | companion | Member | _GlobalMaskTexture1UV | _GlobalMaskTexture1_ST | _GlobalMaskTexture1Pan | none | Split properties as for slot 0. | 19283 | yes |
+| _GlobalMaskTexture2 | 3972 | Matcap rim emission masks | companion | Member | _GlobalMaskTexture2UV | _GlobalMaskTexture2_ST | _GlobalMaskTexture2Pan | none | Split properties as for slot 0. | 19301 | yes |
+| _GlobalMaskTexture3 | 3986 | Matcap rim emission masks | companion | Member | _GlobalMaskTexture3UV | _GlobalMaskTexture3_ST | _GlobalMaskTexture3Pan | none | Split properties as for slot 0. | 19319 | yes |
 | _DistortionMask | 4404 | Color effects UV | companion | Member | _DistortionMaskUV | none | _DistortionMaskPan | none | No transform property exists. Gate USER_LUT. | 19693 | yes |
 | _DistortionFlowTexture | 4408 | Color effects UV | companion | Member | _DistortionFlowTextureUV | _DistortionFlowTexture_ST | _DistortionFlowTexturePan | none | Fresh default is unassigned. Gate USER_LUT. Distortion writes slot 7, so no moved texture may select 7 under this keyword. | 19681 | yes |
 | _DistortionFlowTexture1 | 4411 | Color effects UV | companion | Member | _DistortionFlowTexture1UV | _DistortionFlowTexture1_ST | _DistortionFlowTexture1Pan | none | Same rules. | 19687 | yes |
@@ -312,9 +315,9 @@ Class counts on 2026-11-23, over the 138 rows that cover the 139 declaration lin
 
 ### 4.4 Sampler verification summary
 
-Every companion row and the member row carries a verified sampler read at the sample lines of the table, re-read from the base pass on 2026-11-23. Observed counts over the 107 companion rows: Member 83, `sampler_trilinear_repeat` 12, `sampler_linear_repeat` 9, `sampler_point_repeat` 1, `sampler_point_clamp` 1, Own 1. The one Own companion is `_VideoPixelTexture`, which never moves. The member row samples through `sampler_MainTex`.
+Every companion row and the member row carries a verified sampler read at the sample lines of the table, re-read from the base pass on 2026-11-23. Observed counts over the 107 companion rows: Member 83, `sampler_trilinear_repeat` 11, `sampler_linear_repeat` 10, `sampler_point_repeat` 1, `sampler_point_clamp` 1, Own 1. The one Own companion is `_VideoPixelTexture`, which never moves. The member row samples through `sampler_MainTex`.
 
-Neutral rows carry their own verified samplers: `sampler_linear_clamp` 4, Own 6, `sampler_trilinear_repeat` 4, `sampler_linear_repeat` 2, Member 1. Refused rows: Member 6, Own 5, `sampler_linear_clamp` 1, no sample 1. One companion row uses a clamp sampler. `_UzumoreMask` reads `sampler_point_clamp` and refuses at selector 0. The other clamp reads sit on neutral rows and on the refused `_GlitterTexture`. The route builder reads every sampler from this table. A wrong sampler kind is a false positive.
+Neutral rows carry their own verified samplers: `sampler_linear_clamp` 5, Own 5, `sampler_trilinear_repeat` 4, `sampler_linear_repeat` 2, Member 1. Refused rows: Member 6, Own 5, `sampler_linear_clamp` 1, no sample 1. One companion row uses a clamp sampler. `_UzumoreMask` reads `sampler_point_clamp` and refuses at selector 0. The other clamp reads sit on neutral rows and on the refused `_GlitterTexture`. The route builder reads every sampler from this table. A wrong sampler kind is a false positive.
 
 ## 5. Conditional rules
 
@@ -322,13 +325,13 @@ The table level required value function checks these rules. Each failure returns
 
 | rule | keywords | properties read | declared types | safe state |
 |---|---|---|---|---|
-| Main transform | none | _MainTex_ST, _MainTexPan | Vector, Vector2 | Transform identity (1,1,0,0) and pan zero |
+| Main transform | none | _MainTex_ST, _MainTexPan | Vector, Vector | Transform identity (1,1,0,0) and pan zero |
 | Main selector and mode | none | _MainTexUV, _MainPixelMode, _MainTexStochastic | Int, Float, Float | 0, 0, 0 |
 | Sharpened alpha to coverage | none | _AlphaSharpenedA2C, _AlphaToCoverage | Float, Float | First 0 or second 0 |
 | Renderer blocker | none | _RenderingAOBlockerEnabled | Float | 0 |
 | Light map mode | PROP_LIGHTDATASDFMAP | _LightingMapMode | Int | Not 4 |
 | Texture ramp row pick | _LIGHTINGMODE_TEXTURERAMP | _ToonRampCount, _ToonRampUVSelector | Int, Int | Count at most 1, or selector not 0 |
-| Multilayer border map LOD | _LIGHTINGMODE_MULTILAYER_MATH | _ShadowBorderMaskLOD, _ShadowBorderMapToggle | Range, Float | LOD 0. Toggle 1 turns the sample on, and the companion route then applies |
+| Multilayer border map LOD | _LIGHTINGMODE_MULTILAYER_MATH | _ShadowBorderMaskLOD, _ShadowBorderMapToggle | Float, Float | LOD 0. Toggle 1 turns the sample on, and the companion route then applies |
 | SDF shading flip | _LIGHTINGMODE_SDF | _SDFShadingTextureUV | Int | Not 0 when the texture is assigned. The texture never moves |
 | Matcap blend, slot 0 | POI_MATCAP0 | _MatcapUVToBlend, _MatCapBlendUV1 | Int, Vector | Selector not 0, 6, or 7, or blend vector zero |
 | Matcap blend, slot 1 | COLOR_GRADING_HDR_3D | _Matcap2UVToBlend, _MatCap2ndBlendUV1 | Int, Vector | Same |
@@ -337,7 +340,7 @@ The table level required value function checks these rules. Each failure returns
 | Emission center out, slot 0 | _EMISSION | _EmissionCenterOutEnabled | Float | 0 when the map is assigned on selector 0 |
 | Emission center out, slots 1 to 3 | POI_EMISSION_1 to POI_EMISSION_3 | _EmissionCenterOutEnabled1, 2, 3 | Float | Same |
 | Emission scroll curve, slots 0 to 3 | _EMISSION and POI_EMISSION_1 to 3 | _EmissionScrollingUseCurve, 1, 2, 3 | Float | 0 or the curve texture unassigned |
-| Global mask split, slots 0 to 3 | POI_GLOBALMASK_TEXTURES | _GlobalMaskTexture0Split to 3Split, the 12 _SplitTilingOffset_G, _B, _A vectors, the 12 _SplitPan_G, _B, _A vectors | Int, Vector, Vector2 | Split 0, or every split transform identity and every split pan zero |
+| Global mask split, slots 0 to 3 | POI_GLOBALMASK_TEXTURES | _GlobalMaskTexture0Split to 3Split, the 12 _SplitTilingOffset_G, _B, _A vectors, the 12 _SplitPan_G, _B, _A vectors | Int, Vector | Split 0, or every split transform identity and every split pan zero |
 | Distortion target | USER_LUT | _DistortionUvToDistort | Int | 1, 2, or 3. Never 0 |
 | Dissolve UV tile | DISTORT | _UVTileDissolveEnabled, _UVTileDissolveUV | Float, Int | Enabled 0, or selector not 0 |
 | Text overlay selectors | EFFECT_BUMP | _TextFPSUV, _TextPositionUV, _TextTimeUV, _TextNumericUV | Int | Every enabled sub-overlay selector not 0 |
@@ -346,6 +349,7 @@ The table level required value function checks these rules. Each failure returns
 | Voronoi space | POI_VORONOI | _VoronoiSpace | Int | Not 2 |
 | UV tile discard grids | POI_UDIMDISCARD | _UDIMDiscardMode, _UDIMDiscardUV, the 16 _UDIMDiscardRow vectors, _EnableUDIMFaceDiscardOptions, _UDIMFaceDiscardUV, the 16 _UDIMFaceDiscardRow vectors | Int, Int, Float, Float, Int, Float | Per grid, all row flags 0, or the grid selector not 0 |
 | Pathing source | POI_PATHING | _PathSource, _PathingUVSelect | Float, Int | Source not 1, or selector not 0 |
+| Pathing point sampling | POI_PATHING | _PathPointSampling | Float | 1 when _PathingMap is assigned on selector 0. Default 1 holds |
 | Uzumore channel | POI_UZUMORE | _UzumoreMaskUV | Float | Not 0. Default 3 holds |
 | Video modes | POI_VIDEO_EFFECTS | _VideoPixelateToResolution, _VideoType, _VideoPixelTextureUV | Float, Int, Int | Pixelate 0, type not 2, pixel texture selector not 0 when assigned |
 | AudioLink UV reads | POI_AUDIOLINK | _AudioLinkCCStripY, the uniform flags _DebugWaveform, _DebugDFT, _DebugCCStrip, _DebugCCLights, _DebugAutocorrelator | Float, uniforms without Properties entries | All 0. Defaults hold |
@@ -356,6 +360,9 @@ The table level required value function checks these rules. Each failure returns
 
 Notes on the conditional rules:
 
+- Two keywords with verdict Companion own rules. `AUTO_EXPOSURE` owns the vertex spectrum and vertex wind rules. `_LIGHTINGMODE_MULTILAYER_MATH` owns the border map LOD rule. A use that enables such a keyword with a broken rule value refuses with `RequiredValueNotHeld`.
+- Two keywords with verdict Conditional own no table rule. `_GLOSSYREFLECTIONS_OFF` and `POI_RIM2` are safe exactly when the companion conditions of the active style keyword in section 4.3 hold. The texture routes carry those conditions, so no table rule is needed.
+- `_MainTex_ST` has no Properties block entry. It is the Unity managed tiling and offset of `_MainTex`. `_MainTexPan` is declared Vector at 63. The 12 split pans are declared Vector at 3948 and their siblings.
 - The audio debug flags are shader uniforms without Properties block entries, declared at 5638 to 5651. A material can carry saved values for them. The route reads them as floats. A missing name reads 0, which is the safe state.
 - `_DepthTextureUV` admits 0 and 8. Value 8 is a depth gradient coordinate, not a mesh UV.
 - The coordinate rule of the spec applies to every companion selector value. Selectors 6 and 7 refuse, every value above 9 and every NaN refuse with `RequiredValueNotHeld`.
@@ -363,114 +370,114 @@ Notes on the conditional rules:
 
 ## 6. Dead value families
 
-One row per keyword. The properties listed here are read only by the code of that keyword. When the keyword is off, these values are dead and leave the material key. Task 3 turns each row into an `AtlasDeadValueFamily` with `IsOff` reading the keyword. The words `family` and `group` mean every property name that starts with the named prefix in that section of the property block.
+One row per keyword. A property enters the family of a keyword only when every read of it in the shader sits inside a conditional compilation block that requires that keyword. Section 2 records the gate walk that verified all 104 rows on 2026-11-23. A name that ends in a star is a prefix. It stands for every property whose name starts with that prefix. A plain name stands for one property. An empty family means the keyword gates no property reads. A property that no code reads stays in the material key and appears in no family. When two keywords gate one read, the property appears in both families.
 
 | keyword | dead properties |
 |---|---|
-| PROP_LIGHTINGAOMAPS | _LightDataAOStrengthR to _LightDataAOStrengthA, _LightDataAOGlobalMaskR, _LightDataAOGlobalMaskBlendTypeR |
-| PROP_LIGHTINGDETAILSHADOWMAPS | _LightingDetailShadowStrengthR to _LightingDetailShadowStrengthA, _LightingAddDetailShadowStrengthR to _LightingAddDetailShadowStrengthA, _LightDataDetailShadowGlobalMaskR, _LightDataDetailShadowGlobalMaskBlendTypeR |
-| PROP_LIGHTINGSHADOWMASKS | _LightingShadowMaskStrengthR to _LightingShadowMaskStrengthA, _LightDataShadowMaskGlobalMaskR, _LightDataShadowMaskGlobalMaskBlendTypeR |
-| PROP_LIGHTDATASDFMAP | _LightDataSDFMapLOD, _LightDataSDFBlendY, the map transform properties |
-| COLOR_GRADING_HDR | _MainColorAdjustTexture and its pan, transform, selector, _Saturation, _MainBrightness, _MainGamma, _MainHueShift family, the four main color global mask blend properties |
-| PROP_MAINGRADATIONTEX | _MainGradationTex, the texture effect of _MainGradationStrength |
-| POI_GLOBALMASK_TEXTURES | _GlobalMaskTexture0 to 3 sections, 3942 to 4001, including split and pan properties |
-| USER_LUT | _Distortion family, _DistortionUvToDistort, the audio link distortion strength pairs |
-| POI_UDIMDISCARD | _UDIMDiscardMode, _UDIMDiscardUV, _UDIMDiscardRow0_0 to Row3_3, _EnableUDIMFaceDiscardOptions, _UDIMFaceDiscardFace, _UDIMFaceDiscardUV, _UDIMFaceDiscardRow0_0 to Row3_3 |
-| POI_PARALLAX | _HeightMap family, _Heightmask family, _HeightStrength, _HeightOffset, _HeightSteps family, _Parallax quality and advanced values, _CurvatureU, _CurvatureV, _CurvFix, _ParallaxRelaxedCone, _ParallaxConeRatio, _ParallaxAnisotropic, _ParallaxAnisotropyScale, _ParallaxMipBias, _ParallaxBinarySteps |
-| POI_AUDIOLINK | _AudioLinkDelay, _AudioLinkAnimToggle, _AudioLinkSmoothing family, the audio debug flags, _AudioLinkCCStripY, the band override sliders |
-| POI_BLACKLIGHTMASKING | _BlackLightMasking0 to 3 Key, Range, GlobalMaskIndex, and GlobalMaskBlendType sets |
-| FINALPASS | _DetailTex family, _DetailMask family, _DetailNormalMap family, _DetailTint family, _DetailBrightness, _DetailTexIntensity, the detail global mask properties |
-| AUTO_EXPOSURE | _VertexBasicsMask family, _VertexManipulation family, _VertexRounding family, _VertexBarrel family, _VertexSphere family, _VertexTornado family, _VertexWind family, _VertexSpectrum family, the vertex audio link properties |
-| POI_VERTEX_LOOKAT | _LookAtMask family, _VertexLookAt family, _LookAtVisibility family, _LookAtRed, Green, Blue, Alpha groups |
-| POI_VERTEX_GLITCHING | _VertexGlitchThreshold, _VertexGlitchFrequency, _VertexGlitchStrength, _VertexGlitchDensity, _VertexGlitchMirror family, _VertexGlitchingAudioLink family |
-| POI_VERTEX_GLITCHING_TEXTURE | _VertexGlitchMap family, _VertexGlitchMapPanSpeed |
-| POI_DEPTHBULGE | _DepthBulgeFadeLength, _DepthBulgeHeight, _DepthBulgeMask family |
-| POI_BACKFACE | _BackFaceColor, _BackFaceColorThemeIndex, _BackFaceDetailIntensity, _BackFaceTexture family, _BackFaceMask family, _BackFaceHueShift family, _BackFaceShiftColorSpace, _BackFaceHueSelectOrShift, _BackFaceEmissionStrength, _BackFaceEmissionLimiter, _BackFaceReplaceAlpha, _BackFacePanning |
-| VIGNETTE | _RGBMask and its pan, transform, selector, _RGBMaskType, the _Rgb mask channel family, the channel invert and emission settings |
-| GEOM_TYPE_MESH | none. The keyword gates no code |
-| PROP_RGBMASK | _RGBMask, its pan, transform, selector, and the mask channel properties of the RGB mask section |
-| PROP_RGBAMETALLICMAPS | The per channel metallic enable, UV, scale offset, mask scale tiling, pan, stochastic, and invert properties |
-| PROP_RGBASMOOTHNESSMAPS | The per channel smoothness enable, UV, scale offset, mask scale tiling, pan, stochastic, and invert properties |
-| PROP_REDTEXTURE | _RedTexture, its pan, transform, selector, stochastic flag, _RedAlphaAdd, the red channel invert and emission settings |
-| PROP_RGBNORMALR | _RgbNormalR, its scale, pan, transform, selector, stochastic flag, the red normal blend source vector and mask channel properties |
-| PROP_GREENTEXTURE | _GreenTexture family as for red, with the _RGBAGreenScaleOffset merge |
-| PROP_RGBNORMALG | _RgbNormalG family as for red |
-| PROP_BLUETEXTURE | _BlueTexture family as for red, with the _RGBABlueScaleOffset merge |
-| PROP_RGBNORMALB | _RgbNormalB family as for red |
-| PROP_ALPHATEXTURE | _AlphaTexture family as for red, with the _RGBAAlphaScaleOffset merge |
-| PROP_RGBNORMALA | _RgbNormalA family as for red |
-| POI_LTCGI | _LTCGI_DiffuseColor and theme index, _LTCGI_SpecularColor and theme index, _LTCGI_Smoothness, _LTCGI_Metallic, _LTCGI_UsePBR, _LTCGI_UseEO, _LTCGI_AnimToggle |
-| VIGNETTE_MASKED | _ShadingEnabled and every shading module property the lighting modes do not own |
-| _LIGHTINGMODE_TEXTURERAMP | _ShadowOffset, _ToonRampCount, _ToonRampUVSelector |
-| _LIGHTINGMODE_MULTILAYER_MATH | The multilayer math uniform family, 12898 to 12967, including _ShadowBorder, _ShadowBlur, _ShadowReceive, _Shadow2nd family, _Shadow3rd family, _ShadowAOShift, _ShadowAOShift2, _ShadowPostAO, and the mask and color settings |
-| _LIGHTINGMODE_SHADEMAP | _BaseColor_Step, _BaseShade_Feather, _ShadeColor_Step, _1st2nd_Shades_Feather, _Use_BaseAs1st, _Use_1stAs2nd, _ShadingShadeMapBlendType, _Use_1stShadeMapAlpha_As_ShadowMask, _1stShadeMapMask_Inverse, _Use_2ndShadeMapAlpha_As_ShadowMask, _2ndShadeMapMask_Inverse, the shade map transforms |
-| _LIGHTINGMODE_REALISTIC | _PPLightingMultiplier, _PPLightingAddition |
-| _LIGHTINGMODE_WRAPPED | _LightingWrappedWrap, _LightingWrappedNormalization, _LightingWrappedColor, the wrapped gradient properties |
-| _LIGHTINGMODE_SKIN | _SssScale, _SkinThicknessPower, _SkinThicknessMapInvert, _SssBumpBlur, _SssTransmissionAbsorption, _SssColorBleedAoWeights, the map transforms |
-| _LIGHTINGMODE_FLAT | _ForceFlatRampedLightmap |
-| _LIGHTINGMODE_CLOTH | _ClothLerp, _ClothMetallic, _ClothReflectance, _ClothSmoothness, the map transform and invert properties |
-| _LIGHTINGMODE_SDF | The _SDFShadingTexture transforms, _SDFBlur, _SDFForward, _SDFLeft |
-| GEOM_TYPE_BRANCH | The decal slot 0 family: _DecalTexture, _DecalColor, _DecalType, _DecalBlendType, _DecalPosition, _DecalRotation, _DecalScale, _DecalMirror family, the _Decal0 group |
-| GEOM_TYPE_BRANCH_DETAIL | The decal slot 1 family: _DecalTexture1, _DecalColor1, the _Decal1 group |
-| GEOM_TYPE_FROND | The decal slot 2 family: _DecalTexture2, _DecalColor2, the _Decal2 group |
-| DEPTH_OF_FIELD_COC_VIEW | The decal slot 3 family: _DecalTexture3, _DecalColor3, the _Decal3 group |
-| PROP_DECALMASK | _DecalMask, _DecalMaskPan, _DecalMaskUV |
-| DISTORT | The _Dissolve family, _UVTileDissolve family, _SphericalDissolve family, _ContinuousDissolve |
-| POI_ANISOTROPICS | The _Aniso0 and _Aniso1 layer families, the offset map strengths, the toon mode, edge, blur, and switch direction values, the tint and theme properties, the aniso shadow mask properties |
-| POI_MATCAP0 | The _Matcap and _Matcap0 families of the Matcap 0 section, 1150 to 1246, and _MatCapBlendUV1 |
-| POI_MATCAP0_CUSTOM_NORMAL | _Matcap0NormalMap, _Matcap0NormalMapPan, _Matcap0NormalMapUV, _Matcap0NormalMapScale |
-| COLOR_GRADING_HDR_3D | The _Matcap2 and _Matcap1 families of the Matcap 1 section, and _MatCap2ndBlendUV1 |
-| POI_MATCAP1_CUSTOM_NORMAL | _Matcap1NormalMap, _Matcap1NormalMapPan, _Matcap1NormalMapUV, _Matcap1NormalMapScale |
-| POI_MATCAP2 | The _Matcap3 and _Matcap2 families of the Matcap 2 section, and _MatCap3rdBlendUV1 |
-| POI_MATCAP2_CUSTOM_NORMAL | _Matcap2NormalMap, _Matcap2NormalMapPan, _Matcap2NormalMapUV, _Matcap2NormalMapScale |
-| POI_MATCAP3 | The _Matcap4 and _Matcap3 families of the Matcap 3 section, and _MatCap4thBlendUV1 |
-| POI_MATCAP3_CUSTOM_NORMAL | _Matcap3NormalMap, _Matcap3NormalMapPan, _Matcap3NormalMapUV, _Matcap3NormalMapScale |
-| _CUBEMAP | _CubeMapColor and theme index, _CubeMapIntensity, _CubeMapSmoothness, _CubeMapRotation and pan, _CubeMapUVMode, _CubeMapWorldNormalsStrength, the mask channel, invert, and global mask properties, the hue shift and color adjust properties, _CubemapBlendType, _CubeMapLightMask, _CubeMapEmissionStrength, _CubeMapBlendAmount |
-| POI_AL_DECAL | _ALDecal family, _ALUVPosition, _ALUVRotation, _ALUVRotationSpeed, _ALUVScale, the _AudioLinkDecal0 to 3 groups |
-| POI_AL_VOLUMECOLOR | _ALVolumeColor family, _ALLowEmission, _ALMidEmission, _ALHighEmission |
-| _SUNDISK_HIGH_QUALITY | The flipbook family, 2447 to 2490: frame, scale offset, rotation, tiled, crossfade, and chronotensity properties, _FlipbookTexArray family, _FlipbookMask family |
-| _EMISSION | The emission 0 section, 2520 to 2602, and the helper properties 25271 to 25300 |
-| POI_EMISSION_1 | The emission 1 section families |
-| POI_EMISSION_2 | The emission 2 section families |
-| POI_EMISSION_3 | The emission 3 section families |
-| _GLOSSYREFLECTIONS_OFF | The rim 0 section, 1566 to 1686, and the _Set_RimLightMask family |
-| _RIMSTYLE_POIYOMI | _RimMask family, _RimTex family, _RimWidth, _RimSharpness, _RimPower, _RimLightingInvert, _RimPoiBlendMode, _RimBlendStrength, _RimBaseColorMix, _RimBrightness, _RimStrength, _RimBiasIntensity, _RimMaskChannel, _RimMaskInvert, the rim shadow mask values, the apply alpha and apply global mask values |
-| _RIMSTYLE_UTS2 | _Set_RimLightMask family, _RimLight_Power, _RimLight_InsideMask, _RimLight_FeatherOff, _Tweak_RimLightMaskLevel, _Is_LightColor_RimLight, _LightDirection_MaskOn, _Tweak_LightDirectionMaskLevel, _Add_Antipodean_RimLight, _Is_LightColor_Ap_RimLight, _Ap_RimLightColor, _Ap_RimLight_Power, _Ap_RimLight_FeatherOff, _RimHueShift family |
-| _RIMSTYLE_LILTOON | _RimColorTex family, _RimMainStrength, _RimNormalStrength, _RimDirRange, _RimIndirRange, _RimFresnelPower, _RimBackfaceMask, _RimDirStrength, _RimBorder, _RimBlur, _RimIndirBorder, _RimIndirBlur, _RimShadowMask, _RimEnableLighting, _RimVRParallaxStrength, _RimBlendMode, _RimMaskOnlyMask |
-| POI_RIM2 | The rim 2 section, 1684 to 1804, and the _Set_Rim2LightMask family |
-| _RIM2STYLE_POIYOMI | _Rim2Mask family, _Rim2Tex family, and the rim 2 Poiyomi style values |
-| _RIM2STYLE_UTS2 | _Set_Rim2LightMask family and the rim 2 UTS values |
-| _RIM2STYLE_LILTOON | _Rim2ColorTex family and the rim 2 lilToon values |
-| _POI_DEPTH_RIMLIGHT | _DepthRimColor, _DepthRimColorThemeIndex, _DepthRimBrightness, _DepthRimWidth, _DepthRimSharpness, _DepthRimType, _DepthRimNormalToUse, _DepthRimHideInShadow, _DepthRimEmission, _DepthRimReplace, _DepthRimAdd, _DepthRimMultiply, _DepthRimAdditiveLighting, _DepthRimMixBaseColor, _DepthRimMixLightColor |
-| _SUNDISK_SIMPLE | The glitter family: layers, shape, size, frequency, random rotation, texture rotation, audio link properties, _GlitterTexture family, _GlitterColorMap family, _GlitterMask family, and the texture transforms |
-| POI_SUBSURFACESCATTERING | _SSSColor, _SSSThicknessMod, _SSSStrength, _SSSSpread, _SSSDistortion, _SSSBaseColorMix, the map transforms |
-| MOCHIE_PBR | _MochieRoughnessMultiplier and its second form, _MochieMetallicMultiplier, the tint and theme properties, the four invert flags, _PBRNormalSelect, the GSAA properties, the TPS properties, _MochieReflCube and its HDR, the fallback properties, the global mask properties |
-| GGX_ANISOTROPICS | _Anisotropy, _ReflectionAnisotropicStretch, _RoughnessAnisotropy, the map transforms |
-| POI_CLEARCOAT | _ClearCoatStrength, _ClearCoatSmoothness, the four map channel selectors, the four strength properties, the four invert flags, the _ClearCoatBRDF fallbacks, the tint and theme properties, the TPS mask properties, the GSAA properties, the global mask properties |
-| POI_ENVIRORIM | _RimEnviroSharpness, _RimEnviroWidth, _RimEnviroBlur, _RimEnviroMinBrightness, _RimEnviroChannel, _RimEnviroIntensity, the mask transforms |
-| POI_STYLIZED_StylizedSpecular | _Smoothness, _Metallic, _Reflectance, _UseReflection, _ApplySpecular family, and the _Stylized properties of the section |
-| _STYLIZEDREFLECTIONMODE_UNITYCHAN | The UnityChan specular body values: the _HighColor family and the _Set_HighColorMask family |
-| _STYLIZEDREFLECTIONMODE_LILTOON | The lilToon reflection body values: the _SmoothnessTex and _ReflectionColorTex settings and the reflection properties |
-| POI_PATHING | _PathingMap family, _PathingColorMap family, _PathingUVSelect, _PathPointSampling, _PathSource family, _PathRemap family, _PathGapLengths, _PathType family, _PathGradientType, _PathWidth, _PathTime, _PathOffset, _PathSpeed, _PathColor family, _PathEmissionStrength, _PathSoftness, _PathSegments, _PathSurfaceBlendMode, the _Path theme index properties, the _PathAL and _AudioLinkPath groups |
-| POI_MIRROR | _VisibilityMode, the _VisibilityVRC properties, _MirrorColor, _MirrorColorThemeIndex |
-| POI_MIRROR_TEXTURE | _MirrorTexture family, _MirrorTextureBlendType, _MirrorTextureForceEnabled |
-| GRAIN | _DepthMask family, _DepthTexture family, _DepthColor family, _DepthAlpha family, _DepthEmissionStrength, the depth blend modes |
-| EFFECT_BUMP | _TextGlyphs, _TextPixelRange, and every _Text property of the four sub-overlays |
-| POSTPROCESS | _PPMask and its pan, transform, selector, channel, invert, _PPHue family, _PPTint, _PPRGB, _PPContrast, _PPSaturation, _PPBrightness, _PPLightness, _PPHDR, _PPPosterization family |
-| PROP_PPMASK | _PPMask, its pan, transform, and selector |
-| POI_INTERNALPARALLAX | The _ParallaxInternal family: map, mask, iterations, depth range, fades, colors, blend modes, and the hue shift group |
-| POI_NORMALCORRECT | _NormalCorrectAmount, _NormalCorrectOrigin |
-| POI_VIDEO_EFFECTS | _VideoPixelTexture family, _VideoMaskTexture family, _VideoType, _VideoResolution, _VideoGameboyRamp, _VideoBacklight, _VideoCRT family, _VideoRepeatVideoTexture, _VideoPixelateToResolution, _VideoMaskPanning, _VideoSaturation, _VideoContrast, _VideoEmissionEnabled |
-| POI_BACKLIGHT | _BacklightColor, _BacklightMainStrength, _BacklightNormalStrength, _BacklightBorder, _BacklightBlur, _BacklightDirectivity, _BacklightViewStrength, _BacklightReceiveShadow, _BacklightBackfaceMask, the texture transforms |
-| POIBS_ENABLE | _CustomColors and the Beat Saber color behavior properties |
-| POIBS_BLOOMFOG | _FogStartOffset, _FogScale, and the bloomfog state |
-| BSSBLOOMFOGTYPE_HEIGHT | _FogHeightOffset, _FogHeightScale |
-| _STOCHASTICMODE_DELIOT_HEITZ | _StochasticDeliotHeitzDensity |
-| _STOCHASTICMODE_HEXTILE | The _StochasticHex family |
-| _STOCHASTICMODE_NONE | none. The no-op macros compile no stochastic code |
-| POI_VORONOI | The _Voronoi family: colors, emission strengths, scale, speed, gradient, power, blend, the random cell group, the audio link modulators, and the _AudioLinkVoronoi family |
-| POI_TRUCHET | _TruchetUV, _TruchetDensity, _TruchetThiccness, _TruchetColor family, _TruchetTex family, _TruchetPanOffset, _TruchetAlpha, _TruchetEdgeSharpness, _TruchetEmissionStrength, _TruchetHideWhenNoAL, _TruchetMask family, _TruchetBlendType, _TruchetOverrideAlpha, the _TruchetAL and _TruchetChronoPan families |
-| POI_UZUMORE | _UzumoreEnabled, _UzumoreAmount, _UzumoreBias, _UzumoreMask, _UzumoreMaskUV |
+| PROP_LIGHTINGAOMAPS | _LightingAO*, _LightDataAOStrength* |
+| PROP_LIGHTINGDETAILSHADOWMAPS | _LightingDetail*, _LightingAddDetail* |
+| PROP_LIGHTINGSHADOWMASKS | _LightingShadowMask* |
+| PROP_LIGHTDATASDFMAP | _LightDataSDF* |
+| COLOR_GRADING_HDR | _MainHue*, _MainColorAdjustTexture*, _MainGamma*, _MainBrightness*, _MainAL*, _MainGradation*, _MainSaturation*, _Saturation*, _ColorGradingToggle* |
+| PROP_MAINGRADATIONTEX | _MainGradationTex* |
+| POI_GLOBALMASK_TEXTURES | _GlobalMaskTexture0*, _GlobalMaskTexture1*, _GlobalMaskTexture2*, _GlobalMaskTexture3* |
+| USER_LUT | _DistortionFlow*, _DistortionStrength*, _DistortionMaskUV*, _DistortionMaskPan*, _DistortionMaskChannel*, _DistortionUvToDistort*, _EnableDistortionAudioLink*, _DistortionMask |
+| POI_UDIMDISCARD | _UDIMFace*, _UDIMDiscardRow0*, _UDIMDiscardRow1*, _UDIMDiscardRow2*, _UDIMDiscardRow3*, _UDIMDiscardUV*, _UDIMDiscardMode*, _EnableUDIMFaceDiscardOptions* |
+| POI_PARALLAX | _Height*, _Curv*, _ParallaxUV*, _ParallaxMipBias*, _ParallaxConeRatio*, _ParallaxRelaxedCone*, _ParallaxAnisotropic*, _ParallaxBinarySteps*, _ParallaxAnisotropyScale* |
+| POI_AUDIOLINK | _AudioLinkDecal*, _PathAL*, _AudioLinkPath*, _AudioLinkVoronoi*, _GlitterAL*, _PathChrono*, _AudioLinkRim*, _DecalRotationCTAL*, _Debug*, _ALDecalVolume*, _ALVolume*, _AudioLinkFlipbook*, _AudioLinkOutline*, _VertexLocalRotationCTAL*, _TruchetAL*, _VertexSpectrum*, _ALUV*, _ALDecalColor*, _TruchetChrono*, _FlipbookChrono*, _AudioLinkDissolve*, _AudioLinkSmoothing*, _AlphaAudio*, _ALDecalBand*, _VertexWorld*, _ALDecalShape*, _VertexLocalScale*, _VertexGlitchingAudio*, _VertexLocalTranslation*, _MainAL*, _ALDecalUV*, _MainHueAL*, _ALDecalBlend*, _AudioLinkBand*, _ALDecalGlobal*, _VertexLookAtAudio*, _VertexRoundingRange*, _DistortionStrengthAudio*, _DistortionStrength1Audio*, _ALLowEmission*, _ALMidEmission*, _ALHighEmission*, _ALDecalLineWidth*, _ALDecalBaseBoost*, _AudioLinkCCStripY*, _ALDecalLowEmission*, _ALDecalMidEmission*, _ALDecalTrebleBoost*, _ALDecalHighEmission*, _TruchetHideWhenNoAL*, _AudioLinkAnimToggle*, _ALDecalControlsAlpha*, _VertexGlitchStrength*, _VertexGlitchThreshold*, _OutlineALColorEnabled*, _VertexAudioLinkEnabled*, _EnableDissolveAudioLink*, _ALDecaldCircleDimensions*, _EnableDistortionAudioLink*, _VertexManipulationHeightAL*, _VertexLookAtAlphaAudiolink*, _VertexManipulationHeightBand*, _VertexLocalRotationAL |
+| POI_BLACKLIGHTMASKING | _BlackLightMasking0*, _BlackLightMasking1*, _BlackLightMasking2Global*, _BlackLightMasking3Global*, _BlackLightMasking2Key*, _BlackLightMasking3Key* |
+| FINALPASS | _DetailTex*, _DetailNormal*, _DetailMask*, _DetailTint*, _DetailBrightness*, _BackFaceDetailIntensity* |
+| AUTO_EXPOSURE | _VertexWind*, _VertexManipulationHeight*, _VertexTornado*, _VertexLocalRotationCTAL*, _VertexSphere*, _VertexRounding*, _VertexBarrel*, _VertexSpectrum*, _VertexBasics*, _VertexManipulationLocal*, _VertexWorld*, _VertexLocalScale*, _VertexLocalTranslation*, _VertexAudioLinkEnabled*, _VertexManipulationWorldTranslation*, _VertexLocalRotationAL |
+| POI_VERTEX_LOOKAT | _Look*, _VertexLookAtAudio*, _VertexLookAtAlphaAudiolink* |
+| POI_VERTEX_GLITCHING | _VertexGlitchingAudio*, _VertexGlitchMirror*, _VertexGlitchDensity*, _VertexGlitchStrength*, _VertexGlitchThreshold*, _VertexGlitchFrequency*, _VertexGlitchMapPanSpeed*, _VertexGlitchMap |
+| POI_VERTEX_GLITCHING_TEXTURE | _VertexGlitchDensity*, _VertexGlitchMapPanSpeed*, _VertexGlitchMap |
+| POI_DEPTHBULGE | _DepthBulgeMask*, _DepthBulgeHeight*, _DepthBulgeFadeLength* |
+| POI_BACKFACE | _BackFaceMask*, _BackFaceHue*, _BackFaceTexture*, _BackFaceColor*, _BackFaceEmission*, _BackFaceReplaceAlpha*, _BackFaceShiftColorSpace*, _BackFaceDetailIntensity* |
+| VIGNETTE | _RGBA*, _Red*, _Blue*, _Green*, _AlphaTexture*, _RgbRed*, _RgbBlue*, _RgbAlpha*, _RgbGreen*, _AlphaColor*, _RgbNormalBGlobal*, _RgbNormalGGlobal*, _RgbNormalAGlobal*, _RgbNormalRGlobal*, _RGBMaskUV*, _RGBMaskPan*, _RGBMaskType*, _RgbNormalBUV*, _RgbNormalAUV*, _RgbNormalGUV*, _RgbNormalRUV*, _AlphaAlphaAdd*, _RgbNormalBPan*, _RgbNormalGPan*, _RgbNormalRPan*, _RgbNormalAPan*, _RgbNormalAScale*, _RgbNormalBScale*, _RgbNormalRScale*, _RgbNormalGScale*, _RgbNormalAStochastic*, _RgbNormalBStochastic*, _RgbNormalRStochastic*, _RgbNormalGStochastic*, _RgbNormalBMaskChannel*, _RgbNormalAMaskChannel*, _RgbNormalRMaskChannel*, _RgbNormalGMaskChannel*, _RgbNormalABlendSources*, _RgbNormalGBlendSources*, _RgbNormalRBlendSources*, _RgbNormalBBlendSources*, _RGBMask, _RGBMask_ST, _RgbNormalA, _RgbNormalA_ST, _RgbNormalB, _RgbNormalB_ST, _RgbNormalG, _RgbNormalG_ST, _RgbNormalR, _RgbNormalR_ST |
+| GEOM_TYPE_MESH | none |
+| PROP_RGBMASK | _RGBMaskUV*, _RGBMaskPan*, _RGBMask, _RGBMask_ST |
+| PROP_RGBAMETALLICMAPS | _RGBAMetallic*, _RGBARedMetallicInvert*, _RGBABlueMetallicInvert*, _RGBAGreenMetallicInvert*, _RGBAAlphaMetallicInvert* |
+| PROP_RGBASMOOTHNESSMAPS | _RGBASmoothness*, _RGBARedSmoothnessInvert*, _RGBABlueSmoothnessInvert*, _RGBAGreenSmoothnessInvert*, _RGBAAlphaSmoothnessInvert* |
+| PROP_REDTEXTURE | _RedTexture* |
+| PROP_RGBNORMALR | _RgbNormalRUV*, _RgbNormalRPan*, _RgbNormalRScale*, _RgbNormalRStochastic*, _RgbNormalRBlendSources*, _RgbNormalR, _RgbNormalR_ST |
+| PROP_GREENTEXTURE | _GreenTexture* |
+| PROP_RGBNORMALG | _RgbNormalGUV*, _RgbNormalGPan*, _RgbNormalGScale*, _RgbNormalGStochastic*, _RgbNormalGBlendSources*, _RgbNormalG, _RgbNormalG_ST |
+| PROP_BLUETEXTURE | _BlueTexture* |
+| PROP_RGBNORMALB | _RgbNormalBUV*, _RgbNormalBPan*, _RgbNormalBScale*, _RgbNormalBStochastic*, _RgbNormalBBlendSources*, _RgbNormalB, _RgbNormalB_ST |
+| PROP_ALPHATEXTURE | _AlphaTexture* |
+| PROP_RGBNORMALA | _RgbNormalAUV*, _RgbNormalAPan*, _RgbNormalAScale*, _RgbNormalAStochastic*, _RgbNormalABlendSources*, _RgbNormalA, _RgbNormalA_ST |
+| POI_LTCGI | _LTCGI_AnimToggle, _LTCGI_DiffuseColor, _LTCGI_DiffuseColorThemeIndex, _LTCGI_Metallic, _LTCGI_Smoothness, _LTCGI_SpecularColor, _LTCGI_SpecularColorThemeIndex, _LTCGI_UseEO, _LTCGI_UsePBR |
+| VIGNETTE_MASKED | _Shadow*, _Cloth*, _SDF*, _Skin*, _Multilayer*, _LightingWrapped*, _Base*, _LightingGradient*, _LightingAdditiveGradient*, _SssScale*, _OutlineLit*, _SssBumpBlur*, _ToonRampCount*, _ToonRampUVSelector*, _LightingShadowColor*, _LightingAdditiveType*, _OutlineShadowStrength*, _ForceFlatRampedLightmap*, _ShadingShadeMapBlendType*, _SssTransmissionAbsorption*, _LightingIgnoreAmbientColor*, _LightingMulitlayerNonLinear*, _ShadeColor_Step, _Use_1stAs2nd, _Use_1stShadeMapAlpha_As_ShadowMask, _Use_2ndShadeMapAlpha_As_ShadowMask, _Use_BaseAs1st |
+| _LIGHTINGMODE_TEXTURERAMP | _Toon*, _ShadowOffset* |
+| _LIGHTINGMODE_MULTILAYER_MATH | _Shadow3rd*, _Shadow2nd*, _ShadowBorder*, _ShadowColor*, _Multilayer*, _ShadowStrengthMask*, _ShadowAO*, _ShadowFlat*, _ShadowBlur*, _ShadowPostAO*, _ShadowReceive*, _ShadowMaskType*, _ShadowEnvStrength*, _ShadowMainStrength*, _ShadowNormalStrength*, _LightingMulitlayerNonLinear* |
+| _LIGHTINGMODE_SHADEMAP | _Base*, _ShadingShadeMapBlendType*, _ShadeColor_Step, _Use_1stAs2nd, _Use_1stShadeMapAlpha_As_ShadowMask, _Use_2ndShadeMapAlpha_As_ShadowMask, _Use_BaseAs1st |
+| _LIGHTINGMODE_REALISTIC | none |
+| _LIGHTINGMODE_WRAPPED | _LightingWrapped*, _LightingGradient* |
+| _LIGHTINGMODE_SKIN | _Skin*, _SssScale*, _SssBumpBlur*, _SssTransmissionAbsorption* |
+| _LIGHTINGMODE_FLAT | _ForceFlatRampedLightmap* |
+| _LIGHTINGMODE_CLOTH | _Cloth* |
+| _LIGHTINGMODE_SDF | _SDF* |
+| GEOM_TYPE_BRANCH | _AudioLinkDecal0*, _Decal0Channel*, _Decal0Video*, _Decal0Apply*, _Decal0Global*, _Decal0Depth*, _DecalTextureUV*, _Decal0FaceMask*, _DecalTexturePan*, _Decal0OnlyVideo*, _Decal0MaskChannel*, _AudioLinkDecalCC0*, _Decal0UseDecalAlpha*, _DecalColorThemeIndex*, _Decal0HueAngleStrength*, _DecalRotationCTALType0*, _DecalRotationCTALBand0*, _DecalRotationCTALSpeed0*, _Decal0OverrideAlphaMode*, _DecalAlphaIntensity, _DecalBlendAlpha, _DecalBlendType, _DecalColor, _DecalEmissionStrength, _DecalHueShift, _DecalHueShiftColorSpace, _DecalHueShiftEnabled, _DecalHueShiftSelectOrShift, _DecalHueShiftSpeed, _DecalMirroredUVMode, _DecalOverrideAlpha, _DecalPosition, _DecalRotation, _DecalRotationSpeed, _DecalScale, _DecalSideOffset, _DecalSymmetryMode, _DecalTexture, _DecalTexture_ST, _DecalTiled |
+| GEOM_TYPE_BRANCH_DETAIL | _AudioLinkDecal1*, _Decal1Channel*, _Decal1Video*, _DecalTexture1*, _Decal1Apply*, _DecalColor1*, _Decal1Global*, _DecalScale1*, _DecalTiled1*, _Decal1Depth*, _DecalRotation1*, _Decal1FaceMask*, _DecalHueShift1*, _DecalPosition1*, _Decal1OnlyVideo*, _DecalBlendType1*, _DecalSideOffset1*, _DecalBlendAlpha1*, _AudioLinkDecalCC1*, _Decal1MaskChannel*, _DecalSymmetryMode1*, _DecalHueShiftSpeed1*, _DecalOverrideAlpha1*, _DecalRotationSpeed1*, _Decal1UseDecalAlpha*, _DecalMirroredUVMode1*, _DecalAlphaIntensity1*, _DecalHueShiftEnabled1*, _DecalEmissionStrength1*, _DecalRotationCTALType1*, _DecalRotationCTALBand1*, _Decal1HueAngleStrength*, _DecalRotationCTALSpeed1*, _Decal1OverrideAlphaMode*, _DecalHueShiftColorSpace1*, _DecalHueShiftSelectOrShift1* |
+| GEOM_TYPE_FROND | _AudioLinkDecal2*, _Decal2Channel*, _Decal2Video*, _DecalTexture2*, _DecalColor2*, _Decal2Apply*, _Decal2Global*, _Decal2Depth*, _DecalTiled2*, _DecalScale2*, _DecalRotation2*, _DecalHueShift2*, _Decal2FaceMask*, _DecalPosition2*, _Decal2OnlyVideo*, _DecalBlendType2*, _DecalSideOffset2*, _DecalBlendAlpha2*, _AudioLinkDecalCC2*, _Decal2MaskChannel*, _DecalSymmetryMode2*, _DecalHueShiftSpeed2*, _Decal2UseDecalAlpha*, _DecalRotationSpeed2*, _DecalOverrideAlpha2*, _DecalMirroredUVMode2*, _DecalAlphaIntensity2*, _DecalHueShiftEnabled2*, _DecalRotationCTALType2*, _Decal2HueAngleStrength*, _DecalEmissionStrength2*, _DecalRotationCTALBand2*, _Decal2OverrideAlphaMode*, _DecalRotationCTALSpeed2*, _DecalHueShiftColorSpace2*, _DecalHueShiftSelectOrShift2* |
+| DEPTH_OF_FIELD_COC_VIEW | _AudioLinkDecal3*, _Decal3Channel*, _Decal3Video*, _DecalTexture3*, _DecalColor3*, _Decal3Apply*, _Decal3Global*, _DecalScale3*, _Decal3Depth*, _DecalTiled3*, _DecalHueShift3*, _Decal3FaceMask*, _DecalPosition3*, _DecalRotation3*, _Decal3OnlyVideo*, _DecalBlendType3*, _DecalBlendAlpha3*, _DecalSideOffset3*, _Decal3MaskChannel*, _AudioLinkDecalCC3*, _DecalSymmetryMode3*, _DecalHueShiftSpeed3*, _DecalRotationSpeed3*, _DecalOverrideAlpha3*, _Decal3OverrideAlphaMode*, _Decal3UseDecalAlpha*, _DecalMirroredUVMode3*, _DecalAlphaIntensity3*, _DecalHueShiftEnabled3*, _DecalRotationCTALType3*, _Decal3HueAngleStrength*, _DecalEmissionStrength3*, _DecalRotationCTALBand3*, _DecalRotationCTALSpeed3*, _DecalHueShiftColorSpace3*, _DecalHueShiftSelectOrShift3* |
+| PROP_DECALMASK | _DecalMask* |
+| DISTORT | _Dissolve*, _UVTile*, _Center*, _Spherical*, _AudioLinkDissolve*, _ContinuousDissolve*, _EnableDissolveAudioLink* |
+| POI_ANISOTROPICS | _Aniso0*, _Aniso1*, _AnisoColor*, _AnisoUse*, _AnisoGlobal*, _AnisoAdd*, _AnisoReplace*, _AnisoNormalBlend*, _AnisoHideInShadow*, _AnisoFadeByLightDirection* |
+| POI_MATCAP0 | _Matcap0AL*, _MatcapMask*, _MatcapHue*, _Matcap0Normal*, _MatcapApply*, _Matcap0Circle*, _MatcapUV*, _MatcapTPS*, _MatcapAdd*, _MatcapLight*, _MatcapColor*, _MatcapPan*, _MatcapMixed*, _MatcapScreen*, _MatcapBorder*, _MatcapNormal*, _MatcapReplace*, _MatcapMultiply*, _MatCapBlendUV1*, _MatcapRotation*, _MatcapIntensity*, _MatcapSmoothness*, _MatcapBaseColorMix*, _MatcapAlphaOverride*, _MatcapEmissionStrength*, _Matcap |
+| POI_MATCAP0_CUSTOM_NORMAL | _Matcap0Normal* |
+| COLOR_GRADING_HDR_3D | _Matcap1AL*, _Matcap2Mask*, _Matcap2Hue*, _Matcap1Normal*, _Matcap2Apply*, _Matcap2UV*, _Matcap2TPS*, _Matcap2Add*, _Matcap2Light*, _Matcap2Color*, _Matcap2Pan*, _Matcap2Mixed*, _Matcap2Border*, _Matcap2Screen*, _Matcap2Replace*, _Matcap2Multiply*, _Matcap2Rotation*, _Matcap2Intensity*, _Matcap2Smoothness*, _MatCap2ndBlendUV1*, _Matcap2BaseColorMix*, _Matcap2AlphaOverride*, _Matcap2EmissionStrength*, _Matcap2, _Matcap2Normal |
+| POI_MATCAP1_CUSTOM_NORMAL | _Matcap1Normal* |
+| POI_MATCAP2 | _Matcap2AL*, _Matcap3Mask*, _Matcap3Hue*, _Matcap2NormalMap*, _Matcap3Apply*, _Matcap3UV*, _Matcap3Add*, _Matcap3TPS*, _Matcap3Light*, _Matcap3Color*, _Matcap3Pan*, _Matcap3Mixed*, _Matcap3Screen*, _Matcap3Border*, _Matcap3Replace*, _Matcap3Multiply*, _Matcap3Rotation*, _Matcap3Intensity*, _Matcap3Smoothness*, _MatCap3rdBlendUV1*, _Matcap3BaseColorMix*, _Matcap3AlphaOverride*, _Matcap3EmissionStrength*, _Matcap3, _Matcap3Normal |
+| POI_MATCAP2_CUSTOM_NORMAL | _Matcap2NormalMap* |
+| POI_MATCAP3 | _Matcap3AL*, _Matcap4Mask*, _Matcap4Hue*, _Matcap3NormalMap*, _Matcap4Apply*, _Matcap4UV*, _Matcap4TPS*, _Matcap4Add*, _Matcap4Light*, _Matcap4Color*, _Matcap4Pan*, _Matcap4Mixed*, _Matcap4Screen*, _Matcap4Border*, _Matcap4Normal*, _Matcap4Replace*, _Matcap4Multiply*, _Matcap4Rotation*, _Matcap4Intensity*, _Matcap4Smoothness*, _MatCap4thBlendUV1*, _Matcap4BaseColorMix*, _Matcap4AlphaOverride*, _Matcap4EmissionStrength*, _Matcap4 |
+| POI_MATCAP3_CUSTOM_NORMAL | _Matcap3NormalMap* |
+| _CUBEMAP | _CubeMapMask*, _CubeMapHue*, _CubeMapColor*, _CubeMapRotation*, _CubeMapUVMode*, _CubeMapContrast*, _CubeMapIntensity*, _CubeMapLightMask*, _CubemapBlendType*, _CubeMapSaturation*, _CubeMapSmoothness*, _CubeMapBrightness*, _CubeMapBlendAmount*, _CubeMapEmissionStrength*, _CubeMapWorldNormalsStrength*, _CubeMap |
+| POI_AL_DECAL | _ALDecalVolume*, _ALUV*, _ALDecalColor*, _ALDecalBand*, _ALDecalShape*, _ALDecalUV*, _ALDecalBlend*, _ALDecalGlobal*, _ALDecalBaseBoost*, _ALDecalLineWidth*, _ALDecalMidEmission*, _ALDecalTrebleBoost*, _ALDecalLowEmission*, _ALDecalHighEmission*, _ALDecalControlsAlpha*, _ALDecaldCircleDimensions* |
+| POI_AL_VOLUMECOLOR | _ALVolume*, _ALLowEmission*, _ALMidEmission*, _ALHighEmission* |
+| _SUNDISK_HIGH_QUALITY | _AudioLinkFlipbook*, _FlipbookMask*, _FlipbookHue*, _FlipbookChrono*, _FlipbookColor*, _FlipbookStart*, _FlipbookRotation*, _FlipbookCrossfade*, _FlipbookFPS*, _FlipbookTiled*, _FlipbookReplace*, _FlipbookPanning*, _FlipbookEndFrame*, _FlipbookBlendType*, _FlipbookTexArrayUV*, _FlipbookSideOffset*, _FlipbookTexArrayPan*, _FlipbookFrameOffset*, _FlipbookScaleOffset*, _FlipbookCurrentFrame*, _FlipbookEmissionStrength*, _FlipbookManualFrameControl*, _FlipbookIntensityControlsAlpha*, _FlipbookAlphaControlsFinalAlpha*, _FlipbookTexArray |
+| _EMISSION | _EmissionAL0*, _AudioLinkEmission0*, _EmissionMask0*, _EmissionMapUV*, _EmissionMapPan*, _EmissionMaskUV*, _EmissionMaskPan*, _EmissionReplace0*, _EmissionMaskChannel*, _EmissionColorThemeIndex*, _EmissionBaseColorAsMap, _EmissionBlinkingEnabled, _EmissionBlinkingOffset, _EmissionCenterOutEnabled, _EmissionCenterOutSpeed, _EmissionColor, _EmissionFluorescence, _EmissionHueSelectOrShift, _EmissionHueShift, _EmissionHueShiftColorSpace, _EmissionHueShiftEnabled, _EmissionHueShiftSpeed, _EmissionMap, _EmissionMap_ST, _EmissionMask, _EmissionMaskInvert, _EmissionMask_ST, _EmissionSaturation, _EmissionScrollingCurve, _EmissionScrollingCurve_ST, _EmissionScrollingOffset, _EmissionScrollingUseCurve, _EmissionScrollingVertexColor, _EmissionStrength, _EmissiveBlink_Max, _EmissiveBlink_Min, _EmissiveBlink_Velocity, _EmissiveScroll_Direction, _EmissiveScroll_Interval, _EmissiveScroll_Velocity, _EmissiveScroll_Width, _EnableGITDEmission, _GITDEMaxEmissionMultiplier, _GITDEMaxLight, _GITDEMinEmissionMultiplier, _GITDEMinLight, _GITDEWorldOrMesh, _ScrollingEmission |
+| POI_EMISSION_1 | _EmissionMask1*, _EmissionAL1*, _EmissionMap1*, _AudioLinkEmission1*, _EmissionColor1*, _GITDEMaxLight1*, _GITDEMinLight1*, _EmissionReplace1*, _EmissionStrength1*, _EmissionHueShift1*, _GITDEWorldOrMesh1*, _ScrollingEmission1*, _EmissionMaskInvert1*, _EmissionSaturation1*, _EnableGITDEmission1*, _EmissionFluorescence1*, _EmissionHueShiftSpeed1*, _EmissionBlinkingOffset1*, _EmissionCenterOutSpeed1*, _EmissionScrollingCurve1*, _EmissionBaseColorAsMap1*, _EmissionHueShiftEnabled1*, _EmissionBlinkingEnabled1*, _EmissionScrollingOffset1*, _EmissionCenterOutEnabled1*, _EmissionHueSelectOrShift1*, _EmissionScrollingUseCurve1*, _GITDEMaxEmissionMultiplier1*, _GITDEMinEmissionMultiplier1*, _EmissionHueShiftColorSpace1*, _EmissionScrollingVertexColor1*, _EmissiveBlink_Max1, _EmissiveBlink_Min1, _EmissiveBlink_Velocity1, _EmissiveScroll_Direction1, _EmissiveScroll_Interval1, _EmissiveScroll_Velocity1, _EmissiveScroll_Width1 |
+| POI_EMISSION_2 | _EmissionMask2*, _EmissionAL2*, _EmissionMap2*, _AudioLinkEmission2*, _EmissionColor2*, _GITDEMinLight2*, _GITDEMaxLight2*, _EmissionReplace2*, _GITDEWorldOrMesh2*, _EmissionStrength2*, _EmissionHueShift2*, _ScrollingEmission2*, _EmissionSaturation2*, _EmissionMaskInvert2*, _EnableGITDEmission2*, _EmissionFluorescence2*, _EmissionHueShiftSpeed2*, _EmissionBlinkingOffset2*, _EmissionCenterOutSpeed2*, _EmissionBaseColorAsMap2*, _EmissionScrollingCurve2*, _EmissionHueShiftEnabled2*, _EmissionScrollingOffset2*, _EmissionBlinkingEnabled2*, _EmissionCenterOutEnabled2*, _EmissionHueSelectOrShift2*, _EmissionScrollingUseCurve2*, _GITDEMinEmissionMultiplier2*, _EmissionHueShiftColorSpace2*, _GITDEMaxEmissionMultiplier2*, _EmissionScrollingVertexColor2*, _EmissiveBlink_Max2, _EmissiveBlink_Min2, _EmissiveBlink_Velocity2, _EmissiveScroll_Direction2, _EmissiveScroll_Interval2, _EmissiveScroll_Velocity2, _EmissiveScroll_Width2 |
+| POI_EMISSION_3 | _EmissionMask3*, _EmissionAL3*, _EmissionMap3*, _AudioLinkEmission3*, _EmissionColor3*, _GITDEMinLight3*, _GITDEMaxLight3*, _EmissionReplace3*, _EmissionHueShift3*, _GITDEWorldOrMesh3*, _EmissionStrength3*, _ScrollingEmission3*, _EmissionSaturation3*, _EnableGITDEmission3*, _EmissionMaskInvert3*, _EmissionFluorescence3*, _EmissionHueShiftSpeed3*, _EmissionCenterOutSpeed3*, _EmissionBlinkingOffset3*, _EmissionBaseColorAsMap3*, _EmissionScrollingCurve3*, _EmissionScrollingOffset3*, _EmissionBlinkingEnabled3*, _EmissionHueShiftEnabled3*, _EmissionHueSelectOrShift3*, _EmissionCenterOutEnabled3*, _EmissionScrollingUseCurve3*, _GITDEMaxEmissionMultiplier3*, _EmissionHueShiftColorSpace3*, _GITDEMinEmissionMultiplier3*, _EmissionScrollingVertexColor3*, _EmissiveBlink_Max3, _EmissiveBlink_Min3, _EmissiveBlink_Velocity3, _EmissiveScroll_Direction3, _EmissiveScroll_Interval3, _EmissiveScroll_Velocity3, _EmissiveScroll_Width3 |
+| _GLOSSYREFLECTIONS_OFF | _RimMask*, _RimShadow*, _RimLight*, _RimAp*, _RimHue*, _RimColor*, _RimTex*, _RimIndir*, _RimDir*, _RimBlend*, _RimGlobal*, _AudioLinkRimWidth*, _AudioLinkRimEmission*, _AudioLinkRimBrightness*, _RimBlur*, _RimPower*, _RimWidth*, _RimBorder*, _RimStrength*, _RimSharpness*, _RimBrightness*, _RimBaseColorMix*, _RimMainStrength*, _RimFresnelPower*, _RimPoiBlendMode*, _RimBackfaceMask*, _RimBiasIntensity*, _RimEnableLighting*, _RimNormalStrength*, _RimVRParallaxStrength*, _Add_Antipodean_RimLight, _Ap_RimLightColor, _Ap_RimLight_FeatherOff, _Ap_RimLight_Power, _Is_LightColor_Ap_RimLight, _Is_LightColor_RimLight, _Is_NormalMapToRimLight, _LightDirection_MaskOn, _Set_RimLightMask, _Set_RimLightMaskChannel, _Set_RimLightMaskPan, _Set_RimLightMaskUV, _Set_RimLightMask_ST, _Tweak_LightDirection_MaskLevel, _Tweak_RimLightMaskLevel |
+| _RIMSTYLE_POIYOMI | _RimTex*, _RimApply*, _AudioLinkRimWidth*, _AudioLinkRimEmission*, _AudioLinkRimBrightness*, _RimWidth*, _RimPower*, _RimMaskUV*, _RimMaskPan*, _RimStrength*, _RimSharpness*, _RimMaskInvert*, _RimBrightness*, _RimShadowWidth*, _RimShadowAlpha*, _RimMaskChannel*, _RimShadowToggle*, _RimBaseColorMix*, _RimPoiBlendMode*, _RimBiasIntensity*, _RimBlendStrength*, _RimLightingInvert*, _RimShadowMaskInvert*, _RimShadowMaskStrength*, _RimShadowMaskRampType*, _RimMask, _RimMask_ST |
+| _RIMSTYLE_UTS2 | _RimApColorThemeIndex*, _Add_Antipodean_RimLight, _Ap_RimLightColor, _Ap_RimLight_FeatherOff, _Ap_RimLight_Power, _Is_LightColor_Ap_RimLight, _Is_LightColor_RimLight, _LightDirection_MaskOn, _RimLight_FeatherOff, _RimLight_InsideMask, _RimLight_Power, _Set_RimLightMask, _Set_RimLightMaskChannel, _Set_RimLightMaskPan, _Set_RimLightMaskUV, _Set_RimLightMask_ST, _Tweak_LightDirection_MaskLevel, _Tweak_RimLightMaskLevel |
+| _RIMSTYLE_LILTOON | _RimColor*, _RimIndir*, _RimDir*, _RimBlur*, _RimBorder*, _RimBlendMode*, _RimMaskOnlyMask*, _RimMainStrength*, _RimFresnelPower*, _RimBackfaceMask*, _RimEnableLighting*, _RimNormalStrength*, _RimVRParallaxStrength*, _RimShadowMask |
+| POI_RIM2 | _Rim2Mask*, _Rim2Shadow*, _Rim2Light*, _AudioLinkRim2*, _Rim2Ap*, _Rim2Hue*, _Rim2Color*, _Rim2Tex*, _Rim2Indir*, _Rim2Dir*, _Rim2Blend*, _Rim2Global*, _Rim2Blur*, _Rim2Power*, _Rim2Width*, _Rim2Border*, _Rim2Strength*, _Rim2Sharpness*, _Rim2Brightness*, _Rim2FresnelPower*, _Rim2BaseColorMix*, _Rim2MainStrength*, _RimPoi2BlendMode*, _Rim2BackfaceMask*, _Rim2BiasIntensity*, _Rim2EnableLighting*, _Rim2NormalStrength*, _Rim2VRParallaxStrength*, _Add_Antipodean_Rim2Light, _Ap_Rim2LightColor, _Ap_Rim2Light_FeatherOff, _Ap_Rim2Light_Power, _Is_LightColor_Ap_Rim2Light, _Is_LightColor_Rim2Light, _Is_NormalMapToRim2Light, _LightDirection_MaskOn2, _Set_Rim2LightMask, _Set_Rim2LightMaskChannel, _Set_Rim2LightMaskPan, _Set_Rim2LightMaskUV, _Set_Rim2LightMask_ST, _Tweak_LightDirection_MaskLevel2, _Tweak_Rim2LightMaskLevel |
+| _RIM2STYLE_POIYOMI | _AudioLinkRim2*, _Rim2Tex*, _Rim2Apply*, _Rim2Power*, _Rim2Width*, _Rim2MaskUV*, _Rim2MaskPan*, _Rim2Strength*, _Rim2Sharpness*, _Rim2MaskInvert*, _Rim2Brightness*, _Rim2ShadowAlpha*, _Rim2MaskChannel*, _Rim2ShadowWidth*, _RimPoi2BlendMode*, _Rim2BaseColorMix*, _Rim2ShadowToggle*, _Rim2BlendStrength*, _Rim2BiasIntensity*, _Rim2LightingInvert*, _Rim2ShadowMaskInvert*, _Rim2ShadowMaskStrength*, _Rim2ShadowMaskRampType*, _Rim2Mask, _Rim2Mask_ST |
+| _RIM2STYLE_UTS2 | _Rim2ApColorThemeIndex*, _Add_Antipodean_Rim2Light, _Ap_Rim2LightColor, _Ap_Rim2Light_FeatherOff, _Ap_Rim2Light_Power, _Is_LightColor_Ap_Rim2Light, _Is_LightColor_Rim2Light, _LightDirection_MaskOn2, _Rim2Light_FeatherOff, _Rim2Light_InsideMask, _Rim2Light_Power, _Set_Rim2LightMask, _Set_Rim2LightMaskChannel, _Set_Rim2LightMaskPan, _Set_Rim2LightMaskUV, _Set_Rim2LightMask_ST, _Tweak_LightDirection_MaskLevel2, _Tweak_Rim2LightMaskLevel |
+| _RIM2STYLE_LILTOON | _Rim2Color*, _Rim2Indir*, _Rim2Dir*, _Rim2Blur*, _Rim2Border*, _Rim2BlendMode*, _Rim2MaskOnlyMask*, _Rim2FresnelPower*, _Rim2MainStrength*, _Rim2BackfaceMask*, _Rim2NormalStrength*, _Rim2EnableLighting*, _Rim2VRParallaxStrength*, _Rim2ShadowMask |
+| _POI_DEPTH_RIMLIGHT | _DepthRim* |
+| _SUNDISK_SIMPLE | _GlitterAL*, _GlitterMask*, _GlitterColor*, _GlitterHue*, _GlitterRandom*, _GlitterMin*, _GlitterTexture*, _GlitterUV*, _GlitterUse*, _GlitterSize*, _GlitterMode*, _GlitterBias*, _GlitterSpeed*, _GlitterShape*, _GlitterLayers*, _GlitterJaggyFix*, _GlitterContrast*, _GlitterFrequency*, _GlitterBlendType*, _GlitterBrightness*, _GlitterAngleRange*, _GlitterCenterSize*, _GlitterHideInShadow*, _GlitterScaleWithLighting* |
+| POI_SUBSURFACESCATTERING | _SSSColor*, _SSSSpread*, _SSSStrength*, _SSSDistortion*, _SSSThicknessMod*, _SSSBaseColorMix*, _SSSThicknessMapUV*, _SSSThicknessMapPan*, _SSSThicknessMap, _SSSThicknessMap_ST |
+| MOCHIE_PBR | _MochieMetallic*, _MochieRefl*, _MochieSpecular*, _Anisotropy*, _PBR*, _BRDFTPS*, _MochieRoughness*, _PoiGSAA*, _MochieSmoothness*, _Specular2ndLayer*, _MochieLitFallback*, _MochieGSAAEnabled*, _MochieForceFallback*, _IgnoreCastedShadows*, _SFExposureOcclusion*, _RefSpecFresnelStrength*, _ReflectionAnisotropicStretch*, _LTCGI_UseEO |
+| GGX_ANISOTROPICS | _Anisotropy*, _RoughnessAnisotropy*, _ReflectionAnisotropicStretch* |
+| POI_CLEARCOAT | _ClearCoatMaps*, _ClearCoatSpecular*, _ClearCoatReflection*, _ClearCoatSmoothness*, _ClearCoatGSAA*, _Clearcoat*, _ClearCoatTPS*, _ClearCoatGlobal*, _ClearCoatFallback*, _ClearCoatStrength*, _ClearCoatMaskInvert*, _ClearCoatLitFallback*, _CCIgnoreCastedShadows*, _ClearCoatNormalSelect*, _ClearCoatForceFallback* |
+| POI_ENVIRORIM | _RimEnviroBlur*, _RimEnviroWidth*, _RimEnviroMaskUV*, _RimEnviroMaskPan*, _RimEnviroChannel*, _RimEnviroSharpness*, _RimEnviroIntensity*, _RimEnviroMinBrightness*, _RimEnviroMask |
+| POI_STYLIZED_StylizedSpecular | _High*, _ReflectionCube*, _Apply*, _Layer2*, _Metallic*, _Smoothness*, _ReflectionColor*, _StylizedSpecularIgnore*, _Reflectance*, _GSAAStrength*, _SpecularBlur*, _SpecularToon*, _UseLightColor*, _UseReflection*, _SpecularBorder*, _Layer1Strength*, _ReflectionBlendMode*, _SSIgnoreCastedShadows*, _SpecularNormalStrength*, _StylizedSpecularFeather*, _StylizedSpecular2Feather*, _StylizedSpecularStrength*, _StylizedSpecularInvertMask*, _ReflectionApplyTransparency*, _StylizedSpecularNormalStrength*, _Is_BlendAddToHiColor, _Is_SpecularToHighColor, _Set_HighColorMask, _Set_HighColorMaskChannel, _Set_HighColorMaskPan, _Set_HighColorMaskUV, _Set_HighColorMask_ST, _Tweak_HighColorMaskLevel |
+| _STYLIZEDREFLECTIONMODE_UNITYCHAN | _High*, _Layer2*, _StylizedSpecularIgnore*, _UseLightColor*, _Layer1Strength*, _SSIgnoreCastedShadows*, _StylizedSpecularFeather*, _StylizedSpecularStrength*, _StylizedSpecular2Feather*, _StylizedSpecularInvertMask*, _StylizedSpecularNormalStrength*, _Is_BlendAddToHiColor, _Is_SpecularToHighColor, _Set_HighColorMask, _Set_HighColorMaskChannel, _Set_HighColorMaskPan, _Set_HighColorMaskUV, _Set_HighColorMask_ST, _Tweak_HighColorMaskLevel |
+| _STYLIZEDREFLECTIONMODE_LILTOON | _ReflectionCube*, _Apply*, _Metallic*, _Smoothness*, _ReflectionColor*, _Reflectance*, _GSAAStrength*, _SpecularBlur*, _SpecularToon*, _UseReflection*, _SpecularBorder*, _ReflectionBlendMode*, _SpecularNormalStrength*, _ReflectionApplyTransparency* |
+| POI_PATHING | _Path*, _AudioLinkPath*, _EnablePathRemapping* |
+| POI_MIRROR | _Visibility*, _MirrorColor*, _MirrorTextureUV*, _MirrorTexturePan*, _MirrorTextureBlendType*, _MirrorTextureForceEnabled*, _Mirror, _MirrorTexture, _MirrorTexture_ST |
+| POI_MIRROR_TEXTURE | _MirrorColor*, _MirrorTextureUV*, _MirrorTexturePan*, _MirrorTextureBlendType*, _MirrorTextureForceEnabled*, _MirrorTexture, _MirrorTexture_ST |
+| GRAIN | _DepthColor*, _DepthMask*, _DepthAlpha*, _DepthTexture*, _DepthEmissionStrength* |
+| EFFECT_BUMP | _TextNumeric*, _TextTime*, _TextPosition*, _TextFPSColor*, _TextFPSUV*, _TextFPSScale*, _TextFPSOffset*, _TextFPSEnabled*, _TextPixelRange*, _TextFPSPadding*, _TextFPSRotation*, _TextFPSEmissionStrength*, _TextGlyphs |
+| POSTPROCESS | _PPMask*, _PPHue*, _PPPosterization*, _PPHDR*, _PPRGB*, _PPTint*, _PPContrast*, _PPLightness*, _PPSaturation*, _PPBrightness*, _ppHueSelectOrShift* |
+| PROP_PPMASK | _PPMask* |
+| POI_INTERNALPARALLAX | _ParallaxInternalHue*, _ParallaxInternalMapMask*, _ParallaxInternalMax*, _ParallaxInternalMin*, _ParallaxInternalHeight*, _ParallaxInternalMapPan*, _ParallaxInternalBlendMode*, _ParallaxInternalIterations*, _ParallaxInternalPanDepthSpeed*, _ParallaxInternalSurfaceBlendMode*, _ParallaxInternalMap |
+| POI_NORMALCORRECT | _NormalCorrectAmount*, _NormalCorrectOrigin* |
+| POI_VIDEO_EFFECTS | _Video* |
+| POI_BACKLIGHT | _BacklightColor*, _BacklightBlur*, _BacklightBorder*, _BacklightDirectivity*, _BacklightMainStrength*, _BacklightViewStrength*, _BacklightBackfaceMask*, _BacklightReceiveShadow*, _BacklightNormalStrength* |
+| POIBS_ENABLE | _Fog* |
+| POIBS_BLOOMFOG | _Fog* |
+| BSSBLOOMFOGTYPE_HEIGHT | _Fog* |
+| _STOCHASTICMODE_DELIOT_HEITZ | _StochasticDeliotHeitzDensity* |
+| _STOCHASTICMODE_HEXTILE | _StochasticHex* |
+| _STOCHASTICMODE_NONE | none |
+| POI_VORONOI | _AudioLinkVoronoi*, _VoronoiNoise*, _VoronoiMask*, _VoronoiInner*, _VoronoiOuter*, _VoronoiRandom*, _VoronoiGlobal*, _VoronoiType*, _VoronoiPower*, _VoronoiSpace*, _VoronoiScale*, _VoronoiSpeed*, _VoronoiBlend*, _VoronoiGradient*, _VoronoiAffectsMaterialAlpha*, _VoronoiEnableRandomCellColor* |
+| POI_TRUCHET | _Truchet* |
+| POI_UZUMORE | _UzumoreMask*, _UzumoreBias*, _UzumoreAmount*, _UzumoreEnabled* |
 
 The textures of a keyword join the dead family when the keyword is off. A texture the material does not assign is inert for its own transform, pan, selector, and stochastic properties. The route reads them only while the texture is assigned.
 
@@ -501,14 +508,15 @@ Each item is a state a plausible wrong implementation admits or refuses wrongly.
 17. `_VoronoiSpace` 2. Refuses.
 18. A UV tile discard grid with a row flag set and its selector 0. Refuses.
 19. `_PathSource` 1 with `_PathingUVSelect` 0. Refuses.
-20. `_UzumoreMaskUV` 0. Refuses, because the clamp sampler cannot serve a page.
-21. `_VideoPixelateToResolution` 1, `_VideoType` 2, or an assigned `_VideoPixelTexture` with selector 0. Refuses.
-22. Any audio UV debug flag or `_AudioLinkCCStripY` at 1. Refuses.
-23. `_ALDecalUV` 0 or `_ALVolumeColorUV` 0. Refuses.
-24. Each refused keyword of section 4.1. Refuses with `KeywordNotAllowed`.
-25. Each engine keyword `FOG_EXP2` or `VERTEXLIGHT_ON`. Refuses as today.
-26. `_SDFShadingTexture` assigned on selector 0 with `_LIGHTINGMODE_SDF`. Refuses.
-27. A NaN or out of range companion selector. Refuses with `RequiredValueNotHeld`.
+20. `_PathPointSampling` 0 with an assigned `_PathingMap` on selector 0. Refuses, because the admitted branch would sample bilinear while the route records point facts.
+21. `_UzumoreMaskUV` 0. Refuses, because the clamp sampler cannot serve a page.
+22. `_VideoPixelateToResolution` 1, `_VideoType` 2, or an assigned `_VideoPixelTexture` with selector 0. Refuses.
+23. Any audio UV debug flag or `_AudioLinkCCStripY` at 1. Refuses.
+24. `_ALDecalUV` 0 or `_ALVolumeColorUV` 0. Refuses.
+25. Each refused keyword of section 4.1. Refuses with `KeywordNotAllowed`.
+26. Each engine keyword `FOG_EXP2` or `VERTEXLIGHT_ON`. Refuses as today.
+27. `_SDFShadingTexture` assigned on selector 0 with `_LIGHTINGMODE_SDF`. Refuses.
+28. A NaN or out of range companion selector. Refuses with `RequiredValueNotHeld`.
 
 ## 9. Limits
 
