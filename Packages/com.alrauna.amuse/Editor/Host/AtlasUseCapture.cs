@@ -559,6 +559,30 @@ namespace Alrauna.Amuse.Editor.Host
                 0,
                 0f);
 
+        /// <summary>
+        /// The Poiyomi <c>sampler_linear_repeat</c> facts. The test
+        /// suite reads the constants to pin them against the record.
+        /// </summary>
+        internal static readonly AtlasSamplerFacts InlineLinearRepeat =
+            new AtlasSamplerFacts(
+                FilterMode.Bilinear,
+                UnityEngine.TextureWrapMode.Repeat,
+                UnityEngine.TextureWrapMode.Repeat,
+                0,
+                0f);
+
+        /// <summary>
+        /// The Poiyomi <c>sampler_point_repeat</c> facts. The test
+        /// suite reads the constants to pin them against the record.
+        /// </summary>
+        internal static readonly AtlasSamplerFacts InlinePointRepeat =
+            new AtlasSamplerFacts(
+                FilterMode.Point,
+                UnityEngine.TextureWrapMode.Repeat,
+                UnityEngine.TextureWrapMode.Repeat,
+                0,
+                0f);
+
         private const string OutlineTextureProperty = "_OutlineTex";
 
         /// <summary>
@@ -636,6 +660,22 @@ namespace Alrauna.Amuse.Editor.Host
                     case AtlasCompanionSampler.InlineTrilinearRepeat:
                         facts = InlineTrilinearRepeat;
                         break;
+                    case AtlasCompanionSampler.InlineLinearRepeat:
+                        facts = InlineLinearRepeat;
+                        break;
+                    case AtlasCompanionSampler.InlinePointRepeat:
+                        facts = InlinePointRepeat;
+                        break;
+                    case AtlasCompanionSampler.InlineClamp:
+                        // A clamp companion refuses its UV0 use
+                        // through its own required value before the
+                        // sampler step runs. A pending use here
+                        // means a route built its facts wrong.
+                        throw new InvalidOperationException(
+                            "The companion route '" + route.Property +
+                            "' names the clamp sampler on a UV0 use." +
+                            " The route must refuse that use before" +
+                            " the sampler step.");
                     default:
                         throw new InvalidOperationException(
                             "The companion route '" + route.Property +
@@ -1111,9 +1151,10 @@ namespace Alrauna.Amuse.Editor.Host
             out AtlasRouteTable table)
         {
             table = null;
-            if (TryAttestPoiyomi(material, out shaderRowName))
+            if (TryAttestPoiyomi(
+                    material, out shaderRowName, out var reviewed))
             {
-                table = AtlasRouteTable.PoiyomiMainColor;
+                table = PoiyomiTableOf(reviewed);
                 return AtlasUseRefusal.None;
             }
 
@@ -1188,15 +1229,31 @@ namespace Alrauna.Amuse.Editor.Host
         }
 
         /// <summary>
+        /// The route table of one attested Poiyomi row. The keyword
+        /// review of 2026-11-23 read the two bundled 9.3 rows only,
+        /// so a release row keeps the plain route until a review
+        /// reads its source. The seam mirrors the lilToon version
+        /// gate above.
+        /// </summary>
+        internal static AtlasRouteTable PoiyomiTableOf(bool atlasRouteReviewed)
+        {
+            return atlasRouteReviewed
+                ? AtlasRouteTable.PoiyomiReviewedMainColor
+                : AtlasRouteTable.PoiyomiMainColor;
+        }
+
+        /// <summary>
         /// The Poiyomi row gate: the name classifies, some row with this
         /// name holds this GUID, and the normalized source digest matches
         /// that same row. One row must hold all three values together.
         /// </summary>
         private static bool TryAttestPoiyomi(
             Material material,
-            out string shaderRowName)
+            out string shaderRowName,
+            out bool atlasRouteReviewed)
         {
             shaderRowName = null;
+            atlasRouteReviewed = false;
             var shader = material.shader;
             if (shader == null ||
                 !PoiyomiSourceAttestation.TryClassifyShaderName(
@@ -1233,6 +1290,7 @@ namespace Alrauna.Amuse.Editor.Host
                 }
 
                 shaderRowName = row.ShaderName;
+                atlasRouteReviewed = row.AtlasRouteReviewed;
                 return true;
             }
             catch (IOException)
