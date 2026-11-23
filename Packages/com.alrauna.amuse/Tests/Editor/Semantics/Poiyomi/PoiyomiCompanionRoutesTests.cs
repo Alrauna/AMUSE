@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using Alrauna.Amuse.Editor.Host;
 using Alrauna.Amuse.Editor.Semantics;
 using Alrauna.Amuse.Editor.Semantics.Poiyomi;
@@ -285,6 +287,85 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                         0f)),
                 "the point repeat facts are point Repeat without" +
                 " anisotropy or bias");
+        }
+
+        /// <summary>
+        /// The self-test of the shared inventory helper that the
+        /// four group tasks call. The Always on group is the one
+        /// group whose every companion row follows the standard
+        /// pattern, so the test builds the whole route set from the
+        /// inventory rows with the route builder and exercises every
+        /// branch of the helper: the correct set passes, a wrong
+        /// sampler throws, a stochastic row built without its
+        /// stochastic condition throws, and a removed route throws.
+        /// A wrong helper can therefore never reach a group test
+        /// silently.
+        /// </summary>
+        [Test]
+        public void InventoryHelperSelfTestOnTheAlwaysOnGroup()
+        {
+            var rows = PoiyomiReviewedInventory.Textures
+                .Where(row =>
+                    row.Group == "Always on" &&
+                    row.Class == "companion")
+                .ToList();
+            Assert.That(
+                rows, Has.Count.EqualTo(8),
+                "fixture precondition: the record lists eight" +
+                " companion rows for the Always on group");
+
+            static AtlasCompanionRoute BuildRoute(
+                (string Texture, string Group, string Class,
+                    AtlasCompanionSampler? Sampler, bool Stochastic) row,
+                bool stochastic,
+                AtlasCompanionSampler? samplerOverride = null)
+            {
+                return PoiyomiCompanionRoutes.Standard(
+                    row.Texture,
+                    samplerOverride ?? row.Sampler.Value,
+                    Array.Empty<string>(),
+                    stochastic);
+            }
+
+            var correct = rows
+                .Select(row => BuildRoute(row, row.Stochastic))
+                .ToList();
+            PoiyomiReviewedInventory.AssertRoutesMatchInventory(
+                "Always on", correct);
+
+            var wrongSampler = rows
+                .Select(row => BuildRoute(
+                    row,
+                    row.Stochastic,
+                    row.Texture == "_BumpMap"
+                        ? (AtlasCompanionSampler?)
+                        AtlasCompanionSampler.InlineTrilinearRepeat
+                        : null))
+                .ToList();
+            Assert.That(
+                () => PoiyomiReviewedInventory.AssertRoutesMatchInventory(
+                    "Always on", wrongSampler),
+                Throws.TypeOf<AssertionException>(),
+                "a wrong sampler kind must fail the helper");
+
+            var withoutStochastic = rows
+                .Select(row => BuildRoute(row, false))
+                .ToList();
+            Assert.That(
+                () => PoiyomiReviewedInventory.AssertRoutesMatchInventory(
+                    "Always on", withoutStochastic),
+                Throws.TypeOf<AssertionException>(),
+                "a stochastic row built without its stochastic" +
+                " condition must fail the helper");
+
+            var removed = correct
+                .Where(route => route.Property != "_OutlineTexture")
+                .ToList();
+            Assert.That(
+                () => PoiyomiReviewedInventory.AssertRoutesMatchInventory(
+                    "Always on", removed),
+                Throws.TypeOf<AssertionException>(),
+                "a removed route must fail the helper");
         }
 
         private static string Number(float value)

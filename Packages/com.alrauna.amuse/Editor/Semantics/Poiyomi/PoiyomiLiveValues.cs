@@ -459,13 +459,22 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// DeclaredUniformsCoverTheSource test re-checks it against
         /// the installed source with the same extraction rules.
         /// <para>
-        /// The extraction excludes the script-set global textures
-        /// that the two files declare in the
-        /// <c>uniform Texture2D &lt;name&gt;;</c> form. Those names
-        /// name render-global bindings that scripts fill with
-        /// <c>Shader.SetGlobalTexture</c>. A global binding holds no
-        /// material saved value, so an excluded name can never hide
-        /// a live saved value behind a stale name.
+        /// The extraction excludes three declaration forms. First,
+        /// the script-set global textures, which the two files
+        /// declare as <c>uniform Texture2D &lt;name&gt;;</c>,
+        /// <c>uniform Texture2D&lt;float4&gt; &lt;name&gt;;</c>,
+        /// <c>uniform Texture2DArray &lt;name&gt;;</c>,
+        /// <c>uniform Texture3D &lt;name&gt;;</c>, and
+        /// <c>uniform sampler2D &lt;name&gt;;</c>. Those names name
+        /// render-global bindings that scripts fill with
+        /// <c>Shader.SetGlobalTexture</c>. Second, arrays whose size
+        /// is a macro instead of a digit literal. Third, the
+        /// compiler-warning dummy
+        /// <c>random_uniform_float_only_used_to_stop_compiler_warnings</c>,
+        /// an initialized uniform outside the property namespace. No
+        /// excluded form carries a material saved value, so an
+        /// excluded name can never hide a live saved value behind a
+        /// stale name.
         /// </para>
         /// </summary>
         internal static readonly string[] DeclaredUniforms =

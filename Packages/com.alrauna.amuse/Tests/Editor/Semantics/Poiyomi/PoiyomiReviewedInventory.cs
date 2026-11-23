@@ -304,13 +304,15 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         /// <summary>
         /// The shared sampler and stochastic pin of the reviewed
         /// route. Every group test calls it from its inventory test.
-        /// For every route of the group, the record must class the
-        /// texture as a companion of that group, the route must name
-        /// the verified sampler of the record, and the route must
-        /// carry the stochastic condition exactly when the record
-        /// names a stochastic property. A wrong sampler kind is a
-        /// false positive, so a mismatch fails the group inventory
-        /// test.
+        /// The set of route properties must equal the set of
+        /// companion rows of that group in the record, so a missing
+        /// route fails the group task. For every route of the group,
+        /// the record must class the texture as a companion of that
+        /// group, the route must name the verified sampler of the
+        /// record, and the route must carry the stochastic condition
+        /// exactly when the record names a stochastic property. A
+        /// wrong sampler kind is a false positive, so a mismatch
+        /// fails the group inventory test.
         /// </summary>
         internal static void AssertRoutesMatchInventory(
             string group,
@@ -319,15 +321,25 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             var byName = new Dictionary<string,
                 (string Group, string Class,
                     AtlasCompanionSampler? Sampler, bool Stochastic)>();
+            var companions = new HashSet<string>(StringComparer.Ordinal);
             foreach (var row in Textures)
             {
                 byName[row.Texture] =
                     (row.Group, row.Class, row.Sampler, row.Stochastic);
+                if (row.Group == group && row.Class == "companion")
+                {
+                    companions.Add(row.Texture);
+                }
             }
 
             Assert.That(
+                companions, Is.Not.Empty,
+                "fixture precondition: the record lists companion" +
+                " textures for the group '" + group + "'");
+            Assert.That(
                 routes, Is.Not.Empty,
                 "fixture precondition: the group carries routes");
+
             var seen = new HashSet<string>(StringComparer.Ordinal);
             foreach (var route in routes)
             {
@@ -367,6 +379,25 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                     "' carries the stochastic condition exactly when" +
                     " the record names " + stochasticCondition);
             }
+
+            var missing = companions
+                .Except(seen)
+                .OrderBy(name => name, StringComparer.Ordinal)
+                .ToList();
+            var extra = seen
+                .Except(companions)
+                .OrderBy(name => name, StringComparer.Ordinal)
+                .ToList();
+            Assert.That(
+                missing, Is.Empty,
+                "every companion texture of the group '" + group +
+                "' must carry a route. Missing: " +
+                string.Join(", ", missing));
+            Assert.That(
+                extra, Is.Empty,
+                "no route may name a texture outside the companion" +
+                " rows of the group '" + group + "'. Extra: " +
+                string.Join(", ", extra));
         }
     }
 }

@@ -295,18 +295,28 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         /// <summary>
         /// Every name that either bundled file declares: the
         /// Properties entries, the uniform declarations, and the
-        /// texture and sampler declarations. The extraction covers
-        /// commented declarations too, because a material can still
-        /// carry a saved value under such a name.
+        /// texture and sampler declarations. The Properties entries
+        /// and the texture and sampler declarations include
+        /// commented lines, because a material can still carry a
+        /// saved value under such a name. The typed uniform
+        /// declarations cover digit array sizes only.
         /// <para>
-        /// The extraction excludes the script-set global textures of
-        /// the shader. Those declarations use the form
-        /// <c>uniform Texture2D &lt;name&gt;;</c>, which the texture
-        /// declaration regex does not admit. The excluded names name
-        /// render-global textures that scripts bind with
-        /// <c>Shader.SetGlobalTexture</c>. A global binding holds no
-        /// material saved value, so an excluded name can never hide
-        /// a live saved value behind a stale name.
+        /// The extraction excludes three declaration forms. First,
+        /// the script-set global textures, which the two files
+        /// declare as <c>uniform Texture2D &lt;name&gt;;</c>,
+        /// <c>uniform Texture2D&lt;float4&gt; &lt;name&gt;;</c>,
+        /// <c>uniform Texture2DArray &lt;name&gt;;</c>,
+        /// <c>uniform Texture3D &lt;name&gt;;</c>, and
+        /// <c>uniform sampler2D &lt;name&gt;;</c>. Those names name
+        /// render-global bindings that scripts fill with
+        /// <c>Shader.SetGlobalTexture</c>. Second, arrays whose size
+        /// is a macro instead of a digit literal. Third, the
+        /// compiler-warning dummy
+        /// <c>random_uniform_float_only_used_to_stop_compiler_warnings</c>,
+        /// an initialized uniform outside the property namespace. No
+        /// excluded form carries a material saved value, so an
+        /// excluded name can never hide a live saved value behind a
+        /// stale name.
         /// </para>
         /// </summary>
         private static IEnumerable<string> DeclaredNamesOf(
