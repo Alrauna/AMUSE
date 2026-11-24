@@ -591,9 +591,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             material.SetFloat("_AlphaMaskUV", 6f);
             material.SetFloat("_MainAlphaMaskMode", 0f);
 
-            // No-op guard: the admitted twin first. Mode 0 compiles
-            // the sample out, so even the broken selector 6 admits
-            // and the mask moves into no page.
+            // No-op guard: the admitted twin first. Mode 0 leaves
+            // the mask unread at runtime, so even the broken
+            // selector 6 admits and the mask moves into no page.
             var twin = fixture.CaptureSingle(material);
             PoiyomiReviewedFixture.AssertAdmitted(twin);
             Assert.That(
@@ -625,9 +625,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             material.SetFloat("_AlphaMaskUV", 6f);
             material.SetFloat("_MainAlphaMaskMode", 0f);
 
-            // No-op guard: the admitted twin first. Mode 0 compiles
-            // the sample out, so even the broken selector 6 admits
-            // and the mask moves into no page.
+            // No-op guard: the admitted twin first. Mode 0 leaves
+            // the mask unread at runtime, so even the broken
+            // selector 6 admits and the mask moves into no page.
             var twin = fixture.CaptureSingle(material);
             PoiyomiReviewedFixture.AssertAdmitted(twin);
             Assert.That(

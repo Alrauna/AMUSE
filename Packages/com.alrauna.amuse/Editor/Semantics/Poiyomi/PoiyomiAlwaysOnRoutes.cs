@@ -89,11 +89,14 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     false),
 
                 // The light data map samples only in light map mode
-                // 4. The table rule refuses mode 4, so the texture
-                // never samples in an admitted use. It moves into no
-                // page and leaves the material key. It carries no
-                // conditions, because no material value can turn its
-                // sample on.
+                // 4, and the mode can turn that sample on. The table
+                // rule refuses mode 4 while the keyword is on, and
+                // the mode sits on the table conditions. In an
+                // admitted use the texture never samples, so it
+                // moves into no page and leaves the material key.
+                // The route names no transforms and no conditions of
+                // its own, because the table rule guards the one
+                // state that could reach the sample.
                 LightDataSdfMapRoute(),
 
                 // The outline mask compiles only in the outline
@@ -163,8 +166,8 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
         /// <summary>
         /// The alpha mask route. It follows the standard pattern and
-        /// adds the blend mode gate of the record. Mode 0 compiles
-        /// the sample out, so the use is inert there.
+        /// adds the blend mode gate of the record. Mode 0 leaves the
+        /// mask unread at runtime, so the use is inert there.
         /// </summary>
         private static AtlasCompanionRoute AlphaMaskRoute()
         {

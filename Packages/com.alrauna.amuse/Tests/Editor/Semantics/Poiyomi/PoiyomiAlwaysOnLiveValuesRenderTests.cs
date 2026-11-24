@@ -162,7 +162,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             if (differentPixels > 0)
             {
                 var liveMembers = LiveMembersOf(
-                    shader, family, before, perturbed);
+                    harness, shader, family, before, perturbed);
                 Assert.Fail(
                     "The values of the dead family '" + familyName +
                     "' changed the render" + RowName(twoPass) + ". " +
@@ -385,21 +385,24 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 
         /// <summary>
         /// The members that move the render on their own. The helper
-        /// gives each member one fresh case material, so the result
-        /// names the defect for the data fix.
+        /// gives each member one fresh case material on the caller
+        /// harness, so the result names the defect for the data fix.
+        /// A second harness would place a second scene at the same
+        /// world position, and the two spheres would depth tie.
         /// </summary>
         private List<string> LiveMembersOf(
+            PoiyomiRenderHarness harness,
             Shader shader,
             AtlasDeadValueFamily family,
             Color32[] baseRender,
             List<string> perturbed)
         {
-            using var harness = new PoiyomiRenderHarness();
-            PinAmbientLight();
             var live = new List<string>();
             foreach (var name in perturbed)
             {
                 var probe = NewCaseMaterial(shader, family);
+                TurnEveryGroupKeywordOn(probe);
+                TurnTheFamilyOff(probe, family);
                 PerturbOneValue(probe, name);
                 if (!BytesEqual(baseRender, harness.Render(probe)))
                 {
