@@ -624,14 +624,8 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         }
 
         /// <summary>
-        /// One packed RGBA map. The merged sample follows the standard
-        /// pattern. The four split per channel samples read the same
-        /// texture, so their selectors join the route as conditions at
-        /// UV0, their pans and stochastic flags as zero conditions, and
-        /// their merged transforms as identity demands. A split read on
-        /// another mesh UV would sample the page outside its region.
-        /// The channel prefixes of the packed RGBA maps sit below, in
-        /// red, green, blue, alpha order.
+        /// The channel prefixes of the packed RGBA maps, in red,
+        /// green, blue, alpha order.
         /// </summary>
         private static readonly string[] RgbaChannelPrefixes =
         {
@@ -641,6 +635,16 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             "Alpha",
         };
 
+        /// <summary>
+        /// One packed RGBA map. The merged sample follows the standard
+        /// pattern. The four split per channel samples read the same
+        /// texture, so their selectors join the route as conditions at
+        /// UV0, their split pans join the identity demands as zero
+        /// transforms, their split stochastic flags join the
+        /// conditions at 0, and their merged transforms as identity
+        /// demands. A split read on another mesh UV would sample the
+        /// page outside its region.
+        /// </summary>
         private static AtlasCompanionRoute PackedRgbMapRoute(string texture)
         {
             var selectorProperty = texture + "UV";
@@ -1356,7 +1360,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             {
                 // A saved name reads through GetFloat or GetInteger.
                 // A name the row does not carry reads 0, which is the
-                // safe state. HasFloat and HasInteger stay silent;
+                // safe state. HasFloat and HasInteger stay silent.
                 // a bare GetFloat would log an error for a missing
                 // name.
                 var value = material.HasFloat(flag)

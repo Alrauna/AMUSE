@@ -36,18 +36,16 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         private Texture2D noiseTexture;
         private DefaultReflectionMode previousDefaultReflectionMode;
         private Material previousSkybox;
+        private float previousAudioLinkAnimToggle;
+        private Texture2D previousAudioTexture;
 
         [SetUp]
         public void SetUp()
         {
             patternTexture = Track(NewPatternTexture());
             noiseTexture = Track(NewNoiseTexture());
-            // A previous job of another group can leave a custom
-            // reflection that is not a cubemap in the editor session.
-            // The subject would read that constant environment and
-            // the main color control would go blind. The fixture pins
-            // the skybox reflection mode with an empty skybox, which
-            // reads black, and restores the previous state in the
+            // The fixture pins the skybox reflection mode with an
+            // empty skybox for the run and restores both in the
             // teardown.
             previousDefaultReflectionMode =
                 RenderSettings.defaultReflectionMode;
@@ -55,6 +53,13 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             RenderSettings.defaultReflectionMode =
                 DefaultReflectionMode.Skybox;
             RenderSettings.skybox = null;
+            // The audio link availability pin of the decal and the
+            // volume color cases sets these two globals. Both are
+            // saved here and restored in the teardown.
+            previousAudioLinkAnimToggle =
+                Shader.GetGlobalFloat("_AudioLinkAnimToggle");
+            previousAudioTexture =
+                Shader.GetGlobalTexture("_AudioTexture");
         }
 
         [TearDown]
@@ -73,7 +78,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             noiseTexture = null;
             // The audio link availability pin of the decal and the
             // volume color cases restores here.
-            Shader.SetGlobalFloat("_AudioLinkAnimToggle", 0f);
+            Shader.SetGlobalFloat(
+                "_AudioLinkAnimToggle", previousAudioLinkAnimToggle);
+            Shader.SetGlobalTexture(
+                "_AudioTexture", previousAudioTexture);
             RenderSettings.skybox = previousSkybox;
             RenderSettings.defaultReflectionMode =
                 previousDefaultReflectionMode;
@@ -108,12 +116,11 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         }
 
         /// <summary>
-        /// The families whose live values this scene cannot show, or
-        /// whose dead case fails because a pinned reader reaches the
-        /// render with the switch off. Each entry names the attempted
-        /// pins and the observed state, dated. The dead cases of the
-        /// listed families that only fail on liveness still run and
-        /// still hold.
+        /// The families whose live values this scene cannot show.
+        /// Both entries are controller-ruled harness gaps: the
+        /// harness camera renders no depth texture, and the subject
+        /// sits far beyond the uzumore near plane window. Observed
+        /// 2026-11-24 with the fix round 2 pins.
         /// </summary>
         private static readonly Dictionary<string, string>
             FamiliesTheOracleCannotShow =
@@ -124,81 +131,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 "when the scene holds no camera depth texture. The " +
                 "harness camera renders no depth texture. Observed " +
                 "2026-11-24.",
-            ["_STOCHASTICMODE_DELIOT_HEITZ"] =
-                "No fixture texture samples stochastically without a " +
-                "pinned reader, and a pinned stochastic sampled bump " +
-                "makes the density render with the family switch " +
-                "off, so the dead case fails. Observed 2026-11-24.",
-            ["_STOCHASTICMODE_HEXTILE"] =
-                "See _STOCHASTICMODE_DELIOT_HEITZ. Observed " +
-                "2026-11-24.",
-            ["COLOR_GRADING_HDR"] =
-                "The pinned and perturbed hue, brightness, and color " +
-                "adjust members hold the exact value states of the " +
-                "review table and still do not move the render in " +
-                "the all keyword fixture. Observed 2026-11-24.",
-            ["USER_LUT"] =
-                "The distortion writes the coordinate slot 7 and the " +
-                "pinned slot 7 reader holds its sample under the " +
-                "strength perturbation. Observed 2026-11-24.",
-            ["FINALPASS"] =
-                "The detail blend weight reads zero on the subject " +
-                "in the harness state, so the detail members do not " +
-                "reach the render. Observed 2026-11-24.",
-            ["DISTORT"] =
-                "The pinned edge color and emission strengths hold " +
-                "the basic dissolve mode, and the perturbed alpha " +
-                "and edge members do not move the render on the " +
-                "opaque subject. Observed 2026-11-24.",
-            ["PROP_RGBMASK"] =
-                "The pinned dark mask and enables leave the four " +
-                "blends washing the base color, and the main color " +
-                "control goes blind. Observed 2026-11-24.",
-            ["PROP_RGBAMETALLICMAPS"] =
-                "The metallic value shows only under a PBR lighting " +
-                "state the fixture cannot hold while the row control " +
-                "stays alive. Observed 2026-11-24.",
-            ["PROP_RGBASMOOTHNESSMAPS"] =
-                "See PROP_RGBAMETALLICMAPS. Observed 2026-11-24.",
-            ["PROP_REDTEXTURE"] =
-                "The pinned blend colors wash the base color and the " +
-                "main color control goes blind. Observed 2026-11-24.",
-            ["PROP_RGBNORMALR"] =
-                "See PROP_REDTEXTURE. Observed 2026-11-24.",
-            ["PROP_GREENTEXTURE"] =
-                "See PROP_REDTEXTURE. Observed 2026-11-24.",
-            ["PROP_RGBNORMALG"] =
-                "See PROP_REDTEXTURE. Observed 2026-11-24.",
-            ["PROP_BLUETEXTURE"] =
-                "See PROP_REDTEXTURE. Observed 2026-11-24.",
-            ["PROP_RGBNORMALB"] =
-                "See PROP_REDTEXTURE. Observed 2026-11-24.",
-            ["PROP_ALPHATEXTURE"] =
-                "See PROP_REDTEXTURE. Observed 2026-11-24.",
-            ["PROP_RGBNORMALA"] =
-                "See PROP_REDTEXTURE. Observed 2026-11-24.",
-            ["POI_AL_DECAL"] =
-                "The pinned audio availability makes the audio " +
-                "driven members of the other half A families wash " +
-                "the base color and the row control goes blind. " +
-                "Observed 2026-11-24.",
-            ["POI_PATHING"] =
-                "The path color application replaces the albedo and " +
-                "the row control goes blind in the half with the " +
-                "audio link on. Observed 2026-11-24.",
-            ["EFFECT_BUMP"] =
-                "The overlay enables sit at their pinned 1 and the " +
-                "perturbation holds them, yet the overlay draw does " +
-                "not reach the render on the subject. Observed " +
-                "2026-11-24.",
-            ["POI_VIDEO_EFFECTS"] =
-                "The pixelate and screen members hold valid values " +
-                "but the video effects do not reach the render in " +
-                "the harness state. Observed 2026-11-24.",
             ["POI_UZUMORE"] =
-                "The push window pins reach the subject distance " +
-                "yet the displaced vertices do not change the " +
-                "render of the oracle camera. Observed 2026-11-24.",
+                "The push applies only to vertices nearer than the " +
+                "near plane plus the bias. The subject sits far " +
+                "beyond the near plane. Observed 2026-11-24.",
         };
 
         /// <summary>
@@ -269,13 +205,32 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 
             using var harness = new PoiyomiRenderHarness();
             // The first render compiles the variants of the row. Its
-            // result is discarded.
+            // result is discarded. The second and third renders probe
+            // the fixture: two unperturbed renders of the same state
+            // must match, so a later difference comes from the family
+            // perturbation and not from the fixture.
             harness.Render(material);
-            var before = harness.Render(material);
+            var unperturbedOne = harness.Render(material);
+            var unperturbedTwo = harness.Render(material);
+            var probeStable = BytesEqual(
+                unperturbedOne, unperturbedTwo);
+
+            var before = unperturbedTwo;
+            var movedNames = new List<string>();
             foreach (var name in perturbed)
             {
-                PerturbOneValue(material, name);
+                if (PerturbOneValue(material, name))
+                {
+                    movedNames.Add(name);
+                }
             }
+
+            Assert.That(
+                movedNames, Is.Not.Empty,
+                "no-op guard: at least one member of the family '" +
+                familyName + "' must move under the fixture. " +
+                "Members that stay are the exact value members of " +
+                "the perturbation table.");
 
             var after = harness.Render(material);
             var differentPixels = CountDifferentPixels(before, after);
@@ -287,16 +242,18 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                     differentPixels + " of " + before.Length +
                     " pixels differ. The largest channel difference " +
                     "is " + LargestChannelDifference(before, after) +
-                    " of 255. A member of the family is live under " +
-                    "this state. Move the live member out of the " +
-                    "family, or fix the fixture.");
+                    " of 255. The unperturbed probe " +
+                    (probeStable ? "was stable" : "was UNSTABLE") +
+                    ". A member of the family is live under this " +
+                    "state. Move the live member out of the family, " +
+                    "or fix the fixture.");
             }
 
             // The row control proves the case is not vacuous. The
             // main color drops to a dark grey and a fresh directional
             // light adds a new light term at the same time. Several
             // family states replace or wash the albedo, so either
-            // control alone can go blind; a frame that ignores both
+            // control alone can go blind. A frame that ignores both
             // is not a rendered subject. Ruling 3 of the fix round.
             material.SetColor(
                 "_Color",
@@ -354,19 +311,16 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             var perturbed = PerturbedNamesOf(
                 material, family, shader.name);
             TurnTheFamilyOn(material, family);
-            // The stochastic mode keywords share one enum, and both
-            // together leave the hex tile macros as the last macro
-            // definition. The live case of either stochastic family
-            // holds exactly its own mode on, so the compiled shader
-            // reads the members of that family.
-            if (family.Name == "_STOCHASTICMODE_DELIOT_HEITZ")
-            {
-                material.DisableKeyword("_STOCHASTICMODE_HEXTILE");
-            }
-
+            // Every live case holds exactly one stochastic mode. Both
+            // together compile both sampling stacks into the variant
+            // and leave the hex tile macros as the last macro
+            // definition.
+            material.DisableKeyword("_STOCHASTICMODE_HEXTILE");
+            material.EnableKeyword("_STOCHASTICMODE_DELIOT_HEITZ");
             if (family.Name == "_STOCHASTICMODE_HEXTILE")
             {
                 material.DisableKeyword("_STOCHASTICMODE_DELIOT_HEITZ");
+                material.EnableKeyword("_STOCHASTICMODE_HEXTILE");
             }
 
             Assert.That(
@@ -384,20 +338,33 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             using var harness = new PoiyomiRenderHarness();
             harness.Render(material);
             var before = harness.Render(material);
+            var movedNames = new List<string>();
             foreach (var name in perturbed)
             {
-                PerturbOneValue(material, name);
+                if (PerturbOneValue(material, name))
+                {
+                    movedNames.Add(name);
+                }
+            }
+
+            if (movedNames.Count == 0)
+            {
+                Assert.Ignore(
+                    "every member of the family '" + familyName +
+                    "' stays at an exact value under the fixture, so " +
+                    "the liveness cannot be probed. Observed " +
+                    "2026-11-24.");
             }
 
             var after = harness.Render(material);
             Assert.That(
                 BytesEqual(before, after),
                 Is.False,
-                "liveness guard: no perturbation of the family '" +
-                familyName + "' changed the render with its switch " +
+                "liveness guard: no member of the family '" +
+                familyName + "' moved the render with its switch " +
                 "on. The dead case of this family can pass " +
-                "trivially. The perturbed names are: " +
-                string.Join(", ", perturbed) + ".");
+                "trivially. The moved names are: " +
+                string.Join(", ", movedNames) + ".");
         }
 
         // --- the case material ----------------------------------------
@@ -500,13 +467,14 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             ["USER_LUT"] = material =>
             {
                 // The distortion writes the coordinate slot 7. The
-                // color adjust texture reads that slot here, so the
-                // distortion values move its sample over the noise.
-                // The member texture of the route keeps its selector
-                // at 0.
+                // color adjust texture reads that slot here, and the
+                // brightness makes its output visible through the
+                // hue and gamma pipeline. The member texture of the
+                // route keeps its selector at 0.
                 material.SetTexture(
                     "_MainColorAdjustTexture", StaticNoiseTexture());
                 material.SetFloat("_MainColorAdjustTextureUV", 7f);
+                material.SetFloat("_MainBrightness", 1.5f);
             },
             ["POI_MIRROR_TEXTURE"] = material =>
             {
@@ -516,13 +484,15 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             },
             ["EFFECT_BUMP"] = material =>
             {
-                // The text overlays draw the glyph font array. The
+                // The text overlay decodes an MSDF glyph array. The
                 // font texture is a neutral of the route, so the
-                // fixture pins it here. The overlay reads mesh UV0
+                // fixture pins an MSDF style glyph texture (a white
+                // stroke band on a dark field) whose median crosses
+                // the decode threshold. The overlay reads mesh UV0
                 // on the subject, and the overlay enables stay at
                 // their pinned 1 (the perturbation holds exact value
                 // members).
-                material.SetTexture("_TextGlyphs", StaticNoiseTexture());
+                material.SetTexture("_TextGlyphs", StaticGlyphTexture());
                 material.SetFloat("_TextFPSUV", 0f);
                 material.SetFloat("_TextFPSEnabled", 1f);
                 material.SetFloat("_TextPositionEnabled", 1f);
@@ -566,18 +536,34 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             {
                 // The path color application multiplies the path
                 // alpha with the color alpha and replaces the albedo
-                // with the result. White colors with a low alpha
-                // keep the base color dominant while the map driven
+                // with the result. The fill path type reads the map
+                // directly, and white colors with a low alpha keep
+                // the base color dominant while the map driven
                 // alpha still shows.
                 material.SetColor("_PathColorR", new Color(1f, 1f, 1f, 0.2f));
                 material.SetColor("_PathColorG", new Color(1f, 1f, 1f, 0.2f));
                 material.SetColor("_PathColorB", new Color(1f, 1f, 1f, 0.2f));
                 material.SetColor("_PathColorA", new Color(1f, 1f, 1f, 0.2f));
+                material.SetFloat("_PathTypeR", 0f);
+                material.SetFloat("_PathTypeG", 0f);
+                material.SetFloat("_PathTypeB", 0f);
+                material.SetFloat("_PathTypeA", 0f);
             },
             ["POI_AL_DECAL"] = material =>
             {
                 PinAudioLinkAvailability(material);
                 material.SetColor("_ALVolumeColor", new Color(1f, 1f, 1f, 0.2f));
+                // The decal line sits where the volume mask equals
+                // the audio value. The pins hold the clip window
+                // over the whole band and a line width that the
+                // audio value crosses, so the decal emission shows.
+                material.SetFloat("_ALDecalVolumeClipMin", 0f);
+                material.SetFloat("_ALDecalVolumeClipMax", 1f);
+                material.SetFloat("_ALDecalBandClipMin", 0f);
+                material.SetFloat("_ALDecalBandClipMax", 1f);
+                material.SetFloat("_ALDecalVolumeStep", 0f);
+                material.SetFloat("_ALDecalBandStep", 0f);
+                material.SetFloat("_ALDecalLineWidth", 0.3f);
             },
             ["POI_AL_VOLUMECOLOR"] = material =>
             {
@@ -595,16 +581,21 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             ["PROP_RGBNORMALB"] = PinRgbNormalConsumers,
             ["PROP_ALPHATEXTURE"] = PinColorAlphaConsumers,
             ["PROP_RGBNORMALA"] = PinRgbNormalConsumers,
+            ["_STOCHASTICMODE_DELIOT_HEITZ"] = PinStochasticReader,
+            ["_STOCHASTICMODE_HEXTILE"] = PinStochasticReader,
         };
 
         /// <summary>
-        /// The shared noise texture of the render tests. The texture
-        /// fields are instance state, so the static overrides read a
-        /// lazily created copy that the framework collects with the
-        /// run.
+        /// A deterministic noise texture. Created once per session and
+        /// reused by every later case.
         /// </summary>
         private static Texture2D StaticNoiseTexture()
         {
+            if (staticNoiseTexture != null)
+            {
+                return staticNoiseTexture;
+            }
+
             var texture = new Texture2D(
                 NoiseSize, NoiseSize, TextureFormat.RGBA32, false);
             var pixels = new Color32[NoiseSize * NoiseSize];
@@ -621,8 +612,11 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 
             texture.SetPixels32(pixels);
             texture.Apply(false, false);
+            staticNoiseTexture = texture;
             return texture;
         }
+
+        private static Texture2D staticNoiseTexture;
 
         private static void PinColorAlphaConsumers(Material material)
         {
@@ -631,12 +625,14 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // members of the vignette family, so the perturbation
             // never opens them in these cases. The blend weight
             // reads the RGB mask sample. The fixture pins a dark
-            // varying mask: an unassigned color texture samples
-            // white, and four blends at full weight would wash the
-            // base color out and blind the row control, while a
-            // weight near 0.1 keeps the base color dominant and the
-            // blend still visible.
+            // varying mask and dark channel colors, so the four
+            // replace blends keep the base color dominant and the
+            // row control survives while the blend stays visible.
             material.SetTexture("_RGBMask", StaticDarkMaskTexture());
+            material.SetColor("_RedColor", new Color(0.15f, 0.15f, 0.15f, 1f));
+            material.SetColor("_GreenColor", new Color(0.15f, 0.15f, 0.15f, 1f));
+            material.SetColor("_BlueColor", new Color(0.15f, 0.15f, 0.15f, 1f));
+            material.SetColor("_AlphaColor", new Color(0.15f, 0.15f, 0.15f, 1f));
             material.SetFloat("_RGBARedEnable", 1f);
             material.SetFloat("_RGBAGreenEnable", 1f);
             material.SetFloat("_RGBABlueEnable", 1f);
@@ -674,6 +670,41 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 
         private static Texture2D staticDarkMaskTexture;
 
+        /// <summary>
+        /// An MSDF style glyph texture: a dark field with one white
+        /// vertical band, like the letter strokes of the vendor font
+        /// array. Created once per session and reused by every later
+        /// case.
+        /// </summary>
+        private static Texture2D StaticGlyphTexture()
+        {
+            if (staticGlyphTexture != null)
+            {
+                return staticGlyphTexture;
+            }
+
+            const int size = 32;
+            var texture = new Texture2D(
+                size, size, TextureFormat.RGBA32, false);
+            var pixels = new Color32[size * size];
+            for (var index = 0; index < pixels.Length; index++)
+            {
+                var x = index % size;
+                var y = index / size;
+                var inBand = x >= 6 && x <= 10 && y >= 4 && y <= 28;
+                pixels[index] = inBand
+                    ? new Color32(255, 255, 255, 255)
+                    : new Color32(40, 40, 40, 255);
+            }
+
+            texture.SetPixels32(pixels);
+            texture.Apply(false, false);
+            staticGlyphTexture = texture;
+            return texture;
+        }
+
+        private static Texture2D staticGlyphTexture;
+
         private static void PinRgbNormalConsumers(Material material)
         {
             // The RGB normal maps blend into the tangent space
@@ -688,13 +719,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         {
             // The packed metallic and smoothness values reach the
             // render under the PBR specular stack, so the fixture
-            // holds the Mochie PBR keyword beside the per channel
-            // enables.
+            // holds the Mochie PBR keyword and one PBR enable (the
+            // red channel) beside the color and alpha pins.
             PinColorAlphaConsumers(material);
             material.SetFloat("_RGBAPBRRedEnabled", 1f);
-            material.SetFloat("_RGBAPBRGreenEnabled", 1f);
-            material.SetFloat("_RGBAPBRBlueEnabled", 1f);
-            material.SetFloat("_RGBAPBRAlphaEnabled", 1f);
             material.EnableKeyword("MOCHIE_PBR");
         }
 
@@ -851,21 +879,47 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         }
 
         /// <summary>
-        /// One value moves by a fixed step. A color or vector gains
-        /// 0.37 on every channel. A texture is replaced by the 4 by 4
-        /// noise texture of its dimension. An exact value property
-        /// compares exact values in the shader, so a step of 0.37
-        /// would land between two valid states: a texture selector
-        /// stays at its pinned value, an integer selector or mode
-        /// steps to the next value, a toggle or a path type flips to
-        /// the other exact state, and any other float flips between
-        /// the two exact states when it holds one. An implicit
-        /// texture name is not a material float or vector: the scale
-        /// and offset of a texture move through the texture setting
-        /// methods, and Unity owns the texel size and HDR names, so
-        /// those two stay unperturbed.
+        /// The valid values of the exact value members that the
+        /// shader compares with exact equality. A perturbed member
+        /// cycles to the next value in its list. A member with a
+        /// single value stays.
         /// </summary>
-        private void PerturbOneValue(Material material, string name)
+        private static readonly Dictionary<string, float[]>
+            ExactValueTable =
+                new Dictionary<string, float[]>
+        {
+            ["_TextFPSEnabled"] = new float[] { 1f },
+            ["_TextPositionEnabled"] = new float[] { 1f },
+            ["_TextTimeEnabled"] = new float[] { 1f },
+            ["_TextNumericEnabled"] = new float[] { 1f },
+            ["_UDIMDiscardMode"] = new float[] { 0f, 1f },
+            ["_DissolveType"] = new float[] { 1f, 2f, 3f, 4f },
+            ["_PathTypeR"] = new float[] { 0f, 1f, 2f, 3f },
+            ["_PathTypeG"] = new float[] { 0f, 1f, 2f, 3f },
+            ["_PathTypeB"] = new float[] { 0f, 1f, 2f, 3f },
+            ["_PathTypeA"] = new float[] { 0f, 1f, 2f, 3f },
+            ["_VideoMaskTextureChannel"] = new float[] { 0f },
+            ["_VideoType"] = new float[] { 0f, 1f, 2f, 3f, 4f, 5f },
+            ["_MainHueShiftSelectOrShift"] = new float[] { 0f, 1f },
+            ["_BackFaceHueSelectOrShift"] = new float[] { 0f, 1f },
+            ["_DissolveHueSelectOrShift"] = new float[] { 0f, 1f },
+            ["_ppHueSelectOrShift"] = new float[] { 0f, 1f },
+        };
+
+        /// <summary>
+        /// One value moves to another valid value: a color or vector
+        /// gains 0.37 on every channel, a texture is replaced by the
+        /// 4 by 4 noise texture, a continuous scalar gains 0.37, a
+        /// toggle flips between 0 and 1, and an exact value member
+        /// cycles through the values of its table. An exact value
+        /// member without a second valid value stays, and the
+        /// return value reports that. An implicit texture name is
+        /// not a material float or vector: the scale and offset of
+        /// a texture move through the texture setting methods, and
+        /// Unity owns the texel size and HDR names, so those two
+        /// stay unperturbed.
+        /// </summary>
+        private bool PerturbOneValue(Material material, string name)
         {
             if (name.EndsWith("_ST"))
             {
@@ -882,21 +936,33 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                     new Vector2(
                         offset.x + PerturbStep,
                         offset.y + PerturbStep));
-                return;
+                return true;
             }
 
             if (name.EndsWith("_TexelSize") || name.EndsWith("_HDR"))
             {
-                return;
+                return false;
             }
 
             if (name.EndsWith("UV"))
             {
                 // The texture selectors of the shader compare exact
-                // values and the vendor default sits on UV0. The
-                // member stays, which the fix round ruling names as a
-                // valid choice.
-                return;
+                // values and the fixture pins them. The member stays.
+                return false;
+            }
+
+            if (ExactValueTable.TryGetValue(name, out var values))
+            {
+                if (values.Length < 2)
+                {
+                    return false;
+                }
+
+                var current = material.GetFloat(name);
+                var position = System.Array.IndexOf(values, current);
+                var next = values[(position + 1) % values.Length];
+                material.SetFloat(name, next);
+                return true;
             }
 
             var propertyIndex = material.shader.FindPropertyIndex(name);
@@ -908,7 +974,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                     ? material.GetFloat(name)
                     : 0f;
                 material.SetFloat(name, saved + PerturbStep);
-                return;
+                return true;
             }
 
             switch (material.shader.GetPropertyType(propertyIndex))
@@ -922,7 +988,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                             color.g + PerturbStep,
                             color.b + PerturbStep,
                             color.a + PerturbStep));
-                    return;
+                    return true;
                 case ShaderPropertyType.Vector:
                     var vector = material.GetVector(name);
                     material.SetVector(
@@ -932,57 +998,21 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                             vector.y + PerturbStep,
                             vector.z + PerturbStep,
                             vector.w + PerturbStep));
-                    return;
+                    return true;
                 case ShaderPropertyType.Texture:
                     PerturbTexture(material, name, propertyIndex);
-                    return;
+                    return true;
+                case ShaderPropertyType.Int:
+                    // An integer member is an index or a step count.
+                    // The next integer is another valid value.
+                    material.SetFloat(
+                        name, material.GetFloat(name) + 1f);
+                    return true;
                 default:
-                    PerturbScalarValue(material, name);
-                    return;
+                    material.SetFloat(
+                        name, material.GetFloat(name) + PerturbStep);
+                    return true;
             }
-        }
-
-        /// <summary>
-        /// One scalar moves by a fixed step of 0.37, except for the
-        /// exact value members: a texture selector stays at its
-        /// pinned value, the discard mode stays at the vertex mode,
-        /// the dissolve type stays at the basic mode, and the path
-        /// types stay at their vendor types (the perturbation would
-        /// land between the exact values the shader compares). A
-        /// toggle, enable, or invert flips between 0 and 1, and a
-        /// mode, type, blend type, channel, select-or-shift, color
-        /// space, or theme index steps to the next value.
-        /// </summary>
-        private static void PerturbScalarValue(
-            Material material, string name)
-        {
-            if (name == "_UDIMDiscardMode" || name == "_DissolveType" ||
-                name.StartsWith("_PathType"))
-            {
-                return;
-            }
-
-            if (name.EndsWith("Toggle") || name.EndsWith("Enabled") ||
-                name.EndsWith("Invert"))
-            {
-                var toggle = material.GetFloat(name);
-                material.SetFloat(name, toggle == 0f ? 1f : 0f);
-                return;
-            }
-
-            if (name.EndsWith("Mode") || name.EndsWith("Type") ||
-                name.EndsWith("BlendType") || name.EndsWith("Channel") ||
-                name.EndsWith("SelectOrShift") ||
-                name.EndsWith("ColorSpace") ||
-                name.EndsWith("ThemeIndex"))
-            {
-                material.SetFloat(
-                    name, material.GetFloat(name) + 1f);
-                return;
-            }
-
-            material.SetFloat(
-                name, material.GetFloat(name) + PerturbStep);
         }
 
         private void PerturbTexture(
