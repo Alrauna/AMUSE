@@ -784,6 +784,57 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 "_MochieMetallicMaps");
         }
 
+        /// <summary>
+        /// The three two keyword routes keep the shared selector
+        /// rule. The keyword gate decides only between inert and
+        /// the selector rule, so a selector of the allowed set
+        /// keeps the texture bound, and the selector 6 reads UV0
+        /// data and refuses with the selector name.
+        /// </summary>
+        [Test]
+        public void TwoKeywordRoutesKeepTheirSelectorRule(
+            [Values(false, true)] bool twoPass)
+        {
+            using var fixture = new PoiyomiReviewedFixture();
+            var material = NewCapturedMaterial(fixture, twoPass);
+            foreach (var texture in new[]
+                     {
+                         "_AnisotropyMap",
+                         "_HighColor_Tex",
+                         "_Set_HighColorMask",
+                     })
+            {
+                AssignTexture(fixture, material, texture, true);
+                material.SetFloat(texture + "UV", 1f);
+            }
+
+            EnableKeywords(
+                material,
+                "MOCHIE_PBR",
+                "GGX_ANISOTROPICS",
+                "POI_STYLIZED_StylizedSpecular",
+                "_STYLIZEDREFLECTIONMODE_UNITYCHAN");
+            AssertNoGroupTextureMoved(fixture.CaptureSingle(material));
+
+            foreach (var route in PoiyomiLightingRoutes.Routes())
+            {
+                if (route.Property == "_AnisotropyMap")
+                {
+                    Assert.That(
+                        route.UseOf(material, false),
+                        Is.EqualTo(AtlasRouteUse.OtherCoordinates),
+                        "the anisotropy map must stay bound at" +
+                        " selector 1");
+                }
+            }
+
+            material.SetFloat("_AnisotropyMapUV", 6f);
+            PoiyomiReviewedFixture.AssertRefused(
+                fixture.CaptureSingle(material),
+                AtlasUseRefusal.RequiredValueNotHeld,
+                "'_AnisotropyMapUV'");
+        }
+
         // --- Falsifier 5: TwoLightingModesNeedBothConditions ----------
 
         /// <summary>

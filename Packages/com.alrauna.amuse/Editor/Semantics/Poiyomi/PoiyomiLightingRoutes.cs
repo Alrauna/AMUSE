@@ -745,9 +745,11 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
         /// <summary>
         /// A standard pattern route whose sample body sits under
-        /// every keyword of the gate. The route moves the texture
-        /// only when every keyword sits on, so a body that the
-        /// keyword set compiles out never moves its texture.
+        /// every keyword of the gate. The keyword gate decides only
+        /// between inert and the shared selector rule, so the
+        /// selectors of the coordinate rule keep the texture bound,
+        /// and the UV0 data selectors refuse, exactly as the
+        /// standard routes do.
         /// </summary>
         private static AtlasCompanionRoute StandardAllKeywords(
             string texture,
@@ -757,6 +759,12 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             var selectorProperty = texture + "UV";
             var transformProperty = texture + "_ST";
             var panProperty = texture + "Pan";
+
+            // The shared selector rule carries no keyword gate of
+            // its own. The route wraps it in the all keywords gate.
+            var bySelector = PoiyomiCompanionRoutes.SelectorUse(
+                selectorProperty, Array.Empty<string>());
+            var gate = AllEnabledUse(keywords, AtlasRouteUse.Uv0);
             return new AtlasCompanionRoute(
                 texture,
                 sampler,
@@ -766,7 +774,13 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     (panProperty, ZeroVector),
                 },
                 new[] { selectorProperty, transformProperty, panProperty },
-                AllEnabledUse(keywords, AtlasRouteUse.Uv0));
+                (material, outlineRow) =>
+                    gate(material, outlineRow) == AtlasRouteUse.Inert
+                        ? AtlasRouteUse.Inert
+                        : bySelector(material, outlineRow),
+                material =>
+                    PoiyomiCompanionRoutes.UnheldSelector(
+                        material, selectorProperty));
         }
 
         /// <summary>
