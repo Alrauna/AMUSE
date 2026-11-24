@@ -12,13 +12,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
     /// The capture tests of the 'Always on' feature group of the
     /// reviewed Poiyomi 9.3 route. The record of 2026-11-23,
     /// sections 4.1, 4.3, 5, and 8, carries the rows of the group.
-    /// The group routes the seven always assigned companions and the
-    /// light data map that never samples in an admitted use. The
-    /// table rule of the group requires <c>_LightingMapMode</c>
-    /// not 4 while <c>PROP_LIGHTDATASDFMAP</c> is on. A
-    /// <c>PROP_&lt;texture&gt;</c> keyword never gates a route, so a
-    /// <c>PROP_BUMPMAP</c> state that disagrees with its texture
-    /// stays exact.
+    /// The group routes the eight companions of the record. The
+    /// shader declares one keyword for each light data map, and it
+    /// declares no keyword for the bump map and the alpha mask, so
+    /// their texture assignment is the gate. The table rule of the
+    /// group requires <c>_LightingMapMode</c> not 4 while
+    /// <c>PROP_LIGHTDATASDFMAP</c> is on.
     /// </summary>
     public sealed class PoiyomiAlwaysOnRoutesTests
     {
@@ -219,6 +218,17 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 outcome,
                 AtlasUseRefusal.RequiredValueNotHeld,
                 "_LightingMapMode");
+
+            // Twin: the rule is keyword scoped. Mode 4 with the
+            // keyword off admits, and the map stays inert.
+            material.DisableKeyword("PROP_LIGHTDATASDFMAP");
+            var keywordOff = fixture.CaptureSingle(material);
+
+            PoiyomiReviewedFixture.AssertAdmitted(keywordOff);
+            Assert.That(
+                keywordOff.Use.Companions, Is.Empty,
+                "the map never samples in an admitted use, so it" +
+                " moves into no page");
         }
 
         // --- Falsifier 2:
@@ -541,6 +551,136 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             material.SetTexture(
                 "_MainTex", fixture.NewRouteTexture(64));
             return material;
+        }
+
+        /// <summary>
+        /// The outline texture samples in the outline pass. Its
+        /// selector 0 use moves it beside the main page.
+        /// </summary>
+        [Test]
+        public void OutlineTextureIsAdmitted(
+            [Values(false, true)] bool twoPass)
+        {
+            using var fixture = new PoiyomiReviewedFixture();
+            var material = NewCaseMaterial(fixture, twoPass);
+            material.SetTexture(
+                "_OutlineTexture", fixture.NewRouteTexture(16));
+            material.SetFloat("_OutlineTextureUV", 0f);
+
+            var outcome = fixture.CaptureSingle(material);
+
+            PoiyomiReviewedFixture.AssertCompanion(
+                outcome, "_OutlineTexture");
+        }
+
+        // --- Falsifier 10: AlphaMaskModeAnimationRefuses -------------
+        /// <summary>
+        /// The blend mode decides the use of the alpha mask, so it is
+        /// a route condition. An animation that drives it refuses
+        /// while the mask is assigned, because the runtime could
+        /// turn the mask on at a coordinate that was never checked.
+        /// </summary>
+        [Test]
+        public void AlphaMaskModeAnimationRefuses(
+            [Values(false, true)] bool twoPass)
+        {
+            using var fixture = new PoiyomiReviewedFixture();
+            var material = NewCaseMaterial(fixture, twoPass);
+            material.SetTexture(
+                "_AlphaMask", fixture.NewRouteTexture(16));
+            material.SetFloat("_AlphaMaskUV", 6f);
+            material.SetFloat("_MainAlphaMaskMode", 0f);
+
+            // No-op guard: the admitted twin first. Mode 0 compiles
+            // the sample out, so even the broken selector 6 admits
+            // and the mask moves into no page.
+            var twin = fixture.CaptureSingle(material);
+            PoiyomiReviewedFixture.AssertAdmitted(twin);
+            Assert.That(
+                twin.Use.Companions, Is.Empty,
+                "mode 0 leaves the mask unread");
+
+            fixture.AnimateScalar(fixture.Root, "_MainAlphaMaskMode");
+            var outcome = fixture.CaptureSingle(material);
+
+            PoiyomiReviewedFixture.AssertRefused(
+                outcome,
+                AtlasUseRefusal.AnimatedRouteProperty,
+                "_MainAlphaMaskMode");
+        }
+
+        // --- Falsifier 11: AlphaMaskModePropertyBlockRefuses ---------
+        /// <summary>
+        /// A renderer property block that sets the blend mode
+        /// refuses while the mask is assigned, for the same reason.
+        /// </summary>
+        [Test]
+        public void AlphaMaskModePropertyBlockRefuses(
+            [Values(false, true)] bool twoPass)
+        {
+            using var fixture = new PoiyomiReviewedFixture();
+            var material = NewCaseMaterial(fixture, twoPass);
+            material.SetTexture(
+                "_AlphaMask", fixture.NewRouteTexture(16));
+            material.SetFloat("_AlphaMaskUV", 6f);
+            material.SetFloat("_MainAlphaMaskMode", 0f);
+
+            // No-op guard: the admitted twin first. Mode 0 compiles
+            // the sample out, so even the broken selector 6 admits
+            // and the mask moves into no page.
+            var twin = fixture.CaptureSingle(material);
+            PoiyomiReviewedFixture.AssertAdmitted(twin);
+            Assert.That(
+                twin.Use.Companions, Is.Empty,
+                "mode 0 leaves the mask unread");
+
+            var renderer = fixture.Root
+                .GetComponentInChildren<SkinnedMeshRenderer>();
+            var block = new MaterialPropertyBlock();
+            block.SetFloat("_MainAlphaMaskMode", 1f);
+            renderer.SetPropertyBlock(block);
+
+            var outcome = fixture.CaptureSingle(material);
+
+            PoiyomiReviewedFixture.AssertRefused(
+                outcome,
+                AtlasUseRefusal.PropertyBlockOnRouteProperty,
+                "_MainAlphaMaskMode");
+        }
+
+        // --- Falsifier 12:
+        // LightingAOMapsKeywordOffWithAssignedMapIsAdmitted -----------
+        /// <summary>
+        /// The declared keyword off with its map assigned admits. The
+        /// map is inert, so it moves into no page and leaves the
+        /// material key. A material that holds the map must share its
+        /// key with a material that does not.
+        /// </summary>
+        [Test]
+        public void LightingAOMapsKeywordOffWithAssignedMapIsAdmitted(
+            [Values(false, true)] bool twoPass)
+        {
+            using var fixture = new PoiyomiReviewedFixture();
+            var withMap = NewCaseMaterial(fixture, twoPass);
+            withMap.SetTexture(
+                "_LightingAOMaps", fixture.NewRouteTexture(16));
+            withMap.SetFloat("_LightingAOMapsUV", 0f);
+            withMap.DisableKeyword("PROP_LIGHTINGAOMAPS");
+
+            var outcome = fixture.CaptureSingle(withMap);
+
+            PoiyomiReviewedFixture.AssertAdmitted(outcome);
+            Assert.That(
+                outcome.Use.Companions, Is.Empty,
+                "the keyword off leaves the map unread");
+            var keyWithMap = fixture.MaterialKeyOf(withMap);
+
+            var withoutMap = NewCaseMaterial(fixture, twoPass);
+            var keyWithoutMap = fixture.MaterialKeyOf(withoutMap);
+
+            Assert.That(
+                keyWithMap, Is.EqualTo(keyWithoutMap),
+                "an inert texture must leave the material key");
         }
     }
 }

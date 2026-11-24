@@ -8,16 +8,14 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
     /// The feature group 'Always on' of the reviewed Poiyomi 9.3
     /// route. The review record of 2026-11-23, sections 4.1, 4.3,
     /// and 6, carries the rows of this group. The group routes the
-    /// seven companions that the shader samples whenever their
-    /// texture is assigned, plus the light data map that never
-    /// samples in an admitted use. The table rule of the group
-    /// requires <c>_LightingMapMode</c> not 4 while
+    /// eight companions of the record. The three light data maps
+    /// sample under their declared keyword, and the bump map, the
+    /// alpha mask, and the two outline textures sample under their
+    /// texture assignment, because the shader declares no keyword
+    /// for them. The light data map never samples in an admitted
+    /// use. The table rule of the group requires
+    /// <c>_LightingMapMode</c> not 4 while
     /// <c>PROP_LIGHTDATASDFMAP</c> is on.
-    /// <para>
-    /// A <c>PROP_&lt;texture&gt;</c> keyword never gates a family or
-    /// a route. The Thry editor can leave it out of step with its
-    /// texture, so the bump map route reads no keyword at all.
-    /// </para>
     /// </summary>
     internal static class PoiyomiAlwaysOnRoutes
     {
@@ -140,10 +138,9 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// <summary>
         /// One dead value family per keyword of the group, with the
         /// exact members of the record, section 6. The keyword is
-        /// the only switch of each family. The strength reads of the
-        /// lighting data maps sit outside the texture pragma, but
-        /// they read the constant 1 there, so the render holds while
-        /// the keyword is off.
+        /// the only switch of each family. The gate walk of the
+        /// record puts every read of every member inside the
+        /// keyword gate of its pragma on both bundled rows.
         /// </summary>
         internal static AtlasDeadValueFamily[] Families()
         {
@@ -193,7 +190,13 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     ("_AlphaMask_ST", IdentityScaleOffset),
                     ("_AlphaMaskPan", ZeroVector),
                 },
-                new[] { "_AlphaMaskUV", "_AlphaMask_ST", "_AlphaMaskPan" },
+                new[]
+                {
+                    "_MainAlphaMaskMode",
+                    "_AlphaMaskUV",
+                    "_AlphaMask_ST",
+                    "_AlphaMaskPan",
+                },
                 use,
                 material =>
                     use(material, false) == AtlasRouteUse.Uv0
@@ -205,18 +208,15 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// <summary>
         /// The light data map route. Its use is inert in every
         /// admitted state, so the texture joins no page and no
-        /// material value decides it.
+        /// material value decides it. It names no transforms and no
+        /// conditions, because no code path reads them.
         /// </summary>
         private static AtlasCompanionRoute LightDataSdfMapRoute()
         {
             return new AtlasCompanionRoute(
                 "_LightDataSDFMap",
                 AtlasCompanionSampler.InlineLinearRepeat,
-                new[]
-                {
-                    ("_LightDataSDFMap_ST", IdentityScaleOffset),
-                    ("_LightDataSDFMapPan", ZeroVector),
-                },
+                Array.Empty<(string, Vector4)>(),
                 Array.Empty<string>(),
                 (material, outlineRow) => AtlasRouteUse.Inert,
                 material => null);

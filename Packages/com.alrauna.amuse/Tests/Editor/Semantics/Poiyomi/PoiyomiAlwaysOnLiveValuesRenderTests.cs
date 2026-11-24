@@ -96,7 +96,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         {
             var family = FamilyByName(familyName);
             var shader = LoadShader(twoPass);
-            var material = NewCaseMaterial(shader);
+            var material = NewCaseMaterial(shader, family);
             TurnEveryGroupKeywordOn(material);
             TurnTheFamilyOff(material, family);
 
@@ -143,10 +143,15 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 "every value that the reviewed route requires");
 
             using var harness = new PoiyomiRenderHarness();
+            PinAmbientLight();
             // The first render compiles the variants of the row. Its
             // result is discarded.
             harness.Render(material);
             var before = harness.Render(material);
+            AssertFrameLooksRendered(
+                before,
+                "row '" + shader.name + "', family '" + familyName +
+                "' with its switch off");
             foreach (var name in perturbed)
             {
                 PerturbOneValue(material, name);
@@ -156,15 +161,17 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             var differentPixels = CountDifferentPixels(before, after);
             if (differentPixels > 0)
             {
+                var liveMembers = LiveMembersOf(
+                    shader, family, before, perturbed);
                 Assert.Fail(
                     "The values of the dead family '" + familyName +
                     "' changed the render" + RowName(twoPass) + ". " +
                     differentPixels + " of " + before.Length +
                     " pixels differ. The largest channel difference " +
                     "is " + LargestChannelDifference(before, after) +
-                    " of 255. A member of the family is live under " +
-                    "this state. Move the live member out of the " +
-                    "family, or fix the fixture.");
+                    " of 255. The live members are: " +
+                    string.Join(", ", liveMembers) + ". Move the " +
+                    "live members out of the family.");
             }
 
             // The row control proves the case is not vacuous. The
@@ -199,7 +206,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         {
             var family = FamilyByName(familyName);
             var shader = LoadShader(false);
-            var material = NewCaseMaterial(shader);
+            var material = NewCaseMaterial(shader, family);
             TurnEveryGroupKeywordOn(material);
             TurnTheFamilyOff(material, family);
 
@@ -208,7 +215,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             var perturbed = PerturbedNamesOf(
                 material, family, shader.name);
             TurnTheFamilyOn(material, family);
-            PinTheLiveFixture(material, family);
 
             Assert.That(
                 family.IsOff(material, shader.name),
@@ -253,16 +259,89 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         // --- the case material ----------------------------------------
 
         /// <summary>
-        /// One material on the row with the pattern texture and the
-        /// light map mode at the safe state. The group keywords stay
-        /// at the vendor defaults until the case turns them.
+        /// One material on the row with the pattern texture, one
+        /// lighting mode, and the family fixture overrides of the
+        /// case. The vendor default mode multiplies the light data
+        /// factors into the indirect term only, and the harness
+        /// ambient sits at black, so the unpinned fixture is blind
+        /// to the group families.
         /// </summary>
-        private Material NewCaseMaterial(Shader shader)
+        private Material NewCaseMaterial(
+            Shader shader, AtlasDeadValueFamily family)
         {
             var material = Track(new Material(shader));
             material.SetTexture("_MainTex", patternTexture);
             material.SetFloat("_LightingMapMode", 0f);
+            PinTheCaseFixture(material, family);
             return material;
+        }
+
+        /// <summary>
+        /// The mode keywords of the row. They form one enum, and a
+        /// fresh material carries the flat mode. A material with two
+        /// mode keywords holds no compiled variant, and the variant
+        /// fallback then picks an arbitrary mode. The case turns
+        /// every mode off before it turns its one mode on.
+        /// </summary>
+        private static readonly string[] LightingModeKeywords =
+        {
+            "_LIGHTINGMODE_TEXTURERAMP",
+            "_LIGHTINGMODE_MULTILAYER_MATH",
+            "_LIGHTINGMODE_SHADEMAP",
+            "_LIGHTINGMODE_REALISTIC",
+            "_LIGHTINGMODE_WRAPPED",
+            "_LIGHTINGMODE_SKIN",
+            "_LIGHTINGMODE_FLAT",
+            "_LIGHTINGMODE_CLOTH",
+            "_LIGHTINGMODE_SDF",
+        };
+
+        /// <summary>
+        /// The per family fixture overrides, keyed by family name.
+        /// The base pin holds the shade map lighting mode, whose
+        /// masks consume the shadow masks, the detail shadows, and
+        /// the light map. An override replaces the mode or adds the
+        /// values that the family needs to show, in the convention
+        /// of the lilToon render oracle.
+        /// </summary>
+        private static readonly
+            Dictionary<string, Action<Material>> FamilyFixtureOverrides =
+            new Dictionary<string, Action<Material>>
+            {
+                // The texture ramp mode is the lighting mode whose
+                // final lighting multiplies the occlusion into the
+                // shadow term directly.
+                ["PROP_LIGHTINGAOMAPS"] = material =>
+                    TurnLightingModeOn(
+                        material, "_LIGHTINGMODE_TEXTURERAMP"),
+
+                // The light data map feeds the light map only in
+                // light map mode 4, because the map sample branch
+                // sits behind the mode compare.
+                ["PROP_LIGHTDATASDFMAP"] = material =>
+                    material.SetFloat("_LightingMapMode", 4f),
+            };
+
+        private static void TurnLightingModeOn(
+            Material material, string mode)
+        {
+            foreach (var keyword in LightingModeKeywords)
+            {
+                material.DisableKeyword(keyword);
+            }
+
+            material.EnableKeyword(mode);
+        }
+
+        private static void PinTheCaseFixture(
+            Material material, AtlasDeadValueFamily family)
+        {
+            TurnLightingModeOn(material, "_LIGHTINGMODE_SHADEMAP");
+            if (FamilyFixtureOverrides.TryGetValue(
+                    family.Name, out var overrideAction))
+            {
+                overrideAction(material);
+            }
         }
 
         private static void TurnEveryGroupKeywordOn(Material material)
@@ -293,74 +372,42 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         }
 
         /// <summary>
-        /// The fixture pins of the live case, per ruling 3. The
-        /// vendor default mode multiplies the lighting data factors
-        /// into the indirect term only, and the harness ambient
-        /// sits at black, so no perturbation could show there.
-        /// <para>
-        /// The texture ramp mode is the lighting mode whose final
-        /// lighting multiplies the occlusion into the shadow term
-        /// directly, so the occlusion family holds that mode. The
-        /// shade map lighting mode consumes the other factors in the
-        /// direct path: the shadow masks multiply the main shadow
-        /// mask, the detail shadows multiply the light map and the
-        /// additive lights, and all masks read the light map.
-        /// </para>
-        /// <para>
-        /// The light data map feeds the light map only in light map
-        /// mode 4, because the map sample branch sits behind the
-        /// mode compare.
-        /// </para>
-        /// </summary>
-        private static readonly string[] LightingModeKeywords =
-        {
-            "_LIGHTINGMODE_TEXTURERAMP",
-            "_LIGHTINGMODE_MULTILAYER_MATH",
-            "_LIGHTINGMODE_SHADEMAP",
-            "_LIGHTINGMODE_REALISTIC",
-            "_LIGHTINGMODE_WRAPPED",
-            "_LIGHTINGMODE_SKIN",
-            "_LIGHTINGMODE_FLAT",
-            "_LIGHTINGMODE_CLOTH",
-            "_LIGHTINGMODE_SDF",
-        };
-
-        private static void PinTheLiveFixture(
-            Material material, AtlasDeadValueFamily family)
-        {
-            // The mode keywords form one enum, and a fresh material
-            // carries the flat mode. A material with two mode
-            // keywords holds no compiled variant, and the variant
-            // fallback then picks an arbitrary mode. The case turns
-            // every mode off before it turns its one mode on.
-            foreach (var mode in LightingModeKeywords)
-            {
-                material.DisableKeyword(mode);
-            }
-
-            if (family.Switches[0] == "PROP_LIGHTINGAOMAPS")
-            {
-                material.EnableKeyword("_LIGHTINGMODE_TEXTURERAMP");
-                return;
-            }
-
-            material.EnableKeyword("_LIGHTINGMODE_SHADEMAP");
-            if (family.Switches[0] == "PROP_LIGHTDATASDFMAP")
-            {
-                material.SetFloat("_LightingMapMode", 4f);
-            }
-        }
-
-        /// <summary>
         /// The occlusion factor multiplies the indirect light. The
         /// harness ambient sits at black for the toon light clamp,
-        /// so the live case raises the ambient to a dim grey. The
-        /// harness restores the ambient when it is disposed.
+        /// so the cases raise the ambient to a dim grey. The harness
+        /// restores the ambient when it is disposed.
         /// </summary>
         private static void PinAmbientLight()
         {
             RenderSettings.ambientLight =
                 new Color(0.35f, 0.35f, 0.35f);
+        }
+
+        /// <summary>
+        /// The members that move the render on their own. The helper
+        /// gives each member one fresh case material, so the result
+        /// names the defect for the data fix.
+        /// </summary>
+        private List<string> LiveMembersOf(
+            Shader shader,
+            AtlasDeadValueFamily family,
+            Color32[] baseRender,
+            List<string> perturbed)
+        {
+            using var harness = new PoiyomiRenderHarness();
+            PinAmbientLight();
+            var live = new List<string>();
+            foreach (var name in perturbed)
+            {
+                var probe = NewCaseMaterial(shader, family);
+                PerturbOneValue(probe, name);
+                if (!BytesEqual(baseRender, harness.Render(probe)))
+                {
+                    live.Add(name);
+                }
+            }
+
+            return live;
         }
 
         // --- the perturbation -----------------------------------------
