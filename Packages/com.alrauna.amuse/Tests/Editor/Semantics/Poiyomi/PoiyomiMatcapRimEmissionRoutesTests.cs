@@ -927,6 +927,21 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                     "'" + pan + "'");
                 material.SetVector(pan, Vector4.zero);
             }
+
+            // The compare is exact. Vector4 equality accepts a small
+            // distance, and the shader pans the coordinate by any
+            // non-zero component of the transform.
+            material.SetVector(
+                slot.SplitTransforms[0],
+                new Vector4(1.000005f, 1f, 0f, 0f));
+            var tinyOutcome = fixture.CaptureSingle(material);
+            PoiyomiReviewedFixture.AssertRefused(
+                tinyOutcome,
+                AtlasUseRefusal.RequiredValueNotHeld,
+                "'" + slot.SplitTransforms[0] + "'");
+            material.SetVector(
+                slot.SplitTransforms[0],
+                new Vector4(1f, 1f, 0f, 0f));
         }
 
         // --- Falsifier 4 scope: the rule follows its keyword ---------

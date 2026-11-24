@@ -102,7 +102,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         /// a fixed step or to a noise texture. The render must stay
         /// byte for byte equal. The no-op guards prove that the dead
         /// set of the model holds every perturbed name, so the case
-        /// can never pass by perturbing nothing.
+        /// can never pass by perturbing nothing. The case for the
+        /// slot 0 custom normal family also guards that its parent
+        /// slot keyword stays on, because the production state that
+        /// drops the custom normal members holds both keywords.
         /// </summary>
         [Test]
         [TestCaseSource(nameof(DeadFamilyCases))]
@@ -110,19 +113,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             string familyKeyword, bool twoPass)
         {
             RunDeadCaseAssertions(familyKeyword, twoPass);
-        }
-
-        /// <summary>
-        /// The second dead case of the slot 0 custom normal family.
-        /// The parent slot keyword stays on and the mixed pin keeps
-        /// the member color visible. This is the production state
-        /// that drops the custom normal members.
-        /// </summary>
-        [Test]
-        public void Matcap0CustomNormalDeadCaseHoldsWithParentOn(
-            [Values(false, true)] bool twoPass)
-        {
-            RunDeadCaseAssertions("POI_MATCAP0_CUSTOM_NORMAL", twoPass);
         }
 
         private void RunDeadCaseAssertions(
@@ -197,7 +187,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             if (differentPixels > 0)
             {
                 var liveMembers =
-                    LiveMembersOf(shader, familyKeyword, perturbed);
+                    LiveMembersOf(
+                        harness,
+                        shader,
+                        familyKeyword,
+                        before,
+                        perturbed);
                 Assert.Fail(
                     "The values of the dead family '" + familyKeyword +
                     "' changed the render of row '" + shader.name +
@@ -431,14 +426,17 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         /// <summary>
         /// The fixture overrides per family. A family that the
         /// default material hides needs one pin. The matcap of slot
-        /// 0 replaces the base color by default. The matcaps of the
-        /// slots 1 to 3 carry no blend mode by default, so the mixed
-        /// mode pins them visible. The emission strengths start at
-        /// zero. The rim of the Poiyomi style is an emission and
-        /// starts at zero. The global masks feed the RGB masks of the
-        /// color effects group, so the case pins one consumer on.
-        /// The override runs after the keyword list, so it can enable
-        /// a keyword of another group.
+        /// 0 replaces the base color by default. The slot 0 family
+        /// keeps that default here, and the mixed pin for every
+        /// other case of the slot lives in the case material. The
+        /// matcaps of the slots 1 to 3 carry no blend mode by
+        /// default, so the mixed mode pins them visible. The
+        /// emission strengths start at zero. The rim of the Poiyomi
+        /// style is an emission and starts at zero. The global masks
+        /// feed the RGB masks of the color effects group, so the
+        /// case pins one consumer on. The override runs after the
+        /// keyword list, so it can enable a keyword of another
+        /// group.
         /// </summary>
         private Dictionary<string, Action<Material>> FixtureOverrides =>
             new Dictionary<string, Action<Material>>
@@ -593,23 +591,25 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 
         /// <summary>
         /// The members that move the render on their own. The helper
-        /// gives each member one fresh case material, so the result
-        /// names the defect for the data fix.
+        /// gives each member one fresh case material and renders it
+        /// on the case harness, so the probe compares against the
+        /// kept frame of the same scene. The result names the
+        /// defect for the data fix.
         /// </summary>
         private List<string> LiveMembersOf(
+            PoiyomiRenderHarness harness,
             Shader shader,
             string familyKeyword,
+            Color32[] before,
             List<string> perturbed)
         {
             var live = new List<string>();
             foreach (var name in perturbed)
             {
-                using var harness = new PoiyomiRenderHarness();
                 var probe = NewCaseMaterial(shader, familyKeyword);
                 harness.Render(probe);
-                var baseFrame = harness.Render(probe);
                 PerturbOneValue(probe, name);
-                if (!BytesEqual(baseFrame, harness.Render(probe)))
+                if (!BytesEqual(before, harness.Render(probe)))
                 {
                     live.Add(name);
                 }

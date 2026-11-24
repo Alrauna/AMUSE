@@ -21,12 +21,14 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
     /// </para>
     /// <para>
     /// The table rules of record section 5 return the first failing
-    /// sentence. The matcap blend rule refuses a blend selector 0,
-    /// 6, or 7 with a non-zero blend vector. The center out rule
-    /// refuses an enabled center out with an assigned map on
-    /// selector 0. The scroll rule refuses an assigned curve in
-    /// use. The split rule refuses a split read with a non-identity
-    /// split transform or a non-zero split pan.
+    /// sentence. The matcap blend rule needs the exact blend
+    /// selector 1, 2, 3, 4, 5, 8, or 9, or a blend vector with x
+    /// and y at zero. A fraction, a negative value, or a NaN reads
+    /// UV0, the polar UV, or the distorted UV, so it fails closed.
+    /// The center out rule refuses an enabled center out with an
+    /// assigned map on selector 0. The scroll rule refuses an
+    /// assigned curve in use. The split rule refuses a split read
+    /// with a non-identity split transform or a non-zero split pan.
     /// </para>
     /// </summary>
     internal static class PoiyomiMatcapRimEmissionRoutes
