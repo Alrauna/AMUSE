@@ -785,6 +785,13 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 Is.EqualTo(AtlasCompanionSampler.InlinePointRepeat),
                 "the admitted pathing map sampler is the point" +
                 " repeat one");
+            var pathingMap = outcome.Use.Companions.Single(
+                companion => companion.Property == "_PathingMap");
+            Assert.That(
+                pathingMap.Sampler,
+                Is.EqualTo(AtlasUseCapture.InlinePointRepeat),
+                "the captured pathing map page holds the point" +
+                " repeat sampler facts");
         }
 
         /// <summary>
@@ -1396,9 +1403,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         /// Every audio link UV debug display reads the mesh UV as
         /// data. A debug flag or the CC strip Y at 1 refuses. The
         /// flags are uniforms without Properties entries, so the test
-        /// plants their saved values directly. Planting a saved name
-        /// that no row declares logs the missing property error of
-        /// the material, and the test expects that log.
+        /// plants their saved values directly.
         /// </summary>
         [Test]
         public void AudioLinkUvDebugFlagRefuses(
@@ -1418,6 +1423,31 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 outcome,
                 AtlasUseRefusal.RequiredValueNotHeld,
                 "'" + flag + "'");
+        }
+
+        // --- Falsifier 12b: IntegerPlantedDebugFlagRefuses ------------
+        /// <summary>
+        /// A debug flag planted as a saved integer refuses like a
+        /// saved float. The rule reads both saved shapes.
+        /// </summary>
+        [Test]
+        public void IntegerPlantedDebugFlagRefuses(
+            [Values(false, true)] bool twoPass)
+        {
+            using var fixture = new PoiyomiReviewedFixture();
+            var material = fixture.NewMaterial(twoPass);
+            material.SetTexture("_MainTex", fixture.NewRouteTexture(64));
+            material.EnableKeyword("POI_AUDIOLINK");
+
+            var twin = fixture.CaptureSingle(material);
+            PoiyomiReviewedFixture.AssertAdmitted(twin);
+
+            material.SetInteger("_DebugWaveform", 1);
+            var outcome = fixture.CaptureSingle(material);
+            PoiyomiReviewedFixture.AssertRefused(
+                outcome,
+                AtlasUseRefusal.RequiredValueNotHeld,
+                "'_DebugWaveform'");
         }
 
         // --- Falsifier 13: AlDecalChannelAtDefaultRefuses -------------
@@ -1554,6 +1584,126 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 outcome,
                 AtlasUseRefusal.RequiredValueNotHeld,
                 "'_ParallaxUV'");
+        }
+
+        // --- Falsifier 19: PackedSplitSelectorRefuses -----------------
+        /// <summary>
+        /// The split per channel reads of a packed RGBA map sample the
+        /// same texture as the merged read. A split selector off UV0
+        /// reads the page outside its region and refuses. The
+        /// falsifier asserts the admitted twin first.
+        /// </summary>
+        [Test]
+        public void PackedSplitSelectorRefuses(
+            [Values("_RGBAMetallicMaps", "_RGBASmoothnessMaps")]
+                string texture,
+            [Values(false, true)] bool twoPass)
+        {
+            using var fixture = new PoiyomiReviewedFixture();
+            var material = NewCaseMaterial(fixture, twoPass);
+            material.SetTexture(texture, fixture.NewRouteTexture(64));
+            material.EnableKeyword("VIGNETTE");
+            material.EnableKeyword("PROP_RGBAMETALLICMAPS");
+            material.EnableKeyword("PROP_RGBASMOOTHNESSMAPS");
+
+            var twin = fixture.CaptureSingle(material);
+            PoiyomiReviewedFixture.AssertCompanion(twin, texture);
+
+            material.SetFloat("_RGBARedPBRUV", 1f);
+            var outcome = fixture.CaptureSingle(material);
+            PoiyomiReviewedFixture.AssertRefused(
+                outcome,
+                AtlasUseRefusal.RequiredValueNotHeld,
+                "'_RGBARedPBRUV'");
+        }
+
+        // --- Falsifier 20: PackedSplitStochasticRefuses ---------------
+        /// <summary>
+        /// The split per channel reads of a packed RGBA map follow the
+        /// split stochastic flag. A flag of 1 samples the page at
+        /// stochastic offsets and refuses. The falsifier asserts the
+        /// admitted twin first.
+        /// </summary>
+        [Test]
+        public void PackedSplitStochasticRefuses(
+            [Values("_RGBAMetallicMaps", "_RGBASmoothnessMaps")]
+                string texture,
+            [Values(false, true)] bool twoPass)
+        {
+            using var fixture = new PoiyomiReviewedFixture();
+            var material = NewCaseMaterial(fixture, twoPass);
+            material.SetTexture(texture, fixture.NewRouteTexture(64));
+            material.EnableKeyword("VIGNETTE");
+            material.EnableKeyword("PROP_RGBAMETALLICMAPS");
+            material.EnableKeyword("PROP_RGBASMOOTHNESSMAPS");
+
+            var twin = fixture.CaptureSingle(material);
+            PoiyomiReviewedFixture.AssertCompanion(twin, texture);
+
+            material.SetFloat("_RGBARedPBRSplitMaskStochastic", 1f);
+            var outcome = fixture.CaptureSingle(material);
+            PoiyomiReviewedFixture.AssertRefused(
+                outcome,
+                AtlasUseRefusal.RequiredValueNotHeld,
+                "'_RGBARedPBRSplitMaskStochastic'");
+        }
+
+        // --- Falsifier 21: PackedSplitPanRefuses ----------------------
+        /// <summary>
+        /// The split per channel reads of a packed RGBA map follow the
+        /// split pan. A pan that drifts with time reads the page
+        /// outside its region and refuses with the identity demand.
+        /// The falsifier asserts the admitted twin first.
+        /// </summary>
+        [Test]
+        public void PackedSplitPanRefuses(
+            [Values("_RGBAMetallicMaps", "_RGBASmoothnessMaps")]
+                string texture,
+            [Values(false, true)] bool twoPass)
+        {
+            using var fixture = new PoiyomiReviewedFixture();
+            var material = NewCaseMaterial(fixture, twoPass);
+            material.SetTexture(texture, fixture.NewRouteTexture(64));
+            material.EnableKeyword("VIGNETTE");
+            material.EnableKeyword("PROP_RGBAMETALLICMAPS");
+            material.EnableKeyword("PROP_RGBASMOOTHNESSMAPS");
+
+            var twin = fixture.CaptureSingle(material);
+            PoiyomiReviewedFixture.AssertCompanion(twin, texture);
+
+            material.SetVector("_RGBARedPBRMasksPan", new Vector4(0f, 3f, 0f, 0f));
+            var outcome = fixture.CaptureSingle(material);
+            PoiyomiReviewedFixture.AssertRefused(
+                outcome,
+                AtlasUseRefusal.NonIdentityTransform,
+                "'_RGBARedPBRMasksPan'");
+        }
+
+        // --- Falsifier 22: MergedTransformOffIdentityRefuses ----------
+        /// <summary>
+        /// The merged transform of the red channel joins the identity
+        /// demands of the red channel textures. A scale off identity
+        /// refuses. The falsifier asserts the admitted twin first.
+        /// </summary>
+        [Test]
+        public void MergedTransformOffIdentityRefuses(
+            [Values(false, true)] bool twoPass)
+        {
+            using var fixture = new PoiyomiReviewedFixture();
+            var material = NewCaseMaterial(fixture, twoPass);
+            material.SetTexture("_RedTexture", fixture.NewRouteTexture(64));
+            material.EnableKeyword("VIGNETTE");
+            material.EnableKeyword("PROP_REDTEXTURE");
+
+            var twin = fixture.CaptureSingle(material);
+            PoiyomiReviewedFixture.AssertCompanion(twin, "_RedTexture");
+
+            material.SetVector("_RGBARedScaleOffset", new Vector4(2f, 1f, 0f, 0f));
+            var outcome = fixture.CaptureSingle(material);
+            PoiyomiReviewedFixture.AssertRefused(
+                outcome,
+                AtlasUseRefusal.NonIdentityTransform,
+                "'_RGBARedScaleOffset'");
         }
 
         // --- the route lookups ----------------------------------------

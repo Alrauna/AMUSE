@@ -630,7 +630,17 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// UV0, their pans and stochastic flags as zero conditions, and
         /// their merged transforms as identity demands. A split read on
         /// another mesh UV would sample the page outside its region.
+        /// The channel prefixes of the packed RGBA maps sit below, in
+        /// red, green, blue, alpha order.
         /// </summary>
+        private static readonly string[] RgbaChannelPrefixes =
+        {
+            "Red",
+            "Green",
+            "Blue",
+            "Alpha",
+        };
+
         private static AtlasCompanionRoute PackedRgbMapRoute(string texture)
         {
             var selectorProperty = texture + "UV";
@@ -659,6 +669,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 conditions.Add(channel + "ScaleOffset");
                 transforms.Add((channel + "PBRMaskScaleTiling", IdentityScaleOffset));
                 transforms.Add((channel + "ScaleOffset", IdentityScaleOffset));
+                transforms.Add((channel + "PBRMasksPan", ZeroVector));
             }
 
             return new AtlasCompanionRoute(
@@ -667,8 +678,77 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 transforms.ToArray(),
                 conditions.ToArray(),
                 use,
-                UnheldUv0SelectorAndStochastic(
+                UnheldPackedSplitValues(
                     selectorProperty, stochasticProperty, use));
+        }
+
+        /// <summary>
+        /// The unheld sentences of a packed RGBA map on the UV0 use.
+        /// Beside the merged selector and the merged stochastic flag,
+        /// every split per channel read needs its selector on UV0 and
+        /// its stochastic flag at 0, because the split read samples the
+        /// same texture as the merged read. The split pans join the
+        /// identity demands of the route.
+        /// </summary>
+        private static Func<Material, string> UnheldPackedSplitValues(
+            string selectorProperty,
+            string stochasticProperty,
+            Func<Material, bool, AtlasRouteUse> use)
+        {
+            return material =>
+            {
+                if (use(material, false) != AtlasRouteUse.Uv0)
+                {
+                    return null;
+                }
+
+                var selector = PoiyomiCompanionRoutes.UnheldSelector(
+                    material, selectorProperty);
+                if (selector != null)
+                {
+                    return selector;
+                }
+
+                var mergedStochastic =
+                    material.GetFloat(stochasticProperty);
+                if (mergedStochastic != 0f)
+                {
+                    return "The property '" + stochasticProperty +
+                           "' is " + Number(mergedStochastic) +
+                           ". The route needs 0, because stochastic" +
+                           " sampling moves the coordinate.";
+                }
+
+                foreach (var prefix in RgbaChannelPrefixes)
+                {
+                    var channel = "_RGBA" + prefix;
+                    var splitSelector =
+                        material.GetFloat(channel + "PBRUV");
+                    if (splitSelector != 0f)
+                    {
+                        return "The property '" + channel + "PBRUV" +
+                               "' is " + Number(splitSelector) +
+                               ". The route needs 0, because the" +
+                               " split mask sample reads the same" +
+                               " texture.";
+                    }
+
+                    var splitStochastic = material.GetFloat(
+                        channel + "PBRSplitMaskStochastic");
+                    if (splitStochastic != 0f)
+                    {
+                        return "The property '" + channel +
+                               "PBRSplitMaskStochastic' is " +
+                               Number(splitStochastic) +
+                               ". The route needs 0, because" +
+                               " stochastic sampling moves the" +
+                               " coordinate of the split mask" +
+                               " sample.";
+                    }
+                }
+
+                return null;
+            };
         }
 
         /// <summary>
@@ -1274,13 +1354,16 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
             foreach (var flag in AudioUvFlagProperties)
             {
-                // A saved name reads through GetFloat. A name the row
-                // does not carry reads 0, which is the safe state.
-                // HasFloat stays silent, GetFloat alone would log an
-                // error for a missing name.
+                // A saved name reads through GetFloat or GetInteger.
+                // A name the row does not carry reads 0, which is the
+                // safe state. HasFloat and HasInteger stay silent;
+                // a bare GetFloat would log an error for a missing
+                // name.
                 var value = material.HasFloat(flag)
                     ? material.GetFloat(flag)
-                    : 0f;
+                    : material.HasInteger(flag)
+                        ? material.GetInteger(flag)
+                        : 0f;
                 if (value != 0f)
                 {
                     return "The property '" + flag + "' is " +
