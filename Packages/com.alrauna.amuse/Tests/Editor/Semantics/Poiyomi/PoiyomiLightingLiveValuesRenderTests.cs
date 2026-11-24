@@ -43,10 +43,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         /// family values.
         /// </para>
         /// <para>
-        /// POI_SUBSURFACESCATTERING and
-        /// `_STYLIZEDREFLECTIONMODE_LILTOON` carry no entry. Their
-        /// liveness is unproven in this scene, and their dated
-        /// reasons sit in `CannotShowReasons`.
+        /// POI_SUBSURFACESCATTERING carries no entry. Its liveness
+        /// is unproven in this scene, and its dated reason sits in
+        /// `CannotShowReasons`.
         /// </para>
         /// </summary>
         private static readonly Dictionary<string, Action<Material>>
@@ -76,7 +75,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             FamiliesTheOracleCannotShow = new HashSet<string>
             {
                 "POI_SUBSURFACESCATTERING",
-                "_STYLIZEDREFLECTIONMODE_LILTOON",
             };
 
         /// <summary>
@@ -97,29 +95,18 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                     "of every member left the frame byte for byte " +
                     "equal in the rounds 4 and 6, with the spread at " +
                     "1 and the distortion at 0.",
-                ["_STYLIZEDREFLECTIONMODE_LILTOON"] =
-                    "The specular and reflection body sits behind " +
-                    "the runtime gate `_UseReflection`, and the " +
-                    "toon specular edge, the reflectance, and the " +
-                    "reflection color were all pinned to visible " +
-                    "values, and the probe dump of the failing " +
-                    "cases confirmed the pins on the material. The " +
-                    "perturbation of every member still left the " +
-                    "frame byte for byte equal in the rounds 4, 6, " +
-                    "8, and 9 of 2026-11-23. The oracle scene cannot " +
-                    "show this family; the cause needs a vendor " +
-                    "session of its own.",
             };
 
         /// <summary>
         /// The lighting mode keywords of the base pass pragma, line
         /// 10074. The six mode keywords of the group sit here, plus
-        /// the three KeyOnly modes of the record. The mode blocks
-        /// overwrite each other's final lighting in code order, so
-        /// more than one mode on can never show one family. The
-        /// vendor UI keeps one mode on. Observed on 2026-11-23: a
-        /// liveness case with every other mode on showed no member
-        /// of the family under test.
+        /// the three KeyOnly modes of the record. The nine modes
+        /// share one shader feature pragma, so Unity compiles one
+        /// mode body per keyword set, and the round `t4r1` artifact
+        /// showed only the first mode keyword of the pragma
+        /// rendering when every mode sat on. The vendor UI keeps
+        /// one mode on, so the liveness case of a mode family keeps
+        /// the other modes off.
         /// </summary>
         private static readonly HashSet<string> ModeKeywords =
             new HashSet<string>
@@ -294,7 +281,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                     LargestChannelDifference(before, after) +
                     " of 255. The live members are: " +
                     LiveMembersOf(
-                        harness, material, family, dead, before, false) +
+                        harness, family, dead, false) +
                     ".");
             }
 
@@ -343,7 +330,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 " must hold at least one member of the family '" +
                 familyName + "'");
             TurnOnTheFamilySwitch(material, family);
-            IsolateTheModeOf(material, family);
+            IsolateConflictingKeywords(material, family);
             if (FamilyFixtureOverrides.TryGetValue(
                     familyName, out var prepare))
             {
@@ -368,7 +355,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 // own. The row control proves whether the frame can
                 // show a live value at all.
                 var liveMembers = LiveMembersOf(
-                    harness, material, family, dead, before, true);
+                    harness, family, dead, true);
                 var color = material.GetColor("_Color");
                 material.SetColor(
                     "_Color",
@@ -431,31 +418,50 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         }
 
         /// <summary>
-        /// The lighting mode keywords overwrite each other's final
-        /// lighting in code order, so a mode family shows only when
-        /// its mode is the only mode on. The vendor UI keeps one
-        /// mode on, so the liveness case of a mode family turns the
-        /// other eight modes off. Ruling 2 and 3 of 2026-11-23.
-        /// Observed on 2026-11-23: a liveness case with every other
-        /// group keyword on showed no member of the mode family.
+        /// The liveness case of a family turns every keyword off
+        /// whose presence can hide the family. Ruling 2 and 3 of
+        /// 2026-11-23.
+        /// <para>
+        /// The nine lighting modes share one shader feature pragma
+        /// (line 10074), so Unity compiles one mode body per
+        /// keyword set, and the round `t4r1` artifact showed only
+        /// the first mode keyword of the pragma rendering when
+        /// every mode sat on. The vendor UI keeps one mode on, so
+        /// the liveness case of a mode family turns the other eight
+        /// modes off.
+        /// </para>
+        /// <para>
+        /// The two stylized reflection modes share one shader
+        /// feature pragma (line 10189) the same way, so the
+        /// liveness case of the lilToon mode turns the Unity Chan
+        /// mode off. Observed on 2026-11-23: the lilToon liveness
+        /// case stayed byte for byte equal while both modes sat on,
+        /// in the rounds 4 to 9.
+        /// </para>
         /// </summary>
-        private static void IsolateTheModeOf(
+        private static void IsolateConflictingKeywords(
             Material material,
             AtlasDeadValueFamily family)
         {
             var familyKeyword = family.Switches[0];
-            if (!familyKeyword.StartsWith(
+            if (familyKeyword.StartsWith(
                     "_LIGHTINGMODE_", StringComparison.Ordinal))
             {
+                foreach (var keyword in ModeKeywords)
+                {
+                    if (keyword != familyKeyword)
+                    {
+                        material.DisableKeyword(keyword);
+                    }
+                }
+
                 return;
             }
 
-            foreach (var keyword in ModeKeywords)
+            if (familyKeyword == "_STYLIZEDREFLECTIONMODE_LILTOON")
             {
-                if (keyword != familyKeyword)
-                {
-                    material.DisableKeyword(keyword);
-                }
+                material.DisableKeyword(
+                    "_STYLIZEDREFLECTIONMODE_UNITYCHAN");
             }
         }
 
@@ -720,27 +726,35 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         /// <summary>
         /// The members that move the render on their own. The helper
         /// renders every member on the harness of the caller, so no
-        /// second oracle scene overlaps the first one. The row
-        /// material only carries the shader of the row for the name
-        /// checks.
+        /// second oracle scene overlaps the first one. The base
+        /// frame carries the family switch in the state of the
+        /// caller, so a member counts as live only when it moves
+        /// the frame of its own switch state.
         /// </summary>
         private List<string> LiveMembersOf(
             PoiyomiRenderHarness harness,
-            Material rowMaterial,
             AtlasDeadValueFamily family,
             ISet<string> dead,
-            Color32[] baseRender,
             bool isolateMode)
         {
+            var baseMaterial = NewCaseMaterial(family);
+            Track(baseMaterial);
+            TurnOnTheFamilySwitch(baseMaterial, family);
+            if (isolateMode)
+            {
+                IsolateConflictingKeywords(baseMaterial, family);
+            }
+
+            var baseRender = harness.Render(baseMaterial);
             var live = new List<string>();
-            foreach (var name in PerturbedNamesOf(rowMaterial, family, dead))
+            foreach (var name in PerturbedNamesOf(baseMaterial, family, dead))
             {
                 var material = NewCaseMaterial(family);
                 Track(material);
                 TurnOnTheFamilySwitch(material, family);
                 if (isolateMode)
                 {
-                    IsolateTheModeOf(material, family);
+                    IsolateConflictingKeywords(material, family);
                 }
 
                 PerturbOneValue(material, name);

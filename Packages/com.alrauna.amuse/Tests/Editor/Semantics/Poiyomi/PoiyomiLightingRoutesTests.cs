@@ -287,9 +287,13 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 
         /// <summary>
         /// The SDF shading texture never moves. The sample
-        /// multiplies the coordinate x by a light driven flip, so no
-        /// use may page the texture. The admitted use keeps it bound
-        /// at selector 1.
+        /// multiplies the coordinate x by a light driven flip, so
+        /// no use may page the texture. The admitted use keeps it
+        /// bound at selector 1, and the route must return
+        /// `OtherCoordinates` then and `Inert` when the mode
+        /// keyword sits off, because an inert texture leaves the
+        /// key and two materials that differ only in the texture
+        /// would share one page material.
         /// </summary>
         [Test]
         public void SdfShadingIsAdmitted(
@@ -303,6 +307,26 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 
             var outcome = fixture.CaptureSingle(material);
             AssertNoGroupTextureMoved(outcome);
+
+            foreach (var route in PoiyomiLightingRoutes.Routes())
+            {
+                if (route.Property != "_SDFShadingTexture")
+                {
+                    continue;
+                }
+
+                Assert.That(
+                    route.UseOf(material, false),
+                    Is.EqualTo(AtlasRouteUse.OtherCoordinates),
+                    "the SDF texture must stay bound and keyed" +
+                    " while the mode keyword is on");
+                material.DisableKeyword("_LIGHTINGMODE_SDF");
+                Assert.That(
+                    route.UseOf(material, false),
+                    Is.EqualTo(AtlasRouteUse.Inert),
+                    "the SDF texture must leave the key while the" +
+                    " mode keyword sits off");
+            }
         }
 
         [Test]
@@ -522,9 +546,13 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 
         /// <summary>
         /// The ramp row pick reads a mesh UV as data when the ramp
-        /// count sits above one and the ramp selector sits at zero.
-        /// The rule refuses that state. The no-op guard asserts the
-        /// twin first. The twin keeps the selector at one and admits.
+        /// count sits above one and the ramp row selector sits at
+        /// UV0 data. The coordinate rule of the spec admits only
+        /// the selectors 1, 2, 3, 4, 5, 8, and 9. The selector 6
+        /// holds the polar coordinate and the selector 7 holds the
+        /// distorted UV, so both refuse. The rule also holds when
+        /// the count sits at most 1, whatever the selector reads.
+        /// The no-op guard asserts the twins first.
         /// </summary>
         [Test]
         public void TextureRampRowPickRefuses(
@@ -533,6 +561,14 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             using var fixture = new PoiyomiReviewedFixture();
             var material = NewCapturedMaterial(fixture, twoPass);
             EnableKeywords(material, "_LIGHTINGMODE_TEXTURERAMP");
+
+            // The admitted twins. A count of at most 1 holds the
+            // rule at any selector, and a selector of the allowed
+            // set holds it at any count.
+            material.SetFloat("_ToonRampCount", 1f);
+            material.SetFloat("_ToonRampUVSelector", 0f);
+            PoiyomiReviewedFixture.AssertAdmitted(
+                fixture.CaptureSingle(material));
 
             material.SetFloat("_ToonRampCount", 3f);
             material.SetFloat("_ToonRampUVSelector", 1f);
@@ -552,6 +588,20 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 Is.True,
                 "the refusal must name a property of the ramp row" +
                 " rule, detail: " + detail);
+
+            // The polar and distorted selectors read UV0 data, so
+            // they refuse like selector 0.
+            material.SetFloat("_ToonRampUVSelector", 6f);
+            PoiyomiReviewedFixture.AssertRefused(
+                fixture.CaptureSingle(material),
+                AtlasUseRefusal.RequiredValueNotHeld,
+                "The property '");
+
+            material.SetFloat("_ToonRampUVSelector", 7f);
+            PoiyomiReviewedFixture.AssertRefused(
+                fixture.CaptureSingle(material),
+                AtlasUseRefusal.RequiredValueNotHeld,
+                "The property '");
         }
 
         // --- Falsifier 2: SdfShadingFlipRefuses -----------------------
@@ -559,8 +609,14 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         /// <summary>
         /// The SDF shading sample multiplies the coordinate x by a
         /// light driven flip. An assigned texture at selector 0
-        /// refuses, because the texture must never move. The no-op
-        /// guard asserts the twin at selector 1 first.
+        /// refuses, because the texture must never move. The
+        /// coordinate rule of the spec admits only the selectors 1,
+        /// 2, 3, 4, 5, 8, and 9. The selector 6 holds the polar
+        /// coordinate and the selector 7 holds the distorted UV, so
+        /// both refuse, because the bound texture would read a
+        /// changed coordinate after the build. The rule holds when
+        /// the texture sits unassigned and when the mode keyword
+        /// sits off. The no-op guard asserts the twins first.
         /// </summary>
         [Test]
         public void SdfShadingFlipRefuses(
@@ -571,14 +627,43 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             AssignTexture(fixture, material, "_SDFShadingTexture", true);
             EnableKeywords(material, "_LIGHTINGMODE_SDF");
 
+            // The admitted twins. An unassigned texture never
+            // samples, and a mode keyword that sits off never reads
+            // it, so both states hold the rule at selector 0.
+            var sdfTexture = material.GetTexture("_SDFShadingTexture");
             material.SetFloat("_SDFShadingTextureUV", 1f);
             PoiyomiReviewedFixture.AssertAdmitted(
                 fixture.CaptureSingle(material));
 
+            material.SetTexture("_SDFShadingTexture", null);
             material.SetFloat("_SDFShadingTextureUV", 0f);
+            PoiyomiReviewedFixture.AssertAdmitted(
+                fixture.CaptureSingle(material));
+
+            material.SetTexture("_SDFShadingTexture", sdfTexture);
+            material.SetFloat("_SDFShadingTextureUV", 0f);
+            material.DisableKeyword("_LIGHTINGMODE_SDF");
+            PoiyomiReviewedFixture.AssertAdmitted(
+                fixture.CaptureSingle(material));
+            EnableKeywords(material, "_LIGHTINGMODE_SDF");
+
             var outcome = fixture.CaptureSingle(material);
             PoiyomiReviewedFixture.AssertRefused(
                 outcome,
+                AtlasUseRefusal.RequiredValueNotHeld,
+                "'_SDFShadingTextureUV'");
+
+            // The polar and distorted selectors read UV0 data, so
+            // they refuse like selector 0.
+            material.SetFloat("_SDFShadingTextureUV", 6f);
+            PoiyomiReviewedFixture.AssertRefused(
+                fixture.CaptureSingle(material),
+                AtlasUseRefusal.RequiredValueNotHeld,
+                "'_SDFShadingTextureUV'");
+
+            material.SetFloat("_SDFShadingTextureUV", 7f);
+            PoiyomiReviewedFixture.AssertRefused(
+                fixture.CaptureSingle(material),
                 AtlasUseRefusal.RequiredValueNotHeld,
                 "'_SDFShadingTextureUV'");
         }
@@ -613,6 +698,13 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 outcome,
                 AtlasUseRefusal.RequiredValueNotHeld,
                 "'_ShadowBorderMaskLOD'");
+
+            // The admitted twin of the keyword scope. The rule runs
+            // on its own mode keyword only, so a mode keyword that
+            // sits off holds the rule at a broken LOD.
+            material.DisableKeyword("_LIGHTINGMODE_MULTILAYER_MATH");
+            PoiyomiReviewedFixture.AssertAdmitted(
+                fixture.CaptureSingle(material));
         }
 
         // --- Falsifier 4: MochieSplitMaskFactsRefuse ------------------
@@ -621,10 +713,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         /// The split mask sample reads the same texture through its
         /// own selector, the merged transform, the split pan, and
         /// the split stochastic flag. All four facts must hold when
-        /// the split sample runs on selector 0. The no-op guard
-        /// asserts the twin first. The twin holds every fact and
-        /// pages the maps. The falsifier breaks the split stochastic
-        /// flag.
+        /// the split sample runs on selector 0. The falsifier
+        /// breaks each fact in turn and refuses on every one. The
+        /// rule runs only while the split toggle sits on, so a
+        /// split toggle at 0 holds the rule at a broken transform.
+        /// The no-op guard asserts the twin first. The twin holds
+        /// every fact and pages the maps.
         /// </summary>
         [Test]
         public void MochieSplitMaskFactsRefuse(
@@ -649,11 +743,45 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 "_MochieMetallicMaps");
 
             material.SetFloat("_PBRSplitMaskStochastic", 1f);
-            var outcome = fixture.CaptureSingle(material);
             PoiyomiReviewedFixture.AssertRefused(
-                outcome,
+                fixture.CaptureSingle(material),
                 AtlasUseRefusal.RequiredValueNotHeld,
                 "'_PBRSplitMaskStochastic'");
+            material.SetFloat("_PBRSplitMaskStochastic", 0f);
+
+            material.SetFloat("_MochieMetallicMasksUV", 1f);
+            PoiyomiReviewedFixture.AssertRefused(
+                fixture.CaptureSingle(material),
+                AtlasUseRefusal.RequiredValueNotHeld,
+                "'_MochieMetallicMasksUV'");
+            material.SetFloat("_MochieMetallicMasksUV", 0f);
+
+            material.SetVector(
+                "_PBRMaskScaleTiling", new Vector4(1.37f, 1f, 0f, 0f));
+            PoiyomiReviewedFixture.AssertRefused(
+                fixture.CaptureSingle(material),
+                AtlasUseRefusal.RequiredValueNotHeld,
+                "'_PBRMaskScaleTiling'");
+            material.SetVector(
+                "_PBRMaskScaleTiling", new Vector4(1f, 1f, 0f, 0f));
+
+            material.SetVector(
+                "_MochieMetallicMasksPan", new Vector4(0f, 0.37f, 0f, 0f));
+            PoiyomiReviewedFixture.AssertRefused(
+                fixture.CaptureSingle(material),
+                AtlasUseRefusal.RequiredValueNotHeld,
+                "'_MochieMetallicMasksPan'");
+            material.SetVector("_MochieMetallicMasksPan", Vector4.zero);
+
+            // The admitted twin of the toggle scope. The split
+            // sample never runs while the toggle sits off, so no
+            // split fact matters then.
+            material.SetFloat("_PBRSplitMaskSample", 0f);
+            material.SetVector(
+                "_PBRMaskScaleTiling", new Vector4(2f, 2f, 0f, 0f));
+            PoiyomiReviewedFixture.AssertCompanion(
+                fixture.CaptureSingle(material),
+                "_MochieMetallicMaps");
         }
 
         // --- Falsifier 5: TwoLightingModesNeedBothConditions ----------

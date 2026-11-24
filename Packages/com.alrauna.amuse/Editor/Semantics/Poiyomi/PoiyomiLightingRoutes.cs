@@ -82,8 +82,9 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
         // The feature gates of the textures. Each gate lists the
         // keywords whose sample lines reach the texture. A texture
-        // with two keywords moves when one of them is on, because a
-        // move that the shader never samples is invisible.
+        // whose body sits under another feature moves only when
+        // every keyword of its gate sits on, because the record
+        // words those gates as one body under another feature.
 
         private static readonly string[] MultilayerMath =
         {
@@ -523,27 +524,21 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     AtlasCompanionSampler.Member,
                     MochiePbr,
                     true),
-                PoiyomiCompanionRoutes.Standard(
-                    "_AnisotropyMap",
-                    AtlasCompanionSampler.Member,
-                    GgxMochie,
-                    false),
+                AnisotropyMapRoute(),
                 PoiyomiCompanionRoutes.Standard(
                     "_ClearCoatMaps",
                     AtlasCompanionSampler.Member,
                     Clearcoat,
                     true),
                 RimEnviroRoute(),
-                PoiyomiCompanionRoutes.Standard(
+                StandardAllKeywords(
                     "_HighColor_Tex",
                     AtlasCompanionSampler.Member,
-                    StylizedUnityChan,
-                    false),
-                PoiyomiCompanionRoutes.Standard(
+                    StylizedUnityChan),
+                StandardAllKeywords(
                     "_Set_HighColorMask",
                     AtlasCompanionSampler.Member,
-                    StylizedUnityChan,
-                    false),
+                    StylizedUnityChan),
                 RawUv0Route(
                     "_SmoothnessTex",
                     AtlasCompanionSampler.InlineLinearRepeat,
@@ -562,9 +557,12 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
         /// <summary>
         /// The ramp row pick reads a mesh UV as data when the ramp
-        /// count sits above one and the ramp selector sits at zero.
-        /// The selector property doubles as the mesh UV channel, so
-        /// a selector other than zero keeps the read away from UV0.
+        /// count sits above one and the ramp row selector names a
+        /// UV0 data coordinate. The coordinate rule of the spec
+        /// admits only the selectors 1, 2, 3, 4, 5, 8, and 9. The
+        /// selector 6 holds the polar coordinate, the selector 7
+        /// holds the distorted UV, and every other value and NaN
+        /// counts as UV0, so all of them refuse.
         /// </summary>
         private static string TextureRampRule(Material material)
         {
@@ -575,14 +573,17 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
             var count = material.GetFloat("_ToonRampCount");
             var selector = material.GetFloat("_ToonRampUVSelector");
-            if (count <= 1f || selector != 0f)
+            if (count <= 1f ||
+                selector == 1f || selector == 2f || selector == 3f ||
+                selector == 4f || selector == 5f || selector == 8f ||
+                selector == 9f)
             {
                 return null;
             }
 
             return "The property '_ToonRampCount' is " + Number(count) +
                    ". The route needs a count of at most 1, or a" +
-                   " ramp row selector other than 0.";
+                   " ramp row selector of 1, 2, 3, 4, 5, 8, or 9.";
         }
 
         /// <summary>
@@ -609,8 +610,13 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
         /// <summary>
         /// The SDF shading sample multiplies the coordinate x by a
-        /// light driven flip. An assigned texture on UV0 refuses,
-        /// because the texture must never move.
+        /// light driven flip, so the texture must never move. The
+        /// sample reads the selected channel of the bound texture,
+        /// and the coordinate rule of the spec admits only the
+        /// selectors 1, 2, 3, 4, 5, 8, and 9. The selector 6 holds
+        /// the polar coordinate, the selector 7 holds the distorted
+        /// UV, and every other value and NaN counts as UV0, so all
+        /// of them refuse.
         /// </summary>
         private static string SdfShadingRule(Material material)
         {
@@ -625,12 +631,16 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
 
             var selector = material.GetFloat("_SDFShadingTextureUV");
-            return selector != 0f
-                ? null
-                : "The property '_SDFShadingTextureUV' is " +
-                  Number(selector) + ". The route needs a selector" +
-                  " other than 0, because the sample flips the" +
-                  " coordinate with the light.";
+            if (selector == 1f || selector == 2f || selector == 3f ||
+                selector == 4f || selector == 5f || selector == 8f ||
+                selector == 9f)
+            {
+                return null;
+            }
+
+            return "The property '_SDFShadingTextureUV' is " +
+                   Number(selector) +
+                   ". The route needs 1, 2, 3, 4, 5, 8, or 9.";
         }
 
         /// <summary>
@@ -704,26 +714,59 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// <summary>
         /// The SDF shading texture never moves. The use stays on
         /// another coordinate whenever the mode keyword is on, so
-        /// the texture stays bound and keyed. The selector refusal
-        /// sits in the table rule.
+        /// the texture stays bound and keyed. No transform or pan
+        /// condition exists, because the capture never checks the
+        /// transforms of a texture that never moves, and the
+        /// selector sits in the condition properties of the table.
+        /// The selector refusal sits in the table rule.
         /// </summary>
         private static AtlasCompanionRoute SdfShadingRoute()
         {
             return new AtlasCompanionRoute(
                 "_SDFShadingTexture",
                 AtlasCompanionSampler.Member,
-                new[]
-                {
-                    ("_SDFShadingTexture_ST", IdentityScaleOffset),
-                    ("_SDFShadingTexturePan", ZeroVector),
-                },
-                new[]
-                {
-                    "_SDFShadingTextureUV",
-                    "_SDFShadingTexture_ST",
-                    "_SDFShadingTexturePan",
-                },
+                Array.Empty<(string, Vector4)>(),
+                Array.Empty<string>(),
                 NeverMovedUse(Sdf));
+        }
+
+        /// <summary>
+        /// The anisotropy map sample sits inside the Mochie block
+        /// under the GGX keyword (26730 sits inside 26580), so the
+        /// sample needs both keywords on.
+        /// </summary>
+        private static AtlasCompanionRoute AnisotropyMapRoute()
+        {
+            return StandardAllKeywords(
+                "_AnisotropyMap",
+                AtlasCompanionSampler.Member,
+                GgxMochie);
+        }
+
+        /// <summary>
+        /// A standard pattern route whose sample body sits under
+        /// every keyword of the gate. The route moves the texture
+        /// only when every keyword sits on, so a body that the
+        /// keyword set compiles out never moves its texture.
+        /// </summary>
+        private static AtlasCompanionRoute StandardAllKeywords(
+            string texture,
+            AtlasCompanionSampler sampler,
+            string[] keywords)
+        {
+            var selectorProperty = texture + "UV";
+            var transformProperty = texture + "_ST";
+            var panProperty = texture + "Pan";
+            return new AtlasCompanionRoute(
+                texture,
+                sampler,
+                new[]
+                {
+                    (transformProperty, IdentityScaleOffset),
+                    (panProperty, ZeroVector),
+                },
+                new[] { selectorProperty, transformProperty, panProperty },
+                AllEnabledUse(keywords, AtlasRouteUse.Uv0));
         }
 
         /// <summary>
@@ -760,27 +803,36 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 sampler,
                 Array.Empty<(string, Vector4)>(),
                 Array.Empty<string>(),
-                SwitchedUse(keywords, AtlasRouteUse.Uv0));
+                AllEnabledUse(keywords, AtlasRouteUse.Uv0));
         }
 
         /// <summary>
-        /// The use of a texture that never moves. The mode keyword
-        /// decides between inert and another coordinate.
+        /// The use of a texture whose sample body needs every
+        /// keyword of the gate on. The mode keyword decides between
+        /// inert and another coordinate for the SDF texture.
         /// </summary>
         private static Func<Material, bool, AtlasRouteUse>
             NeverMovedUse(string[] keywords)
         {
-            return SwitchedUse(keywords, AtlasRouteUse.OtherCoordinates);
+            return AllEnabledUse(keywords, AtlasRouteUse.OtherCoordinates);
         }
 
-        private static Func<Material, bool, AtlasRouteUse> SwitchedUse(
+        private static Func<Material, bool, AtlasRouteUse> AllEnabledUse(
             string[] keywords,
             AtlasRouteUse moved)
         {
             return (material, outlineRow) =>
-                PoiyomiCompanionRoutes.AnyEnabled(material, keywords)
-                    ? moved
-                    : AtlasRouteUse.Inert;
+            {
+                foreach (var keyword in keywords)
+                {
+                    if (!material.IsKeywordEnabled(keyword))
+                    {
+                        return AtlasRouteUse.Inert;
+                    }
+                }
+
+                return moved;
+            };
         }
 
         private static AtlasDeadValueFamily[] BuildFamilies()
