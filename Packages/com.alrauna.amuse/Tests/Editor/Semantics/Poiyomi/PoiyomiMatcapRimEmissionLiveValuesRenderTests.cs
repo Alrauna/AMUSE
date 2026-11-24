@@ -109,6 +109,25 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         public void DeadFamilyValuesDoNotChangeTheRender(
             string familyKeyword, bool twoPass)
         {
+            RunDeadCaseAssertions(familyKeyword, twoPass);
+        }
+
+        /// <summary>
+        /// The second dead case of the slot 0 custom normal family.
+        /// The parent slot keyword stays on and the mixed pin keeps
+        /// the member color visible. This is the production state
+        /// that drops the custom normal members.
+        /// </summary>
+        [Test]
+        public void Matcap0CustomNormalDeadCaseHoldsWithParentOn(
+            [Values(false, true)] bool twoPass)
+        {
+            RunDeadCaseAssertions("POI_MATCAP0_CUSTOM_NORMAL", twoPass);
+        }
+
+        private void RunDeadCaseAssertions(
+            string familyKeyword, bool twoPass)
+        {
             var family = FamilyByName(familyKeyword);
             var shader = LoadRowShader(twoPass);
             var material = NewCaseMaterial(shader, familyKeyword);
@@ -118,6 +137,14 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 Is.True,
                 "no-op guard: the family '" + familyKeyword +
                 "' must be off on row '" + shader.name + "'");
+            if (familyKeyword == "POI_MATCAP0_CUSTOM_NORMAL")
+            {
+                Assert.That(
+                    material.IsKeywordEnabled("POI_MATCAP0"),
+                    Is.True,
+                    "no-op guard: the parent slot keyword of the" +
+                    " custom normal family must be on");
+            }
 
             var perturbed =
                 PerturbedNamesOf(material, family, shader.name);
@@ -169,14 +196,17 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             var differentPixels = CountDifferentPixels(before, after);
             if (differentPixels > 0)
             {
+                var liveMembers =
+                    LiveMembersOf(shader, familyKeyword, perturbed);
                 Assert.Fail(
                     "The values of the dead family '" + familyKeyword +
                     "' changed the render of row '" + shader.name +
                     "'. " + differentPixels + " of " + before.Length +
                     " pixels differ. The largest channel difference" +
                     " is " + LargestChannelDifference(before, after) +
-                    " of 255. Move the live member out of the" +
-                    " family in the data.");
+                    " of 255. The members that move the render are: " +
+                    string.Join(", ", liveMembers) +
+                    ". Move them out of the family in the data.");
             }
 
             // The row control proves the case is not vacuous. The
@@ -236,17 +266,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                         material.DisableKeyword(sibling);
                     }
                 }
-            }
-
-            // The custom normal sample sits under its matcap slot
-            // feature. The slot 0 keyword stays off in the case
-            // material under ruling 2, so the live case turns the
-            // parent on here. The parents of the other families sit
-            // in the case material already.
-            if (ParentKeywords.TryGetValue(
-                    familyKeyword, out var parent))
-            {
-                material.EnableKeyword(parent);
             }
 
             Assert.That(
@@ -338,19 +357,21 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 
         /// <summary>
         /// One material on one row. Every group keyword of the record
-        /// is on, except the keyword of the family under test and
-        /// except <c>POI_MATCAP0</c>. The vendor default of the
-        /// matcap slot 0 replaces the base color with the matcap
-        /// sample. The replaced surface shows no member color, so
-        /// the row control of every dead case goes blind while the
-        /// keyword is on. The green run of 2026-11-23 proved that
-        /// blindness. The keyword stays off under ruling 2 of the
-        /// green round. Each exclusive keyword group holds exactly
-        /// one member, because one variant exists per member. The
-        /// vendor defaults hold every rule value of the group, so
-        /// the case material holds the route values. The fixture
-        /// override of the family pins the values that make the
-        /// family visible to the camera.
+        /// is on, except the keyword of the family under test. The
+        /// vendor default of the matcap slot 0 replaces the base
+        /// color with the matcap sample. The replaced surface shows
+        /// no member color, so the green run of 2026-11-23 proved
+        /// the row control blind while the sample replaced. Every
+        /// case that holds the slot keyword on therefore pins the
+        /// slot sample to the mixed blend, which keeps the base
+        /// color in the output. The case of the slot 0 family itself
+        /// keeps the vendor default, because the family keyword
+        /// holds the slot off there. Each exclusive keyword group
+        /// holds exactly one member, because one variant exists per
+        /// member. The vendor defaults hold every rule value of the
+        /// group, so the case material holds the route values. The
+        /// fixture override of the family pins the values that make
+        /// the family visible to the camera.
         /// </summary>
         private Material NewCaseMaterial(
             Shader shader, string familyKeyword)
@@ -369,7 +390,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             foreach (var keyword in GroupKeywordNames())
             {
                 if (keyword == familyKeyword ||
-                    keyword == "POI_MATCAP0" ||
                     ExclusiveGroupOf(keyword) != null)
                 {
                     continue;
@@ -390,6 +410,13 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                     material.EnableKeyword(keyword);
                     break;
                 }
+            }
+
+            if (familyKeyword != "POI_MATCAP0")
+            {
+                material.SetTexture("_Matcap", patternTexture);
+                material.SetFloat("_MatcapReplace", 0f);
+                material.SetFloat("_MatcapMixed", 1f);
             }
 
             if (FixtureOverrides.TryGetValue(
@@ -422,7 +449,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 },
                 ["POI_MATCAP0_CUSTOM_NORMAL"] = material =>
                 {
-                    material.SetTexture("_Matcap", patternTexture);
+                    // The base fixture of every other case assigns
+                    // the slot 0 matcap with the mixed pin. The
+                    // custom normal map joins that state here.
                     material.SetTexture(
                         "_Matcap0NormalMap", patternTexture);
                 },
@@ -536,30 +565,14 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 },
             };
 
-        /// <summary>
-        /// The parent feature keyword of a family whose sample sits
-        /// under another feature of the group. The custom normal
-        /// sample of each matcap slot compiles only while the slot
-        /// keyword is on. The live case of such a family turns the
-        /// parent on, because the case material holds
-        /// <c>POI_MATCAP0</c> off under ruling 2.
-        /// </summary>
-        private static readonly Dictionary<string, string> ParentKeywords =
-            new Dictionary<string, string>
-            {
-                ["POI_MATCAP0_CUSTOM_NORMAL"] = "POI_MATCAP0",
-                ["POI_MATCAP1_CUSTOM_NORMAL"] = "COLOR_GRADING_HDR_3D",
-                ["POI_MATCAP2_CUSTOM_NORMAL"] = "POI_MATCAP2",
-                ["POI_MATCAP3_CUSTOM_NORMAL"] = "POI_MATCAP3",
-            };
-
         // --- the perturbation -----------------------------------------
 
         /// <summary>
         /// The family members that the dead set of the model holds
-        /// for the case material. The model never returns a name that
-        /// another on family owns, so the perturbation stays inside
-        /// the family under test.
+        /// for the case material. The dead set is the union of every
+        /// family that is off. The intersection with the members of
+        /// the family under test keeps the perturbation inside that
+        /// family, even when another off family shares a member.
         /// </summary>
         private static List<string> PerturbedNamesOf(
             Material material,
@@ -576,6 +589,33 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         private static bool NeverDynamic(string name)
         {
             return false;
+        }
+
+        /// <summary>
+        /// The members that move the render on their own. The helper
+        /// gives each member one fresh case material, so the result
+        /// names the defect for the data fix.
+        /// </summary>
+        private List<string> LiveMembersOf(
+            Shader shader,
+            string familyKeyword,
+            List<string> perturbed)
+        {
+            var live = new List<string>();
+            foreach (var name in perturbed)
+            {
+                using var harness = new PoiyomiRenderHarness();
+                var probe = NewCaseMaterial(shader, familyKeyword);
+                harness.Render(probe);
+                var baseFrame = harness.Render(probe);
+                PerturbOneValue(probe, name);
+                if (!BytesEqual(baseFrame, harness.Render(probe)))
+                {
+                    live.Add(name);
+                }
+            }
+
+            return live;
         }
 
         /// <summary>

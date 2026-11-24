@@ -480,21 +480,24 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 }
 
                 var selector = material.GetFloat(rule.UvToBlend);
-                if (selector != 0f && selector != 6f && selector != 7f)
+                if (selector == 1f || selector == 2f ||
+                    selector == 3f || selector == 4f ||
+                    selector == 5f || selector == 8f ||
+                    selector == 9f)
                 {
                     continue;
                 }
 
                 var blend = material.GetVector(rule.BlendVector);
-                if (blend == Vector4.zero)
+                if (blend.x == 0f && blend.y == 0f)
                 {
                     continue;
                 }
 
                 return "The property '" + rule.UvToBlend + "' is " +
-                       Number(selector) + ". The route needs a blend" +
-                       " vector of zero, or a blend selector other" +
-                       " than 0, 6, or 7.";
+                       Number(selector) + ". The route needs the" +
+                       " exact blend selector 1, 2, 3, 4, 5, 8, or" +
+                       " 9, or a blend vector with x and y at 0.";
             }
 
             return null;
@@ -568,7 +571,6 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 return null;
             }
 
-            var identity = new Vector4(1f, 1f, 0f, 0f);
             foreach (var rule in SplitRules)
             {
                 var split = material.GetFloat(rule.Split);
@@ -582,7 +584,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     var transform = rule.Texture +
                                     "SplitTilingOffset_" + channel;
                     var value = material.GetVector(transform);
-                    if (value != identity)
+                    if (!HoldsIdentity(value))
                     {
                         return "The property '" + transform +
                                "' is " + Number(value) +
@@ -592,7 +594,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
                     var pan = rule.Texture + "SplitPan_" + channel;
                     var panValue = material.GetVector(pan);
-                    if (panValue != Vector4.zero)
+                    if (!HoldsZero(panValue))
                     {
                         return "The property '" + pan +
                                "' is " + Number(panValue) +
@@ -603,6 +605,28 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// The exact identity compare. Vector4 equality accepts a
+        /// small distance, and a split read moves the coordinate by
+        /// any non-zero component.
+        /// </summary>
+        private static bool HoldsIdentity(Vector4 value)
+        {
+            return value.x == 1f && value.y == 1f &&
+                   value.z == 0f && value.w == 0f;
+        }
+
+        /// <summary>
+        /// The exact zero compare. Vector4 equality accepts a small
+        /// distance, and a split read pans by any non-zero
+        /// component.
+        /// </summary>
+        private static bool HoldsZero(Vector4 value)
+        {
+            return value.x == 0f && value.y == 0f &&
+                   value.z == 0f && value.w == 0f;
         }
 
         // --- the condition properties ---------------------------------

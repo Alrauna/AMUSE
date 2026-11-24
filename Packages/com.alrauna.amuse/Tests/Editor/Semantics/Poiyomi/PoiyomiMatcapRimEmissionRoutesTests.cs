@@ -581,6 +581,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 "_GlobalMaskTexture3");
         }
 
+        // --- Falsifier 5: MatcapTextureIsNeutralAtAnySelector --------
         /// <summary>
         /// The matcap texture stays bound and is no companion at any
         /// selector of the blend rule. The blend vector stays zero,
@@ -664,9 +665,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         /// comes from an unrelated gate cannot pass the test.
         /// </summary>
 
-        // --- Falsifier 1: MatcapBlendSelectorZeroRefuses --------------
+        // --- Falsifier 1: MatcapBlendSelectorRefuses ------------------
         [Test]
-        public void MatcapBlendSelectorZeroRefuses(
+        public void MatcapBlendSelectorRefuses(
             [ValueSource(nameof(MatcapSlots))] MatcapSlotRow slot,
             [Values(false, true)] bool twoPass)
         {
@@ -675,20 +676,72 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             material.SetTexture("_MainTex", fixture.NewRouteTexture(64));
             material.SetTexture(slot.Mask, fixture.NewRouteTexture(64));
             material.SetFloat(slot.Mask + "UV", 0f);
-            material.SetFloat(slot.UvToBlend, 0f);
-            material.SetVector(slot.BlendVector, Vector4.zero);
             material.EnableKeyword(slot.Keyword);
 
+            // The common admitted twin. The vendor default selector
+            // is 1, and a UV blend at the exact selector 1 with a
+            // non-zero blend vector admits.
+            material.SetFloat(slot.UvToBlend, 1f);
+            material.SetVector(
+                slot.BlendVector, new Vector4(0.5f, 0.5f, 0f, 0f));
             var twin = fixture.CaptureSingle(material);
             PoiyomiReviewedFixture.AssertCompanion(twin, slot.Mask);
 
+            // The zero selector twin. The shader reads only the x
+            // and y of the blend vector, so a non-zero z and w with
+            // x and y at zero admits.
+            material.SetFloat(slot.UvToBlend, 0f);
+            material.SetVector(
+                slot.BlendVector, new Vector4(0f, 0f, 1f, 1f));
+            var zeroTwin = fixture.CaptureSingle(material);
+            PoiyomiReviewedFixture.AssertCompanion(zeroTwin, slot.Mask);
+
+            // Every selector that is not an exact allow list value
+            // refuses, because the shader truncates the float to an
+            // array index. A fraction, a negative value, and a NaN
+            // read UV0, the polar UV, or the distorted UV.
             material.SetVector(
                 slot.BlendVector, new Vector4(1f, 1f, 1f, 1f));
+            foreach (var selector in new float[]
+                     {
+                         0f,
+                         6f,
+                         7f,
+                         0.5f,
+                         -0.5f,
+                         6.5f,
+                         7.5f,
+                         float.NaN,
+                     })
+            {
+                material.SetFloat(slot.UvToBlend, selector);
+                var outcome = fixture.CaptureSingle(material);
+                PoiyomiReviewedFixture.AssertRefused(
+                    outcome,
+                    AtlasUseRefusal.RequiredValueNotHeld,
+                    "'" + slot.UvToBlend + "'");
+            }
+        }
+
+        // --- Falsifier 1 scope: the rule follows its keyword ---------
+        [Test]
+        public void MatcapBlendRuleIsKeywordScoped(
+            [ValueSource(nameof(MatcapSlots))] MatcapSlotRow slot,
+            [Values(false, true)] bool twoPass)
+        {
+            // The keyword stays off. The broken rule value must not
+            // refuse, because the rule follows its keyword.
+            using var fixture = new PoiyomiReviewedFixture();
+            var material = fixture.NewMaterial(twoPass);
+            material.SetTexture("_MainTex", fixture.NewRouteTexture(64));
+            material.SetTexture(slot.Mask, fixture.NewRouteTexture(64));
+            material.SetFloat(slot.Mask + "UV", 0f);
+            material.SetFloat(slot.UvToBlend, 0f);
+            material.SetVector(
+                slot.BlendVector, new Vector4(1f, 1f, 1f, 1f));
+
             var outcome = fixture.CaptureSingle(material);
-            PoiyomiReviewedFixture.AssertRefused(
-                outcome,
-                AtlasUseRefusal.RequiredValueNotHeld,
-                "'" + slot.UvToBlend + "'");
+            PoiyomiReviewedFixture.AssertAdmitted(outcome);
         }
 
         // --- Falsifier 2: EmissionCenterOutRefuses --------------------
@@ -717,6 +770,27 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 outcome,
                 AtlasUseRefusal.RequiredValueNotHeld,
                 "'" + slot.CenterOut + "'");
+        }
+
+        // --- Falsifier 2 scope: the rule follows its keyword ---------
+        [Test]
+        public void EmissionCenterOutRuleIsKeywordScoped(
+            [ValueSource(nameof(EmissionSlots))] EmissionSlotRow slot,
+            [Values(false, true)] bool twoPass)
+        {
+            // The keyword stays off. The broken center out value
+            // with an assigned map on selector 0 must not refuse.
+            using var fixture = new PoiyomiReviewedFixture();
+            var material = fixture.NewMaterial(twoPass);
+            material.SetTexture("_MainTex", fixture.NewRouteTexture(64));
+            material.SetTexture(slot.Mask, fixture.NewRouteTexture(64));
+            material.SetTexture(slot.Map, fixture.NewRouteTexture(64));
+            material.SetFloat(slot.MaskUv, 0f);
+            material.SetFloat(slot.MapUv, 0f);
+            material.SetFloat(slot.CenterOut, 1f);
+
+            var outcome = fixture.CaptureSingle(material);
+            PoiyomiReviewedFixture.AssertAdmitted(outcome);
         }
 
         // --- Falsifier 3: EmissionScrollingCurveRefuses ---------------
@@ -749,6 +823,29 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 "'" + slot.UseCurve + "'");
         }
 
+        // --- Falsifier 3 scope: the rule follows its keyword ---------
+        [Test]
+        public void EmissionScrollingRuleIsKeywordScoped(
+            [ValueSource(nameof(EmissionSlots))] EmissionSlotRow slot,
+            [Values(false, true)] bool twoPass)
+        {
+            // The keyword stays off. The broken use curve value with
+            // an assigned curve must not refuse.
+            using var fixture = new PoiyomiReviewedFixture();
+            var material = fixture.NewMaterial(twoPass);
+            material.SetTexture("_MainTex", fixture.NewRouteTexture(64));
+            material.SetTexture(slot.Mask, fixture.NewRouteTexture(64));
+            material.SetTexture(slot.Map, fixture.NewRouteTexture(64));
+            material.SetTexture(slot.Curve, fixture.NewRouteTexture(64));
+            material.SetFloat(slot.MaskUv, 0f);
+            material.SetFloat(slot.MapUv, 0f);
+            material.SetFloat(slot.CenterOut, 0f);
+            material.SetFloat(slot.UseCurve, 1f);
+
+            var outcome = fixture.CaptureSingle(material);
+            PoiyomiReviewedFixture.AssertAdmitted(outcome);
+        }
+
         // --- Falsifier 4: GlobalMaskSplitRefuses ----------------------
         [Test]
         public void GlobalMaskSplitRefuses(
@@ -777,36 +874,140 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             var twin = fixture.CaptureSingle(material);
             PoiyomiReviewedFixture.AssertCompanion(twin, slot.Texture);
 
-            // The split flag at zero is a safe state. The split
-            // transforms may hold any value then, because the split
+            // The split flag at zero is a safe state. All three
+            // split transforms may hold junk then, because the split
             // sample never runs.
             material.SetFloat(slot.Split, 0f);
-            material.SetVector(
-                slot.SplitTransforms[0],
-                new Vector4(2f, 3f, 0f, 0f));
+            foreach (var transform in slot.SplitTransforms)
+            {
+                material.SetVector(
+                    transform, new Vector4(2f, 3f, 0f, 0f));
+            }
+
             var safe = fixture.CaptureSingle(material);
             PoiyomiReviewedFixture.AssertCompanion(safe, slot.Texture);
 
             material.SetFloat(slot.Split, 1f);
-            var outcome = fixture.CaptureSingle(material);
-            PoiyomiReviewedFixture.AssertRefused(
-                outcome,
-                AtlasUseRefusal.RequiredValueNotHeld,
-                "'" + slot.SplitTransforms[0] + "'");
-
             foreach (var transform in slot.SplitTransforms)
             {
                 material.SetVector(
                     transform, new Vector4(1f, 1f, 0f, 0f));
             }
 
+            foreach (var pan in slot.SplitPans)
+            {
+                material.SetVector(pan, Vector4.zero);
+            }
+
+            // A split read refuses every channel transform that is
+            // not the identity, one channel at a time.
+            foreach (var transform in slot.SplitTransforms)
+            {
+                material.SetVector(
+                    transform, new Vector4(2f, 3f, 0f, 0f));
+                var outcome = fixture.CaptureSingle(material);
+                PoiyomiReviewedFixture.AssertRefused(
+                    outcome,
+                    AtlasUseRefusal.RequiredValueNotHeld,
+                    "'" + transform + "'");
+                material.SetVector(
+                    transform, new Vector4(1f, 1f, 0f, 0f));
+            }
+
+            // A split read refuses every channel pan that is not
+            // zero, one channel at a time.
+            foreach (var pan in slot.SplitPans)
+            {
+                material.SetVector(
+                    pan, new Vector4(1f, 0f, 0f, 0f));
+                var panOutcome = fixture.CaptureSingle(material);
+                PoiyomiReviewedFixture.AssertRefused(
+                    panOutcome,
+                    AtlasUseRefusal.RequiredValueNotHeld,
+                    "'" + pan + "'");
+                material.SetVector(pan, Vector4.zero);
+            }
+        }
+
+        // --- Falsifier 4 scope: the rule follows its keyword ---------
+        [Test]
+        public void GlobalMaskSplitRuleIsKeywordScoped(
+            [ValueSource(nameof(GlobalMaskSlots))] GlobalMaskSlotRow slot,
+            [Values(false, true)] bool twoPass)
+        {
+            // The keyword stays off. The broken split flag with junk
+            // split values and an assigned mask must not refuse.
+            using var fixture = new PoiyomiReviewedFixture();
+            var material = fixture.NewMaterial(twoPass);
+            material.SetTexture("_MainTex", fixture.NewRouteTexture(64));
+            material.SetTexture(slot.Texture, fixture.NewRouteTexture(64));
+            material.SetFloat(slot.TextureUv, 0f);
+            material.SetFloat(slot.Split, 1f);
+            foreach (var transform in slot.SplitTransforms)
+            {
+                material.SetVector(
+                    transform, new Vector4(2f, 3f, 0f, 0f));
+            }
+
+            foreach (var pan in slot.SplitPans)
+            {
+                material.SetVector(pan, Vector4.zero);
+            }
+
             material.SetVector(
                 slot.SplitPans[0], new Vector4(1f, 0f, 0f, 0f));
-            var panOutcome = fixture.CaptureSingle(material);
+
+            var outcome = fixture.CaptureSingle(material);
+            PoiyomiReviewedFixture.AssertAdmitted(outcome);
+        }
+
+        // --- the rule property guards --------------------------------
+
+        /// <summary>
+        /// An animation on a rule property refuses the use. The
+        /// capture reads the rule values from the material. A clip
+        /// that drives one could hold a broken value at runtime.
+        /// </summary>
+        [Test]
+        public void AnimatedRulePropertyRefuses(
+            [Values(false, true)] bool twoPass)
+        {
+            using var fixture = new PoiyomiReviewedFixture();
+            var material = fixture.NewMaterial(twoPass);
+            material.SetTexture("_MainTex", fixture.NewRouteTexture(64));
+            material.EnableKeyword("_EMISSION");
+            fixture.AnimateScalar(fixture.Root, "_EmissionScrollingUseCurve");
+
+            var outcome = fixture.CaptureSingle(material);
             PoiyomiReviewedFixture.AssertRefused(
-                panOutcome,
-                AtlasUseRefusal.RequiredValueNotHeld,
-                "'" + slot.SplitPans[0] + "'");
+                outcome,
+                AtlasUseRefusal.AnimatedRouteProperty,
+                "_EmissionScrollingUseCurve");
+        }
+
+        /// <summary>
+        /// A property block on a rule property refuses the use. The
+        /// block twin of the animated case.
+        /// </summary>
+        [Test]
+        public void BlockedRulePropertyRefuses(
+            [Values(false, true)] bool twoPass)
+        {
+            using var fixture = new PoiyomiReviewedFixture();
+            var material = fixture.NewMaterial(twoPass);
+            material.SetTexture("_MainTex", fixture.NewRouteTexture(64));
+            material.EnableKeyword("_EMISSION");
+            var renderer = fixture.Root
+                .GetComponentInChildren<SkinnedMeshRenderer>();
+            var block = new MaterialPropertyBlock();
+            block.SetFloat("_EmissionScrollingUseCurve", 1f);
+            renderer.SetPropertyBlock(block);
+
+            var outcome = fixture.CaptureSingle(material);
+            PoiyomiReviewedFixture.AssertRefused(
+                outcome,
+                AtlasUseRefusal.PropertyBlockOnRouteProperty,
+                "_EmissionScrollingUseCurve");
         }
     }
 }
