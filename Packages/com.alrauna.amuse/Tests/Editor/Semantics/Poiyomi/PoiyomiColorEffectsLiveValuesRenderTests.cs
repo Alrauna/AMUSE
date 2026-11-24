@@ -37,7 +37,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         private DefaultReflectionMode previousDefaultReflectionMode;
         private Material previousSkybox;
         private float previousAudioLinkAnimToggle;
-        private Texture2D previousAudioTexture;
+        private Texture previousAudioTexture;
 
         [SetUp]
         public void SetUp()
