@@ -904,6 +904,54 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         }
 
         [Test]
+        [Platform(Include = "Win")]
+        public void AcquisitionRefusesALockedSourceFile()
+        {
+            var texture = ImportUnreadableStreamingTexture(
+                "locked_source", 32);
+            var path = AssetDatabase.GetAssetPath(texture);
+            using (File.Open(path, FileMode.Open, FileAccess.Read, FileShare.None))
+            {
+                var ok = UnityStreamingTextureEvidence.TryAcquireAtlasSource(
+                    texture, 1, out var image, out var refusal);
+                Assert.That(ok, Is.False);
+                Assert.That(image, Is.Null);
+                Assert.That(refusal, Is.EqualTo(
+                    TextureCaptureRefusalReason.CloneFileInUse));
+            }
+        }
+
+        [Test]
+        [Platform(Include = "Win")]
+        public void AcquisitionRefusesALockedLeftoverClone()
+        {
+            var texture = ImportUnreadableStreamingTexture(
+                "locked_leftover", 32);
+            var guid = AssetDatabase.AssetPathToGUID(
+                AssetDatabase.GetAssetPath(texture));
+            Assert.That(AssetDatabase.IsValidFolder(StreamingTempFolder), Is.False);
+            AssetDatabase.CreateFolder("Assets", Path.GetFileName(StreamingTempFolder));
+            var leftover = StreamingTempFolder + "/" + guid + ".png";
+            File.WriteAllBytes(leftover, new byte[] { 1, 2, 3 });
+            try
+            {
+                using (File.Open(leftover, FileMode.Open, FileAccess.Read, FileShare.None))
+                {
+                    var ok = UnityStreamingTextureEvidence.TryAcquireAtlasSource(
+                        texture, 1, out var image, out var refusal);
+                    Assert.That(ok, Is.False);
+                    Assert.That(image, Is.Null);
+                    Assert.That(refusal, Is.EqualTo(
+                        TextureCaptureRefusalReason.CloneFileInUse));
+                }
+            }
+            finally
+            {
+                AssetDatabase.DeleteAsset(StreamingTempFolder);
+            }
+        }
+
+        [Test]
         public void AcquisitionThrowsWhenTheLoadedSourceFileIsMissing()
         {
             var texture = ImportUnreadableStreamingTexture(

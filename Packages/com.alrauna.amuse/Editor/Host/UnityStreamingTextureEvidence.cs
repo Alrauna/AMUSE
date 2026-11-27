@@ -400,7 +400,24 @@ namespace Alrauna.Amuse.Editor.Host
                 // sit in the pinned folder. The sweep runs before a new clone
                 // is made and deletes exactly the route's own naming shape,
                 // so a leftover is removed rather than accumulated.
-                SweepStaleClones();
+                try
+                {
+                    SweepStaleClones();
+                }
+                catch (IOException ex) when (
+                    (ex.HResult & 0xffff) == 32 ||
+                    (ex.HResult & 0xffff) == 33)
+                {
+                    // Another process can hold a leftover clone.
+                    refusal = TextureCaptureRefusalReason.CloneFileInUse;
+                    return false;
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    // The editor can lack permission to remove a leftover.
+                    refusal = TextureCaptureRefusalReason.CloneFileAccessDenied;
+                    return false;
+                }
 
                 var folderCreated =
                     !AssetDatabase.IsValidFolder(TempFolder);
