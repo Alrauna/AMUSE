@@ -15,6 +15,8 @@ The review read the base ForwardBase pass of the installed bundled shader file `
 
 The keyword set is the set of `shader_feature` and `multi_compile` tokens of the base pass pragma lines 9979 to 10247. The texture set is the set of texture typed declarations (2D, 3D, Cube, 2DArray) in the Properties block, lines 3 to 4678. Both sets were extracted mechanically on 2026-11-23 and counted. Every companion texture row was verified by re-reading its sample line in the base pass. The verified column of the texture table marks that re-read.
 
+On 2026-11-27, a synthetic material probe found that Unity can synchronize Poiyomi drawer keywords on the first material property read. With `_MatcapEnable` at 0 and `POI_MATCAP0` on, `Material.HasProperty` removed that keyword and marked the material dirty. The vendor drawer detour prevented that change in the control. The controller ruled that this synchronization is not an AMUSE defect. Test materials must keep each keyword consistent with its driving toggle or enum.
+
 Sampler words used in this record:
 
 - `Member`: the sample passes `_MainTex` as the sampler state, so the sample reads the sampler state that `sampler_MainTex` resolves to.
@@ -330,10 +332,10 @@ The table level required value function checks these rules. Each failure returns
 | Sharpened alpha to coverage | none | _AlphaSharpenedA2C, _AlphaToCoverage | Float, Float | First 0 or second 0 |
 | Renderer blocker | none | _RenderingAOBlockerEnabled | Float | 0 |
 | Light map mode | PROP_LIGHTDATASDFMAP | _LightingMapMode | Int | Not 4 |
-| Texture ramp row pick | _LIGHTINGMODE_TEXTURERAMP | _ToonRampCount, _ToonRampUVSelector | Int, Int | Count at most 1, or selector not 0 |
+| Texture ramp row pick | _LIGHTINGMODE_TEXTURERAMP | _ToonRampCount, _ToonRampUVSelector | Int, Int | Count at most 1, or the selector 1, 2, 3, 4, 5, 8, or 9 |
 | Multilayer border map LOD | _LIGHTINGMODE_MULTILAYER_MATH | _ShadowBorderMaskLOD, _ShadowBorderMapToggle | Float, Float | LOD 0. Toggle 1 turns the sample on, and the companion route then applies |
-| SDF shading flip | _LIGHTINGMODE_SDF | _SDFShadingTextureUV | Int | Not 0 when the texture is assigned. The texture never moves |
-| Matcap blend, slot 0 | POI_MATCAP0 | _MatcapUVToBlend, _MatCapBlendUV1 | Int, Vector | Selector not 0, 6, or 7, or blend vector zero |
+| SDF shading flip | _LIGHTINGMODE_SDF | _SDFShadingTextureUV | Int | One of 1, 2, 3, 4, 5, 8, 9 when the texture is assigned. The texture never moves |
+| Matcap blend, slot 0 | POI_MATCAP0 | _MatcapUVToBlend, _MatCapBlendUV1 | Int, Vector | Selector 1, 2, 3, 4, 5, 8, or 9, or blend vector zero |
 | Matcap blend, slot 1 | COLOR_GRADING_HDR_3D | _Matcap2UVToBlend, _MatCap2ndBlendUV1 | Int, Vector | Same |
 | Matcap blend, slot 2 | POI_MATCAP2 | _Matcap3UVToBlend, _MatCap3rdBlendUV1 | Int, Vector | Same |
 | Matcap blend, slot 3 | POI_MATCAP3 | _Matcap4UVToBlend, _MatCap4thBlendUV1 | Int, Vector | Same |
@@ -367,6 +369,7 @@ Notes on the conditional rules:
 - `_DepthTextureUV` admits 0 and 8. Value 8 is a depth gradient coordinate, not a mesh UV.
 - The coordinate rule of the spec applies to every companion selector value. Selectors 6 and 7 refuse, every value above 9 and every NaN refuse with `RequiredValueNotHeld`.
 - The stochastic rule is per texture: every companion route with a stochastic property requires that flag 0 on selector 0. The `_STOCHASTICMODE_*` keywords stay Conditional because their mode macros move coordinates only when a flag is 1.
+- 2026-11-24 correction. The texture ramp rule, the SDF shading rule, and the matcap blend rule first said "not 0" or "not 0, 6, or 7" in the safe state column. The shipped code holds the exact coordinate allow list of spec section 6: the selectors 1, 2, 3, 4, 5, 8, and 9. The table above now states that list.
 
 ## 6. Dead value families
 

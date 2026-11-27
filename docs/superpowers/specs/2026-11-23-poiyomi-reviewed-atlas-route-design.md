@@ -4,6 +4,8 @@ Privacy note: This record contains product design only. It names vendor shader p
 
 Date: 2026-11-23.
 Status on 2026-11-23: Approved by the user on 2026-11-23. The plan is `docs/superpowers/plans/2026-11-23-poiyomi-reviewed-atlas-route.md`.
+Status on 2026-11-24: Implementation and verification are in progress.
+Status on 2026-11-27: The route is implemented.
 
 ## 1. Intent
 
