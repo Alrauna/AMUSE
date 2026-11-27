@@ -186,6 +186,28 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             return readback.GetPixels32();
         }
 
+        /// <summary>
+        /// The subject with a caller mesh renders once, for an end
+        /// to end case that must render the built output mesh of a
+        /// slot. The call swaps the subject mesh for the render and
+        /// restores the sphere mesh after it, so the framing and
+        /// the lights stay the harness ones.
+        /// </summary>
+        public Color32[] Render(Material material, Mesh mesh)
+        {
+            var filter = sphereRenderer.GetComponent<MeshFilter>();
+            var sphereMesh = filter.sharedMesh;
+            filter.sharedMesh = mesh;
+            try
+            {
+                return Render(material);
+            }
+            finally
+            {
+                filter.sharedMesh = sphereMesh;
+            }
+        }
+
         private GameObject NewChild(string name)
         {
             var child = new GameObject(name);
