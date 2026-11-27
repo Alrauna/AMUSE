@@ -19,11 +19,10 @@ namespace Alrauna.Amuse.Editor.Host
     /// <c>loadedMipmapLevel</c> was 0 before and after the capture, so no
     /// residency observation makes the GPU read sound. The importer, by
     /// contrast, is deterministic: the same source file under the same
-    /// importer settings produces the same texels, and neither
-    /// <c>isReadable</c> nor <c>streamingMipmaps</c> changes texel content
-    /// (both measured). Copying the asset copies the source and its .meta,
-    /// so the clone differs from the avatar's texture in exactly those two
-    /// flags and nothing else.
+    /// importer settings produces the same texels. The
+    /// <c>isReadable</c> and <c>streamingMipmaps</c> flags do not change
+    /// texel content. The clone uses the source importer settings without
+    /// copying the source metadata file.
     /// </para>
     /// <para>
     /// The route is fail-closed: any step that does not hold - a texture
@@ -399,7 +398,9 @@ namespace Alrauna.Amuse.Editor.Host
                 var tempPath = ClonePath(path);
                 try
                 {
-                    if (!leaveAssetEditing.CopySoTheCloneImports(
+                    if (!(AssetImporter.GetAtPath(path)
+                            is TextureImporter sourceImporter) ||
+                        !leaveAssetEditing.CopySoTheCloneImports(
                             path, tempPath))
                     {
                         return false;
@@ -411,8 +412,9 @@ namespace Alrauna.Amuse.Editor.Host
                         return false;
                     }
 
-                    // Only the two flags that gate editor access change. Every
-                    // content-bearing setting rides in on the copied .meta.
+                    // Copy settings, including platform overrides, without
+                    // copying the source asset identity.
+                    EditorUtility.CopySerialized(sourceImporter, importer);
                     importer.isReadable = true;
                     importer.streamingMipmaps = false;
                     importer.SaveAndReimport();
@@ -452,6 +454,11 @@ namespace Alrauna.Amuse.Editor.Host
                     // both deletions are immediate and no leftover waits
                     // for the caller's batch to close.
                     AssetDatabase.DeleteAsset(tempPath);
+                    // An import deferred past the limit has no asset yet.
+                    if (File.Exists(tempPath))
+                    {
+                        File.Delete(tempPath);
+                    }
                     if (folderCreated &&
                         AssetDatabase.IsValidFolder(TempFolder) &&
                         AssetDatabase.FindAssets("", new[] { TempFolder })
@@ -467,14 +474,9 @@ namespace Alrauna.Amuse.Editor.Host
         /// Leaves the asset editing levels a build holds open around the
         /// clone work, and restores the same number of levels when the
         /// scope ends. Inside an open level the asset database defers
-        /// every import, and a deferred copy never imports: this editor
-        /// version exposes no depth query, public or internal, so the
-        /// scope reads the deferral itself. The first copy attempt is
-        /// the test: a copy that reports success but yields no importer
-        /// is the deferred shape, so one level is left and the copy is
-        /// retried, one level at a time, until the clone imports. A
-        /// build that holds no level open answers with its importer at
-        /// once, so nothing is left and that build path is unchanged.
+        /// imports. The scope tries the clone import and checks for its
+        /// importer. If the import is deferred, it leaves one level and
+        /// tries again. A build with no level open leaves none.
         /// A build that holds more levels open than the bound keeps its
         /// refusal, so the route fails closed instead of unbounding the
         /// loop.
@@ -486,20 +488,30 @@ namespace Alrauna.Amuse.Editor.Host
             internal int LeftLevels { get; private set; }
 
             /// <summary>
-            /// Copies the source to the clone path until the copy
-            /// imports, leaving asset editing levels as needed. The
-            /// answer says whether the clone's importer exists.
+            /// Copies the source bytes and imports the clone. The scope
+            /// leaves asset editing levels until the importer exists.
             /// </summary>
             internal bool CopySoTheCloneImports(
                 string sourcePath,
                 string tempPath)
             {
+                try
+                {
+                    File.Copy(sourcePath, tempPath);
+                }
+                catch (IOException)
+                {
+                    return false;
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    return false;
+                }
+
                 while (true)
                 {
-                    if (!AssetDatabase.CopyAsset(sourcePath, tempPath))
-                    {
-                        return false;
-                    }
+                    AssetDatabase.ImportAsset(
+                        tempPath, ImportAssetOptions.ForceSynchronousImport);
 
                     if (AssetImporter.GetAtPath(tempPath) != null)
                     {
