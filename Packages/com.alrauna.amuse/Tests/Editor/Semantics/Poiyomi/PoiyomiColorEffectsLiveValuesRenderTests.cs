@@ -15,12 +15,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
     /// effects, and UV' group of the reviewed Poiyomi 9.3 route. The
     /// model drops the values of a dead family from the material
     /// key. A wrong member would merge two materials that render
-    /// differently. Each case renders a lit sphere with every group
-    /// keyword of the record on, except the switch of the family. It
-    /// changes only the family values and renders again. The two
-    /// readbacks must match byte for byte. The liveness case turns
-    /// the family switch on and proves that the same change moves
-    /// the render there. So an equal pair means a dead family and
+    /// differently. Each dead case renders a lit sphere with one
+    /// consumer-aware half of the other group keywords on. It changes
+    /// only the family values and renders again. The two readbacks
+    /// must match byte for byte. The liveness case turns the family
+    /// switch on in its matching half and proves that the same change
+    /// moves the render. An equal pair means a dead family and
     /// not a broken fixture.
     /// </summary>
     public sealed class PoiyomiColorEffectsLiveValuesRenderTests
@@ -38,6 +38,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         private Material previousSkybox;
         private float previousAudioLinkAnimToggle;
         private Texture previousAudioTexture;
+        private Texture previousCameraDepthTexture;
 
         [SetUp]
         public void SetUp()
@@ -60,6 +61,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 Shader.GetGlobalFloat("_AudioLinkAnimToggle");
             previousAudioTexture =
                 Shader.GetGlobalTexture("_AudioTexture");
+            previousCameraDepthTexture = Shader.GetGlobalTexture("_CameraDepthTexture");
+            Shader.SetGlobalFloat("_AudioLinkAnimToggle", 0f);
+            Shader.SetGlobalTexture("_AudioTexture", null);
         }
 
         [TearDown]
@@ -82,6 +86,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 "_AudioLinkAnimToggle", previousAudioLinkAnimToggle);
             Shader.SetGlobalTexture(
                 "_AudioTexture", previousAudioTexture);
+            Shader.SetGlobalTexture("_CameraDepthTexture", previousCameraDepthTexture);
             RenderSettings.skybox = previousSkybox;
             RenderSettings.defaultReflectionMode =
                 previousDefaultReflectionMode;
@@ -139,12 +144,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 
         /// <summary>
         /// One dead family of the group on one bundled row, in two
-        /// halves. Each half turns on half of the other group
-        /// keywords, and every other keyword sits on in exactly one
-        /// half, so the falsification power of the all-on fixture
-        /// stays while the compiled variant carries roughly half the
-        /// feature code per draw. The family values change. The
-        /// render must stay byte for byte equal. The no-op guard
+        /// halves. Related readers and writers share a half. The
+        /// family values change, but the render must stay byte for
+        /// byte equal. The no-op guard
         /// proves that the dead set of the model holds every
         /// perturbed name, so the case can never pass by perturbing
         /// nothing.
@@ -188,13 +190,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                     "hold the perturbed name '" + name + "'");
             }
 
-            if (DeclaredPerturbedCount(shader, perturbed) == 0)
-            {
-                Assert.Ignore(
-                    "no perturbed name of the family '" + familyName +
-                    "' is a property or a declared uniform of the " +
-                    "row. The case would pass vacuously.");
-            }
+            Assert.That(DeclaredPerturbedCount(shader, perturbed), Is.GreaterThan(0),
+                "The family must contain a declared shader value.");
 
             Assert.That(
                 AtlasRouteTable.PoiyomiReviewedMainColor
@@ -204,16 +201,17 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 "every value that the reviewed route requires");
 
             using var harness = new PoiyomiRenderHarness();
+            var mesh = NeedsUv1(familyName) ? NewTextMesh() : null;
             // The first render compiles the variants of the row. Its
             // result is discarded. The second and third renders probe
             // the fixture: two unperturbed renders of the same state
             // must match, so a later difference comes from the family
             // perturbation and not from the fixture.
-            harness.Render(material);
-            var unperturbedOne = harness.Render(material);
-            var unperturbedTwo = harness.Render(material);
-            var probeStable = BytesEqual(
-                unperturbedOne, unperturbedTwo);
+            Render(harness, material, mesh);
+            var unperturbedOne = Render(harness, material, mesh);
+            var unperturbedTwo = Render(harness, material, mesh);
+            Assert.That(BytesEqual(unperturbedOne, unperturbedTwo), Is.True,
+                "The unperturbed dead fixture must be stable.");
 
             var before = unperturbedTwo;
             var movedNames = new List<string>();
@@ -226,13 +224,13 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             }
 
             Assert.That(
-                movedNames, Is.Not.Empty,
+                DeclaredPerturbedCount(shader, movedNames), Is.GreaterThan(0),
                 "no-op guard: at least one member of the family '" +
                 familyName + "' must move under the fixture. " +
                 "Members that stay are the exact value members of " +
                 "the perturbation table.");
 
-            var after = harness.Render(material);
+            var after = Render(harness, material, mesh);
             var differentPixels = CountDifferentPixels(before, after);
             if (differentPixels > 0)
             {
@@ -242,9 +240,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                     differentPixels + " of " + before.Length +
                     " pixels differ. The largest channel difference " +
                     "is " + LargestChannelDifference(before, after) +
-                    " of 255. The unperturbed probe " +
-                    (probeStable ? "was stable" : "was UNSTABLE") +
-                    ". A member of the family is live under this " +
+                    " of 255. A member of the family is live under this " +
                     "state. Move the live member out of the family, " +
                     "or fix the fixture.");
             }
@@ -269,11 +265,11 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             controlLight.intensity = 1.5f;
             controlLight.shadows = LightShadows.None;
             Track(controlLightObject);
-            var control = harness.Render(material);
+            var control = Render(harness, material, mesh);
             Assert.That(
                 BytesEqual(before, control),
                 Is.False,
-                "row control: the main color must change the render" +
+                "row control: the main color and light must change the render" +
                 RowName(twoPass) + ". The frame under test is " +
                 Describe(control) + ". The shader may not have " +
                 "compiled, or the subject may be out of frame.");
@@ -301,7 +297,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 
             var shader = LoadShader(false);
             var material = NewCaseMaterial(shader, family);
-            TurnEveryGroupKeywordOn(material);
+            TurnHalfOfTheOtherGroupKeywordsOn(
+                material, family, HalfA.Contains(familyName) ? "A" : "B");
             TurnTheFamilyOff(material, family);
 
             // The perturbed members are the dead members. The case
@@ -311,17 +308,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             var perturbed = PerturbedNamesOf(
                 material, family, shader.name);
             TurnTheFamilyOn(material, family);
-            // Every live case holds exactly one stochastic mode. Both
-            // together compile both sampling stacks into the variant
-            // and leave the hex tile macros as the last macro
-            // definition.
-            material.DisableKeyword("_STOCHASTICMODE_HEXTILE");
-            material.EnableKeyword("_STOCHASTICMODE_DELIOT_HEITZ");
-            if (family.Name == "_STOCHASTICMODE_HEXTILE")
-            {
-                material.DisableKeyword("_STOCHASTICMODE_DELIOT_HEITZ");
-                material.EnableKeyword("_STOCHASTICMODE_HEXTILE");
-            }
+            // The matching dead half holds the same consumer keywords.
 
             Assert.That(
                 family.IsOff(material, shader.name),
@@ -336,8 +323,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 "'");
 
             using var harness = new PoiyomiRenderHarness();
-            harness.Render(material);
-            var before = harness.Render(material);
+            var mesh = NeedsUv1(familyName) ? NewTextMesh() : null;
+            Render(harness, material, mesh);
+            var baseline = Render(harness, material, mesh);
+            var before = Render(harness, material, mesh);
+            Assert.That(BytesEqual(baseline, before), Is.True,
+                "The unperturbed live fixture must be stable.");
             var movedNames = new List<string>();
             foreach (var name in perturbed)
             {
@@ -347,16 +338,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 }
             }
 
-            if (movedNames.Count == 0)
-            {
-                Assert.Ignore(
-                    "every member of the family '" + familyName +
-                    "' stays at an exact value under the fixture, so " +
-                    "the liveness cannot be probed. Observed " +
-                    "2026-11-24.");
-            }
+            Assert.That(DeclaredPerturbedCount(shader, movedNames), Is.GreaterThan(0),
+                "The live family must change at least one declared value.");
 
-            var after = harness.Render(material);
+            var after = Render(harness, material, mesh);
             Assert.That(
                 BytesEqual(before, after),
                 Is.False,
@@ -364,7 +349,44 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 familyName + "' moved the render with its switch " +
                 "on. The dead case of this family can pass " +
                 "trivially. The moved names are: " +
-                string.Join(", ", movedNames) + ".");
+                string.Join(", ", movedNames) + ". The frame is " +
+                Describe(before) + ".");
+        }
+
+        private static bool NeedsUv1(string familyName)
+        {
+            return familyName == "EFFECT_BUMP" ||
+                   familyName == "POI_PARALLAX" ||
+                   familyName == "POI_AL_DECAL";
+        }
+
+        private Mesh NewTextMesh()
+        {
+            var sphere = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            try
+            {
+                var mesh = Track(UnityEngine.Object.Instantiate(
+                    sphere.GetComponent<MeshFilter>().sharedMesh));
+                mesh.uv2 = mesh.uv;
+                return mesh;
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(sphere);
+            }
+        }
+
+        private static Color32[] Render(
+            PoiyomiRenderHarness harness, Material material, Mesh mesh)
+        {
+            var keywords = new HashSet<string>(material.shaderKeywords);
+            MaterialEditor.ApplyMaterialPropertyDrawers(material);
+            Assert.That(new HashSet<string>(material.shaderKeywords),
+                Is.EquivalentTo(keywords),
+                "The material drawers must not change the fixture keywords.");
+            return mesh == null
+                ? harness.Render(material)
+                : harness.Render(material, mesh);
         }
 
         // --- the case material ----------------------------------------
@@ -396,6 +418,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             Shader shader, AtlasDeadValueFamily family)
         {
             var material = Track(new Material(shader));
+            MaterialEditor.ApplyMaterialPropertyDrawers(material);
             material.SetTexture("_MainTex", patternTexture);
             PinSafeGroupValues(material);
             if (FamilyFixtureOverrides.TryGetValue(
@@ -438,6 +461,19 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             // The point sampling flag selects the recorded sampler
             // facts of the pathing map.
             material.SetFloat("_PathPointSampling", 1f);
+            // The path color replaces the albedo with the path color
+            // where the path alpha reads one. A full alpha path hides
+            // the base color in every case where the pathing keyword
+            // is on. Low alpha colors and the fill type keep the base
+            // color dominant and keep the map driven alpha visible.
+            material.SetColor("_PathColorR", new Color(1f, 1f, 1f, 0.2f));
+            material.SetColor("_PathColorG", new Color(1f, 1f, 1f, 0.2f));
+            material.SetColor("_PathColorB", new Color(1f, 1f, 1f, 0.2f));
+            material.SetColor("_PathColorA", new Color(1f, 1f, 1f, 0.2f));
+            material.SetFloat("_PathTypeR", 0f);
+            material.SetFloat("_PathTypeG", 0f);
+            material.SetFloat("_PathTypeB", 0f);
+            material.SetFloat("_PathTypeA", 0f);
             // The voronoi color and emission mode replaces the base
             // color with the voronoi cell pattern. The mask of the
             // pattern reads one with the mask texture unassigned, so
@@ -464,6 +500,21 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             FamilyFixtureOverrides =
                 new Dictionary<string, Action<Material>>
         {
+            ["POI_PARALLAX"] = material =>
+            {
+                material.SetTexture("_MainColorAdjustTexture", StaticNoiseTexture());
+                material.SetFloat("_MainColorAdjustTextureUV", 1f);
+                material.SetFloat("_MainBrightness", 1.5f);
+            },
+            ["POI_AUDIOLINK"] = material =>
+            {
+                Shader.SetGlobalFloat("_AudioLinkAnimToggle", 1f);
+                Shader.SetGlobalTexture("_AudioTexture", null);
+                material.SetFloat("_AudioLinkBandOverridesEnabled", 1f);
+                material.SetVector("_AudioLinkBandOverrideSliders",
+                    new Vector4(0.2f, 0.2f, 0.2f, 0.2f));
+                material.SetFloat("_DebugBass", 1f);
+            },
             ["USER_LUT"] = material =>
             {
                 // The distortion writes the coordinate slot 7. The
@@ -481,23 +532,19 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 // The mirror texture block compiles under the
                 // mirror options keyword of the always on group.
                 material.EnableKeyword("POI_MIRROR");
+                material.SetFloat("_EnableMirrorOptions", 1f);
+                material.SetFloat("_MirrorTextureForceEnabled", 1f);
             },
             ["EFFECT_BUMP"] = material =>
             {
-                // The text overlay decodes an MSDF glyph array. The
-                // font texture is a neutral of the route, so the
-                // fixture pins an MSDF style glyph texture (a white
-                // stroke band on a dark field) whose median crosses
-                // the decode threshold. The overlay reads mesh UV0
-                // on the subject, and the overlay enables stay at
-                // their pinned 1 (the perturbation holds exact value
-                // members).
+                // Use UV1 on a copy of the sphere so the route admits
+                // the fixture and the glyph has usable coordinates.
                 material.SetTexture("_TextGlyphs", StaticGlyphTexture());
-                material.SetFloat("_TextFPSUV", 0f);
+                material.SetFloat("_TextFPSUV", 1f);
                 material.SetFloat("_TextFPSEnabled", 1f);
-                material.SetFloat("_TextPositionEnabled", 1f);
-                material.SetFloat("_TextTimeEnabled", 1f);
-                material.SetFloat("_TextNumericEnabled", 1f);
+                material.SetFloat("_TextPositionEnabled", 0f);
+                material.SetFloat("_TextTimeEnabled", 0f);
+                material.SetFloat("_TextNumericEnabled", 0f);
             },
             ["PROP_PPMASK"] = material =>
             {
@@ -532,27 +579,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 // the fixture widens it past the subject distance.
                 material.SetFloat("_UzumoreAmount", 3f);
             },
-            ["POI_PATHING"] = material =>
-            {
-                // The path color application multiplies the path
-                // alpha with the color alpha and replaces the albedo
-                // with the result. The fill path type reads the map
-                // directly, and white colors with a low alpha keep
-                // the base color dominant while the map driven
-                // alpha still shows.
-                material.SetColor("_PathColorR", new Color(1f, 1f, 1f, 0.2f));
-                material.SetColor("_PathColorG", new Color(1f, 1f, 1f, 0.2f));
-                material.SetColor("_PathColorB", new Color(1f, 1f, 1f, 0.2f));
-                material.SetColor("_PathColorA", new Color(1f, 1f, 1f, 0.2f));
-                material.SetFloat("_PathTypeR", 0f);
-                material.SetFloat("_PathTypeG", 0f);
-                material.SetFloat("_PathTypeB", 0f);
-                material.SetFloat("_PathTypeA", 0f);
-            },
             ["POI_AL_DECAL"] = material =>
             {
                 PinAudioLinkAvailability(material);
-                material.SetColor("_ALVolumeColor", new Color(1f, 1f, 1f, 0.2f));
+                material.SetFloat("_ALVolumeColorBlendAlpha", 0.2f);
                 // The decal line sits where the volume mask equals
                 // the audio value. The pins hold the clip window
                 // over the whole band and a line width that the
@@ -564,11 +594,22 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 material.SetFloat("_ALDecalVolumeStep", 0f);
                 material.SetFloat("_ALDecalBandStep", 0f);
                 material.SetFloat("_ALDecalLineWidth", 0.3f);
+                material.SetFloat("_ALDecalVolume", 1f);
+                material.SetFloat("_ALDecalBaseBoost", 1f);
+                material.SetFloat("_ALDecalTrebleBoost", 1f);
             },
             ["POI_AL_VOLUMECOLOR"] = material =>
             {
                 PinAudioLinkAvailability(material);
                 material.SetColor("_ALVolumeColor", new Color(1f, 1f, 1f, 0.2f));
+            },
+            ["VIGNETTE"] = PinColorAlphaConsumers,
+            ["POI_VIDEO_EFFECTS"] = material =>
+                material.SetFloat("_VideoEffectsEnable", 1f),
+            ["GRAIN"] = material =>
+            {
+                Shader.SetGlobalTexture("_CameraDepthTexture", StaticDarkMaskTexture());
+                material.SetFloat("_DepthColorToggle", 1f);
             },
             ["PROP_RGBMASK"] = PinColorAlphaConsumers,
             ["PROP_RGBAMETALLICMAPS"] = PinPackedMapConsumers,
@@ -632,7 +673,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             material.SetColor("_RedColor", new Color(0.15f, 0.15f, 0.15f, 1f));
             material.SetColor("_GreenColor", new Color(0.15f, 0.15f, 0.15f, 1f));
             material.SetColor("_BlueColor", new Color(0.15f, 0.15f, 0.15f, 1f));
-            material.SetColor("_AlphaColor", new Color(0.15f, 0.15f, 0.15f, 1f));
+            material.SetColor("_AlphaColor", new Color(0.15f, 0.15f, 0.15f, 0.2f));
             material.SetFloat("_RGBARedEnable", 1f);
             material.SetFloat("_RGBAGreenEnable", 1f);
             material.SetFloat("_RGBABlueEnable", 1f);
@@ -659,7 +700,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 var x = index % size;
                 var y = index / size;
                 pixels[index] = new Color32(
-                    (byte)(20 + x * 2), (byte)10, (byte)10, 255);
+                    (byte)(20 + x * 2), (byte)10, (byte)10, 64);
             }
 
             texture.SetPixels32(pixels);
@@ -683,15 +724,15 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 return staticGlyphTexture;
             }
 
-            const int size = 32;
+            const int size = 256;
             var texture = new Texture2D(
                 size, size, TextureFormat.RGBA32, false);
             var pixels = new Color32[size * size];
             for (var index = 0; index < pixels.Length; index++)
             {
-                var x = index % size;
-                var y = index / size;
-                var inBand = x >= 6 && x <= 10 && y >= 4 && y <= 28;
+                var x = index % size % 16;
+                var y = index / size % 16;
+                var inBand = x >= 4 && x <= 11 && y >= 2 && y <= 13;
                 pixels[index] = inBand
                     ? new Color32(255, 255, 255, 255)
                     : new Color32(40, 40, 40, 255);
@@ -713,6 +754,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             PinColorAlphaConsumers(material);
             material.DisableKeyword("_LIGHTINGMODE_FLAT");
             material.EnableKeyword("_LIGHTINGMODE_SHADEMAP");
+            material.SetFloat("_LightingMode", 4f);
         }
 
         private static void PinPackedMapConsumers(Material material)
@@ -724,6 +766,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             PinColorAlphaConsumers(material);
             material.SetFloat("_RGBAPBRRedEnabled", 1f);
             material.EnableKeyword("MOCHIE_PBR");
+            material.SetFloat("_MochieBRDF", 1f);
+            material.SetFloat("_MochieMetallicMultiplier", 1f);
+            material.SetFloat("_MochieSpecularStrength", 5f);
         }
 
         private static void PinStochasticReader(Material material)
@@ -742,6 +787,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             material.SetFloat("_BumpMapStochastic", 1f);
             material.DisableKeyword("_LIGHTINGMODE_FLAT");
             material.EnableKeyword("_LIGHTINGMODE_MULTILAYER_MATH");
+            material.SetFloat("_LightingMode", 1f);
         }
 
         private static void PinAudioLinkAvailability(Material material)
@@ -791,42 +837,85 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 
         private static Texture2D staticAudioLinkTexture;
 
-        private static void TurnEveryGroupKeywordOn(Material material)
+
+        // Keep each consumer with its dependent keywords.
+        private static readonly HashSet<string> HalfA = new HashSet<string>
         {
-            foreach (var keyword in PoiyomiColorEffectsRoutes
-                .AllowedKeywords)
+            "COLOR_GRADING_HDR", "USER_LUT", "POI_PARALLAX",
+            "POI_AUDIOLINK", "AUTO_EXPOSURE", "POI_VERTEX_LOOKAT",
+            "POI_BACKFACE", "VIGNETTE", "PROP_RGBMASK",
+            "PROP_RGBAMETALLICMAPS", "PROP_RGBASMOOTHNESSMAPS",
+            "PROP_REDTEXTURE", "PROP_RGBNORMALR", "PROP_GREENTEXTURE",
+            "PROP_RGBNORMALG", "PROP_BLUETEXTURE", "PROP_RGBNORMALB",
+            "PROP_ALPHATEXTURE", "PROP_RGBNORMALA", "POI_AL_DECAL",
+            "POI_AL_VOLUMECOLOR", "POI_PATHING", "EFFECT_BUMP",
+            "_STOCHASTICMODE_DELIOT_HEITZ"
+        };
+
+        private static readonly Dictionary<string, string> SwitchDrawers =
+            new Dictionary<string, string>
+        {
+            ["COLOR_GRADING_HDR"] = "_MainColorAdjustToggle",
+            ["USER_LUT"] = "_EnableDistortion",
+            ["POI_UDIMDISCARD"] = "_EnableUDIMDiscardOptions",
+            ["POI_PARALLAX"] = "_PoiParallax",
+            ["POI_AUDIOLINK"] = "_EnableAudioLink",
+            ["FINALPASS"] = "_DetailEnabled",
+            ["AUTO_EXPOSURE"] = "_VertexManipulationsEnabled",
+            ["POI_VERTEX_LOOKAT"] = "_VertexLookAtEnabled",
+            ["POI_DEPTHBULGE"] = "_EnableDepthBulge",
+            ["POI_BACKFACE"] = "_BackFaceEnabled",
+            ["VIGNETTE"] = "_RGBMaskEnabled",
+            ["DISTORT"] = "_EnableDissolve",
+            ["POI_AL_DECAL"] = "_EnableALDecal",
+            ["POI_AL_VOLUMECOLOR"] = "_EnableVolumeColor",
+            ["POI_PATHING"] = "_EnablePathing",
+            ["POI_MIRROR_TEXTURE"] = "_MirrorTextureEnabled",
+            ["GRAIN"] = "_EnableTouchGlow",
+            ["EFFECT_BUMP"] = "_TextEnabled",
+            ["POSTPROCESS"] = "_PostProcess",
+            ["POI_VIDEO_EFFECTS"] = "_VideoEffectsEnable",
+            ["POI_VORONOI"] = "_VoronoiEnabled",
+            ["POI_TRUCHET"] = "_EnableTruchet",
+            ["POI_UZUMORE"] = "_UzumoreCategoryToggle",
+        };
+
+        private static void MatchSwitchDrawers(Material material)
+        {
+            foreach (var pair in SwitchDrawers)
             {
-                material.EnableKeyword(keyword);
+                material.SetFloat(pair.Value,
+                    material.IsKeywordEnabled(pair.Key) ? 1f : 0f);
             }
+
+            material.SetFloat("_StochasticMode",
+                material.IsKeywordEnabled("_STOCHASTICMODE_DELIOT_HEITZ") ? 0f :
+                material.IsKeywordEnabled("_STOCHASTICMODE_HEXTILE") ? 1f : 2f);
         }
 
-        /// <summary>
-        /// Half A enables the other group keywords at the even list
-        /// positions, half B the odd ones. The family switch sits in
-        /// neither half, and every other keyword sits on in exactly
-        /// one half, so the union of the two halves is the all-on
-        /// fixture of the record design with roughly half the feature
-        /// code per variant. The two stochastic mode keywords sit at
-        /// adjacent positions, so each case holds at most one mode
-        /// on and the variant compiles one sampling stack.
-        /// </summary>
         private static void TurnHalfOfTheOtherGroupKeywordsOn(
             Material material,
             AtlasDeadValueFamily family,
             string half)
         {
-            var index = 0;
-            foreach (var keyword in PoiyomiColorEffectsRoutes
-                .AllowedKeywords)
+            material.DisableKeyword("_STOCHASTICMODE_NONE");
+            foreach (var keyword in PoiyomiColorEffectsRoutes.AllowedKeywords)
             {
-                var inFamily = family.Switches.Contains(keyword);
-                var thisHalf = (index % 2 == 0) == (half == "A");
-                if (!inFamily && thisHalf)
+                material.DisableKeyword(keyword);
+            }
+
+            foreach (var keyword in PoiyomiColorEffectsRoutes.AllowedKeywords)
+            {
+                if (!family.Switches.Contains(keyword) &&
+                    (HalfA.Contains(keyword) == (half == "A")))
                 {
                     material.EnableKeyword(keyword);
                 }
-
-                index++;
+            }
+            if (!material.IsKeywordEnabled("_STOCHASTICMODE_DELIOT_HEITZ") &&
+                !material.IsKeywordEnabled("_STOCHASTICMODE_HEXTILE"))
+            {
+                material.EnableKeyword("_STOCHASTICMODE_NONE");
             }
         }
 
@@ -837,15 +926,23 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             {
                 material.DisableKeyword(name);
             }
+            MatchSwitchDrawers(material);
         }
 
         private static void TurnTheFamilyOn(
             Material material, AtlasDeadValueFamily family)
         {
+            if (family.Name == "_STOCHASTICMODE_DELIOT_HEITZ" ||
+                family.Name == "_STOCHASTICMODE_HEXTILE")
+            {
+                material.DisableKeyword("_STOCHASTICMODE_NONE");
+            }
+
             foreach (var name in family.Switches)
             {
                 material.EnableKeyword(name);
             }
+            MatchSwitchDrawers(material);
         }
 
         // --- the perturbation -----------------------------------------
@@ -893,27 +990,31 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             ["_TextTimeEnabled"] = new float[] { 1f },
             ["_TextNumericEnabled"] = new float[] { 1f },
             ["_UDIMDiscardMode"] = new float[] { 0f, 1f },
-            ["_DissolveType"] = new float[] { 1f, 2f, 3f, 4f },
-            ["_PathTypeR"] = new float[] { 0f, 1f, 2f, 3f },
-            ["_PathTypeG"] = new float[] { 0f, 1f, 2f, 3f },
-            ["_PathTypeB"] = new float[] { 0f, 1f, 2f, 3f },
-            ["_PathTypeA"] = new float[] { 0f, 1f, 2f, 3f },
+            ["_DissolveType"] = new float[] { 1f },
+            ["_PathTypeR"] = new float[] { 0f },
+            ["_PathTypeG"] = new float[] { 0f },
+            ["_PathTypeB"] = new float[] { 0f },
+            ["_PathTypeA"] = new float[] { 0f },
             ["_VideoMaskTextureChannel"] = new float[] { 0f },
             ["_VideoType"] = new float[] { 0f, 1f, 2f, 3f, 4f, 5f },
             ["_MainHueShiftSelectOrShift"] = new float[] { 0f, 1f },
             ["_BackFaceHueSelectOrShift"] = new float[] { 0f, 1f },
             ["_DissolveHueSelectOrShift"] = new float[] { 0f, 1f },
             ["_ppHueSelectOrShift"] = new float[] { 0f, 1f },
+            ["_MainHueShiftToggle"] = new float[] { 0f, 1f },
+            ["_ALVolumeColorDirection"] = new float[] { 1f },
+            ["_ALDecalVolume"] = new float[] { 1f },
+            ["_ALDecalVolumeStep"] = new float[] { 0f },
+            ["_ALDecalBandStep"] = new float[] { 0f },
+            ["_VideoPixelateToResolution"] = new float[] { 0f },
         };
 
         /// <summary>
-        /// One value moves to another valid value: a color or vector
-        /// gains 0.37 on every channel, a texture is replaced by the
-        /// 4 by 4 noise texture, a continuous scalar gains 0.37, a
-        /// toggle flips between 0 and 1, and an exact value member
-        /// cycles through the values of its table. An exact value
-        /// member without a second valid value stays, and the
-        /// return value reports that. An implicit texture name is
+        /// A continuous scalar moves within its declared range. A
+        /// color or vector gains 0.37 on every channel. A texture
+        /// changes to the noise texture. Selected exact values cycle
+        /// through their table. Other exact values stay at their
+        /// fixture state. An implicit texture name is
         /// not a material float or vector: the scale and offset of
         /// a texture move through the texture setting methods, and
         /// Unity owns the texel size and HDR names, so those two
@@ -936,7 +1037,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                     new Vector2(
                         offset.x + PerturbStep,
                         offset.y + PerturbStep));
-                return true;
+                return material.GetTextureScale(texture) != scale ||
+                       material.GetTextureOffset(texture) != offset;
             }
 
             if (name.EndsWith("_TexelSize") || name.EndsWith("_HDR"))
@@ -962,19 +1064,13 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 var position = System.Array.IndexOf(values, current);
                 var next = values[(position + 1) % values.Length];
                 material.SetFloat(name, next);
-                return true;
+                return material.GetFloat(name) != current;
             }
 
             var propertyIndex = material.shader.FindPropertyIndex(name);
             if (propertyIndex < 0)
             {
-                // HasFloat stays silent for a name that the shader
-                // does not declare. GetFloat would log an error.
-                var saved = material.HasFloat(name)
-                    ? material.GetFloat(name)
-                    : 0f;
-                material.SetFloat(name, saved + PerturbStep);
-                return true;
+                return false;
             }
 
             switch (material.shader.GetPropertyType(propertyIndex))
@@ -988,7 +1084,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                             color.g + PerturbStep,
                             color.b + PerturbStep,
                             color.a + PerturbStep));
-                    return true;
+                    return material.GetColor(name) != color;
                 case ShaderPropertyType.Vector:
                     var vector = material.GetVector(name);
                     material.SetVector(
@@ -998,20 +1094,32 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                             vector.y + PerturbStep,
                             vector.z + PerturbStep,
                             vector.w + PerturbStep));
-                    return true;
+                    return material.GetVector(name) != vector;
                 case ShaderPropertyType.Texture:
+                    var previousTexture = material.GetTexture(name);
                     PerturbTexture(material, name, propertyIndex);
-                    return true;
+                    return material.GetTexture(name) != previousTexture;
                 case ShaderPropertyType.Int:
-                    // An integer member is an index or a step count.
-                    // The next integer is another valid value.
-                    material.SetFloat(
-                        name, material.GetFloat(name) + 1f);
-                    return true;
+                    return false;
                 default:
-                    material.SetFloat(
-                        name, material.GetFloat(name) + PerturbStep);
-                    return true;
+                    var attributes = material.shader.GetPropertyAttributes(propertyIndex);
+                    if (attributes.Any(attribute =>
+                        attribute.IndexOf("Toggle", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        attribute.IndexOf("Enum", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                        attribute.IndexOf("IntRange", StringComparison.OrdinalIgnoreCase) >= 0))
+                    {
+                        return false;
+                    }
+                    var previous = material.GetFloat(name);
+                    var nextValue = previous + PerturbStep;
+                    if (material.shader.GetPropertyType(propertyIndex) == ShaderPropertyType.Range)
+                    {
+                        var limits = material.shader.GetPropertyRangeLimits(propertyIndex);
+                        nextValue = previous + PerturbStep <= limits.y
+                            ? previous + PerturbStep : limits.x;
+                    }
+                    material.SetFloat(name, nextValue);
+                    return material.GetFloat(name) != previous;
             }
         }
 
@@ -1022,7 +1130,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 material.shader.GetPropertyTextureDimension(index);
             if (dimension == TextureDimension.Tex2D)
             {
-                material.SetTexture(name, noiseTexture);
+                // The dissolve mask and noise must not share a pattern.
+                material.SetTexture(name, name == "_DissolveMask"
+                    ? StaticGlyphTexture() : noiseTexture);
                 return;
             }
 
