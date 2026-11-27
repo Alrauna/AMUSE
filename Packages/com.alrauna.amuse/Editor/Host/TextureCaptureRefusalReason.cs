@@ -45,5 +45,20 @@ namespace Alrauna.Amuse.Editor.Host
         /// cref="UnityAlphaFieldEvidence.IsAdmittedFormat"/>), so no capture
         /// route may decode it.</summary>
         UnsupportedFormat,
+
+        /// <summary>The source importer has unapplied settings.</summary>
+        SourceImporterDirty,
+
+        /// <summary>The package source has no accessible local file.</summary>
+        SourceFileNotLocallyAccessible,
+
+        /// <summary>A file lock prevents the temporary copy.</summary>
+        CloneFileInUse,
+
+        /// <summary>The editor cannot access a file for the copy.</summary>
+        CloneFileAccessDenied,
+
+        /// <summary>The editor cannot remove a temporary clone.</summary>
+        CloneCleanupFailed,
     }
 }

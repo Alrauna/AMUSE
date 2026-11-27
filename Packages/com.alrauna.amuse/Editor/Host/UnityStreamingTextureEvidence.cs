@@ -337,10 +337,10 @@ namespace Alrauna.Amuse.Editor.Host
             out TextureCaptureRefusalReason refusal);
 
         /// <summary>
-        /// The clone route's shared steps: the fail-closed gates that
-        /// name a clonable source, the stale sweep, the copy, the two
-        /// importer flags, the size checks, and the cleanup. The read
-        /// callback receives the readable clone and answers from it.
+        /// The clone route checks the source, sweeps stale clones, copies
+        /// the file and importer settings, sets the two access flags,
+        /// checks the size, and cleans up.
+        /// The callback receives the readable clone and answers from it.
         /// The whole clone ride leaves any open asset editing level
         /// and restores it, so a manual bake that holds one open sees
         /// the same import and the same cleanup as an unbatched
@@ -371,6 +371,24 @@ namespace Alrauna.Amuse.Editor.Host
                 return false;
             }
 
+            if (!(AssetImporter.GetAtPath(path) is TextureImporter sourceImporter))
+            {
+                return false;
+            }
+            if (EditorUtility.IsDirty(sourceImporter))
+            {
+                // The loaded texture uses the saved settings, not these edits.
+                refusal = TextureCaptureRefusalReason.SourceImporterDirty;
+                return false;
+            }
+            if (path.StartsWith("Packages/", StringComparison.Ordinal) &&
+                !File.Exists(path))
+            {
+                // Registry packages can resolve outside the project folder.
+                refusal = TextureCaptureRefusalReason.SourceFileNotLocallyAccessible;
+                return false;
+            }
+
             // The clone work runs with any open asset editing level left,
             // and the scope restores those levels below. A manual bake
             // holds one level open around the whole build, and inside it
@@ -392,16 +410,16 @@ namespace Alrauna.Amuse.Editor.Host
                         "Assets", Path.GetFileName(TempFolder));
                 }
 
-                // The source's GUID names the clone, so one source has one clone
-                // name and a leftover from a crashed capture is overwritten, not
-                // duplicated.
+                // The source identity names one clone. The sweep above
+                // removes a leftover before the new copy is created.
                 var tempPath = ClonePath(path);
+                var cloneCreated = false;
+                var result = false;
+                var propagating = false;
                 try
                 {
-                    if (!(AssetImporter.GetAtPath(path)
-                            is TextureImporter sourceImporter) ||
-                        !leaveAssetEditing.CopySoTheCloneImports(
-                            path, tempPath))
+                    if (!leaveAssetEditing.CopySoTheCloneImports(
+                            path, tempPath, out cloneCreated, out refusal))
                     {
                         return false;
                     }
@@ -412,8 +430,8 @@ namespace Alrauna.Amuse.Editor.Host
                         return false;
                     }
 
-                    // Copy settings, including platform overrides, without
-                    // copying the source asset identity.
+                    // Copy importer settings, including platform overrides.
+                    // Unity assigns the clone its own asset identity.
                     EditorUtility.CopySerialized(sourceImporter, importer);
                     importer.isReadable = true;
                     importer.streamingMipmaps = false;
@@ -446,27 +464,51 @@ namespace Alrauna.Amuse.Editor.Host
                         return false;
                     }
 
-                    return read(clone, out refusal);
+                    result = read(clone, out refusal);
+                }
+                catch
+                {
+                    propagating = true;
+                    throw;
                 }
                 finally
                 {
-                    // The cleanup runs while the levels are still left, so
-                    // both deletions are immediate and no leftover waits
-                    // for the caller's batch to close.
-                    AssetDatabase.DeleteAsset(tempPath);
-                    // An import deferred past the limit has no asset yet.
-                    if (File.Exists(tempPath))
+                    try
                     {
-                        File.Delete(tempPath);
+                        // Keep the clone owned by this call. A later sweep
+                        // removes it if a file lock stops cleanup.
+                        if (cloneCreated)
+                        {
+                            AssetDatabase.DeleteAsset(tempPath);
+                            // A deferred import can leave an untracked file.
+                            File.Delete(tempPath);
+                        }
+                        if (folderCreated && Directory.Exists(TempFolder) &&
+                            Directory.GetFileSystemEntries(TempFolder).Length == 0)
+                        {
+                            if (AssetDatabase.IsValidFolder(TempFolder))
+                                AssetDatabase.DeleteAsset(TempFolder);
+                            else
+                                Directory.Delete(TempFolder);
+                        }
                     }
-                    if (folderCreated &&
-                        AssetDatabase.IsValidFolder(TempFolder) &&
-                        AssetDatabase.FindAssets("", new[] { TempFolder })
-                            .Length == 0)
+                    catch (Exception) when (propagating)
                     {
-                        AssetDatabase.DeleteAsset(TempFolder);
+                        // Preserve the earlier failure. The next sweep retries.
+                        Debug.LogWarning("Could not clean up a texture clone.");
+                    }
+                    catch (IOException)
+                    {
+                        refusal = TextureCaptureRefusalReason.CloneCleanupFailed;
+                        result = false;
+                    }
+                    catch (UnauthorizedAccessException)
+                    {
+                        refusal = TextureCaptureRefusalReason.CloneCleanupFailed;
+                        result = false;
                     }
                 }
+                return result;
             }
         }
 
@@ -493,18 +535,29 @@ namespace Alrauna.Amuse.Editor.Host
             /// </summary>
             internal bool CopySoTheCloneImports(
                 string sourcePath,
-                string tempPath)
+                string tempPath,
+                out bool cloneCreated,
+                out TextureCaptureRefusalReason refusal)
             {
+                cloneCreated = false;
+                refusal = TextureCaptureRefusalReason.UnavailableCapture;
                 try
                 {
                     File.Copy(sourcePath, tempPath);
+                    cloneCreated = true;
                 }
-                catch (IOException)
+                catch (IOException ex) when (
+                    (ex.HResult & 0xffff) == 32 ||
+                    (ex.HResult & 0xffff) == 33)
                 {
+                    // Another process can hold a file or a byte range.
+                    refusal = TextureCaptureRefusalReason.CloneFileInUse;
                     return false;
                 }
                 catch (UnauthorizedAccessException)
                 {
+                    // The editor can lack permission to read or write a file.
+                    refusal = TextureCaptureRefusalReason.CloneFileAccessDenied;
                     return false;
                 }
 
