@@ -9,7 +9,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
 {
     /// <summary>
     /// One render oracle scene per test. The harness renders a lit
-    /// sphere into a 64 by 64 ARGB32 texture. One directional light
+    /// sphere into a square ARGB32 texture. The default frame is 64 by
+    /// 64 pixels, and a caller may pass a larger frame size, as the
+    /// end-to-end cases do at 512 by 512 pixels. One directional light
     /// with soft shadows lands on a receiver plane, and one point
     /// light runs ForwardAdd, as in the lilToon live value render
     /// oracle. The scene sits far below the origin and every foreign
@@ -216,15 +218,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             block.SetVectorArray("_Udon_LTCGI_ExtraData",
                 new[] { new Vector4(1f, 0.5f, 0.2f, flags) });
             sphereRenderer.SetPropertyBlock(block);
-        }
-
-        internal void FrameUnitQuad(Quaternion rotation)
-        {
-            camera.orthographic = true;
-            camera.orthographicSize = 0.5f;
-            camera.transform.position = root.transform.position +
-                rotation * new Vector3(0.5f, 0.5f, -5f);
-            camera.transform.rotation = rotation;
         }
 
         /// <summary>

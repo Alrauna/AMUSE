@@ -269,7 +269,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             return root;
         }
 
-        private static MeshRenderer NewQuadRenderer(
+        private static MeshRenderer NewDomeRenderer(
             GameObject root,
             string name,
             Mesh mesh,
@@ -479,9 +479,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
 
                 var firstMesh = NewSubjectMesh();
                 var secondMesh = NewSubjectMesh();
-                var firstRenderer = NewQuadRenderer(
+                var firstRenderer = NewDomeRenderer(
                     root, caseName + " first", firstMesh, firstMaterial);
-                var secondRenderer = NewQuadRenderer(
+                var secondRenderer = NewDomeRenderer(
                     root, caseName + " second", secondMesh,
                     secondMaterial);
 
@@ -1304,10 +1304,10 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         private const string LightingGapReason =
             "2026-11-27: the single case shows no change under its look. " +
             "The lighting group passes this member under the same look. " +
-            "Gates: MultilayerMath.poiTemplateCollection lines 237, 265, " +
-            "293, 308, 316, 325. " +
-            "Live proof: VignetteMaskedMembers in PoiyomiLiveValues.cs " +
-            "(lines 3927, 3969, 3991) and the VIGNETTE_MASKED oracle in " +
+            "Gates: the shadow and border gates of the MultilayerMath " +
+            "feature in MultilayerMath.poiTemplateCollection. " +
+            "Live proof: the VignetteMaskedMembers list in " +
+            "PoiyomiLiveValues.cs and the VIGNETTE_MASKED oracle in " +
             "PoiyomiSharedLiveValuesRenderTests.cs.";
 
         // The detail mask of the color effects family. The single case leaves
@@ -1317,8 +1317,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             "2026-11-27: the single case shows a change of 1 level under the " +
             "default check. The color effects group passes this member with a " +
             "detail texture present, and its change is 45 levels in both " +
-            "variants. Gates: VRLT_PoiDetails.poiTemplateCollection lines 111 " +
-            "and 112. Live proof: none in the shared live oracle. The color " +
+            "variants. Gates: the detail mask gates of " +
+            "VRLT_PoiDetails.poiTemplateCollection. Live proof: none in " +
+            "the shared live oracle. The color " +
             "effects group case proves the visibility and the mapping of this " +
             "member.";
 
