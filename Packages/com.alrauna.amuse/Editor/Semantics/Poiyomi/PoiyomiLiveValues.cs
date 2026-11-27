@@ -6,8 +6,10 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
     /// <summary>
     /// The reviewed live value model of the two bundled Poiyomi 9.3
     /// rows. It holds the dead value families of the eight refused
-    /// keywords of the review, plus the families of the four feature
-    /// groups, plus every declared name of the two bundled files.
+    /// keywords of the review, the families of the fourteen KeyOnly
+    /// keywords that the record gives dead properties, and the
+    /// families of the four feature groups, plus every declared name
+    /// of the two bundled files.
     /// <para>
     /// The review record of 2026-11-23 at
     /// docs/superpowers/investigations/2026-11-23-poiyomi-reviewed-route-
@@ -3777,6 +3779,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 families.Add(family);
             }
 
+            families.AddRange(KeyOnlyFamilies());
             families.AddRange(PoiyomiAlwaysOnRoutes.Families());
             families.AddRange(PoiyomiLightingRoutes.Families());
             families.AddRange(PoiyomiMatcapRimEmissionRoutes.Families());
@@ -3795,6 +3798,293 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             yield return KeywordFamily("_SUNDISK_HIGH_QUALITY", FlipbookMembers);
             yield return KeywordFamily("_SUNDISK_SIMPLE", GlitterMembers);
         }
+
+        /// <summary>
+        /// One dead value family per KeyOnly keyword that the record
+        /// section 6 gives dead properties. The three KeyOnly rows
+        /// with an empty record family hold no members, so they
+        /// carry no family. Main added the families on 2026-11-24
+        /// under the spec rule that the model holds one family for
+        /// every keyword of the review.
+        /// </summary>
+        private static IEnumerable<AtlasDeadValueFamily> KeyOnlyFamilies()
+        {
+            yield return KeywordFamily(
+                "PROP_MAINGRADATIONTEX", MainGradationTexMembers);
+            yield return KeywordFamily(
+                "POI_BLACKLIGHTMASKING", BlackLightMaskingMembers);
+            yield return KeywordFamily(
+                "POI_VERTEX_GLITCHING", VertexGlitchingMembers);
+            yield return KeywordFamily(
+                "POI_VERTEX_GLITCHING_TEXTURE",
+                VertexGlitchingTextureMembers);
+            yield return KeywordFamily("POI_LTCGI", LtcgiMembers);
+            yield return KeywordFamily("VIGNETTE_MASKED",
+                VignetteMaskedMembers);
+            yield return KeywordFamily(
+                "_LIGHTINGMODE_WRAPPED", LightingWrappedMembers);
+            yield return KeywordFamily(
+                "_LIGHTINGMODE_FLAT", ForceFlatRampedLightmapMembers);
+            yield return KeywordFamily(
+                "_POI_DEPTH_RIMLIGHT", DepthRimMembers);
+            yield return KeywordFamily("POI_MIRROR", MirrorMembers);
+            yield return KeywordFamily(
+                "POI_NORMALCORRECT", NormalCorrectMembers);
+            yield return KeywordFamily("POIBS_ENABLE", FogMembers);
+            yield return KeywordFamily("POIBS_BLOOMFOG", FogMembers);
+            yield return KeywordFamily(
+                "BSSBLOOMFOGTYPE_HEIGHT", FogHeightMembers);
+        }
+
+        // The pinned members of the KeyOnly families. The record
+        // section 6 carries the prefix tokens of the review. These
+        // lists hold the expanded exact names that a material can
+        // save, expanded against the property universe of the two
+        // bundled files on 2026-11-24.
+
+        private static readonly string[] MainGradationTexMembers =
+        {
+            "_MainGradationTex",
+        };
+
+        private static readonly string[] BlackLightMaskingMembers =
+        {
+            "_BlackLightMasking0GlobalMaskBlendType",
+            "_BlackLightMasking0GlobalMaskIndex",
+            "_BlackLightMasking0Key",
+            "_BlackLightMasking0Range",
+            "_BlackLightMasking1GlobalMaskBlendType",
+            "_BlackLightMasking1GlobalMaskIndex",
+            "_BlackLightMasking1Key",
+            "_BlackLightMasking1Range",
+            "_BlackLightMasking2GlobalMaskBlendType",
+            "_BlackLightMasking2GlobalMaskIndex",
+            "_BlackLightMasking2Key",
+            "_BlackLightMasking3GlobalMaskBlendType",
+            "_BlackLightMasking3GlobalMaskIndex",
+            "_BlackLightMasking3Key",
+        };
+
+        private static readonly string[] VertexGlitchingMembers =
+        {
+            "_VertexGlitchDensity",
+            "_VertexGlitchFrequency",
+            "_VertexGlitchingAudioLinkBand",
+            "_VertexGlitchingAudioLinkEnabled",
+            "_VertexGlitchingAudiolinkOverride",
+            "_VertexGlitchMap",
+            "_VertexGlitchMapPanSpeed",
+            "_VertexGlitchMirror",
+            "_VertexGlitchMirrorEnable",
+            "_VertexGlitchStrength",
+            "_VertexGlitchThreshold",
+        };
+
+        private static readonly string[] VertexGlitchingTextureMembers =
+        {
+            "_VertexGlitchDensity",
+            "_VertexGlitchMap",
+            "_VertexGlitchMapPanSpeed",
+        };
+
+        private static readonly string[] LtcgiMembers =
+        {
+            "_LTCGI_AnimToggle",
+            "_LTCGI_DiffuseColor",
+            "_LTCGI_DiffuseColorThemeIndex",
+            "_LTCGI_Metallic",
+            "_LTCGI_Smoothness",
+            "_LTCGI_SpecularColor",
+            "_LTCGI_SpecularColorThemeIndex",
+            "_LTCGI_UseEO",
+            "_LTCGI_UsePBR",
+        };
+
+        private static readonly string[] VignetteMaskedMembers =
+        {
+            "_BaseColor_Step",
+            "_BaseShade_Feather",
+            "_ClothDFG",
+            "_ClothLerp",
+            "_ClothMetallic",
+            "_ClothMetallicSmoothnessMap",
+            "_ClothMetallicSmoothnessMap_ST",
+            "_ClothMetallicSmoothnessMapInvert",
+            "_ClothMetallicSmoothnessMapPan",
+            "_ClothMetallicSmoothnessMapUV",
+            "_ClothReflectance",
+            "_ClothSmoothness",
+            "_ForceFlatRampedLightmap",
+            "_LightingAdditiveGradientEnd",
+            "_LightingAdditiveGradientStart",
+            "_LightingAdditiveType",
+            "_LightingGradientEnd",
+            "_LightingGradientStart",
+            "_LightingIgnoreAmbientColor",
+            "_LightingMulitlayerNonLinear",
+            "_LightingShadowColor",
+            "_LightingWrappedColor",
+            "_LightingWrappedNormalization",
+            "_LightingWrappedWrap",
+            "_MultilayerMathBlurMap",
+            "_MultilayerMathBlurMap_ST",
+            "_MultilayerMathBlurMapPan",
+            "_MultilayerMathBlurMapUV",
+            "_MultilayerShadowStrength",
+            "_OutlineLit",
+            "_OutlineShadowStrength",
+            "_SDFBlur",
+            "_SDFForward",
+            "_SDFLeft",
+            "_SDFShadingTexture",
+            "_SDFShadingTexture_ST",
+            "_SDFShadingTexturePan",
+            "_SDFShadingTextureUV",
+            "_ShadeColor_Step",
+            "_ShadingShadeMapBlendType",
+            "_Shadow2ndBlur",
+            "_Shadow2ndBorder",
+            "_Shadow2ndColor",
+            "_Shadow2ndColorTex",
+            "_Shadow2ndColorTex_ST",
+            "_Shadow2ndColorTexAddition",
+            "_Shadow2ndColorTexPan",
+            "_Shadow2ndColorTexUV",
+            "_Shadow2ndNormalStrength",
+            "_Shadow2ndReceive",
+            "_Shadow3rdBlur",
+            "_Shadow3rdBorder",
+            "_Shadow3rdColor",
+            "_Shadow3rdColorTex",
+            "_Shadow3rdColorTex_ST",
+            "_Shadow3rdColorTexAddition",
+            "_Shadow3rdColorTexPan",
+            "_Shadow3rdColorTexUV",
+            "_Shadow3rdNormalStrength",
+            "_Shadow3rdReceive",
+            "_ShadowAOShift",
+            "_ShadowAOShift2",
+            "_ShadowBlur",
+            "_ShadowBorder",
+            "_ShadowBorderColor",
+            "_ShadowBorderMapToggle",
+            "_ShadowBorderMask",
+            "_ShadowBorderMask_ST",
+            "_ShadowBorderMaskLOD",
+            "_ShadowBorderMaskPan",
+            "_ShadowBorderMaskUV",
+            "_ShadowBorderRange",
+            "_ShadowColor",
+            "_ShadowColorTex",
+            "_ShadowColorTex_ST",
+            "_ShadowColorTexAddition",
+            "_ShadowColorTexPan",
+            "_ShadowColorTexUV",
+            "_ShadowEnvStrength",
+            "_ShadowFlatBlur",
+            "_ShadowFlatBorder",
+            "_ShadowMainStrength",
+            "_ShadowMaskType",
+            "_ShadowNormalStrength",
+            "_ShadowOffset",
+            "_ShadowPostAO",
+            "_ShadowReceive",
+            "_ShadowStrength",
+            "_ShadowStrengthMask",
+            "_ShadowStrengthMask_ST",
+            "_ShadowStrengthMaskLOD",
+            "_ShadowStrengthMaskPan",
+            "_ShadowStrengthMaskUV",
+            "_SkinLUT",
+            "_SkinThicknessMap",
+            "_SkinThicknessMap_ST",
+            "_SkinThicknessMapInvert",
+            "_SkinThicknessMapPan",
+            "_SkinThicknessMapUV",
+            "_SkinThicknessPower",
+            "_SssBumpBlur",
+            "_SssScale",
+            "_SssTransmissionAbsorption",
+            "_ToonRampCount",
+            "_ToonRampUVSelector",
+            "_Use_1stAs2nd",
+            "_Use_1stShadeMapAlpha_As_ShadowMask",
+            "_Use_2ndShadeMapAlpha_As_ShadowMask",
+            "_Use_BaseAs1st",
+        };
+
+        private static readonly string[] LightingWrappedMembers =
+        {
+            "_LightingGradientEnd",
+            "_LightingGradientStart",
+            "_LightingWrappedColor",
+            "_LightingWrappedNormalization",
+            "_LightingWrappedWrap",
+        };
+
+        private static readonly string[] ForceFlatRampedLightmapMembers =
+        {
+            "_ForceFlatRampedLightmap",
+        };
+
+        private static readonly string[] DepthRimMembers =
+        {
+            "_DepthRimAdd",
+            "_DepthRimAdditiveLighting",
+            "_DepthRimBrightness",
+            "_DepthRimColor",
+            "_DepthRimColorThemeIndex",
+            "_DepthRimEmission",
+            "_DepthRimHideInShadow",
+            "_DepthRimMixBaseColor",
+            "_DepthRimMixLightColor",
+            "_DepthRimMultiply",
+            "_DepthRimNormalToUse",
+            "_DepthRimReplace",
+            "_DepthRimSharpness",
+            "_DepthRimType",
+            "_DepthRimWidth",
+        };
+
+        private static readonly string[] MirrorMembers =
+        {
+            "_Mirror",
+            "_MirrorColor",
+            "_MirrorColorThemeIndex",
+            "_MirrorTexture",
+            "_MirrorTexture_ST",
+            "_MirrorTextureBlendType",
+            "_MirrorTextureForceEnabled",
+            "_MirrorTexturePan",
+            "_MirrorTextureUV",
+            "_VisibilityMode",
+            "_VisibilityVRCCameraDesktop",
+            "_VisibilityVRCCameraScreenshot",
+            "_VisibilityVRCCameraVR",
+            "_VisibilityVRCMirrorDesktop",
+            "_VisibilityVRCMirrorVR",
+            "_VisibilityVRCRegular",
+        };
+
+        private static readonly string[] NormalCorrectMembers =
+        {
+            "_NormalCorrectAmount",
+            "_NormalCorrectOrigin",
+        };
+
+        private static readonly string[] FogMembers =
+        {
+            "_FogHeightOffset",
+            "_FogHeightScale",
+            "_FogScale",
+            "_FogStartOffset",
+        };
+
+        private static readonly string[] FogHeightMembers =
+        {
+            "_FogHeightOffset",
+            "_FogHeightScale",
+        };
 
         /// <summary>
         /// One dead value family per refused keyword. The only

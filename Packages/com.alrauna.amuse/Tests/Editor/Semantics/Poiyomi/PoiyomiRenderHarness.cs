@@ -186,6 +186,40 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             return readback.GetPixels32();
         }
 
+        internal void EnableDepthTexture()
+        {
+            camera.depthTextureMode |= DepthTextureMode.Depth;
+        }
+
+        internal void SetLtcgiScreen()
+        {
+            var block = new MaterialPropertyBlock();
+            block.SetFloatArray("_Udon_LTCGI_Mask", new float[16]);
+            block.SetVectorArray("_Udon_LTCGI_Vertices_0",
+                new[] { new Vector4(-1f, -501f, -1.5f, 0f) });
+            block.SetVectorArray("_Udon_LTCGI_Vertices_1",
+                new[] { new Vector4(-1f, -499f, -1.5f, 0f) });
+            block.SetVectorArray("_Udon_LTCGI_Vertices_2",
+                new[] { new Vector4(1f, -501f, -1.5f, 0f) });
+            block.SetVectorArray("_Udon_LTCGI_Vertices_3",
+                new[] { new Vector4(1f, -499f, -1.5f, 0f) });
+            // The low bits enable two-sided diffuse light. The high bits
+            // keep the packed float out of the subnormal range.
+            var flags = BitConverter.ToSingle(BitConverter.GetBytes(0x3f800009), 0);
+            block.SetVectorArray("_Udon_LTCGI_ExtraData",
+                new[] { new Vector4(1f, 0.5f, 0.2f, flags) });
+            sphereRenderer.SetPropertyBlock(block);
+        }
+
+        internal void FrameUnitQuad(Quaternion rotation)
+        {
+            camera.orthographic = true;
+            camera.orthographicSize = 0.5f;
+            camera.transform.position = root.transform.position +
+                rotation * new Vector3(0.5f, 0.5f, -5f);
+            camera.transform.rotation = rotation;
+        }
+
         /// <summary>
         /// The subject with a caller mesh renders once, for an end
         /// to end case that must render the built output mesh of a
