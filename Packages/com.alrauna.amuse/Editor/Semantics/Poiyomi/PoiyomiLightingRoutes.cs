@@ -574,9 +574,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             var count = material.GetFloat("_ToonRampCount");
             var selector = material.GetFloat("_ToonRampUVSelector");
             if (count <= 1f ||
-                selector == 1f || selector == 2f || selector == 3f ||
-                selector == 4f || selector == 5f || selector == 8f ||
-                selector == 9f)
+                PoiyomiCompanionRoutes.IsOtherCoordinate(selector))
             {
                 return null;
             }
@@ -631,9 +629,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
 
             var selector = material.GetFloat("_SDFShadingTextureUV");
-            if (selector == 1f || selector == 2f || selector == 3f ||
-                selector == 4f || selector == 5f || selector == 8f ||
-                selector == 9f)
+            if (PoiyomiCompanionRoutes.IsOtherCoordinate(selector))
             {
                 return null;
             }
@@ -646,10 +642,11 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// <summary>
         /// The split mask sample reads the same texture through its
         /// own selector, the merged transform, the split pan, and
-        /// the split stochastic flag. All four facts must hold when
-        /// the split sample runs and the maps move on UV0. Another
-        /// main selector keeps the texture bound, so the split
-        /// sample reads the bound texture and no fact matters.
+        /// the split stochastic flag. When the maps move on UV0, all
+        /// four facts must hold while the split sample runs. Another
+        /// main selector keeps the texture bound, so only the split
+        /// selector must sit on the allow list, and no other fact
+        /// matters.
         /// </summary>
         private static string MochieSplitRule(Material material)
         {
@@ -668,7 +665,25 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 return null;
             }
 
-            if (material.GetFloat("_MochieMetallicMapsUV") != 0f)
+            var mainSelector = material.GetFloat("_MochieMetallicMapsUV");
+            if (PoiyomiCompanionRoutes.IsOtherCoordinate(mainSelector))
+            {
+                // The texture stays bound. The split sample reads it at
+                // its own selector, so that selector must be admitted.
+                var boundSplit =
+                    material.GetFloat("_MochieMetallicMasksUV");
+                if (PoiyomiCompanionRoutes.IsOtherCoordinate(boundSplit))
+                {
+                    return null;
+                }
+
+                return "The property '_MochieMetallicMasksUV' is " +
+                       Number(boundSplit) + ". The route needs 1, 2," +
+                       " 3, 4, 5, 8, or 9, because the split mask" +
+                       " sample reads the bound texture.";
+            }
+
+            if (mainSelector != 0f)
             {
                 return null;
             }

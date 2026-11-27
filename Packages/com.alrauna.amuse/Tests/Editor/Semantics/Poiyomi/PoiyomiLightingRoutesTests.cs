@@ -784,6 +784,40 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 "_MochieMetallicMaps");
         }
 
+        // --- Falsifier 4b: MochieSplitOnBoundMapsRefuses --------------
+        /// <summary>
+        /// The Mochie packed map on another coordinate stays bound. Its
+        /// split mask sample reads the bound texture at its own
+        /// selector, so that selector must sit on the allow list of 1,
+        /// 2, 3, 4, 5, 8, and 9. Selector 0 refuses, and so do the
+        /// selectors 6 and 7 and NaN. The falsifier asserts the admitted
+        /// twins first.
+        /// </summary>
+        [Test]
+        public void MochieSplitOnBoundMapsRefuses(
+            [Values(0f, 6f, 7f, float.NaN)] float value,
+            [Values(false, true)] bool twoPass)
+        {
+            using var fixture = new PoiyomiReviewedFixture();
+            var material = NewCapturedMaterial(fixture, twoPass);
+            AssignTexture(
+                fixture, material, "_MochieMetallicMaps", true);
+            EnableKeywords(material, "MOCHIE_PBR");
+            material.SetFloat("_PBRSplitMaskSample", 1f);
+            material.SetFloat("_MochieMetallicMapsUV", 1f);
+            material.SetFloat("_MochieMetallicMasksUV", 1f);
+            AssertNoGroupTextureMoved(fixture.CaptureSingle(material));
+
+            material.SetFloat("_MochieMetallicMasksUV", 9f);
+            AssertNoGroupTextureMoved(fixture.CaptureSingle(material));
+
+            material.SetFloat("_MochieMetallicMasksUV", value);
+            PoiyomiReviewedFixture.AssertRefused(
+                fixture.CaptureSingle(material),
+                AtlasUseRefusal.RequiredValueNotHeld,
+                "'_MochieMetallicMasksUV'");
+        }
+
         /// <summary>
         /// The three two keyword routes keep the shared selector
         /// rule. The keyword gate decides only between inert and

@@ -66,6 +66,29 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             "_ALVolumeColorDirection",
         };
 
+        /// <summary>
+        /// The selectors of the eight rules that refuse outside the
+        /// allow list 1, 2, 3, 4, 5, 8, and 9.
+        /// </summary>
+        private static readonly string[] AllowListSelectorProperties =
+        {
+            "_TextFPSUV",
+            "_TextPositionUV",
+            "_TextTimeUV",
+            "_TextNumericUV",
+            "_ParallaxUV",
+            "_HeightMapUV",
+            "_HeightmaskUV",
+            "_TruchetUV",
+            "_UDIMDiscardUV",
+            "_UDIMFaceDiscardUV",
+            "_PathingUVSelect",
+            "_ALDecalUV",
+            "_ALVolumeColorUV",
+            "_ALVolumeColorDirection",
+            "_VertexSpectrumUV",
+        };
+
         private static readonly string[] VignettePropKeywords =
         {
             "PROP_RGBMASK",
@@ -1704,6 +1727,193 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                 outcome,
                 AtlasUseRefusal.NonIdentityTransform,
                 "'_RGBARedScaleOffset'");
+        }
+
+        // --- Falsifier 23: SelectorOutsideAllowListRefuses ------------
+        /// <summary>
+        /// Eight table rules of the group read a selector that indexes
+        /// the mesh coordinates. The coordinate rule admits only the
+        /// selectors 1, 2, 3, 4, 5, 8, and 9. The selector 6 holds the
+        /// polar coordinate and the selector 7 holds the distorted UV,
+        /// so both refuse. NaN counts as UV0, so it refuses too. Each
+        /// selector refuses at 6, 7, and NaN, and admits at the
+        /// allowed selectors 1 and 9. The falsifier asserts the
+        /// admitted twins first.
+        /// </summary>
+        [Test]
+        public void SelectorOutsideAllowListRefuses(
+            [ValueSource(nameof(AllowListSelectorProperties))]
+                string selector,
+            [Values(6f, 7f, float.NaN)] float value,
+            [Values(false, true)] bool twoPass)
+        {
+            using var fixture = new PoiyomiReviewedFixture();
+            var material = NewCaseMaterial(fixture, twoPass);
+            var named = ArrangeAllowListRule(fixture, material, selector);
+
+            PoiyomiReviewedFixture.AssertAdmitted(
+                fixture.CaptureSingle(material));
+
+            material.SetFloat(selector, 9f);
+            PoiyomiReviewedFixture.AssertAdmitted(
+                fixture.CaptureSingle(material));
+
+            material.SetFloat(selector, value);
+            PoiyomiReviewedFixture.AssertRefused(
+                fixture.CaptureSingle(material),
+                AtlasUseRefusal.RequiredValueNotHeld,
+                "'" + named + "'");
+        }
+
+        /// <summary>
+        /// Arranges the keyword, the facts, and the textures of one
+        /// allow-list rule with every selector of the rule on 1. The
+        /// return value names the property that the refusal detail
+        /// carries.
+        /// </summary>
+        private static string ArrangeAllowListRule(
+            PoiyomiReviewedFixture fixture,
+            Material material,
+            string selector)
+        {
+            switch (selector)
+            {
+                case "_TextFPSUV":
+                case "_TextPositionUV":
+                case "_TextTimeUV":
+                case "_TextNumericUV":
+                    foreach (var name in TextSelectorProperties)
+                    {
+                        material.SetFloat(name, 1f);
+                    }
+
+                    material.EnableKeyword("EFFECT_BUMP");
+                    return selector;
+                case "_ParallaxUV":
+                case "_HeightMapUV":
+                case "_HeightmaskUV":
+                    material.SetTexture(
+                        "_HeightMap", fixture.NewRouteTexture(64));
+                    material.SetTexture(
+                        "_Heightmask", fixture.NewRouteTexture(64));
+                    foreach (var name in ParallaxChannelProperties)
+                    {
+                        material.SetFloat(name, 1f);
+                    }
+
+                    material.EnableKeyword("POI_PARALLAX");
+                    return selector;
+                case "_TruchetUV":
+                    material.SetTexture(
+                        "_TruchetTex", fixture.NewRouteTexture(64));
+                    material.SetTexture(
+                        "_TruchetMask", fixture.NewRouteTexture(64));
+                    material.SetFloat("_TruchetUV", 1f);
+                    material.EnableKeyword("POI_TRUCHET");
+                    return selector;
+                case "_UDIMDiscardUV":
+                    // The tile grid refuses only with a row flag set.
+                    material.SetFloat("_UDIMDiscardUV", 1f);
+                    material.SetFloat("_UDIMDiscardRow2_1", 1f);
+                    material.EnableKeyword("POI_UDIMDISCARD");
+                    return "_UDIMDiscardRow2_1";
+                case "_UDIMFaceDiscardUV":
+                    // The face grid refuses only with its options on
+                    // and a row flag set.
+                    material.SetFloat("_UDIMFaceDiscardUV", 1f);
+                    material.SetFloat(
+                        "_EnableUDIMFaceDiscardOptions", 1f);
+                    material.SetFloat("_UDIMFaceDiscardRow1_2", 1f);
+                    material.EnableKeyword("POI_UDIMDISCARD");
+                    return "_UDIMFaceDiscardRow1_2";
+                case "_PathingUVSelect":
+                    material.SetTexture(
+                        "_PathingMap", fixture.NewRouteTexture(64));
+                    material.SetTexture(
+                        "_PathingColorMap", fixture.NewRouteTexture(64));
+                    material.SetFloat("_PathPointSampling", 1f);
+                    material.SetFloat("_PathSource", 1f);
+                    material.SetFloat("_PathingUVSelect", 1f);
+                    material.EnableKeyword("POI_PATHING");
+                    return "_PathSource";
+                case "_ALDecalUV":
+                    material.SetTexture(
+                        "_ALDecalColorMask", fixture.NewRouteTexture(64));
+                    material.SetFloat("_ALDecalUV", 1f);
+                    material.EnableKeyword("POI_AL_DECAL");
+                    return selector;
+                case "_ALVolumeColorUV":
+                case "_ALVolumeColorDirection":
+                    material.SetFloat("_ALVolumeColorUV", 1f);
+                    material.SetFloat("_ALVolumeColorDirection", 1f);
+                    material.EnableKeyword("POI_AL_VOLUMECOLOR");
+                    return selector;
+                case "_VertexSpectrumUV":
+                    material.SetFloat("_VertexSpectrumMotion", 1f);
+                    material.SetFloat("_VertexSpectrumUV", 1f);
+                    material.EnableKeyword("AUTO_EXPOSURE");
+                    return selector;
+                default:
+                    throw new ArgumentOutOfRangeException(
+                        nameof(selector), selector,
+                        "no arrangement exists for this selector");
+            }
+        }
+
+        // --- Falsifier 24: PackedSplitOnBoundMapsRefuses --------------
+        /// <summary>
+        /// A packed RGBA map on another coordinate stays bound. Each
+        /// split per channel read samples the bound texture at its own
+        /// selector, so every channel selector must sit on the allow
+        /// list. Selector 0 refuses, because the bound texture would
+        /// read UV0 after the build. The falsifier asserts the admitted
+        /// twins first.
+        /// </summary>
+        [Test]
+        public void PackedSplitOnBoundMapsRefuses(
+            [Values("_RGBAMetallicMaps", "_RGBASmoothnessMaps")]
+                string texture,
+            [Values(0f, 6f, 7f, float.NaN)] float value,
+            [Values(false, true)] bool twoPass)
+        {
+            using var fixture = new PoiyomiReviewedFixture();
+            var material = NewCaseMaterial(fixture, twoPass);
+            material.SetTexture(texture, fixture.NewRouteTexture(64));
+            material.SetFloat(texture + "UV", 1f);
+            material.EnableKeyword("VIGNETTE");
+            material.EnableKeyword("PROP_RGBAMETALLICMAPS");
+            material.EnableKeyword("PROP_RGBASMOOTHNESSMAPS");
+            foreach (var prefix in RgbaChannelPrefixes)
+            {
+                material.SetFloat("_RGBA" + prefix + "PBRUV", 1f);
+            }
+
+            var twin = fixture.CaptureSingle(material);
+            PoiyomiReviewedFixture.AssertAdmitted(twin);
+            Assert.That(
+                twin.Use.Companions.Select(
+                    companion => companion.Property),
+                Does.Not.Contain(texture),
+                "the bound map must stay bound on this use");
+
+            foreach (var prefix in RgbaChannelPrefixes)
+            {
+                material.SetFloat("_RGBA" + prefix + "PBRUV", 9f);
+            }
+
+            PoiyomiReviewedFixture.AssertAdmitted(
+                fixture.CaptureSingle(material));
+
+            foreach (var prefix in RgbaChannelPrefixes)
+            {
+                var channel = "_RGBA" + prefix + "PBRUV";
+                material.SetFloat(channel, value);
+                PoiyomiReviewedFixture.AssertRefused(
+                    fixture.CaptureSingle(material),
+                    AtlasUseRefusal.RequiredValueNotHeld,
+                    "'" + channel + "'");
+                material.SetFloat(channel, 9f);
+            }
         }
 
         // --- the route lookups ----------------------------------------

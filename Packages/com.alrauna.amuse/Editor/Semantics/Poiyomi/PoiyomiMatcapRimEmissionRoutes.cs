@@ -482,10 +482,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 }
 
                 var selector = material.GetFloat(rule.UvToBlend);
-                if (selector == 1f || selector == 2f ||
-                    selector == 3f || selector == 4f ||
-                    selector == 5f || selector == 8f ||
-                    selector == 9f)
+                if (PoiyomiCompanionRoutes.IsOtherCoordinate(selector))
                 {
                     continue;
                 }

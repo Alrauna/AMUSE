@@ -86,15 +86,27 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 }
 
                 var selector = material.GetFloat(selectorProperty);
-                if (selector == 1f || selector == 2f || selector == 3f ||
-                    selector == 4f || selector == 5f || selector == 8f ||
-                    selector == 9f)
+                if (IsOtherCoordinate(selector))
                 {
                     return AtlasRouteUse.OtherCoordinates;
                 }
 
                 return AtlasRouteUse.Uv0;
             };
+        }
+
+        /// <summary>
+        /// Whether a selector value names a mesh coordinate that the
+        /// coordinate rule admits: 1, 2, 3, 4, 5, 8, or 9. The compare
+        /// is exact. Selector 0 reads UV0, selectors 6 and 7 read UV0
+        /// data, and a NaN or a fraction counts as UV0, so every other
+        /// value refuses.
+        /// </summary>
+        internal static bool IsOtherCoordinate(float selector)
+        {
+            return selector == 1f || selector == 2f || selector == 3f ||
+                   selector == 4f || selector == 5f || selector == 8f ||
+                   selector == 9f;
         }
 
         /// <summary>

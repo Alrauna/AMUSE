@@ -191,8 +191,8 @@ Columns: texture, declaration line, group, class, sampler, selector property, tr
 | _BackFaceTexture | 634 | Color effects UV | companion | Member | _BackFaceTextureUV | _BackFaceTexture_ST | _BackFaceTexturePan | none | Gate POI_BACKFACE. No UV flip on back faces. | 20181 | yes |
 | _BackFaceMask | 637 | Color effects UV | companion | Member | _BackFaceMaskUV | _BackFaceMask_ST | _BackFaceMaskPan | none | Gate POI_BACKFACE. | 20191 | yes |
 | _RGBMask | 664 | Color effects UV | companion | sampler_trilinear_repeat | _RGBMaskUV | _RGBMask_ST | _RGBMaskPan | none | _RGBMaskType 1 replaces the mask with vertex color and removes the sample. | 20258, 20357 | yes |
-| _RGBAMetallicMaps | 668 | Color effects UV | companion | sampler_trilinear_repeat | _RGBAMetallicMapsUV | _RGBAMetallicMaps_ST | _RGBAMetallicMapsPan | _RGBAMetallicMapsStochastic | Split samples at 20425 to 20437 add _RGBAxPBRUV selectors, merged transforms _RGBAxPBRMaskScaleTiling with _RGBAxScaleOffset, pans _RGBAxPBRMasksPan, and _RGBAxPBRSplitMaskStochastic flags. All must hold identity, zero, and 0 when the split sample runs on selector 0. | 20420 | yes |
-| _RGBASmoothnessMaps | 677 | Color effects UV | companion | sampler_trilinear_repeat | _RGBASmoothnessMapsUV | _RGBASmoothnessMaps_ST | _RGBASmoothnessMapsPan | _RGBASmoothnessMapsStochastic | Split samples at 20395 to 20407 with the same split properties as the metallic maps. | 20390 | yes |
+| _RGBAMetallicMaps | 668 | Color effects UV | companion | sampler_trilinear_repeat | _RGBAMetallicMapsUV | _RGBAMetallicMaps_ST | _RGBAMetallicMapsPan | _RGBAMetallicMapsStochastic | Split samples at 20425 to 20437 add _RGBAxPBRUV selectors, merged transforms _RGBAxPBRMaskScaleTiling with _RGBAxScaleOffset, pans _RGBAxPBRMasksPan, and _RGBAxPBRSplitMaskStochastic flags. All must hold identity, zero, and 0 when the split sample runs on selector 0. When the main selector sits on 1, 2, 3, 4, 5, 8, or 9, each _RGBAxPBRUV must sit on 1, 2, 3, 4, 5, 8, or 9, because the texture then stays bound. | 20420 | yes |
+| _RGBASmoothnessMaps | 677 | Color effects UV | companion | sampler_trilinear_repeat | _RGBASmoothnessMapsUV | _RGBASmoothnessMaps_ST | _RGBASmoothnessMapsPan | _RGBASmoothnessMapsStochastic | Split samples at 20395 to 20407 with the same split properties as the metallic maps. When the main selector sits on 1, 2, 3, 4, 5, 8, or 9, each split selector must sit on 1, 2, 3, 4, 5, 8, or 9, because the texture then stays bound. | 20390 | yes |
 | _RedTexture | 694 | Color effects UV | companion | sampler_trilinear_repeat | _RedTextureUV | _RedTexture_ST | _RedTexturePan | _RedTextureStochastic | Merged transform _RGBARedScaleOffset must also hold identity. | 20367 | yes |
 | _RgbNormalR | 703 | Color effects UV | companion | sampler_trilinear_repeat | _RgbNormalRUV | _RgbNormalR_ST | _RgbNormalRPan | _RgbNormalRStochastic | Merged transform _RGBARedScaleOffset. Runtime gate _RgbNormalRScale above 0 and _RGBARedEnable. | 20290 | yes |
 | _GreenTexture | 730 | Color effects UV | companion | sampler_trilinear_repeat | _GreenTextureUV | _GreenTexture_ST | _GreenTexturePan | _GreenTextureStochastic | Merged transform _RGBAGreenScaleOffset. | 20370 | yes |
@@ -243,7 +243,7 @@ Columns: texture, declaration line, group, class, sampler, selector property, tr
 | _Rim2Tex | 1703 | Matcap rim emission masks | companion | Member | _Rim2TexUV | _Rim2Tex_ST | _Rim2TexPan | none | Gate _RIM2STYLE_POIYOMI. | 30098 | yes |
 | _Rim2ColorTex | 1751 | Matcap rim emission masks | companion | Member | _Rim2ColorTexUV | _Rim2ColorTex_ST | _Rim2ColorTexPan | none | Gate _RIM2STYLE_LILTOON. | 30350 | yes |
 | _SSSThicknessMap | 1839 | Lighting | companion | Member | _SSSThicknessMapUV | _SSSThicknessMap_ST | _SSSThicknessMapPan | none | The selector enum labels value 4 DistortedUV1, but the code reads mesh slot 4, which is the panosphere slot. Value 4 never reads UV0. | 26348 | yes |
-| _MochieMetallicMaps | 1862 | Lighting | companion | Member | _MochieMetallicMapsUV | _MochieMetallicMaps_ST | _MochieMetallicMapsPan | _MochieMetallicMapsStochastic | The split sample at 26600 adds _MochieMetallicMasksUV, merged transform _PBRMaskScaleTiling, _MochieMetallicMasksPan, and _PBRSplitMaskStochastic. All must hold when the split sample runs on selector 0. | 26596, 26600 | yes |
+| _MochieMetallicMaps | 1862 | Lighting | companion | Member | _MochieMetallicMapsUV | _MochieMetallicMaps_ST | _MochieMetallicMapsPan | _MochieMetallicMapsStochastic | The split sample at 26600 adds _MochieMetallicMasksUV, merged transform _PBRMaskScaleTiling, _MochieMetallicMasksPan, and _PBRSplitMaskStochastic. All must hold when the split sample runs on selector 0. When the main selector sits on 1, 2, 3, 4, 5, 8, or 9, _MochieMetallicMasksUV must sit on 1, 2, 3, 4, 5, 8, or 9, because the texture then stays bound. | 26596, 26600 | yes |
 | _MochieReflCube | 1880 | KeyOnly | neutral | Own | none | none | none | none | Cube sampled by view. The texture enters GetReflections as an argument at 26824. | 26824 | yes |
 | _AnisotropyMap | 1891 | Lighting | companion | Member | _AnisotropyMapUV | _AnisotropyMap_ST | _AnisotropyMapPan | none | None. | 26733 | yes |
 | _ClearCoatMaps | 1949 | Lighting | companion | Member | _ClearCoatMapsUV | _ClearCoatMaps_ST | _ClearCoatMapsPan | _ClearCoatMapsStochastic | None. | 26851 | yes |
@@ -344,20 +344,20 @@ The table level required value function checks these rules. Each failure returns
 | Emission scroll curve, slots 0 to 3 | _EMISSION and POI_EMISSION_1 to 3 | _EmissionScrollingUseCurve, 1, 2, 3 | Float | 0 or the curve texture unassigned |
 | Global mask split, slots 0 to 3 | POI_GLOBALMASK_TEXTURES | _GlobalMaskTexture0Split to 3Split, the 12 _SplitTilingOffset_G, _B, _A vectors, the 12 _SplitPan_G, _B, _A vectors | Int, Vector | Split 0, or every split transform identity and every split pan zero |
 | Distortion target | USER_LUT | _DistortionUvToDistort | Int | 1, 2, or 3. Never 0 |
-| Dissolve UV tile | DISTORT | _UVTileDissolveEnabled, _UVTileDissolveUV | Float, Int | Enabled 0, or selector not 0 |
-| Text overlay selectors | EFFECT_BUMP | _TextFPSUV, _TextPositionUV, _TextTimeUV, _TextNumericUV | Int | Every enabled sub-overlay selector not 0 |
-| Parallax channels | POI_PARALLAX | _ParallaxUV, _HeightMapUV, _HeightmaskUV | Int, Int, Int | All three not 0. Defaults refuse |
-| Truchet channel | POI_TRUCHET | _TruchetUV | Int | Not 0. Default refuses |
+| Dissolve UV tile | DISTORT | _UVTileDissolveEnabled, _UVTileDissolveUV | Float, Int | Enabled 0, or selector 1, 2, or 3 |
+| Text overlay selectors | EFFECT_BUMP | _TextFPSUV, _TextPositionUV, _TextTimeUV, _TextNumericUV | Int | Every enabled sub-overlay selector 1, 2, 3, 4, 5, 8, or 9 |
+| Parallax channels | POI_PARALLAX | _ParallaxUV, _HeightMapUV, _HeightmaskUV | Int, Int, Int | All three 1, 2, 3, 4, 5, 8, or 9. Defaults refuse |
+| Truchet channel | POI_TRUCHET | _TruchetUV | Int | 1, 2, 3, 4, 5, 8, or 9. Default refuses |
 | Voronoi space | POI_VORONOI | _VoronoiSpace | Int | Not 2 |
-| UV tile discard grids | POI_UDIMDISCARD | _UDIMDiscardMode, _UDIMDiscardUV, the 16 _UDIMDiscardRow vectors, _EnableUDIMFaceDiscardOptions, _UDIMFaceDiscardUV, the 16 _UDIMFaceDiscardRow vectors | Int, Int, Float, Float, Int, Float | Per grid, all row flags 0, or the grid selector not 0 |
-| Pathing source | POI_PATHING | _PathSource, _PathingUVSelect | Float, Int | Source not 1, or selector not 0 |
+| UV tile discard grids | POI_UDIMDISCARD | _UDIMDiscardMode, _UDIMDiscardUV, the 16 _UDIMDiscardRow vectors, _EnableUDIMFaceDiscardOptions, _UDIMFaceDiscardUV, the 16 _UDIMFaceDiscardRow vectors | Int, Int, Float, Float, Int, Float | Per grid, all row flags 0, or the grid selector 1, 2, 3, 4, 5, 8, or 9 |
+| Pathing source | POI_PATHING | _PathSource, _PathingUVSelect | Float, Int | Source not 1, or selector 1, 2, 3, 4, 5, 8, or 9 |
 | Pathing point sampling | POI_PATHING | _PathPointSampling | Float | 1 when _PathingMap is assigned on selector 0. Default 1 holds |
 | Uzumore channel | POI_UZUMORE | _UzumoreMaskUV | Float | Not 0. Default 3 holds |
 | Video modes | POI_VIDEO_EFFECTS | _VideoPixelateToResolution, _VideoType, _VideoPixelTextureUV | Float, Int, Int | Pixelate 0, type not 2, pixel texture selector not 0 when assigned |
 | AudioLink UV reads | POI_AUDIOLINK | _AudioLinkCCStripY, the uniform flags _DebugWaveform, _DebugDFT, _DebugCCStrip, _DebugCCLights, _DebugAutocorrelator | Float, uniforms without Properties entries | All 0. Defaults hold |
-| AL decal channel | POI_AL_DECAL | _ALDecalUV | Int | Not 0. Default refuses |
-| AL volume color channel | POI_AL_VOLUMECOLOR | _ALVolumeColorUV, _ALVolumeColorDirection | Int, Int | Selector not 0. Default refuses |
-| Vertex spectrum | AUTO_EXPOSURE | _VertexSpectrumMotion, _VertexSpectrumUV, _VertexSpectrumUVDirection | Float, Int, Int | Motion 0, or the selector not 0 |
+| AL decal channel | POI_AL_DECAL | _ALDecalUV | Int | 1, 2, 3, 4, 5, 8, or 9. Default refuses |
+| AL volume color channel | POI_AL_VOLUMECOLOR | _ALVolumeColorUV, _ALVolumeColorDirection | Int, Int | Each selector 1, 2, 3, 4, 5, 8, or 9. Default refuses |
+| Vertex spectrum | AUTO_EXPOSURE | _VertexSpectrumMotion, _VertexSpectrumUV, _VertexSpectrumUVDirection | Float, Int, Int | Motion 0, or the selector 1, 2, 3, 4, 5, 8, or 9 |
 | Vertex wind | AUTO_EXPOSURE | _VertexWindEnabled | Float | 0 when _VertexBasicsMask is a companion page |
 
 Notes on the conditional rules:

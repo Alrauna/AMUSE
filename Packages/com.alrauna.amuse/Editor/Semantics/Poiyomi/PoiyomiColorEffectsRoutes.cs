@@ -692,7 +692,9 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// every split per channel read needs its selector on UV0 and
         /// its stochastic flag at 0, because the split read samples the
         /// same texture as the merged read. The split pans join the
-        /// identity demands of the route.
+        /// identity demands of the route. A bound use on another
+        /// coordinate has no route value, so UnheldPackedSplitBound
+        /// checks its split selectors instead.
         /// </summary>
         private static Func<Material, string> UnheldPackedSplitValues(
             string selectorProperty,
@@ -753,6 +755,53 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
                 return null;
             };
+        }
+
+        /// <summary>
+        /// A packed RGBA map on another coordinate stays bound. Each
+        /// split per channel read then samples the bound map at its own
+        /// selector, so every channel selector must sit on the allow
+        /// list of 1, 2, 3, 4, 5, 8, and 9. Selector 0 refuses, because
+        /// the bound map would read UV0. The rule is a table rule, since
+        /// a bound map has no route value.
+        /// </summary>
+        private static string UnheldPackedSplitBound(Material material)
+        {
+            foreach (var texture in new[]
+                     {
+                         "_RGBAMetallicMaps",
+                         "_RGBASmoothnessMaps",
+                     })
+            {
+                if (material.GetTexture(texture) == null)
+                {
+                    continue;
+                }
+
+                var use = PoiyomiCompanionRoutes.SelectorUse(
+                    texture + "UV", VignetteKeywords);
+                if (use(material, false) != AtlasRouteUse.OtherCoordinates)
+                {
+                    continue;
+                }
+
+                foreach (var prefix in RgbaChannelPrefixes)
+                {
+                    var channel = "_RGBA" + prefix + "PBRUV";
+                    var splitSelector = material.GetFloat(channel);
+                    if (!PoiyomiCompanionRoutes.IsOtherCoordinate(
+                            splitSelector))
+                    {
+                        return "The property '" + channel + "' is " +
+                               Number(splitSelector) + ". The route" +
+                               " needs 1, 2, 3, 4, 5, 8, or 9, because" +
+                               " the split mask sample reads the bound" +
+                               " texture.";
+                    }
+                }
+            }
+
+            return null;
         }
 
         /// <summary>
@@ -1016,7 +1065,8 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 ?? UnheldAlDecalChannel(material)
                 ?? UnheldAlVolumeColorChannel(material)
                 ?? UnheldVertexSpectrum(material)
-                ?? UnheldVertexWind(material);
+                ?? UnheldVertexWind(material)
+                ?? UnheldPackedSplitBound(material);
         }
 
         /// <summary>
@@ -1071,8 +1121,9 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         }
 
         /// <summary>
-        /// Every text overlay reads its selected mesh UV as data. The
-        /// first selector that sits on UV0 names the refusal.
+        /// Every text overlay reads its selected mesh UV as data, so each
+        /// selector must sit on the allow list. The first selector outside
+        /// it names the refusal.
         /// </summary>
         private static string UnheldTextSelectors(Material material)
         {
@@ -1083,12 +1134,13 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
             foreach (var selector in TextSelectorProperties)
             {
-                if (material.GetFloat(selector) == 0f)
+                var value = material.GetFloat(selector);
+                if (!PoiyomiCompanionRoutes.IsOtherCoordinate(value))
                 {
-                    return "The property '" + selector + "' is 0." +
-                           " The route needs another coordinate," +
-                           " because the text overlay reads the mesh" +
-                           " UV as data.";
+                    return "The property '" + selector + "' is " +
+                           Number(value) + ". The route needs 1, 2, 3," +
+                           " 4, 5, 8, or 9, because the text overlay" +
+                           " reads the mesh UV as data.";
                 }
             }
 
@@ -1097,8 +1149,8 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
         /// <summary>
         /// The parallax marches the height at the selected coordinates
-        /// with UV0 gradients. Every channel must sit on another
-        /// coordinate. The defaults refuse.
+        /// with UV0 gradients. Every channel must sit on the allow list of
+        /// 1, 2, 3, 4, 5, 8, and 9. The defaults refuse.
         /// </summary>
         private static string UnheldParallaxChannels(Material material)
         {
@@ -1109,12 +1161,13 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
             foreach (var channel in ParallaxChannelProperties)
             {
-                if (material.GetFloat(channel) == 0f)
+                var value = material.GetFloat(channel);
+                if (!PoiyomiCompanionRoutes.IsOtherCoordinate(value))
                 {
-                    return "The property '" + channel + "' is 0." +
-                           " The route needs another coordinate," +
-                           " because the parallax marches the height" +
-                           " with UV0 gradients.";
+                    return "The property '" + channel + "' is " +
+                           Number(value) + ". The route needs 1, 2, 3," +
+                           " 4, 5, 8, or 9, because the parallax marches" +
+                           " the height with UV0 gradients.";
                 }
             }
 
@@ -1133,14 +1186,14 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
 
             var channel = material.GetFloat("_TruchetUV");
-            if (channel != 0f)
+            if (!PoiyomiCompanionRoutes.IsOtherCoordinate(channel))
             {
-                return null;
+                return "The property '_TruchetUV' is " + Number(channel) +
+                       ". The route needs 1, 2, 3, 4, 5, 8, or 9, because" +
+                       " the pattern reads the mesh UV as data.";
             }
 
-            return "The property '_TruchetUV' is 0. The route needs" +
-                   " another coordinate, because the pattern reads the" +
-                   " mesh UV as data.";
+            return null;
         }
 
         /// <summary>
@@ -1177,7 +1230,8 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 return null;
             }
 
-            if (material.GetFloat("_UDIMDiscardUV") == 0f)
+            var tileSelector = material.GetFloat("_UDIMDiscardUV");
+            if (!PoiyomiCompanionRoutes.IsOtherCoordinate(tileSelector))
             {
                 foreach (var flag in UdimDiscardRowFlags)
                 {
@@ -1186,7 +1240,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                         return "The property '" + flag + "' is " +
                                Number(material.GetFloat(flag)) +
                                ". The route needs all row flags 0, or" +
-                               " the selector another coordinate.";
+                               " the selector 1, 2, 3, 4, 5, 8, or 9.";
                     }
                 }
             }
@@ -1196,7 +1250,8 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 return null;
             }
 
-            if (material.GetFloat("_UDIMFaceDiscardUV") != 0f)
+            var faceSelector = material.GetFloat("_UDIMFaceDiscardUV");
+            if (PoiyomiCompanionRoutes.IsOtherCoordinate(faceSelector))
             {
                 return null;
             }
@@ -1208,7 +1263,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                     return "The property '" + flag + "' is " +
                            Number(material.GetFloat(flag)) +
                            ". The route needs all row flags 0, or the" +
-                           " selector another coordinate.";
+                           " selector 1, 2, 3, 4, 5, 8, or 9.";
                 }
             }
 
@@ -1232,14 +1287,14 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
 
             var selector = material.GetFloat("_PathingUVSelect");
-            if (selector != 0f)
+            if (PoiyomiCompanionRoutes.IsOtherCoordinate(selector))
             {
                 return null;
             }
 
             return "The property '_PathSource' is 1. The route needs" +
                    " the tex gradient source, or the selector" +
-                   " another coordinate.";
+                   " 1, 2, 3, 4, 5, 8, or 9.";
         }
 
         /// <summary>
@@ -1392,19 +1447,19 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
 
             var channel = material.GetFloat("_ALDecalUV");
-            if (channel != 0f)
+            if (!PoiyomiCompanionRoutes.IsOtherCoordinate(channel))
             {
-                return null;
+                return "The property '_ALDecalUV' is " + Number(channel) +
+                       ". The route needs 1, 2, 3, 4, 5, 8, or 9, because" +
+                       " the decal reads the mesh UV as data.";
             }
 
-            return "The property '_ALDecalUV' is 0. The route needs" +
-                   " another coordinate, because the decal reads the" +
-                   " mesh UV as data.";
+            return null;
         }
 
         /// <summary>
         /// The audio link volume color reads the selected mesh UV as
-        /// data. Either selector at 0 refuses.
+        /// data. Either selector outside the allow list refuses.
         /// </summary>
         private static string UnheldAlVolumeColorChannel(
             Material material)
@@ -1416,12 +1471,13 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
             foreach (var selector in AlVolumeColorSelectors)
             {
-                if (material.GetFloat(selector) == 0f)
+                var value = material.GetFloat(selector);
+                if (!PoiyomiCompanionRoutes.IsOtherCoordinate(value))
                 {
-                    return "The property '" + selector + "' is 0." +
-                           " The route needs another coordinate," +
-                           " because the volume color reads the mesh" +
-                           " UV as data.";
+                    return "The property '" + selector + "' is " +
+                           Number(value) + ". The route needs 1, 2, 3," +
+                           " 4, 5, 8, or 9, because the volume color" +
+                           " reads the mesh UV as data.";
                 }
             }
 
@@ -1445,14 +1501,14 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
 
             var selector = material.GetFloat("_VertexSpectrumUV");
-            if (selector != 0f)
+            if (PoiyomiCompanionRoutes.IsOtherCoordinate(selector))
             {
                 return null;
             }
 
-            return "The property '_VertexSpectrumUV' is 0. The route" +
-                   " needs another coordinate, because the spectrum" +
-                   " reads the mesh UV as data.";
+            return "The property '_VertexSpectrumUV' is " +
+                   Number(selector) + ". The route needs 1, 2, 3, 4, 5, 8," +
+                   " or 9, because the spectrum reads the mesh UV as data.";
         }
 
         /// <summary>
