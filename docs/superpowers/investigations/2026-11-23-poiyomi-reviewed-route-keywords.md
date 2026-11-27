@@ -529,3 +529,43 @@ Each item is a state a plausible wrong implementation admits or refuses wrongly.
 - `_Udon_VideoTex` has no active declaration. The decal code reads it only under refused keywords. A future shader that declares it needs a new review.
 - The record classes the four matcap textures and the three ramp and lookup textures as neutrals because their sample coordinates never track UV0. The matcap blend rule guards the one UV read in the matcap path. The texture ramp rule guards the row pick.
 - The audit of the four feature groups derives from the base pass. The other passes repeat the same code. The Add pass adds additive shadow strengths, the outline pass gates shading behind `_OutlineLit`, and the shadow caster skips lighting, rim, matcap, decal, emission, and LTCGI sections. No pass adds a UV0 read that the base pass lacks.
+
+## 10. Census Lab rerun
+
+Privacy note: This section gives aggregate results from a private avatar in the Census Lab project. It names no avatar, renderer, material, or asset. Exact counts are replaced with ranges. It names refusal causes, vendor keywords, and vendor texture properties only.
+
+Date: 2026-11-27.
+
+Method: The main agent ran the atlas analysis read-only in the Census Lab editor instance on 2026-11-27. The instance data path ended with `/AMUSE-Census-Lab/Assets`. The Lab project compiles the AMUSE package from this repository, and its compiled assemblies were newer than every production source change of the branch. The scene held one avatar root with the optimizer component. The analysis was `AtlasAnalysis.Analyze` over `CommittedControllerGraph.Enumerate` with the VRChat platform bindings, called through reflection. It used the component values: maximum page size 8192 and protected mip level count 1. It used the production budget limits. The avatar gate passed. The analysis creates no texture, material, or mesh.
+
+Results on 2026-11-27:
+
+- The avatar has between 100 and 150 renderer slot uses.
+- Between 16 and 35 uses passed capture. Almost all of them are on the bundled Poiyomi 9.3 row. Between 1 and 5 are on a lilToon row.
+- The admitted uses form between 6 and 15 groups. Every admitted use was then refused with `SingleSourceGroup`. So the build would make no atlas page on this avatar. Each group holds one source texture, so no group has a second source to share a page with.
+- No use was refused by the budget.
+
+Capture refusals per cause on 2026-11-27:
+
+| cause | uses | shaders |
+|---|---|---|
+| `MissingMainTexture` | 36 to 60 | Mostly the bundled Poiyomi 9.3 row. Between 6 and 15 are lilToon. |
+| `KeywordNotAllowed` | 6 to 15 | The bundled Poiyomi 9.3 row |
+| `UnlistedTexture` | 6 to 15 | lilToon rows |
+| `LockedShader` | 6 to 15 | Locked copies of the bundled Poiyomi 9.3 shader |
+| `UnattestedShader` | 6 to 15 | The Poiyomi 10 top level shader, a lilToon variant without a route, and shaders of other vendors |
+| `RequiredValueNotHeld` | 1 to 5 | Mostly lilToon outline rows. One bundled Poiyomi 9.3 use. |
+| `UvOutsideUnitSquare` | 1 to 5 | The bundled Poiyomi 9.3 row |
+
+Refused features on the bundled Poiyomi 9.3 row on 2026-11-27:
+
+- The refusal details named `GEOM_TYPE_BRANCH` (decal slot 0) on every `KeywordNotAllowed` use, `PROP_DECALMASK` (the decal mask) on most of them, and `GEOM_TYPE_BRANCH_DETAIL` (decal slot 1) on a few. The record refuses all three in section 4.1.
+- The one `RequiredValueNotHeld` use on this row held `_MainTexUV` at a value other than 0.
+
+Other refusal facts on 2026-11-27:
+
+- The `UnlistedTexture` refusals named the lilToon properties `_ReflectionCubeTex`, `_EmissionBlendMask`, `_MainGradationTex`, `_MatCap2ndBlendMask`, and `_ShadowStrengthMask`. The lilToon route has no companion review. This record does not cover it.
+- Every lilToon `RequiredValueNotHeld` refusal named `_UseGlitter`.
+- The bundled Poiyomi 9.3 row attested in the Lab. The contingency of the plan for a different digest did not apply. The Lab and the dev project both held Poiyomi Toon package 10.0.29 on 2026-11-27. The `UnattestedShader` Poiyomi uses are on the top level Poiyomi 10.0 shader of that package, which AMUSE does not support.
+
+Reading on 2026-11-27: On this avatar, capture admits between 16 and 35 uses, but no merge results. The limiting causes are a missing main texture and a single source texture per group. The decal keywords are the only refused Poiyomi keywords on this avatar. No baseline run before the reviewed route was made, so this section does not measure what the route added.
