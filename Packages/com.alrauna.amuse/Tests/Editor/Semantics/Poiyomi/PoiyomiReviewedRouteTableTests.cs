@@ -437,6 +437,14 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                     "' must sit in the keyword space of the row");
             }
 
+            foreach (var keyword in refused)
+            {
+                Assert.That(
+                    keywordSpace.Contains(keyword), Is.True,
+                    "the refused keyword '" + keyword +
+                    "' must sit in the keyword space of the row");
+            }
+
             var unclassed = new SortedSet<string>(StringComparer.Ordinal);
             foreach (var keyword in keywordSpace)
             {

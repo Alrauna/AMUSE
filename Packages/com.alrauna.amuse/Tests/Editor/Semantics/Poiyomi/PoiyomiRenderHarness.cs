@@ -18,12 +18,18 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
     /// </summary>
     public sealed class PoiyomiRenderHarness : IDisposable
     {
-        private const int TargetSize = 64;
+        private const int DefaultFrameSize = 64;
+        private readonly int frameSize;
 
         private readonly TestTransientScope _scope =
             new TestTransientScope(null);
 
         private GameObject root;
+        private Transform sunTransform;
+
+        /// <summary>The sun angle of the default framing.</summary>
+        internal static readonly Vector3 DefaultSunEuler =
+            new Vector3(18f, 90f, 0f);
         private Camera camera;
         private MeshRenderer sphereRenderer;
         private RenderTexture target;
@@ -36,8 +42,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         private readonly List<Light> disabledForeignLights =
             new List<Light>();
 
-        public PoiyomiRenderHarness()
+        public PoiyomiRenderHarness(int frameSize = DefaultFrameSize)
         {
+            this.frameSize = frameSize;
             // A case must never compare placeholder frames of an
             // async shader compile.
             previousAllowAsyncCompilation =
@@ -59,9 +66,9 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             root = new GameObject("AMUSE poiyomi render oracle root");
             root.transform.position = new Vector3(0f, -500f, 0f);
             readback = _scope.Track(new Texture2D(
-                TargetSize, TargetSize, TextureFormat.RGBA32, false));
+                frameSize, frameSize, TextureFormat.RGBA32, false));
             target = new RenderTexture(
-                TargetSize, TargetSize, 24, RenderTextureFormat.ARGB32);
+                frameSize, frameSize, 24, RenderTextureFormat.ARGB32);
 
             var cameraObject = NewChild("oracle camera");
             camera = cameraObject.AddComponent<Camera>();
@@ -97,8 +104,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             sun.type = LightType.Directional;
             sun.intensity = 0.6f;
             sun.shadows = LightShadows.Soft;
-            sunObject.transform.localRotation =
-                Quaternion.Euler(18f, 90f, 0f);
+            sunTransform = sunObject.transform;
+            sunTransform.localRotation = Quaternion.Euler(DefaultSunEuler);
 
             var lampObject = NewChild("oracle point light");
             var lamp = lampObject.AddComponent<Light>();
@@ -180,7 +187,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             RenderTexture.active = target;
             camera.Render();
             readback.ReadPixels(
-                new Rect(0, 0, TargetSize, TargetSize), 0, 0);
+                new Rect(0, 0, frameSize, frameSize), 0, 0);
             readback.Apply(false, false);
             RenderTexture.active = active;
             return readback.GetPixels32();
@@ -218,6 +225,30 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             camera.transform.position = root.transform.position +
                 rotation * new Vector3(0.5f, 0.5f, -5f);
             camera.transform.rotation = rotation;
+        }
+
+        /// <summary>
+        /// Moves the camera around the subject for one probe. A yaw of
+        /// 180 degrees shows the subject from behind. The distance and
+        /// the height match the default framing.
+        /// </summary>
+        internal void SetViewYaw(float yaw)
+        {
+            var turn = Quaternion.Euler(0f, yaw, 0f);
+            camera.transform.localPosition =
+                turn * new Vector3(0f, 1.1f, -2.6f);
+            camera.transform.localRotation =
+                Quaternion.Euler(22f, yaw, 0f);
+        }
+
+        /// <summary>
+        /// Turns the sun. The default angle is the harness framing. A
+        /// probe angles the sun so that the shadow terminator crosses
+        /// the subject.
+        /// </summary>
+        internal void SetSunEuler(Vector3 euler)
+        {
+            sunTransform.localRotation = Quaternion.Euler(euler);
         }
 
         /// <summary>

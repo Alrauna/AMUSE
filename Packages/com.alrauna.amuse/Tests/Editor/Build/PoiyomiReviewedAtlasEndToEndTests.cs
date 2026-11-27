@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.IO;
@@ -13,7 +12,6 @@ using nadena.dev.ndmf;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEngine;
-using UnityEngine.TestTools;
 
 namespace Alrauna.Amuse.Tests.Editor.Build
 {
@@ -25,24 +23,18 @@ namespace Alrauna.Amuse.Tests.Editor.Build
     /// sequence, and both slots must share one page set. The source
     /// and the built slot then render on the render harness of the
     /// live value oracles. The largest channel difference of the
-    /// two frames must stay at one of 255 or less. The render meshes
-    /// carry one fixed rotation, so the subject faces the harness
-    /// sun and the comparison cannot pass blind.
+    /// two frames must stay at one of 255 or less. The render mesh
+    /// is a dome patch that faces the camera. The sun and the view
+    /// change its terms, so the comparison cannot pass blind.
     /// </summary>
     public sealed class PoiyomiReviewedAtlasEndToEndTests
     {
+        // A 512 pixel frame over the dome samples only mip level 0 of the
+        // 64 texel fixture textures. The final dome and frame were measured
+        // on 2026-11-27. The protected count stays at 2.
+        private const int EndToEndFrameSize = 512;
         private const string TempFolder =
             "Assets/AmuseTests_PoiyomiReviewedEndToEnd";
-
-        /// <summary>
-        /// The fixed rotation of the render meshes. The subject quad
-        /// starts in the XY plane with its normal on Z. The rotation
-        /// turns the normal toward the harness sun and camera, so a
-        /// black frame fails the visibility guard instead of passing
-        /// the comparison.
-        /// </summary>
-        private static readonly Quaternion RenderRotation =
-            Quaternion.Euler(20f, -60f, 0f);
 
         private readonly TestTransientScope _scope =
             new TestTransientScope(TempFolder);
@@ -102,20 +94,27 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
-        /// One mipmapped RGBA32 source with a checker of 16 texel
-        /// blocks. Bilinear filtering and no anisotropy keep the
-        /// render comparison stable.
+        /// One mipmapped RGBA32 source. Each channel changes linearly from
+        /// the first color at one corner to the second color at the other
+        /// corner. The step is at most two levels per texel, so the half
+        /// precision rounding of the vendor shader moves a sample by at most
+        /// one level. Bilinear filtering and no anisotropy keep the render
+        /// comparison stable.
         /// </summary>
         private static Texture2D ImportPatternTexture(
-            string name, Color32 even, Color32 odd, int size = 64)
+            string name, Color32 first, Color32 last, int size = 64)
         {
             var pixels = new Color32[size * size];
             for (var y = 0; y < size; y++)
             {
                 for (var x = 0; x < size; x++)
                 {
-                    pixels[y * size + x] =
-                        ((x / 16 + y / 16) % 2 == 0) ? even : odd;
+                    var t = (x + y) / (2f * (size - 1));
+                    pixels[y * size + x] = new Color32(
+                        (byte)Mathf.Round(Mathf.Lerp(first.r, last.r, t)),
+                        (byte)Mathf.Round(Mathf.Lerp(first.g, last.g, t)),
+                        (byte)Mathf.Round(Mathf.Lerp(first.b, last.b, t)),
+                        255);
                 }
             }
 
@@ -156,41 +155,87 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             return material;
         }
 
-        private static Mesh NewQuadMesh()
+        /// <summary>
+        /// One new copy of the subject dome. The dome is a 35 degree
+        /// cap of a sphere that faces the camera. Its normals curve
+        /// across the frame, and the sun crosses the cap at a grazing
+        /// angle, so the shadow terminator crosses the patch. The cap
+        /// stays off the limb, so the sampled mip levels stay low. Its
+        /// UVs fill the unit square, so the build sees no UV outside it.
+        /// </summary>
+        private Mesh NewSubjectMesh()
         {
-            var mesh = new Mesh
+            const float capAngle = 35f * Mathf.Deg2Rad;
+            const int rings = 24;
+            const int segments = 64;
+            const float radius = 0.5f;
+            var capRadius = Mathf.Sin(capAngle);
+            var vertices = new Vector3[(rings + 1) * (segments + 1)];
+            var normals = new Vector3[vertices.Length];
+            var uv = new Vector2[vertices.Length];
+            for (var r = 0; r <= rings; r++)
             {
-                vertices = new[]
+                var theta = capAngle * r / rings;
+                for (var s = 0; s <= segments; s++)
                 {
-                    Vector3.zero,
-                    Vector3.right,
-                    Vector3.up,
-                    Vector3.right + Vector3.up,
-                },
-                normals = new[]
+                    var phi = 2f * Mathf.PI * s / segments;
+                    var planar = new Vector2(
+                        Mathf.Cos(phi), Mathf.Sin(phi)) * Mathf.Sin(theta);
+                    var normal = new Vector3(
+                        planar.x, planar.y, -Mathf.Cos(theta));
+                    var index = r * (segments + 1) + s;
+                    normals[index] = normal;
+                    vertices[index] = radius * normal;
+                    uv[index] = new Vector2(
+                        Mathf.Clamp01(0.5f + 0.5f * planar.x / capRadius),
+                        Mathf.Clamp01(0.5f + 0.5f * planar.y / capRadius));
+                }
+            }
+            var triangles = new List<int>();
+            for (var r = 0; r < rings; r++)
+            {
+                for (var s = 0; s < segments; s++)
                 {
-                    Vector3.forward,
-                    Vector3.forward,
-                    Vector3.forward,
-                    Vector3.forward,
-                },
-                tangents = new[]
-                {
-                    new Vector4(1f, 0f, 0f, 1f),
-                    new Vector4(1f, 0f, 0f, 1f),
-                    new Vector4(1f, 0f, 0f, 1f),
-                    new Vector4(1f, 0f, 0f, 1f),
-                },
-                uv = new[]
-                {
-                    new Vector2(0f, 0f),
-                    new Vector2(1f, 0f),
-                    new Vector2(0f, 1f),
-                    new Vector2(1f, 1f),
-                },
-            };
-            mesh.SetTriangles(new[] { 0, 2, 1, 2, 3, 1 }, 0);
+                    var a = r * (segments + 1) + s;
+                    var b = a + segments + 1;
+                    AddFrontFacing(triangles, vertices, normals, a, b, a + 1);
+                    AddFrontFacing(triangles, vertices, normals, b, b + 1, a + 1);
+                }
+            }
+            var mesh = Track(new Mesh());
+            mesh.name = "AMUSE poiyomi subject dome";
+            mesh.vertices = vertices;
+            mesh.normals = normals;
+            mesh.uv = uv;
+            mesh.SetTriangles(triangles, 0);
+            mesh.RecalculateBounds();
             return mesh;
+        }
+
+        /// <summary>
+        /// Adds one triangle wound to face the outward normals.
+        /// </summary>
+        private static void AddFrontFacing(
+            List<int> triangles,
+            Vector3[] vertices,
+            Vector3[] normals,
+            int a,
+            int b,
+            int c)
+        {
+            var facing = Vector3.Cross(
+                vertices[b] - vertices[a], vertices[c] - vertices[a]);
+            var outward = normals[a] + normals[b] + normals[c];
+            if (Vector3.Dot(facing, outward) < 0f)
+            {
+                triangles.Add(a);
+                triangles.Add(c);
+                triangles.Add(b);
+                return;
+            }
+            triangles.Add(a);
+            triangles.Add(b);
+            triangles.Add(c);
         }
 
         /// <summary>
@@ -211,6 +256,14 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 "AmuseAvatarOptimizer._alphaSeparatorEnabled field" +
                 " pin");
             alphaSwitch.boolValue = false;
+            // The largest count that the atlas budget admits. The final
+            // dome samples only mip level 0 of these fixture textures.
+            const int measuredProtectedMipCount = 2;
+            var mipLevels =
+                serialized.FindProperty("_protectedMipLevelCount");
+            Assert.That(mipLevels, Is.Not.Null,
+                "AmuseAvatarOptimizer._protectedMipLevelCount field pin");
+            mipLevels.intValue = measuredProtectedMipCount;
             serialized.ApplyModifiedProperties();
             FixtureProofScope.PinAllSizes(root);
             return root;
@@ -242,65 +295,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
-        /// One copy of the mesh with every position, normal, and
-        /// tangent turned by the fixed render rotation. The UVs stay,
-        /// so the source frame samples the unit square and the build
-        /// frame samples the remapped route of the output mesh.
-        /// </summary>
-        private static Mesh NewRenderMesh(Mesh source)
-        {
-            var render = new Mesh();
-            var vertices = source.vertices;
-            var rotated = new Vector3[vertices.Length];
-            for (var index = 0; index < vertices.Length; index++)
-            {
-                rotated[index] = RenderRotation * vertices[index];
-            }
-
-            render.vertices = rotated;
-
-            var normals = source.normals;
-            if (normals == null || normals.Length == 0)
-            {
-                normals = new Vector3[vertices.Length];
-                for (var index = 0; index < normals.Length; index++)
-                {
-                    normals[index] = Vector3.forward;
-                }
-            }
-
-            var rotatedNormals = new Vector3[normals.Length];
-            for (var index = 0; index < normals.Length; index++)
-            {
-                rotatedNormals[index] = RenderRotation * normals[index];
-            }
-
-            render.normals = rotatedNormals;
-
-            var tangents = source.tangents;
-            if (tangents != null && tangents.Length > 0)
-            {
-                var rotatedTangents = new Vector4[tangents.Length];
-                for (var index = 0; index < tangents.Length; index++)
-                {
-                    var turned = RenderRotation * new Vector3(
-                        tangents[index].x,
-                        tangents[index].y,
-                        tangents[index].z);
-                    rotatedTangents[index] = new Vector4(
-                        turned.x, turned.y, turned.z,
-                        tangents[index].w);
-                }
-
-                render.tangents = rotatedTangents;
-            }
-
-            render.uv = source.uv;
-            render.triangles = source.triangles;
-            return render;
-        }
-
-        /// <summary>
         /// The largest per channel difference of two renders, in
         /// units of one of 255.
         /// </summary>
@@ -325,177 +319,6 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             }
 
             return largest;
-        }
-
-        private static string DifferenceMap(Color32[] before, Color32[] after)
-        {
-            var size = (int)Math.Sqrt(before.Length);
-            var count = 0;
-            var minX = size;
-            var minY = size;
-            var maxX = -1;
-            var maxY = -1;
-            for (var i = 0; i < before.Length; i++)
-            {
-                if (before[i].Equals(after[i])) continue;
-                count++;
-                var x = i % size;
-                var y = i / size;
-                minX = Math.Min(minX, x);
-                minY = Math.Min(minY, y);
-                maxX = Math.Max(maxX, x);
-                maxY = Math.Max(maxY, y);
-            }
-            return count + " of " + before.Length + " pixels differ. Bounds " +
-                minX + "," + minY + " to " + maxX + "," + maxY;
-        }
-
-        private static string MaterialDifferences(Material source, Material page)
-        {
-            var differences = new List<string>();
-            if (source.shader != page.shader) differences.Add("shader");
-            if (source.renderQueue != page.renderQueue) differences.Add("render queue");
-            if (!source.shaderKeywords.OrderBy(x => x).SequenceEqual(
-                    page.shaderKeywords.OrderBy(x => x)))
-                differences.Add("keywords");
-            for (var i = 0; i < source.shader.passCount; i++)
-            {
-                var pass = source.GetPassName(i);
-                if (source.GetShaderPassEnabled(pass) != page.GetShaderPassEnabled(pass))
-                    differences.Add("pass " + pass);
-            }
-            for (var i = 0; i < source.shader.GetPropertyCount(); i++)
-            {
-                var name = source.shader.GetPropertyName(i);
-                var type = source.shader.GetPropertyType(i);
-                switch (type)
-                {
-                    case UnityEngine.Rendering.ShaderPropertyType.Texture:
-                        if (source.GetTexture(name) != page.GetTexture(name))
-                            differences.Add("texture " + name);
-                        if (source.GetTextureScale(name) != page.GetTextureScale(name) ||
-                            source.GetTextureOffset(name) != page.GetTextureOffset(name))
-                            differences.Add("texture transform " + name);
-                        break;
-                    case UnityEngine.Rendering.ShaderPropertyType.Color:
-                        if (source.GetColor(name) != page.GetColor(name))
-                            differences.Add("color " + name);
-                        break;
-                    case UnityEngine.Rendering.ShaderPropertyType.Vector:
-                        if (source.GetVector(name) != page.GetVector(name))
-                            differences.Add("vector " + name);
-                        break;
-                    default:
-                        if (source.GetFloat(name) != page.GetFloat(name))
-                            differences.Add("scalar " + name + " " +
-                                source.GetFloat(name) + " to " + page.GetFloat(name));
-                        break;
-                }
-            }
-            using var first = new SerializedObject(source);
-            using var second = new SerializedObject(page);
-            var firstInts = first.FindProperty("m_SavedProperties.m_Ints");
-            var secondInts = second.FindProperty("m_SavedProperties.m_Ints");
-            if (firstInts != null && secondInts != null)
-            {
-                var a = new Dictionary<string, int>();
-                var b = new Dictionary<string, int>();
-                for (var i = 0; i < firstInts.arraySize; i++)
-                {
-                    var item = firstInts.GetArrayElementAtIndex(i);
-                    a[item.FindPropertyRelative("first").stringValue] =
-                        item.FindPropertyRelative("second").intValue;
-                }
-                for (var i = 0; i < secondInts.arraySize; i++)
-                {
-                    var item = secondInts.GetArrayElementAtIndex(i);
-                    b[item.FindPropertyRelative("first").stringValue] =
-                        item.FindPropertyRelative("second").intValue;
-                }
-                foreach (var name in a.Keys.Union(b.Keys))
-                    if (!a.TryGetValue(name, out var av) ||
-                        !b.TryGetValue(name, out var bv) || av != bv)
-                        differences.Add("saved int " + name);
-            }
-            return string.Join(", ", differences);
-        }
-
-        private static string YamlChanges(byte[] before, byte[] after)
-        {
-            var oldLines = System.Text.Encoding.UTF8.GetString(before).Split('\n');
-            var newLines = System.Text.Encoding.UTF8.GetString(after).Split('\n');
-            var section = "";
-            var keywordSection = "";
-            foreach (var line in oldLines)
-            {
-                var trimmed = line.Trim();
-                if (trimmed.StartsWith("m_") && trimmed.EndsWith(":"))
-                    section = trimmed;
-                if (trimmed == "- POI_MATCAP0")
-                    keywordSection = section;
-            }
-            string Sanitize(string line)
-            {
-                line = System.Text.RegularExpressions.Regex.Replace(
-                    line, @"\b[0-9a-fA-F]{32}\b", "<identifier>");
-                return System.Text.RegularExpressions.Regex.Replace(
-                    line, @"fileID:\s*-?\d+", "fileID: <identifier>").Trim();
-            }
-            return "keyword section " + keywordSection +
-                ". Removed " + string.Join(" | ", oldLines.Except(newLines).Select(Sanitize)) +
-                ". Added " + string.Join(" | ", newLines.Except(oldLines).Select(Sanitize));
-        }
-
-
-        private static Color32[] ReadTexture(Texture texture)
-        {
-            var target = RenderTexture.GetTemporary(
-                texture.width, texture.height, 0,
-                RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
-            var previous = RenderTexture.active;
-            var readback = new Texture2D(
-                texture.width, texture.height, TextureFormat.RGBA32, false, true);
-            try
-            {
-                Graphics.Blit(texture, target);
-                RenderTexture.active = target;
-                readback.ReadPixels(new Rect(0, 0, texture.width, texture.height), 0, 0);
-                readback.Apply();
-                return readback.GetPixels32();
-            }
-            finally
-            {
-                RenderTexture.active = previous;
-                RenderTexture.ReleaseTemporary(target);
-                UnityEngine.Object.DestroyImmediate(readback);
-            }
-        }
-
-        private static string ComparePageTexels(
-            Texture source, Texture page, Vector2[] uv)
-        {
-            var sourcePixels = ReadTexture(source);
-            var pagePixels = ReadTexture(page);
-            var different = 0;
-            var first = "";
-            for (var y = 0; y < source.height; y++)
-            {
-                for (var x = 0; x < source.width; x++)
-                {
-                    var u = Mathf.Lerp(uv[0].x, uv[3].x, (x + 0.5f) / source.width);
-                    var v = Mathf.Lerp(uv[0].y, uv[3].y, (y + 0.5f) / source.height);
-                    var actual = pagePixels[Mathf.FloorToInt(v * page.height) * page.width +
-                        Mathf.FloorToInt(u * page.width)];
-                    var expected = sourcePixels[y * source.width + x];
-                    if (actual.Equals(expected)) continue;
-                    different++;
-                    if (first.Length == 0)
-                    {
-                        first = " First source " + expected + " page " + actual;
-                    }
-                }
-            }
-            return different + " of " + sourcePixels.Length + " texels differ." + first;
         }
 
         /// <summary>
@@ -558,15 +381,32 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
-        /// The shared body of one group case. It assigns the
-        /// companion textures and the keywords through the setup
-        /// action on both materials, builds the avatar, asserts the
-        /// one shared page set with its named pages, and proves that
-        /// each built slot renders as its source did.
+        /// The shared body of one group case without saved assets.
         /// </summary>
         private void RunGroupCase(
             bool twoPass,
             string caseName,
+            Action<Material, PoiyomiReviewedEndToEndTextures> setup,
+            params string[] companionProperties)
+        {
+            RunGroupCase(
+                twoPass, caseName, false, setup, companionProperties);
+        }
+
+        /// <summary>
+        /// The shared body of one group case. It assigns the
+        /// companion textures and the keywords through the setup
+        /// action on both materials, builds the avatar, asserts the
+        /// one shared page set with its named pages, and proves that
+        /// each built slot renders as its source did. Each companion
+        /// must change the source frame when its texture changes, so
+        /// a wrong page mapping cannot pass unseen. A saved case also
+        /// proves that the build leaves both source assets unchanged.
+        /// </summary>
+        private void RunGroupCase(
+            bool twoPass,
+            string caseName,
+            bool saveAssets,
             Action<Material, PoiyomiReviewedEndToEndTextures> setup,
             params string[] companionProperties)
         {
@@ -582,21 +422,19 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     this, twoPass, caseName + " second");
                 var firstMaterial = texturesA.Material;
                 var secondMaterial = texturesB.Material;
-                var assetPath = caseName == "asset matcap mask"
-                    ? TempFolder + "/matcap probe.mat" : null;
-                var secondAssetPath = assetPath == null
-                    ? null : TempFolder + "/matcap probe second.mat";
-                byte[] assetBefore = null;
-                byte[] secondAssetBefore = null;
-                if (assetPath != null)
+                string assetPath = null;
+                string secondAssetPath = null;
+                if (saveAssets)
                 {
+                    assetPath = TempFolder + "/" + caseName + " first.mat";
+                    secondAssetPath =
+                        TempFolder + "/" + caseName + " second.mat";
                     firstMaterial = new Material(firstMaterial);
                     AssetDatabase.CreateAsset(firstMaterial, assetPath);
                     secondMaterial = new Material(secondMaterial);
                     AssetDatabase.CreateAsset(secondMaterial, secondAssetPath);
-                    assetBefore = File.ReadAllBytes(assetPath);
-                    secondAssetBefore = File.ReadAllBytes(secondAssetPath);
                 }
+
                 setup(firstMaterial, texturesA);
                 setup(secondMaterial, texturesB);
                 // Asset imports can reset material keywords. Apply the
@@ -622,79 +460,81 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         string.Join(", ", secondMaterial.shaderKeywords));
                 }
 
-                    var firstUse = capture.CaptureSingle(firstMaterial).Use;
-                    var secondUse = capture.CaptureSingle(secondMaterial).Use;
-                    Assert.That(firstUse, Is.Not.Null);
-                    Assert.That(secondUse, Is.Not.Null);
-                    var firstParts = firstUse.MaterialKey.Split(';');
-                    var secondParts = secondUse.MaterialKey.Split(';');
-                    Assert.That(
-                        firstUse.MaterialKey, Is.EqualTo(secondUse.MaterialKey),
-                        "The material keys differ. First only: " +
-                        string.Join(", ", firstParts.Except(secondParts)) +
-                        ". Second only: " +
-                        string.Join(", ", secondParts.Except(firstParts)));
-                    Assert.That(
-                        firstUse.RouteSignature,
-                        Is.EqualTo(secondUse.RouteSignature),
-                        "The companion route signatures differ");
+                var firstUse = capture.CaptureSingle(firstMaterial).Use;
+                var secondUse = capture.CaptureSingle(secondMaterial).Use;
+                Assert.That(firstUse, Is.Not.Null);
+                Assert.That(secondUse, Is.Not.Null);
+                var firstParts = firstUse.MaterialKey.Split(';');
+                var secondParts = secondUse.MaterialKey.Split(';');
+                Assert.That(
+                    firstUse.MaterialKey, Is.EqualTo(secondUse.MaterialKey),
+                    "The material keys differ. First only: " +
+                    string.Join(", ", firstParts.Except(secondParts)) +
+                    ". Second only: " +
+                    string.Join(", ", secondParts.Except(firstParts)));
+                Assert.That(
+                    firstUse.RouteSignature,
+                    Is.EqualTo(secondUse.RouteSignature),
+                    "The companion route signatures differ");
 
-                var firstMesh = Track(NewQuadMesh());
-                var secondMesh = Track(NewQuadMesh());
+                var firstMesh = NewSubjectMesh();
+                var secondMesh = NewSubjectMesh();
                 var firstRenderer = NewQuadRenderer(
                     root, caseName + " first", firstMesh, firstMaterial);
                 var secondRenderer = NewQuadRenderer(
                     root, caseName + " second", secondMesh,
                     secondMaterial);
 
-                using var harness = new PoiyomiRenderHarness();
-                harness.FrameUnitQuad(RenderRotation);
+                using var harness =
+                    new PoiyomiRenderHarness(EndToEndFrameSize);
                 // The harness ambient sits at black for the toon
                 // light clamp. The dim grey keeps the shaded base
                 // color visible in the oracle frame.
                 RenderSettings.ambientLight =
                     new Color(0.35f, 0.35f, 0.35f);
-                var firstRenderMesh = Track(NewRenderMesh(firstMesh));
-                var secondRenderMesh = Track(NewRenderMesh(secondMesh));
                 // The first render of each row compiles the variants.
-                harness.Render(firstMaterial, firstRenderMesh);
-                harness.Render(secondMaterial, secondRenderMesh);
+                harness.Render(firstMaterial, firstMesh);
+                harness.Render(secondMaterial, secondMesh);
                 var firstBefore =
-                    harness.Render(firstMaterial, firstRenderMesh);
+                    harness.Render(firstMaterial, firstMesh);
                 var secondBefore =
-                    harness.Render(secondMaterial, secondRenderMesh);
+                    harness.Render(secondMaterial, secondMesh);
                 AssertFrameShowsTheSubject(
                     firstBefore, caseName + " first source");
                 AssertFrameShowsTheSubject(
                     secondBefore, caseName + " second source");
-                var materialBefore = EditorJsonUtility.ToJson(firstMaterial);
-                var keywordsBefore = firstMaterial.shaderKeywords;
-                var positionsBefore = firstMesh.vertices;
-                var normalsBefore = firstMesh.normals;
-                var uvBefore = firstMesh.uv;
-                var ambientBefore = RenderSettings.ambientLight;
-                var ambientModeBefore = RenderSettings.ambientMode;
-                var ambientProbeBefore = RenderSettings.ambientProbe;
-                var reflectionBefore = Shader.GetGlobalTexture("unity_SpecCube0");
-                var colorSpaceBefore = QualitySettings.activeColorSpace;
-                var activeTextureBefore = RenderTexture.active;
-                var audioBefore = Shader.GetGlobalTexture("_AudioTexture");
-                var bloomBefore = Shader.GetGlobalTexture("_BloomPrePassTexture");
-                var depthBefore = Shader.GetGlobalTexture("_CameraDepthTexture");
-                var timeBefore = Shader.GetGlobalVector("_Time");
-                var audioSizeBefore = Shader.GetGlobalVector("_AudioTexture_TexelSize");
-                var lightsBefore = UnityEngine.Object.FindObjectsOfType<Light>().Length;
-                var camerasBefore = UnityEngine.Object.FindObjectsOfType<Camera>().Length;
-                var objectsBefore = UnityEngine.Object.FindObjectsOfType<GameObject>().Length;
-                if (companionProperties.Length == 1 &&
-                    companionProperties[0] == "_MatcapMask")
-                {
-                    var stable = harness.Render(firstMaterial, firstRenderMesh);
-                    Assert.That(LargestChannelDifference(firstBefore, stable), Is.Zero,
-                        "The source render must stay stable before the build");
-                }
 
-                if (assetPath != null)
+                // Each companion must change the source frame when its
+                // texture changes. Back-face companions render from the
+                // back. Every failing companion is listed in one assertion.
+                var failures = new List<string>();
+                foreach (var property in companionProperties.Where(
+                    p => !CompanionLooks.ContainsKey(p)))
+                {
+                    var back = IsBackFaceCompanion(property);
+                    harness.SetViewYaw(back ? 180f : 0f);
+                    var probe = Track(new Material(firstMaterial));
+                    probe.SetTexture(property, texturesA.Alternate(property));
+                    var before = harness.Render(firstMaterial, firstMesh);
+                    var swapped = harness.Render(probe, firstMesh);
+                    var change = LargestChannelDifference(before, swapped);
+                    var failure = SensitivityFailure(
+                        caseName, property, change, string.Empty);
+                    if (failure != null)
+                    {
+                        failures.Add(failure);
+                    }
+                }
+                harness.SetViewYaw(0f);
+                Assert.That(
+                    failures, Is.Empty,
+                    "These companions must change the source frame:\n" +
+                    string.Join("\n", failures));
+
+                byte[] assetBefore = null;
+                byte[] secondAssetBefore = null;
+                string[] keywordsSaved = null;
+                if (saveAssets)
                 {
                     AssetDatabase.SaveAssetIfDirty(firstMaterial);
                     AssetDatabase.SaveAssetIfDirty(secondMaterial);
@@ -702,75 +542,51 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         "The first material must be saved before the build");
                     Assert.That(EditorUtility.IsDirty(secondMaterial), Is.False,
                         "The second material must be saved before the build");
-                    Assert.That(firstMaterial.IsKeywordEnabled("POI_MATCAP0"), Is.True,
-                        "The first saved material must keep the probe keyword");
-                    Assert.That(secondMaterial.IsKeywordEnabled("POI_MATCAP0"), Is.True,
-                        "The second saved material must keep the probe keyword");
+                    keywordsSaved = firstMaterial.shaderKeywords
+                        .OrderBy(keyword => keyword).ToArray();
                     var savedFirst = capture.CaptureSingle(firstMaterial).Use;
-                    Assert.That(firstMaterial.IsKeywordEnabled("POI_MATCAP0") &&
-                        secondMaterial.IsKeywordEnabled("POI_MATCAP0") &&
-                        !EditorUtility.IsDirty(firstMaterial) &&
-                        !EditorUtility.IsDirty(secondMaterial), Is.True,
-                        "The first saved capture changed the asset state");
                     var savedSecond = capture.CaptureSingle(secondMaterial).Use;
-                    Assert.That(firstMaterial.IsKeywordEnabled("POI_MATCAP0") &&
-                        secondMaterial.IsKeywordEnabled("POI_MATCAP0") &&
-                        !EditorUtility.IsDirty(firstMaterial) &&
-                        !EditorUtility.IsDirty(secondMaterial), Is.True,
-                        "The second saved capture changed the asset state");
                     Assert.That(savedFirst, Is.Not.Null);
                     Assert.That(savedSecond, Is.Not.Null);
-                    var savedFirstParts = savedFirst.MaterialKey.Split(';');
-                    var savedSecondParts = savedSecond.MaterialKey.Split(';');
-                    var changedFields = savedFirstParts.Except(savedSecondParts)
-                        .Concat(savedSecondParts.Except(savedFirstParts))
-                        .Select(part => part.Split('=')[0]).Distinct();
-                    Assert.That(savedFirst.MaterialKey == savedSecond.MaterialKey,
-                        Is.True, "Saved material key fields differ: " +
-                        string.Join(", ", changedFields));
-                    Assert.That(savedFirst.RouteSignature,
+                    Assert.That(
+                        EditorUtility.IsDirty(firstMaterial) ||
+                        EditorUtility.IsDirty(secondMaterial), Is.False,
+                        "The saved captures must not dirty the materials");
+                    Assert.That(
+                        savedFirst.MaterialKey,
+                        Is.EqualTo(savedSecond.MaterialKey),
+                        "The saved material keys differ");
+                    Assert.That(
+                        savedFirst.RouteSignature,
                         Is.EqualTo(savedSecond.RouteSignature));
                     assetBefore = File.ReadAllBytes(assetPath);
                     secondAssetBefore = File.ReadAllBytes(secondAssetPath);
                 }
-                var originalIdentity = firstMaterial.GetInstanceID();
+
                 var context = Build(root);
                 state = context.GetState<AmusePlatformFinishState>();
-                var assetChanged = assetPath != null &&
-                    (!assetBefore.SequenceEqual(File.ReadAllBytes(assetPath)) ||
-                     !secondAssetBefore.SequenceEqual(File.ReadAllBytes(secondAssetPath)));
-                if (assetPath != null)
+                if (saveAssets)
                 {
-                    var firstKeyword = firstMaterial.IsKeywordEnabled("POI_MATCAP0");
-                    var secondKeyword = secondMaterial.IsKeywordEnabled("POI_MATCAP0");
-                    var firstDirty = EditorUtility.IsDirty(firstMaterial);
-                    var secondDirty = EditorUtility.IsDirty(secondMaterial);
-                    Assert.That(!assetChanged && firstKeyword && secondKeyword &&
-                        !firstDirty && !secondDirty, Is.True,
-                        "The source asset state changed. Disk: " + assetChanged +
-                        ". Keywords: " + firstKeyword + ", " + secondKeyword +
-                        ". Dirty: " + firstDirty + ", " + secondDirty +
-                        ". First YAML changes: " +
-                        YamlChanges(assetBefore, File.ReadAllBytes(assetPath)) +
-                        ". Second YAML changes: " +
-                        YamlChanges(secondAssetBefore, File.ReadAllBytes(secondAssetPath)));
+                    Assert.That(
+                        assetBefore.SequenceEqual(File.ReadAllBytes(assetPath)),
+                        Is.True,
+                        "The first source asset file changed in the build");
+                    Assert.That(
+                        secondAssetBefore.SequenceEqual(
+                            File.ReadAllBytes(secondAssetPath)),
+                        Is.True,
+                        "The second source asset file changed in the build");
+                    Assert.That(
+                        firstMaterial.shaderKeywords
+                            .OrderBy(keyword => keyword)
+                            .SequenceEqual(keywordsSaved),
+                        Is.True,
+                        "The build changed the keywords of the source");
+                    Assert.That(
+                        EditorUtility.IsDirty(firstMaterial) ||
+                        EditorUtility.IsDirty(secondMaterial), Is.False,
+                        "The build dirtied a source material");
                 }
-                var materialAfter = EditorJsonUtility.ToJson(firstMaterial);
-                var globalsChanged = new List<string>();
-                if (ambientBefore != RenderSettings.ambientLight) globalsChanged.Add("ambient color");
-                if (ambientModeBefore != RenderSettings.ambientMode) globalsChanged.Add("ambient mode");
-                if (!ambientProbeBefore.Equals(RenderSettings.ambientProbe)) globalsChanged.Add("ambient probe");
-                if (reflectionBefore != Shader.GetGlobalTexture("unity_SpecCube0")) globalsChanged.Add("reflection texture");
-                if (colorSpaceBefore != QualitySettings.activeColorSpace) globalsChanged.Add("color space");
-                if (activeTextureBefore != RenderTexture.active) globalsChanged.Add("active render texture");
-                if (audioBefore != Shader.GetGlobalTexture("_AudioTexture")) globalsChanged.Add("audio texture");
-                if (bloomBefore != Shader.GetGlobalTexture("_BloomPrePassTexture")) globalsChanged.Add("bloom texture");
-                if (depthBefore != Shader.GetGlobalTexture("_CameraDepthTexture")) globalsChanged.Add("depth texture");
-                if (timeBefore != Shader.GetGlobalVector("_Time")) globalsChanged.Add("time");
-                if (audioSizeBefore != Shader.GetGlobalVector("_AudioTexture_TexelSize")) globalsChanged.Add("audio texture size");
-                if (lightsBefore != UnityEngine.Object.FindObjectsOfType<Light>().Length) globalsChanged.Add("light count");
-                if (camerasBefore != UnityEngine.Object.FindObjectsOfType<Camera>().Length) globalsChanged.Add("camera count");
-                if (objectsBefore != UnityEngine.Object.FindObjectsOfType<GameObject>().Length) globalsChanged.Add("object count");
 
                 Assert.That(context.Successful, Is.True,
                     "fixture precondition: the build must complete");
@@ -830,95 +646,107 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     Is.EqualTo(secondMesh.vertexCount),
                     "the built mesh must keep the vertex count");
 
-                var firstBuildRender =
-                    Track(NewRenderMesh(firstOutput));
-                var secondBuildRender =
-                    Track(NewRenderMesh(secondOutput));
-                harness.Render(pageMaterial, firstBuildRender);
-                harness.Render(pageMaterial, secondBuildRender);
+                harness.Render(pageMaterial, firstOutput);
+                harness.Render(pageMaterial, secondOutput);
                 var firstAfter =
-                    harness.Render(pageMaterial, firstBuildRender);
+                    harness.Render(pageMaterial, firstOutput);
                 var secondAfter =
-                    harness.Render(pageMaterial, secondBuildRender);
+                    harness.Render(pageMaterial, secondOutput);
                 AssertFrameShowsTheSubject(
                     firstAfter, caseName + " first build");
                 AssertFrameShowsTheSubject(
                     secondAfter, caseName + " second build");
-                var routeFacts = string.Join(" | ",
-                    companionProperties.Select(property =>
-                    {
-                        var source = firstMaterial.GetTexture(property);
-                        var page = pageMaterial.GetTexture(property);
-                        return property + " selector " +
-                            firstMaterial.GetFloat(property + "UV") +
-                            " source scale " + firstMaterial.GetTextureScale(property) +
-                            " source offset " + firstMaterial.GetTextureOffset(property) +
-                            " page scale " + pageMaterial.GetTextureScale(property) +
-                            " page offset " + pageMaterial.GetTextureOffset(property) +
-                            " source format " + source.graphicsFormat +
-                            " page format " + page.graphicsFormat +
-                            " source sampler " + source.filterMode + "/" + source.wrapMode +
-                            " page sampler " + page.filterMode + "/" + page.wrapMode;
-                    }));
-                var outputUv = firstOutput.uv;
-                var evidence = " Routes: " + routeFacts +
-                    ". Output UV: " + string.Join(", ", outputUv);
-                if (companionProperties.Length == 1 &&
-                    companionProperties[0] == "_MatcapMask" &&
-                    LargestChannelDifference(firstBefore, firstAfter) > 1)
-                {
-                    harness.Render(firstMaterial, firstRenderMesh);
-                    var sourceAfter = harness.Render(firstMaterial, firstRenderMesh);
-                    var copy = Track(new Material(firstMaterial));
-                    harness.Render(copy, firstRenderMesh);
-                    var copyAfter = harness.Render(copy, firstRenderMesh);
-                    var alphaChanges = firstBefore.Zip(firstAfter,
-                        (before, after) => before.a != after.a).Count(changed => changed);
-                    evidence += ". Material differences: " +
-                        MaterialDifferences(firstMaterial, pageMaterial) +
-                        ". Source before and after build: " +
-                        DifferenceMap(firstBefore, sourceAfter) +
-                        ". Copy after build: " + DifferenceMap(sourceAfter, copyAfter) +
-                        ". Original material serialized state changed: " +
-                        (materialBefore != materialAfter) +
-                        ". Original keywords removed: " +
-                        string.Join(", ", keywordsBefore.Except(firstMaterial.shaderKeywords)) +
-                        ". Original keywords added: " +
-                        string.Join(", ", firstMaterial.shaderKeywords.Except(keywordsBefore)) +
-                        ". Original positions changed: " +
-                        !positionsBefore.SequenceEqual(firstMesh.vertices) +
-                        ". Original normals changed: " +
-                        !normalsBefore.SequenceEqual(firstMesh.normals) +
-                        ". Original UV changed: " +
-                        !uvBefore.SequenceEqual(firstMesh.uv) +
-                        ". Globals changed: " + string.Join(", ", globalsChanged) +
-                        ". Renderer uses page: " + ReferenceEquals(firstRenderer.sharedMaterial, pageMaterial) +
-                        ". Input object is unchanged: " + (firstMaterial.GetInstanceID() == originalIdentity) +
-                        ". Asset bytes changed: " + assetChanged +
-                        ". Alpha changed in " + alphaChanges + " pixels" +
-                        ". First pixel source " + firstBefore[0] +
-                        " build " + firstAfter[0] +
-                        ". Second output UV: " + string.Join(", ", secondOutput.uv);
-                    evidence += ". " + DifferenceMap(firstBefore, firstAfter) +
-                        ". Mask channel " + firstMaterial.GetFloat("_MatcapMaskChannel") +
-                        ". Mask invert " + firstMaterial.GetFloat("_MatcapMaskInvert") +
-                        ". " + ComparePageTexels(
-                            firstMaterial.GetTexture("_MatcapMask"),
-                            pageMaterial.GetTexture("_MatcapMask"), outputUv);
-                }
-
 
                 Assert.That(
                     LargestChannelDifference(firstBefore, firstAfter),
                     Is.LessThanOrEqualTo(1),
-                    "the built first slot must render as its source" +
-                    " did." + evidence);
+                    "the built first slot must render as its source did");
                 Assert.That(
-                    LargestChannelDifference(
-                        secondBefore, secondAfter),
+                    LargestChannelDifference(secondBefore, secondAfter),
                     Is.LessThanOrEqualTo(1),
-                    "the built second slot must render as its" +
-                    " source did");
+                    "the built second slot must render as its source did");
+                // A companion with its own look shows under that look. A look
+                // changes no texture and no UV. The same overrides apply to the
+                // source clone and to the built clone, so the built slot still
+                // meets the bound of one level under the look.
+                var lookFailures = new List<string>();
+                foreach (var property in companionProperties.Where(
+                    p => CompanionLooks.ContainsKey(p)))
+                {
+                    harness.SetSunEuler(LookSunOf(property));
+                    harness.SetViewYaw(
+                        IsBackFaceCompanion(property) ? 180f : 0f);
+                    var source = Track(new Material(firstMaterial));
+                    CompanionLooks[property](source);
+                    var before = harness.Render(source, firstMesh);
+                    var probe = Track(new Material(source));
+                    probe.SetTexture(property, texturesA.Alternate(property));
+                    var change = LargestChannelDifference(
+                        before, harness.Render(probe, firstMesh));
+                    var lookFailure = SensitivityFailure(
+                        caseName, property, change, " under its look");
+                    if (lookFailure != null)
+                    {
+                        lookFailures.Add(lookFailure);
+                    }
+
+                    var built = Track(new Material(pageMaterial));
+                    CompanionLooks[property](built);
+                    var builtFrame = harness.Render(built, firstOutput);
+                    AssertFrameShowsTheSubject(
+                        before, caseName + " " + property + " source");
+                    AssertFrameShowsTheSubject(
+                        builtFrame, caseName + " " + property + " build");
+                    var builtChange = LargestChannelDifference(
+                        before, builtFrame);
+                    if (builtChange > 1)
+                    {
+                        lookFailures.Add(property + " built slot differs by " +
+                            builtChange + " under its look");
+                    }
+
+                    harness.SetSunEuler(PoiyomiRenderHarness.DefaultSunEuler);
+                    harness.SetViewYaw(0f);
+                }
+
+                Assert.That(
+                    lookFailures, Is.Empty,
+                    "These companions must pass under their look:\n" +
+                    string.Join("\n", lookFailures));
+                if (companionProperties.Any(IsBackFaceCompanion))
+                {
+                    // The back face values show only on the back faces. The
+                    // front comparison above still runs, so a front face
+                    // mapping error still fails. This pass compares the
+                    // source and the built slots from behind.
+                    harness.SetViewYaw(180f);
+                    var firstBack = harness.Render(firstMaterial, firstMesh);
+                    var secondBack = harness.Render(secondMaterial, secondMesh);
+                    var firstBuiltBack =
+                        harness.Render(pageMaterial, firstOutput);
+                    var secondBuiltBack =
+                        harness.Render(pageMaterial, secondOutput);
+                    harness.SetViewYaw(0f);
+                    AssertFrameShowsTheSubject(
+                        firstBack, caseName + " first source from behind");
+                    AssertFrameShowsTheSubject(
+                        secondBack, caseName + " second source from behind");
+                    AssertFrameShowsTheSubject(
+                        firstBuiltBack, caseName + " first build from behind");
+                    AssertFrameShowsTheSubject(
+                        secondBuiltBack,
+                        caseName + " second build from behind");
+                    Assert.That(
+                        LargestChannelDifference(firstBack, firstBuiltBack),
+                        Is.LessThanOrEqualTo(1),
+                        "the built first slot must render as its source" +
+                        " did from behind");
+                    Assert.That(
+                        LargestChannelDifference(secondBack, secondBuiltBack),
+                        Is.LessThanOrEqualTo(1),
+                        "the built second slot must render as its source" +
+                        " did from behind");
+                }
             }
             finally
             {
@@ -957,30 +785,50 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     new Color32(45, 45, 210, 255));
             }
 
+            // The companion pattern is a green to yellow ramp.
+            private static readonly Color32 CompanionFirst =
+                new Color32(30, 160, 90, 255);
+            private static readonly Color32 CompanionLast =
+                new Color32(200, 170, 30, 255);
+
             internal Texture2D Companion(string name)
             {
                 if (!companions.TryGetValue(name, out var texture))
                 {
                     texture = ImportPatternTexture(
-                        prefix + " " + name,
-                        new Color32(30, 160, 90, 255),
-                        new Color32(200, 170, 30, 255));
+                        prefix + " " + name, CompanionFirst, CompanionLast);
                     companions.Add(name, texture);
                 }
 
                 return texture;
             }
 
-            internal Texture2D ConstantMask()
+            // The alternate is the inverse of the companion pattern: each
+            // color value is 255 minus the companion value. The swap moves
+            // every texel as far as one linear pattern allows. The import
+            // writes alpha 255, so only the color channels invert.
+            internal Texture2D Alternate(string property)
             {
-                const string name = "constant mask";
+                var name = property + " alternate";
                 if (!companions.TryGetValue(name, out var texture))
                 {
-                    var gray = new Color32(128, 128, 128, 128);
-                    texture = ImportPatternTexture(prefix + " " + name, gray, gray);
+                    texture = ImportPatternTexture(
+                        prefix + " " + name,
+                        Inverse(CompanionFirst),
+                        Inverse(CompanionLast));
                     companions.Add(name, texture);
                 }
+
                 return texture;
+            }
+
+            private static Color32 Inverse(Color32 color)
+            {
+                return new Color32(
+                    (byte)(255 - color.r),
+                    (byte)(255 - color.g),
+                    (byte)(255 - color.b),
+                    255);
             }
         }
 
@@ -993,124 +841,59 @@ namespace Alrauna.Amuse.Tests.Editor.Build
             RunGroupCase(twoPass, "main only", (material, textures) => { });
         }
 
-        [UnityTest]
-        public IEnumerator SourceAcquisitionKeepsLoadedMaterialKeywords() =>
-            ProbeSourceAcquisition(false);
-
-        [UnityTest]
-        public IEnumerator SourceAcquisitionKeepsBoundMaterialKeywords() =>
-            ProbeSourceAcquisition(true);
-
-        [UnityTest]
-        public IEnumerator BoundAcquisitionWithNoSelectionKeepsKeywords() =>
-            ProbeSourceAcquisition(true, 0);
-
-        [UnityTest]
-        public IEnumerator BoundAcquisitionWithSelectedRendererKeepsKeywords() =>
-            ProbeSourceAcquisition(true, 1);
-
-        [UnityTest]
-        public IEnumerator UnrelatedAcquisitionKeepsBoundMaterialKeywords() =>
-            ProbeSourceAcquisition(true, 0, true);
-
-        [UnityTest]
-        public IEnumerator BoundWithoutAcquisitionKeepsKeywords() =>
-            ProbeSourceAcquisition(true, 0, false, false);
-
-        private IEnumerator ProbeSourceAcquisition(
-            bool bind, int selection = -1, bool unrelated = false,
-            bool acquire = true)
+        private static readonly string[] LightingModeKeywords =
         {
-            var source = ImportPatternTexture(
-                "acquisition probe", new Color32(30, 160, 90, 255),
-                new Color32(200, 170, 30, 255));
-            var acquired = unrelated
-                ? ImportPatternTexture("unrelated probe",
-                    new Color32(60, 80, 100, 255),
-                    new Color32(120, 140, 160, 255))
-                : source;
-            var material = Track(new Material(LoadInstalledPoiyomiShader(false)));
-            var previousSelection = Selection.objects;
-            GameObject selectedRenderer = null;
-            if (bind)
+            "_LIGHTINGMODE_TEXTURERAMP",
+            "_LIGHTINGMODE_MULTILAYER_MATH",
+            "_LIGHTINGMODE_SHADEMAP",
+            "_LIGHTINGMODE_REALISTIC",
+            "_LIGHTINGMODE_WRAPPED",
+            "_LIGHTINGMODE_SKIN",
+            "_LIGHTINGMODE_FLAT",
+            "_LIGHTINGMODE_CLOTH",
+            "_LIGHTINGMODE_SDF",
+        };
+
+        private static void SetMultilayerLighting(Material material)
+        {
+            foreach (var mode in LightingModeKeywords)
             {
-                var root = Track(new GameObject("Acquisition probe"));
-                var mesh = Track(NewQuadMesh());
-                selectedRenderer = NewQuadRenderer(root, "Subject", mesh, material).gameObject;
-                material.SetTexture("_MatcapMask", source);
+                material.DisableKeyword(mode);
             }
-            if (selection == 0) Selection.activeObject = null;
-            if (selection == 1) Selection.activeObject = selectedRenderer;
-            try
-            {
+            material.SetFloat("_LightingMode", 1f);
+            material.EnableKeyword("_LIGHTINGMODE_MULTILAYER_MATH");
+            material.SetFloat("_ShadowBorderMapToggle", 1f);
+            // The shadow colors are white. A dark color mutes the shadow
+            // color textures, so their samples barely move the frame. The
+            // third layer border sits at 0.4. A border of 1 covers the
+            // first two layers, and the default border covers no region
+            // of the dome.
+            var shadow = Color.white;
+            material.SetColor("_ShadowColor", shadow);
+            material.SetColor("_Shadow2ndColor", shadow);
+            material.SetColor("_Shadow3rdColor", shadow);
+            material.SetFloat("_Shadow3rdBorder", 0.4f);
+        }
+        private static void SetMatcapMask(
+            Material material, PoiyomiReviewedEndToEndTextures textures)
+        {
+            material.SetTexture(
+                "_MatcapMask", textures.Companion("matcap"));
             material.SetFloat("_MatcapEnable", 1f);
             material.EnableKeyword("POI_MATCAP0");
-            Assert.That(material.IsKeywordEnabled("POI_MATCAP0"), Is.True);
-            var beforeDelayCallbacks = EditorCallbacks("delayCall");
-            var beforeUpdateCallbacks = EditorCallbacks("update");
-            if (acquire)
-                Assert.That(UnityStreamingTextureEvidence.TryAcquireAtlasSource(
-                    acquired, 1, out _, out _), Is.True);
-            var immediately = material.IsKeywordEnabled("POI_MATCAP0");
-            var delayCallbacks = EditorCallbacks("delayCall");
-            var updateCallbacks = EditorCallbacks("update");
-            var delayed = false;
-            EditorApplication.delayCall += () => delayed = true;
-            while (!delayed) yield return null;
-            var afterDelay = material.IsKeywordEnabled("POI_MATCAP0");
-            Assert.That(immediately && afterDelay, Is.True,
-                "The keyword after acquisition was " + immediately +
-                ". After the editor update it was " + afterDelay +
-                ". New delay callbacks: " +
-                string.Join(", ", delayCallbacks.Except(beforeDelayCallbacks)) +
-                ". New update callbacks: " +
-                string.Join(", ", updateCallbacks.Except(beforeUpdateCallbacks)) +
-                ". Delay callbacks: " + string.Join(", ", delayCallbacks));
-            }
-            finally
-            {
-                Selection.objects = previousSelection;
-            }
-        }
-
-        private static string[] EditorCallbacks(string fieldName)
-        {
-            var field = typeof(EditorApplication).GetField(fieldName,
-                System.Reflection.BindingFlags.Static |
-                System.Reflection.BindingFlags.Public |
-                System.Reflection.BindingFlags.NonPublic);
-            var callbacks = field?.GetValue(null) as Delegate;
-            return callbacks == null ? Array.Empty<string>() :
-                callbacks.GetInvocationList().Select(callback =>
-                    callback.Method.DeclaringType?.FullName + "." +
-                    callback.Method.Name).ToArray();
         }
 
         [Test]
-        public void ConstantMatcapMaskRendersLikeItsSource()
+        public void MatcapMaskRendersLikeItsSource()
         {
-            RunGroupCase(
-                false, "constant matcap mask",
-                (material, textures) =>
-                {
-                    material.SetTexture("_MatcapMask", textures.ConstantMask());
-                    material.SetFloat("_MatcapEnable", 1f);
-                    material.EnableKeyword("POI_MATCAP0");
-                },
-                "_MatcapMask");
+            RunGroupCase(false, "matcap mask", SetMatcapMask, "_MatcapMask");
         }
 
         [Test]
         public void AssetMatcapMaskRendersLikeItsSource()
         {
             RunGroupCase(
-                false, "asset matcap mask",
-                (material, textures) =>
-                {
-                    material.SetTexture("_MatcapMask", textures.ConstantMask());
-                    material.SetFloat("_MatcapEnable", 1f);
-                    material.EnableKeyword("POI_MATCAP0");
-                },
+                false, "asset matcap mask", true, SetMatcapMask,
                 "_MatcapMask");
         }
 
@@ -1145,39 +928,62 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                 {
                     material.SetTexture(property, textures.Companion("single"));
                     material.SetFloat("_ShadowBorderMapToggle", 1f);
-                    material.SetFloat("_PathPointSampling", 1f);
-                    material.SetFloat("_ColorGradingToggle", 1f);
-                    if (keyword.StartsWith("_LIGHTINGMODE_"))
+                    material.SetFloat("_ShadowMaskType", 0f);
+                    // The lighting family starts from the lighting group base:
+                    // the border map toggle, the mask type, and multilayer math.
+                    // Other families keep their own pins.
+                    if (!LightingFamily.Contains(property))
                     {
-                        material.SetFloat("_LightingMode", 1f);
-                        foreach (var mode in LightingModeKeywords)
-                        {
-                            material.DisableKeyword(mode);
-                        }
+                        material.SetFloat("_ShadowStrength", 1f);
+                        material.SetFloat("_RimStyle", 0f);
+                        material.EnableKeyword("_RIMSTYLE_POIYOMI");
+                        material.SetFloat("_PathPointSampling", 1f);
+                        material.SetFloat("_ColorGradingToggle", 1f);
                     }
+                    SetMultilayerLighting(material);
                     switch (keyword)
                     {
                         case "POI_MATCAP0": material.SetFloat("_MatcapEnable", 1f); break;
-                        case "_EMISSION": material.SetFloat("_EnableEmission", 1f); break;
-                        case "_GLOSSYREFLECTIONS_OFF": material.SetFloat("_EnableRimLighting", 1f); break;
-                        case "COLOR_GRADING_HDR": material.SetFloat("_MainColorAdjustToggle", 1f); break;
+                        case "_EMISSION":
+                            material.SetFloat("_EnableEmission", 1f);
+                            material.SetFloat("_EmissionStrength", 1f);
+                            material.SetColor("_EmissionColor", Color.white);
+                            break;
+                        case "_GLOSSYREFLECTIONS_OFF":
+                            material.SetFloat("_EnableRimLighting", 1f);
+                            material.SetFloat("_RimStrength", 1f);
+                            material.SetFloat("_RimBrightness", 0.4f);
+                            material.SetFloat("_RimShadowToggle", 1f);
+                            break;
+                        case "COLOR_GRADING_HDR":
+                            material.SetFloat("_MainColorAdjustToggle", 1f);
+                            material.SetFloat("_MainGradationStrength", 0.5f);
+                            material.SetFloat("_MainBrightness", 0.5f);
+                            break;
                         case "FINALPASS":
                             material.SetFloat("_DetailEnabled", 1f);
-                            material.SetFloat("_DetailTexIntensity", 0.25f);
+                            material.SetFloat("_DetailTexIntensity", 1f);
                             break;
-                        case "POSTPROCESS": material.SetFloat("_PostProcess", 1f); break;
+                        case "POSTPROCESS":
+                            material.SetFloat("_PostProcess", 1f);
+                            material.SetFloat("_PPBrightness", 1.5f);
+                            // The mask texture keyword is on when the texture
+                            // is assigned, as the drawer sets it.
+                            material.EnableKeyword("PROP_PPMASK");
+                            break;
                         case "POI_VORONOI":
-                            material.SetFloat("_VoronoiEnabled", 1f);
-                            material.SetFloat("_VoronoiBlend", 1f);
+                            SetVoronoi(material);
                             break;
-                        case "POI_BACKFACE": material.SetFloat("_BackFaceEnabled", 1f); break;
+                        case "POI_BACKFACE":
+                            material.SetFloat("_BackFaceEnabled", 1f);
+                            // The back face companions show only from behind,
+                            // and the back face feature is double sided. Its
+                            // vendor note requires Cull Off.
+                            material.SetFloat("_Cull", 0f);
+                            break;
                         case "POI_PATHING":
                             material.SetFloat("_EnablePathing", 1f);
-                            var pathColor = new Color(1f, 1f, 1f, 0.2f);
-                            material.SetColor("_PathColorR", pathColor);
-                            material.SetColor("_PathColorG", pathColor);
-                            material.SetColor("_PathColorB", pathColor);
-                            material.SetColor("_PathColorA", pathColor);
+                            PinPathFill(material);
                             break;
                     }
                     material.EnableKeyword(keyword);
@@ -1194,28 +1000,50 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         public void AlwaysOnCompanionsShareOnePageSet(
             [Values(false, true)] bool twoPass)
         {
-            RunGroupCase(
-                twoPass,
-                "always on",
-                (material, textures) =>
-                {
-                    material.SetTexture(
-                        "_BumpMap", textures.Companion("bump"));
-                    material.SetFloat("_BumpMapUV", 0f);
-                    material.SetTexture(
-                        "_LightingAOMaps",
-                        textures.Companion("ao"));
-                    material.SetFloat("_LightingAOMapsUV", 0f);
-                    material.SetTexture(
-                        "_LightingShadowMasks",
-                        textures.Companion("shadow mask"));
-                    material.SetFloat("_LightingShadowMasksUV", 0f);
-                    material.EnableKeyword("PROP_LIGHTINGSHADOWMASKS");
-                    material.EnableKeyword("PROP_LIGHTINGAOMAPS");
-                },
-                "_BumpMap",
-                "_LightingAOMaps",
-                "_LightingShadowMasks");
+            var ambient = RenderSettings.ambientLight;
+            try
+            {
+                RunGroupCase(
+                    twoPass,
+                    "always on",
+                    (material, textures) =>
+                    {
+                        // The always on live cases turn every group keyword
+                        // on and pin the ambient light. The occlusion factor
+                        // multiplies the indirect light, and the default
+                        // ambient is black.
+                        foreach (var keyword in
+                                 PoiyomiAlwaysOnRoutes.AllowedKeywords)
+                        {
+                            material.EnableKeyword(keyword);
+                        }
+                        RenderSettings.ambientLight =
+                            new Color(0.35f, 0.35f, 0.35f);
+                        material.SetTexture(
+                            "_BumpMap", textures.Companion("bump"));
+                        material.SetFloat("_BumpMapUV", 0f);
+                        material.SetTexture(
+                            "_LightingAOMaps",
+                            textures.Companion("ao"));
+                        material.SetFloat("_LightingAOMapsUV", 0f);
+                        material.SetTexture(
+                            "_LightingShadowMasks",
+                            textures.Companion("shadow mask"));
+                        material.SetFloat("_LightingShadowMasksUV", 0f);
+                        material.EnableKeyword("PROP_LIGHTINGSHADOWMASKS");
+                        material.EnableKeyword("PROP_LIGHTINGAOMAPS");
+                        // The texture ramp mode multiplies the occlusion into
+                        // the shadow term. The multilayer mode does not read it.
+                        SetTextureRampLighting(material);
+                    },
+                    "_BumpMap",
+                    "_LightingAOMaps",
+                    "_LightingShadowMasks");
+            }
+            finally
+            {
+                RenderSettings.ambientLight = ambient;
+            }
         }
 
         /// <summary>
@@ -1252,12 +1080,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     material.SetTexture(
                         "_ShadowStrengthMask",
                         textures.Companion("strength"));
-                    foreach (var mode in LightingModeKeywords)
-                    {
-                        material.DisableKeyword(mode);
-                    }
-                    material.SetFloat("_LightingMode", 1f);
-                    material.EnableKeyword("_LIGHTINGMODE_MULTILAYER_MATH");
+                    SetMultilayerLighting(material);
                 },
                 "_MultilayerMathBlurMap",
                 "_ShadowBorderMask",
@@ -1302,9 +1125,15 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     material.SetFloat("_MatcapEnable", 1f);
                     material.SetFloat("_EnableEmission", 1f);
                     material.SetFloat("_EnableRimLighting", 1f);
+                    SetMultilayerLighting(material);
                     material.EnableKeyword("POI_MATCAP0");
                     material.EnableKeyword("_EMISSION");
                     material.EnableKeyword("_GLOSSYREFLECTIONS_OFF");
+                    material.SetFloat("_EmissionStrength", 1f);
+                    material.SetColor("_EmissionColor", Color.white);
+                    material.SetFloat("_RimStrength", 1f);
+                    material.SetFloat("_RimBrightness", 0.4f);
+                    material.SetFloat("_RimShadowToggle", 1f);
                 },
                 "_MatcapMask",
                 "_EmissionMap",
@@ -1331,6 +1160,7 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         "_MainColorAdjustTexture",
                         textures.Companion("adjust"));
                     material.SetFloat("_MainColorAdjustTextureUV", 0f);
+                    material.SetFloat("_MainBrightness", 1.5f);
                     material.SetTexture(
                         "_DetailTex", textures.Companion("detail"));
                     material.SetFloat("_DetailTexUV", 0f);
@@ -1357,6 +1187,9 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                         "_BackFaceTexture",
                         textures.Companion("backface"));
                     material.SetFloat("_BackFaceTextureUV", 0f);
+                    material.SetFloat("_MainColorAdjustToggle", 1f);
+                    material.SetFloat("_MainGradationStrength", 0.5f);
+                    SetMultilayerLighting(material);
                     material.SetTexture(
                         "_BackFaceMask", textures.Companion("backface" +
                         " mask"));
@@ -1373,10 +1206,19 @@ namespace Alrauna.Amuse.Tests.Editor.Build
                     material.SetFloat("_VoronoiEnabled", 1f);
                     material.SetFloat("_BackFaceEnabled", 1f);
                     material.SetFloat("_EnablePathing", 1f);
+                    PinPathFill(material);
                     material.EnableKeyword("COLOR_GRADING_HDR");
                     material.EnableKeyword("FINALPASS");
                     material.EnableKeyword("POSTPROCESS");
                     material.EnableKeyword("POI_VORONOI");
+                    material.SetFloat("_PPBrightness", 1.5f);
+                    material.EnableKeyword("PROP_PPMASK");
+                    SetVoronoi(material);
+                    material.SetFloat("_MainGradationStrength", 0.5f);
+                    // The back face companions show only from behind, and
+                    // the back face feature is double sided. Its vendor note
+                    // requires Cull Off.
+                    material.SetFloat("_Cull", 0f);
                     material.EnableKeyword("POI_BACKFACE");
                     material.EnableKeyword("POI_PATHING");
                 },
@@ -1394,21 +1236,237 @@ namespace Alrauna.Amuse.Tests.Editor.Build
         }
 
         /// <summary>
-        /// The mode keywords of the lighting mode enum. A material
-        /// with two holds no compiled variant, so the lighting case
-        /// turns every mode off before it turns its one mode on.
+        /// The look of each companion whose feature needs a material
+        /// override to show. A look changes floats, colors, or the lighting
+        /// mode of the material. No look changes a texture or a UV.
         /// </summary>
-        private static readonly string[] LightingModeKeywords =
+        private static readonly Dictionary<string, Action<Material>>
+            CompanionLooks = new Dictionary<string, Action<Material>>
+            {
+                // The detail normal reads in the shade map mode.
+                ["_DetailNormalMap"] = SetShadeMapLighting,
+                // The blur map reads only when the border map toggle is off.
+                ["_MultilayerMathBlurMap"] = material =>
+                {
+                    material.SetFloat("_ShadowBorderMapToggle", 0f);
+                    material.SetFloat("_ShadowBlur", 1f);
+                },
+                ["_ShadowColorTex"] = BorderMapOff,
+                ["_Shadow2ndColorTex"] = BorderMapOff,
+                // The path map decides where the path covers the subject. Its
+                // fill edge sits in the middle of the map range.
+                ["_PathingMap"] = PathingMapLook,
+                // The path covers the whole subject, so that the path color
+                // map shows on it.
+                ["_PathingColorMap"] = PathingColorMapLook,
+                // The strength stays off full, so the mask term shows.
+                ["_ShadowBorderMask"] = ShadowStrengthLook,
+                ["_ShadowStrengthMask"] = ShadowStrengthLook,
+            };
+
+        /// <summary>
+        /// The companions of the lighting family. Each starts from the base
+        /// of the lighting group, so that the single case and the group share
+        /// one base.
+        /// </summary>
+        private static readonly HashSet<string> LightingFamily =
+            new HashSet<string>
+            {
+                "_MultilayerMathBlurMap",
+                "_ShadowBorderMask",
+                "_ShadowColorTex",
+                "_Shadow2ndColorTex",
+                "_Shadow3rdColorTex",
+                "_ShadowStrengthMask",
+            };
+
+        /// <summary>
+        /// The dated named exceptions of the sensitivity checks. A key names
+        /// the case and the companion, as case|companion. A listed companion
+        /// must stay at one level or below. A change above one level fails
+        /// the test, so the list gets reviewed.
+        /// </summary>
+        private static readonly Dictionary<string, string> NamedLookGaps =
+            new Dictionary<string, string>
+            {
+                ["_MultilayerMathBlurMap|_MultilayerMathBlurMap"] =
+                    LightingGapReason,
+                ["_ShadowBorderMask|_ShadowBorderMask"] =
+                    LightingGapReason,
+                ["_ShadowStrengthMask|_ShadowStrengthMask"] =
+                    LightingGapReason,
+                ["_DetailMask|_DetailMask"] = DetailMaskGapReason,
+            };
+
+        // The shadow and blur members of the lighting family. The single
+        // case shows no change under its look. The lighting group case passes
+        // for the same member under the same look.
+        private const string LightingGapReason =
+            "2026-11-27: the single case shows no change under its look. " +
+            "The lighting group passes this member under the same look. " +
+            "Gates: MultilayerMath.poiTemplateCollection lines 237, 265, " +
+            "293, 308, 316, 325. " +
+            "Live proof: VignetteMaskedMembers in PoiyomiLiveValues.cs " +
+            "(lines 3927, 3969, 3991) and the VIGNETTE_MASKED oracle in " +
+            "PoiyomiSharedLiveValuesRenderTests.cs.";
+
+        // The detail mask of the color effects family. The single case leaves
+        // the detail texture at its white default, so the mask has no visible
+        // effect there.
+        private const string DetailMaskGapReason =
+            "2026-11-27: the single case shows a change of 1 level under the " +
+            "default check. The color effects group passes this member with a " +
+            "detail texture present, and its change is 45 levels in both " +
+            "variants. Gates: VRLT_PoiDetails.poiTemplateCollection lines 111 " +
+            "and 112. Live proof: none in the shared live oracle. The color " +
+            "effects group case proves the visibility and the mapping of this " +
+            "member.";
+
+        /// <summary>
+        /// The verdict of one sensitivity check. A companion must change the
+        /// frame by more than one level. A named gap must stay at one level
+        /// or below, and a change above one level fails, so the named list
+        /// gets reviewed. Returns null when the check passes.
+        /// </summary>
+        private static string SensitivityFailure(
+            string caseName, string property, int change, string context)
         {
-            "_LIGHTINGMODE_TEXTURERAMP",
-            "_LIGHTINGMODE_MULTILAYER_MATH",
-            "_LIGHTINGMODE_SHADEMAP",
-            "_LIGHTINGMODE_REALISTIC",
-            "_LIGHTINGMODE_WRAPPED",
-            "_LIGHTINGMODE_SKIN",
-            "_LIGHTINGMODE_FLAT",
-            "_LIGHTINGMODE_CLOTH",
-            "_LIGHTINGMODE_SDF",
-        };
+            if (NamedLookGaps.ContainsKey(caseName + "|" + property))
+            {
+                return change > 1
+                    ? property + " now changes by " + change + context +
+                      ". Review the named gap"
+                    : null;
+            }
+
+            return change <= 1
+                ? property + " changed by " + change + context
+                : null;
+        }
+
+        /// <summary>
+        /// The sun angle of the looks that need the shadow terminator to
+        /// cross the subject. The default angle is the harness framing.
+        /// </summary>
+        private static readonly Dictionary<string, Vector3> CompanionSuns =
+            new Dictionary<string, Vector3>
+            {
+                ["_ShadowBorderMask"] = new Vector3(60f, 60f, 0f),
+                ["_ShadowStrengthMask"] = new Vector3(60f, 60f, 0f),
+                ["_MultilayerMathBlurMap"] = new Vector3(60f, 60f, 0f),
+            };
+
+        private static Vector3 LookSunOf(string property)
+        {
+            return CompanionSuns.TryGetValue(property, out var sun)
+                ? sun
+                : PoiyomiRenderHarness.DefaultSunEuler;
+        }
+
+        private static void BorderMapOff(Material material)
+        {
+            material.SetFloat("_ShadowBorderMapToggle", 0f);
+        }
+
+        // The shadow masks multiply the shadow terms only with post AO on
+        // and a strength below full, so the look sets both.
+        private static void ShadowStrengthLook(Material material)
+        {
+            material.SetFloat("_ShadowPostAO", 1f);
+            material.SetFloat("_ShadowStrength", 0.5f);
+        }
+
+        // The path map decides where the path covers the subject. The fill
+        // edge sits at the fixed time 0.2, low in the map range. The path then
+        // covers only the low part of the map, and the subject stays colored.
+        // The map moves the edge on both sides. Full path color alpha lets the
+        // path show.
+        private static void PathingMapLook(Material material)
+        {
+            SetPathFill(material, 0.2f);
+        }
+
+        // The default white path map is remapped by the range 0 .. 2, so
+        // every texel becomes 0.5. The fixed fill time 0.75 is past that
+        // value, so the fill covers the whole subject, and the path color map
+        // shows on all of it.
+        private static void PathingColorMapLook(Material material)
+        {
+            material.SetFloat("_EnablePathRemapping", 1f);
+            var remap = new Vector4(0f, 2f, 0f, 1f);
+            material.SetVector("_PathRemapR", remap);
+            material.SetVector("_PathRemapG", remap);
+            material.SetVector("_PathRemapB", remap);
+            material.SetVector("_PathRemapA", remap);
+            SetPathFill(material, 0.75f);
+        }
+
+        // The fill type at one fixed time and full path color alpha. The look
+        // sets floats and colors only.
+        private static void SetPathFill(Material material, float time)
+        {
+            material.SetFloat("_EnablePathing", 1f);
+            var fillTime = new Vector4(time, time, time, time);
+            material.SetVector("_PathTime", fillTime);
+            material.SetFloat("_PathTypeR", 0f);
+            material.SetFloat("_PathTypeG", 0f);
+            material.SetFloat("_PathTypeB", 0f);
+            material.SetFloat("_PathTypeA", 0f);
+            var opaque = new Color(1f, 1f, 1f, 1f);
+            material.SetColor("_PathColorR", opaque);
+            material.SetColor("_PathColorG", opaque);
+            material.SetColor("_PathColorB", opaque);
+            material.SetColor("_PathColorA", opaque);
+        }
+
+        private static bool IsBackFaceCompanion(string property)
+        {
+            return property.StartsWith("_BackFace", StringComparison.Ordinal);
+        }
+
+        private static void SetShadeMapLighting(Material material)
+        {
+            foreach (var mode in LightingModeKeywords)
+            {
+                material.DisableKeyword(mode);
+            }
+            material.SetFloat("_LightingMode", 4f);
+            material.EnableKeyword("_LIGHTINGMODE_SHADEMAP");
+        }
+
+        // The path types pin to Fill, as the live oracle does. The default
+        // Loop type reads time, so the path alpha of a still frame is
+        // unreliable.
+        private static void PinPathFill(Material material)
+        {
+            material.SetFloat("_PathTypeR", 0f);
+            material.SetFloat("_PathTypeG", 0f);
+            material.SetFloat("_PathTypeB", 0f);
+            material.SetFloat("_PathTypeA", 0f);
+            var pathColor = new Color(1f, 1f, 1f, 0.2f);
+            material.SetColor("_PathColorR", pathColor);
+            material.SetColor("_PathColorG", pathColor);
+            material.SetColor("_PathColorB", pathColor);
+            material.SetColor("_PathColorA", pathColor);
+        }
+
+        private static void SetTextureRampLighting(Material material)
+        {
+            foreach (var mode in LightingModeKeywords)
+            {
+                material.DisableKeyword(mode);
+            }
+            material.SetFloat("_LightingMode", 0f);
+            material.EnableKeyword("_LIGHTINGMODE_TEXTURERAMP");
+        }
+
+        private static void SetVoronoi(Material material)
+        {
+            material.SetFloat("_VoronoiEnabled", 1f);
+            material.EnableKeyword("POI_VORONOI");
+            material.SetFloat("_VoronoiBlend", 1f);
+            material.SetFloat("_VoronoiOuterEmissionStrength", 1f);
+            material.SetFloat("_VoronoiInnerEmissionStrength", 1f);
+        }
     }
 }

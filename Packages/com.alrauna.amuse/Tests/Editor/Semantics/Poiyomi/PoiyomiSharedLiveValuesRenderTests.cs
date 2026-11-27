@@ -103,33 +103,20 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         }
 
         /// <summary>
-        /// The fourteen KeyOnly keywords that the record section 6
-        /// gives dead properties. The three KeyOnly rows with an
-        /// empty record family carry no family, so they carry no
-        /// case here either.
+        /// The KeyOnly keywords that the record section 6 gives dead
+        /// properties. The list comes from the model, so a new KeyOnly
+        /// family gets its oracle case without an edit here.
         /// </summary>
-        private static readonly string[] KeyOnlyFamilyKeywords =
+        private static IEnumerable<string> KeyOnlyFamilyKeywords()
         {
-            "PROP_MAINGRADATIONTEX",
-            "POI_BLACKLIGHTMASKING",
-            "POI_VERTEX_GLITCHING",
-            "POI_VERTEX_GLITCHING_TEXTURE",
-            "POI_LTCGI",
-            "VIGNETTE_MASKED",
-            "_LIGHTINGMODE_WRAPPED",
-            "_LIGHTINGMODE_FLAT",
-            "_POI_DEPTH_RIMLIGHT",
-            "POI_MIRROR",
-            "POI_NORMALCORRECT",
-            "POIBS_ENABLE",
-            "POIBS_BLOOMFOG",
-            "BSSBLOOMFOGTYPE_HEIGHT",
-        };
+            return PoiyomiLiveValues.KeyOnlyFamilies()
+                .Select(family => family.Name);
+        }
 
         private static IEnumerable<string> SharedFamilyNames()
         {
             return PoiyomiLiveValues.RefusedKeywords
-                .Concat(KeyOnlyFamilyKeywords);
+                .Concat(KeyOnlyFamilyKeywords());
         }
 
         private static IEnumerable<TestCaseData> DeadFamilyCases()
@@ -287,22 +274,12 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         /// perturbed members with the switch off, then turns the
         /// switch on. The same perturbation must change the render,
         /// so the compiled shader reads the family and the dead case
-        /// cannot pass trivially. The dated entries of
-        /// <see cref="FamiliesTheOracleCannotShow"/> name the
-        /// families whose fixture the harness cannot show.
+        /// cannot pass trivially.
         /// </summary>
         [Test]
         [TestCaseSource(nameof(LiveFamilyCases))]
         public void LiveFamilyValueChangesTheRender(string familyName)
         {
-            if (FamiliesTheOracleCannotShow.TryGetValue(
-                    familyName, out var cannotShow))
-            {
-                Assert.Ignore(
-                    "the oracle cannot show the liveness of the" +
-                    " family '" + familyName + "'. " + cannotShow);
-            }
-
             var family = FamilyByName(familyName);
             var shader = LoadShader(false);
             var material = NewCaseMaterial(shader, family);
@@ -357,18 +334,6 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
                     "255.");
             }
         }
-
-        /// <summary>
-        /// The families whose liveness the harness cannot show. A
-        /// case whose dead case fails because a pinned reader
-        /// reaches the render with the switch off is a data defect
-        /// and never enters this list. Each entry names the
-        /// attempted pins and the observed state, dated. The dead
-        /// cases of the listed families still run and still hold.
-        /// </summary>
-        private static readonly Dictionary<string, string>
-            FamiliesTheOracleCannotShow =
-                new Dictionary<string, string>();
 
         // --- the case material ----------------------------------------
 

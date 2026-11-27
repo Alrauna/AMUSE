@@ -3803,11 +3803,9 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// One dead value family per KeyOnly keyword that the record
         /// section 6 gives dead properties. The three KeyOnly rows
         /// with an empty record family hold no members, so they
-        /// carry no family. Main added the families on 2026-11-24
-        /// under the spec rule that the model holds one family for
-        /// every keyword of the review.
+        /// carry no family.
         /// </summary>
-        private static IEnumerable<AtlasDeadValueFamily> KeyOnlyFamilies()
+        internal static IEnumerable<AtlasDeadValueFamily> KeyOnlyFamilies()
         {
             yield return KeywordFamily(
                 "PROP_MAINGRADATIONTEX", MainGradationTexMembers);
