@@ -80,8 +80,13 @@ function Assert-UnityInstaller([string]$path, $lock, [string]$expectedMd5) {
 
 # Runs one installer file silently into the target folder. Split from
 # Install-Unity so the tests can watch that a failed check never reaches it.
+# A nonzero exit code throws, because a failed install can still leave
+# Unity.exe behind.
 function Invoke-UnityInstaller([string]$installerPath, [string]$targetDir) {
-    Start-Process -FilePath $installerPath -ArgumentList '/S', "/D=$targetDir" -Wait
+    $process = Start-Process -FilePath $installerPath -ArgumentList '/S', "/D=$targetDir" -Wait -PassThru
+    if ($process.ExitCode -ne 0) {
+        throw "The Unity installer exited with code $($process.ExitCode)."
+    }
 }
 
 # Downloads the installer, checks it, installs it, deletes the installer file

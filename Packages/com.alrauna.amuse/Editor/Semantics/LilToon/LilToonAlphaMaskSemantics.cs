@@ -278,9 +278,20 @@ namespace Alrauna.Amuse.Editor.Semantics.LilToon
 
             if (scale == 1f && value >= 1f)
             {
-                // r * 1 + v >= v >= 1 in real arithmetic; both fused and
-                // unfused binary32 rounding keep a value at or above one,
-                // so saturate is exactly one for every sampled r >= 0.
+                // r * 1 + v >= v >= 1 holds only for r >= 0. A captured red
+                // channel proves that: red capture admits only unorm formats
+                // (UnityAlphaFieldEvidence.IsAdmittedFormat). A half or float
+                // mask can hold negative red, so the arm refuses without one.
+                // Both fused and unfused binary32 rounding keep a value at or
+                // above one, so saturate is exactly one for every r >= 0.
+                if (!assignment.Texture.HasRedChannel)
+                {
+                    return Refuse(
+                        diagnostics,
+                        LilToonSemanticDiagnosticCode.UnsupportedFeature,
+                        LilToonProperties.AlphaMask);
+                }
+
                 return mode == 1f
                     ? ConstantTerm(1f)
                     : MainUnchanged();

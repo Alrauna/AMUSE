@@ -2145,6 +2145,16 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
         _EnableEnvironmentalRim (""Env Rim"", Float) = 0
         _VideoEffectsEnable (""Video"", Float) = 0
         _EnableTouchGlow (""Touch"", Float) = 0
+        _MatcapAlphaOverride (""MatcapAlphaOverride"", Float) = 0
+        _MatcapApplyToAlphaEnabled (""MatcapApplyToAlphaEnabled"", Float) = 0
+        _Matcap2AlphaOverride (""Matcap2AlphaOverride"", Float) = 0
+        _Matcap2ApplyToAlphaEnabled (""Matcap2ApplyToAlphaEnabled"", Float) = 0
+        _Matcap3AlphaOverride (""Matcap3AlphaOverride"", Float) = 0
+        _Matcap3ApplyToAlphaEnabled (""Matcap3ApplyToAlphaEnabled"", Float) = 0
+        _Matcap4AlphaOverride (""Matcap4AlphaOverride"", Float) = 0
+        _Matcap4ApplyToAlphaEnabled (""Matcap4ApplyToAlphaEnabled"", Float) = 0
+        _TruchetOverrideAlpha (""TruchetOverrideAlpha"", Float) = 0
+        _VoronoiAffectsMaterialAlpha (""VoronoiAffectsMaterialAlpha"", Float) = 0
         _MainVertexColoringEnabled (""Vertex"", Float) = 0
         _MainTexUV (""UV"", Float) = 0
         _MainTexPan (""Pan"", Vector) = (0,0,0,0)

@@ -152,10 +152,11 @@ Describe 'Unity install' {
         # the Start-Process seam. The mock creates the Editor binary that
         # Install-Unity checks afterwards.
         Mock Start-Process {
-            param($FilePath, $ArgumentList, $Wait)
+            param($FilePath, $ArgumentList, $Wait, $PassThru)
             $target = [string](@($ArgumentList | Where-Object { $_ -like '/D=*' })[0]).Substring(3)
             New-Item -ItemType Directory -Force -Path (Join-Path $target 'Editor') | Out-Null
             Set-Content -LiteralPath (Join-Path $target 'Editor\Unity.exe') -Value 'unity exe'
+            return [pscustomobject]@{ ExitCode = 0 }
         }
         $targetDir = Join-Path $tempDir 'target'
         Install-Unity -Lock $lockFixture -TargetDir $targetDir -WorkDir $tempDir
@@ -165,5 +166,28 @@ Describe 'Unity install' {
         Should -Invoke Start-Process -Exactly -Times 1 -Scope It -ParameterFilter {
             @($ArgumentList).Count -eq 2 -and @($ArgumentList)[0] -ceq '/S' -and @($ArgumentList)[1] -like '/D=*'
         }
+    }
+
+    It 'NonzeroInstallerExitCodeThrows' {
+        Mock Get-UnityDownload {
+            return @{ Url = 'https://download.unity3d.com/UnitySetup64.exe'; Md5 = $fileMd5 }
+        }
+        Mock Invoke-WebRequest {
+            param($Uri, $OutFile)
+            Set-Content -LiteralPath $OutFile -Value 'downloaded installer bytes'
+        }
+        Mock Assert-UnityInstaller { }
+        # The installer exits with 1 after it wrote Unity.exe. The existence
+        # check alone would pass, so only the exit code shows the failure.
+        Mock Start-Process {
+            param($FilePath, $ArgumentList, $Wait, $PassThru)
+            $target = [string](@($ArgumentList | Where-Object { $_ -like '/D=*' })[0]).Substring(3)
+            New-Item -ItemType Directory -Force -Path (Join-Path $target 'Editor') | Out-Null
+            Set-Content -LiteralPath (Join-Path $target 'Editor\Unity.exe') -Value 'unity exe'
+            return [pscustomobject]@{ ExitCode = 1 }
+        }
+        $targetDir = Join-Path $tempDir 'target-fail'
+        { Install-Unity -Lock $lockFixture -TargetDir $targetDir -WorkDir $tempDir } |
+            Should -Throw '*exited with code 1*'
     }
 }

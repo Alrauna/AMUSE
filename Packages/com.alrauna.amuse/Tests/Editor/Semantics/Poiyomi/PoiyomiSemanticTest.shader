@@ -122,6 +122,16 @@ Shader "Hidden/Alrauna/AmuseTests/PoiyomiSemanticTest"
         _PoiParallax ("Parallax", Float) = 0
         _VideoEffectsEnable ("Video Effects", Float) = 0
         _EnableTouchGlow ("Touch / Depth FX", Float) = 0
+        _MatcapAlphaOverride ("MatcapAlphaOverride", Float) = 0
+        _MatcapApplyToAlphaEnabled ("MatcapApplyToAlphaEnabled", Float) = 0
+        _Matcap2AlphaOverride ("Matcap2AlphaOverride", Float) = 0
+        _Matcap2ApplyToAlphaEnabled ("Matcap2ApplyToAlphaEnabled", Float) = 0
+        _Matcap3AlphaOverride ("Matcap3AlphaOverride", Float) = 0
+        _Matcap3ApplyToAlphaEnabled ("Matcap3ApplyToAlphaEnabled", Float) = 0
+        _Matcap4AlphaOverride ("Matcap4AlphaOverride", Float) = 0
+        _Matcap4ApplyToAlphaEnabled ("Matcap4ApplyToAlphaEnabled", Float) = 0
+        _TruchetOverrideAlpha ("TruchetOverrideAlpha", Float) = 0
+        _VoronoiAffectsMaterialAlpha ("VoronoiAffectsMaterialAlpha", Float) = 0
         _VoronoiEnabled ("Voronoi", Float) = 0
         _EnableTruchet ("Truchet", Float) = 0
         _EmissionReplace1 ("Emission 1 Override Base", Float) = 0

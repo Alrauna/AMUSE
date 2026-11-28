@@ -20,6 +20,8 @@ param(
 
 Set-StrictMode -Version Latest
 . (Join-Path $PSScriptRoot 'lib/Common.ps1')
+# Gives Select-UnityDownload. The install body runs only on a direct run.
+. (Join-Path $PSScriptRoot 'install-unity.ps1')
 
 # Some listings start with a byte order mark. Invoke-RestMethod would then
 # return a string, so the raw body is decoded first.
@@ -42,20 +44,11 @@ function Get-UnityVersion {
 function New-UnityLock {
     $version = Get-UnityVersion
     $release = Invoke-RestMethod -Uri "https://services.api.unity.com/unity/editor/release/v1/releases?version=$version&limit=1"
-    $result = $release.results | Select-Object -First 1
-    if (-not $result) { throw "The release API lists no release for $version." }
-    $download = $result.downloads | Where-Object { $_.platform -eq 'WINDOWS' -and $_.type -eq 'EXE' } | Select-Object -First 1
-    if (-not $download) { throw "The release API lists no Windows installer for $version." }
-    if (-not $download.url.StartsWith('https://download.unity3d.com/')) {
-        throw "The installer download host is unexpected: $($download.url)"
-    }
-    if ($download.integrity -notmatch '^md5-(.+)$') {
-        throw 'The release API gave no md5 integrity value.'
-    }
-    $expectedMd5 = [Text.Encoding]::ASCII.GetString([Convert]::FromBase64String($Matches[1])).ToLowerInvariant()
+    $download = Select-UnityDownload $release
+    $expectedMd5 = $download.Md5
 
     $installer = Join-Path $work 'UnitySetup64.exe'
-    Invoke-WebRequest -Uri $download.url -OutFile $installer
+    Invoke-WebRequest -Uri $download.Url -OutFile $installer
     $actualMd5 = (Get-FileHash -Algorithm MD5 -Path $installer).Hash.ToLowerInvariant()
     $actualSha256 = (Get-FileHash -Algorithm SHA256 -Path $installer).Hash.ToLowerInvariant()
     $signature = Get-AuthenticodeSignature -FilePath $installer
