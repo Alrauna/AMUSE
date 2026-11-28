@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using Alrauna.Amuse.Editor.Semantics.LilToon;
+using Alrauna.Amuse.Editor.Semantics.Poiyomi;
 using UnityEngine;
 
 namespace Alrauna.Amuse.Editor.Semantics
@@ -30,6 +31,69 @@ namespace Alrauna.Amuse.Editor.Semantics
     /// </summary>
     internal sealed class AtlasRouteTable
     {
+        // Fields, not later lines: the two reviewed tables below
+        // initialize before any static field that sits below them
+        // would be set. Every array a table initializer reads sits
+        // above the tables.
+        private static readonly string[] PoiyomiKeyOnlyKeywords =
+        {
+            "PROP_MAINGRADATIONTEX",
+            "POI_BLACKLIGHTMASKING",
+            "GEOM_TYPE_MESH",
+            "POI_VERTEX_GLITCHING",
+            "POI_VERTEX_GLITCHING_TEXTURE",
+            "POI_LTCGI",
+            "VIGNETTE_MASKED",
+            "_LIGHTINGMODE_REALISTIC",
+            "_LIGHTINGMODE_WRAPPED",
+            "_LIGHTINGMODE_FLAT",
+            "_POI_DEPTH_RIMLIGHT",
+            "POI_MIRROR",
+            "POI_NORMALCORRECT",
+            "POIBS_ENABLE",
+            "POIBS_BLOOMFOG",
+            "BSSBLOOMFOGTYPE_HEIGHT",
+            "_STOCHASTICMODE_NONE",
+        };
+
+        private static readonly string[] PoiyomiKeyOnlyNeutralTextures =
+        {
+            "_MainGradationTex",
+            "_ToonRamp",
+            "_SkinLUT",
+            "_ClothDFG",
+            "_Matcap",
+            "_Matcap2",
+            "_Matcap3",
+            "_Matcap4",
+            "_CubeMap",
+            "_ReflectionCubeTex",
+            "_MochieReflCube",
+            "_ClearCoatFallback",
+            "_MetallicGlossMap",
+            "_VideoGameboyRamp",
+            "_DissolveEdgeGradient",
+            "_TextGlyphs",
+            "_VertexGlitchMap",
+        };
+
+        // The reviewed companion routes, built once. The field sits
+        // above the tables, because the reviewed table initializer
+        // reads it. Its build touches only the group classes, so the
+        // initialization order stays safe.
+        private static readonly AtlasCompanionRoute[]
+            PoiyomiReviewedRoutes = CollectPoiyomiCompanionRoutes();
+
+        private static AtlasCompanionRoute[] CollectPoiyomiCompanionRoutes()
+        {
+            var routes = new List<AtlasCompanionRoute>();
+            routes.AddRange(PoiyomiAlwaysOnRoutes.Routes());
+            routes.AddRange(PoiyomiLightingRoutes.Routes());
+            routes.AddRange(PoiyomiMatcapRimEmissionRoutes.Routes());
+            routes.AddRange(PoiyomiColorEffectsRoutes.Routes());
+            return routes.ToArray();
+        }
+
         /// <summary>
         /// The Poiyomi 9.3 main color route. The four admitted rows of
         /// <see cref="Poiyomi.PoiyomiSourceAttestation"/> share it,
@@ -75,6 +139,137 @@ namespace Alrauna.Amuse.Editor.Semantics
                     ("_MainTexPan", new Vector4(0f, 0f, 0f, 0f)),
                 },
                 UnheldPoiyomiMainColorRequiredValue);
+
+        /// <summary>
+        /// The reviewed Poiyomi 9.3 main color route. It follows the
+        /// keyword review of 2026-11-23, so only the two bundled 9.3
+        /// rows use it. It is a superset of
+        /// <see cref="PoiyomiMainColor"/>: the same member, the same
+        /// main transform, the same conditions and required values,
+        /// plus the KeyOnly keywords and neutrals of the review, plus
+        /// the companion routes and families of the four feature
+        /// groups. The allowed list stays an allow list, so a keyword
+        /// the review did not class refuses.
+        /// </summary>
+        internal static readonly AtlasRouteTable PoiyomiReviewedMainColor =
+            new AtlasRouteTable(
+                "_MainTex",
+                PoiyomiReviewedNeutralProperties(),
+                PoiyomiReviewedAllowedKeywords(),
+                PoiyomiReviewedConditionProperties(),
+                new (string, Vector4)[]
+                {
+                    ("_MainTex_ST", new Vector4(1f, 1f, 0f, 0f)),
+                    ("_MainTexPan", new Vector4(0f, 0f, 0f, 0f)),
+                },
+                UnheldPoiyomiReviewedRequiredValue,
+                null,
+                PoiyomiReviewedRoutes,
+                null,
+                PoiyomiLiveValues.Model);
+
+        /// <summary>
+        /// The neutrals of the reviewed Poiyomi route: the old
+        /// neutrals, the KeyOnly neutrals of the review, and the
+        /// neutrals of the four groups. A texture that a group routes
+        /// is never neutral, so a route always wins over the old
+        /// neutral entry once the group fills.
+        /// </summary>
+        private static string[] PoiyomiReviewedNeutralProperties()
+        {
+            var routed = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var route in PoiyomiReviewedRoutes)
+            {
+                routed.Add(route.Property);
+            }
+
+            var names = new List<string>();
+            AppendNew(names, PoiyomiMainColor.NeutralProperties, routed);
+            AppendNew(names, PoiyomiKeyOnlyNeutralTextures, routed);
+            AppendNew(names, PoiyomiAlwaysOnRoutes.NeutralTextures, routed);
+            AppendNew(names, PoiyomiLightingRoutes.NeutralTextures, routed);
+            AppendNew(
+                names,
+                PoiyomiMatcapRimEmissionRoutes.NeutralTextures,
+                routed);
+            AppendNew(
+                names, PoiyomiColorEffectsRoutes.NeutralTextures, routed);
+            return names.ToArray();
+        }
+
+        /// <summary>
+        /// The allowed keywords of the reviewed Poiyomi route: the
+        /// seven keywords of the old table, the KeyOnly keywords of
+        /// the review, and the keywords of the four groups.
+        /// </summary>
+        private static string[] PoiyomiReviewedAllowedKeywords()
+        {
+            var names = new List<string>();
+            AppendNew(names, PoiyomiMainColor.AllowedKeywords, null);
+            AppendNew(names, PoiyomiKeyOnlyKeywords, null);
+            AppendNew(names, PoiyomiAlwaysOnRoutes.AllowedKeywords, null);
+            AppendNew(names, PoiyomiLightingRoutes.AllowedKeywords, null);
+            AppendNew(
+                names,
+                PoiyomiMatcapRimEmissionRoutes.AllowedKeywords,
+                null);
+            AppendNew(
+                names, PoiyomiColorEffectsRoutes.AllowedKeywords, null);
+            return names.ToArray();
+        }
+
+        private static string[] PoiyomiReviewedConditionProperties()
+        {
+            var names = new List<string>(
+                PoiyomiMainColor.ConditionProperties);
+            AppendNew(
+                names, PoiyomiAlwaysOnRoutes.ConditionProperties, null);
+            AppendNew(
+                names, PoiyomiLightingRoutes.ConditionProperties, null);
+            AppendNew(
+                names,
+                PoiyomiMatcapRimEmissionRoutes.ConditionProperties,
+                null);
+            AppendNew(
+                names, PoiyomiColorEffectsRoutes.ConditionProperties, null);
+            return names.ToArray();
+        }
+
+        /// <summary>
+        /// The first failing sentence of the main color rule and
+        /// then the four group rules, in group order.
+        /// </summary>
+        private static string UnheldPoiyomiReviewedRequiredValue(
+            Material material)
+        {
+            return UnheldPoiyomiMainColorRequiredValue(material) ??
+                   PoiyomiAlwaysOnRoutes.UnheldRequiredValue(material) ??
+                   PoiyomiLightingRoutes.UnheldRequiredValue(material) ??
+                   PoiyomiMatcapRimEmissionRoutes
+                       .UnheldRequiredValue(material) ??
+                   PoiyomiColorEffectsRoutes.UnheldRequiredValue(material);
+        }
+
+        private static void AppendNew(
+            List<string> names,
+            IReadOnlyCollection<string> additions,
+            HashSet<string> excluded)
+        {
+            foreach (var name in additions)
+            {
+                if (excluded != null && excluded.Contains(name))
+                {
+                    continue;
+                }
+
+                if (names.Contains(name))
+                {
+                    continue;
+                }
+
+                names.Add(name);
+            }
+        }
 
         private static readonly string[] LilToonFeatureSwitches =
         {

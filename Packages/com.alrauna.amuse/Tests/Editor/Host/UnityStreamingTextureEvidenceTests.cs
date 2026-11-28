@@ -9,6 +9,22 @@ using UnityEngine;
 
 namespace Alrauna.Amuse.Tests.Editor.Host
 {
+    internal sealed class StreamingCloneImportObserver : AssetPostprocessor
+    {
+        internal static string CloneGuid;
+
+        private static void OnPostprocessAllAssets(
+            string[] imported, string[] deleted,
+            string[] moved, string[] movedFrom)
+        {
+            foreach (var path in imported)
+            {
+                if (path.StartsWith("Assets/Amuse.StreamingReadback/"))
+                    CloneGuid = AssetDatabase.AssetPathToGUID(path);
+            }
+        }
+    }
+
     /// <summary>
     /// The streaming route's bounds cache contract, mirrored from the
     /// generated route's session cache test: one texture captured under
@@ -741,6 +757,303 @@ namespace Alrauna.Amuse.Tests.Editor.Host
                 importer.sRGBTexture + "|" +
                 importer.wrapMode + "|" +
                 importer.filterMode;
+        }
+
+        [TestCase(false)]
+        [TestCase(true)]
+        public void AcquisitionLeavesAnUnsavedMaterialUnwrittenOnDisk(
+            bool atlas)
+        {
+            var texture = atlas
+                ? ImportUnreadableStreamingTexture("unsaved_atlas", 32)
+                : ImportExrStreamingBandTexture("unsaved_alpha");
+            var folder = AssetDatabase.GenerateUniqueAssetPath(
+                TempFolder + "/unsaved_material");
+            AssetDatabase.CreateFolder(TempFolder, Path.GetFileName(folder));
+            var path = folder + "/material.mat";
+            var shader = Shader.Find("Standard");
+            Assert.That(shader, Is.Not.Null);
+            var material = new Material(shader);
+            AssetDatabase.CreateAsset(material, path);
+            AssetDatabase.SaveAssetIfDirty(material);
+            var saved = File.ReadAllBytes(path);
+            material.SetFloat("_Glossiness", 0.123f);
+            EditorUtility.SetDirty(material);
+            Assert.That(EditorUtility.IsDirty(material), Is.True);
+
+            if (atlas)
+            {
+                var ok = UnityStreamingTextureEvidence.TryAcquireAtlasSource(
+                    texture, 1, out var image, out var refusal);
+                Assert.That(ok, Is.True, "Acquisition refused: " + refusal);
+                Assert.That(image, Is.Not.Null);
+            }
+            else
+            {
+                var ok = UnityStreamingTextureEvidence.TryCapture(
+                    texture, TextureChannel.Alpha, 0.25f,
+                    AlphaPolicyBounds.Inert, out var chain);
+                Assert.That(ok, Is.True);
+                Assert.That(chain, Is.Not.Null);
+            }
+
+            Assert.That(File.ReadAllBytes(path), Is.EqualTo(saved),
+                "Acquisition must not save an unrelated dirty material");
+            Assert.That(EditorUtility.IsDirty(material), Is.True,
+                "The material must keep its unsaved change");
+        }
+
+        [TestCase(1)]
+        [TestCase(2)]
+        public void AcquisitionInsideAssetEditingKeepsAnUnsavedMaterial(
+            int levels)
+        {
+            var texture = ImportUnreadableStreamingTexture(
+                "unsaved_in_batch", 32);
+            var path = TempFolder + "/unsaved_in_batch.mat";
+            var shader = Shader.Find("Standard");
+            Assert.That(shader, Is.Not.Null);
+            var material = new Material(shader);
+            AssetDatabase.CreateAsset(material, path);
+            AssetDatabase.SaveAssetIfDirty(material);
+            var saved = File.ReadAllBytes(path);
+            material.SetFloat("_Glossiness", 0.123f);
+            EditorUtility.SetDirty(material);
+            Assert.That(EditorUtility.IsDirty(material), Is.True);
+            for (var i = 0; i < levels; i++)
+                AssetDatabase.StartAssetEditing();
+            try
+            {
+                var ok = UnityStreamingTextureEvidence.TryAcquireAtlasSource(
+                    texture, 1, out var image, out var refusal);
+                Assert.That(ok, Is.True, "Acquisition refused: " + refusal);
+                Assert.That(image, Is.Not.Null);
+                Assert.That(File.ReadAllBytes(path), Is.EqualTo(saved));
+                Assert.That(EditorUtility.IsDirty(material), Is.True);
+            }
+            finally
+            {
+                for (var i = 0; i < levels; i++)
+                    AssetDatabase.StopAssetEditing();
+            }
+            Assert.That(File.ReadAllBytes(path), Is.EqualTo(saved));
+            Assert.That(EditorUtility.IsDirty(material), Is.True);
+        }
+
+        [Test]
+        public void AcquisitionRefusesAnUnsavedSourceImporter()
+        {
+            var texture = ImportUnreadableStreamingTexture(
+                "unsaved_importer", 32);
+            var path = AssetDatabase.GetAssetPath(texture);
+            var importer = (TextureImporter)AssetImporter.GetAtPath(path);
+            var metadata = File.ReadAllBytes(path + ".meta");
+            importer.sRGBTexture = !importer.sRGBTexture;
+            EditorUtility.SetDirty(importer);
+            Assert.That(EditorUtility.IsDirty(importer), Is.True);
+
+            var ok = UnityStreamingTextureEvidence.TryAcquireAtlasSource(
+                texture, 1, out var image, out var refusal);
+            Assert.That(ok, Is.False);
+            Assert.That(image, Is.Null);
+            Assert.That(refusal, Is.EqualTo(
+                TextureCaptureRefusalReason.SourceImporterDirty));
+            Assert.That(EditorUtility.IsDirty(importer), Is.True);
+            Assert.That(File.ReadAllBytes(path + ".meta"), Is.EqualTo(metadata));
+        }
+
+        [Test]
+        public void AcquisitionUsesANewCloneAssetIdentity()
+        {
+            var texture = ImportUnreadableStreamingTexture(
+                "clone_identity", 32);
+            var sourceGuid = AssetDatabase.AssetPathToGUID(
+                AssetDatabase.GetAssetPath(texture));
+            StreamingCloneImportObserver.CloneGuid = null;
+            var ok = UnityStreamingTextureEvidence.TryAcquireAtlasSource(
+                texture, 1, out var image, out var refusal);
+            Assert.That(ok, Is.True, "Acquisition refused: " + refusal);
+            Assert.That(image, Is.Not.Null);
+            Assert.That(sourceGuid, Is.Not.Empty);
+            Assert.That(StreamingCloneImportObserver.CloneGuid, Is.Not.Null.And.Not.Empty);
+            Assert.That(StreamingCloneImportObserver.CloneGuid, Is.Not.EqualTo(sourceGuid));
+        }
+
+        [Test]
+        public void AcquisitionPastAssetEditingLimitRefusesAndCleansUp()
+        {
+            var texture = ImportUnreadableStreamingTexture(
+                "acquisition_past_limit", 32);
+            for (var i = 0; i < 9; i++)
+                AssetDatabase.StartAssetEditing();
+            try
+            {
+                var ok = UnityStreamingTextureEvidence.TryAcquireAtlasSource(
+                    texture, 1, out var image, out var refusal);
+                Assert.That(ok, Is.False);
+                Assert.That(image, Is.Null);
+                Assert.That(refusal, Is.EqualTo(
+                    TextureCaptureRefusalReason.UnavailableCapture));
+            }
+            finally
+            {
+                for (var i = 0; i < 9; i++)
+                    AssetDatabase.StopAssetEditing();
+            }
+            Assert.That(AssetDatabase.IsValidFolder(StreamingTempFolder), Is.False);
+        }
+
+        [Test]
+        [Platform(Include = "Win")]
+        public void AcquisitionRefusesALockedSourceFile()
+        {
+            var texture = ImportUnreadableStreamingTexture(
+                "locked_source", 32);
+            var path = AssetDatabase.GetAssetPath(texture);
+            using (File.Open(path, FileMode.Open, FileAccess.Read, FileShare.None))
+            {
+                var ok = UnityStreamingTextureEvidence.TryAcquireAtlasSource(
+                    texture, 1, out var image, out var refusal);
+                Assert.That(ok, Is.False);
+                Assert.That(image, Is.Null);
+                Assert.That(refusal, Is.EqualTo(
+                    TextureCaptureRefusalReason.CloneFileInUse));
+            }
+        }
+
+        [Test]
+        [Platform(Include = "Win")]
+        public void AcquisitionRefusesALockedLeftoverClone()
+        {
+            var texture = ImportUnreadableStreamingTexture(
+                "locked_leftover", 32);
+            var guid = AssetDatabase.AssetPathToGUID(
+                AssetDatabase.GetAssetPath(texture));
+            Assert.That(AssetDatabase.IsValidFolder(StreamingTempFolder), Is.False);
+            AssetDatabase.CreateFolder("Assets", Path.GetFileName(StreamingTempFolder));
+            var leftover = StreamingTempFolder + "/" + guid + ".png";
+            File.WriteAllBytes(leftover, new byte[] { 1, 2, 3 });
+            try
+            {
+                using (File.Open(leftover, FileMode.Open, FileAccess.Read, FileShare.None))
+                {
+                    var ok = UnityStreamingTextureEvidence.TryAcquireAtlasSource(
+                        texture, 1, out var image, out var refusal);
+                    Assert.That(ok, Is.False);
+                    Assert.That(image, Is.Null);
+                    Assert.That(refusal, Is.EqualTo(
+                        TextureCaptureRefusalReason.CloneFileInUse));
+                }
+            }
+            finally
+            {
+                AssetDatabase.DeleteAsset(StreamingTempFolder);
+            }
+        }
+
+        [Test]
+        public void AcquisitionThrowsWhenTheLoadedSourceFileIsMissing()
+        {
+            var texture = ImportUnreadableStreamingTexture(
+                "missing_source_file", 32);
+            var path = AssetDatabase.GetAssetPath(texture);
+            var held = path + ".held";
+            File.Move(path, held);
+            try
+            {
+                Assert.Throws<FileNotFoundException>(() =>
+                    UnityStreamingTextureEvidence.TryAcquireAtlasSource(
+                        texture, 1, out _, out _));
+            }
+            finally
+            {
+                File.Move(held, path);
+            }
+        }
+
+        [Test]
+        public void AcquisitionKeepsTheSourcePlatformOverride()
+        {
+            var texture = ImportUnreadableStreamingTexture(
+                "platform_override", 128);
+            var path = AssetDatabase.GetAssetPath(texture);
+            var importer = (TextureImporter)AssetImporter.GetAtPath(path);
+            importer.sRGBTexture = false;
+            var platformName = BuildPipeline.GetBuildTargetGroup(
+                EditorUserBuildSettings.activeBuildTarget).ToString();
+            var platform = importer.GetPlatformTextureSettings(platformName);
+            platform.overridden = true;
+            platform.maxTextureSize = 32;
+            platform.format = TextureImporterFormat.RGBA32;
+            importer.SetPlatformTextureSettings(platform);
+            importer.SaveAndReimport();
+            texture = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+            var metadata = File.ReadAllBytes(path + ".meta");
+            Assert.That(texture.width, Is.EqualTo(32));
+            Assert.That(texture.height, Is.EqualTo(32));
+
+            var ok = UnityStreamingTextureEvidence.TryAcquireAtlasSource(
+                texture, 1, out var image, out var refusal);
+            Assert.That(ok, Is.True, "Acquisition refused: " + refusal);
+            Assert.That(image.Width, Is.EqualTo(texture.width));
+            Assert.That(image.Height, Is.EqualTo(texture.height));
+            Assert.That(image.Format, Is.EqualTo(texture.graphicsFormat));
+            Assert.That(image.MipCount, Is.EqualTo(texture.mipmapCount));
+            var previous = RenderTexture.active;
+            var target = RenderTexture.GetTemporary(
+                texture.width, texture.height, 0,
+                RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
+            var readback = new Texture2D(
+                texture.width, texture.height, TextureFormat.RGBA32, false, true);
+            try
+            {
+                Graphics.Blit(texture, target);
+                RenderTexture.active = target;
+                readback.ReadPixels(new Rect(0, 0, texture.width, texture.height), 0, 0);
+                readback.Apply();
+                var pixels = readback.GetPixels32();
+                Assert.That(image.Level0[0], Is.EqualTo(pixels[0]));
+                Assert.That(image.Level0[17 * texture.width + 11],
+                    Is.EqualTo(pixels[17 * texture.width + 11]));
+            }
+            finally
+            {
+                RenderTexture.active = previous;
+                RenderTexture.ReleaseTemporary(target);
+                UnityEngine.Object.DestroyImmediate(readback);
+            }
+            Assert.That(File.ReadAllBytes(path + ".meta"), Is.EqualTo(metadata));
+        }
+
+        [Test]
+        public void AcquisitionInsideNestedAssetEditingBatchesReturnsTheImage()
+        {
+            var texture = ImportUnreadableStreamingTexture(
+                "acquisition_nested_batches", 32);
+            AssetDatabase.StartAssetEditing();
+            try
+            {
+                AssetDatabase.StartAssetEditing();
+                try
+                {
+                    var ok = UnityStreamingTextureEvidence.TryAcquireAtlasSource(
+                        texture, 1, out var image, out var refusal);
+                    Assert.That(ok, Is.True, "Acquisition refused: " + refusal);
+                    Assert.That(image, Is.Not.Null);
+                    Assert.That(image.Width, Is.EqualTo(32));
+                    Assert.That(
+                        AssetDatabase.IsValidFolder(StreamingTempFolder),
+                        Is.False);
+                }
+                finally
+                {
+                    AssetDatabase.StopAssetEditing();
+                }
+            }
+            finally
+            {
+                AssetDatabase.StopAssetEditing();
+            }
         }
 
         [Test]

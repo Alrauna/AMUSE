@@ -48,18 +48,27 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         internal string NormalizedSourceHash { get; }
         internal bool LockedOriginalAdmitted { get; }
 
+        /// <summary>
+        /// Whether the keyword review of 2026-11-23 read the source
+        /// of this row. Only the two bundled 9.3 rows carry true, so
+        /// only they take the reviewed route table.
+        /// </summary>
+        internal bool AtlasRouteReviewed { get; }
+
         internal PoiyomiAdmittedSource(
             string shaderName,
             bool isTwoPass,
             string assetGuid,
             string normalizedSourceHash,
-            bool lockedOriginalAdmitted)
+            bool lockedOriginalAdmitted,
+            bool atlasRouteReviewed)
         {
             ShaderName = shaderName;
             IsTwoPass = isTwoPass;
             AssetGuid = assetGuid;
             NormalizedSourceHash = normalizedSourceHash;
             LockedOriginalAdmitted = lockedOriginalAdmitted;
+            AtlasRouteReviewed = atlasRouteReviewed;
         }
     }
 
@@ -112,31 +121,37 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 false,
                 CanonicalShaderGuid,
                 ReleaseMainNormalizedSourceHash,
-                true),
+                true,
+                false),
             new PoiyomiAdmittedSource(
                 PoiyomiTwoPassShaderName,
                 true,
                 TwoPassCanonicalShaderGuid,
                 ReleaseTwoPassNormalizedSourceHash,
-                true),
+                true,
+                false),
             // The bundled 9.3 rows (Y13, stage 7 of the 2026-10-25
             // bundled locked original admission design, flipped on
             // 2026-10-30; K8.1 of the 2026-10-23 per-shader
             // attestation design as amended). The rows admit locked
             // originals under the same reconstruction contract as the
             // release rows. The primary support path is the bundled
-            // 9.3 shader inside the Poiyomi 10 package.
+            // 9.3 shader inside the Poiyomi 10 package. The keyword
+            // review of 2026-11-23 read these two files, so only
+            // these rows carry the reviewed atlas route.
             new PoiyomiAdmittedSource(
                 ".poiyomi/Old Versions/9.3/Poiyomi Toon",
                 false,
                 CanonicalShaderGuid,
                 BundledMainNormalizedSourceHash,
+                true,
                 true),
             new PoiyomiAdmittedSource(
                 ".poiyomi/Old Versions/9.3/Poiyomi Toon Two Pass",
                 true,
                 TwoPassCanonicalShaderGuid,
                 BundledTwoPassNormalizedSourceHash,
+                true,
                 true),
         };
 

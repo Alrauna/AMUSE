@@ -394,6 +394,52 @@ namespace Alrauna.Amuse.Editor.Build
                 "build saw a texture that no project asset backs. When it " +
                 "says the texture has a source identity, the capture route " +
                 "refused a real imported asset.",
+            ["amuse.texture.SourceImporterDirty"] =
+                "A material texture on slot {0} has unapplied import settings.",
+            ["amuse.texture.SourceImporterDirty:description"] =
+                "Texture property {1} (channel {2}) on material slot {0} " +
+                "has unsaved importer changes. AMUSE cannot copy those " +
+                "settings as proof for the loaded texture. The refusal " +
+                "reason is {3}, and the texture {4}.",
+            ["amuse.texture.SourceImporterDirty:hint"] =
+                "Apply or revert the texture import settings, then build again.",
+            ["amuse.texture.SourceFileNotLocallyAccessible"] =
+                "A package texture on slot {0} has no accessible source file.",
+            ["amuse.texture.SourceFileNotLocallyAccessible:description"] =
+                "Texture property {1} (channel {2}) on material slot {0} " +
+                "has no source file at its project path. AMUSE cannot " +
+                "copy it for capture. The refusal reason is {3}, and " +
+                "the texture {4}.",
+            ["amuse.texture.SourceFileNotLocallyAccessible:hint"] =
+                "Use a texture with a source file that the project can access.",
+            ["amuse.texture.CloneFileInUse"] =
+                "A texture file on slot {0} is in use.",
+            ["amuse.texture.CloneFileInUse:description"] =
+                "A file lock stopped the copy of texture property {1} " +
+                "(channel {2}) on material slot {0}. The refusal " +
+                "reason is {3}, and the texture {4}.",
+            ["amuse.texture.CloneFileInUse:hint"] =
+                "Close the program that holds the file, then build again.",
+            ["amuse.texture.CloneFileAccessDenied"] =
+                "AMUSE cannot access a texture file on slot {0}.",
+            ["amuse.texture.CloneFileAccessDenied:description"] =
+                "File permissions stopped the copy of texture property {1} " +
+                "(channel {2}) on material slot {0}. The refusal " +
+                "reason is {3}, and the texture {4}.",
+            ["amuse.texture.CloneFileAccessDenied:hint"] =
+                "Allow the editor to read the source and write a temporary " +
+                "texture, then build again.",
+            ["amuse.texture.CloneCleanupFailed"] =
+                "AMUSE could not remove a temporary texture for slot {0}.",
+            ["amuse.texture.CloneCleanupFailed:description"] =
+                "A file error stopped cleanup after reading texture property " +
+                "{1} (channel {2}) on material slot {0}. AMUSE cannot use " +
+                "the capture as proof. The refusal reason is {3}, and " +
+                "the texture {4}.",
+            ["amuse.texture.CloneCleanupFailed:hint"] =
+                "Close programs that hold temporary texture files, then " +
+                "build again. AMUSE removes its leftover copy on the " +
+                "next capture.",
             ["amuse.texture.NoAlphaChannel"] =
                 "A material texture on slot {0} has no alpha channel.",
             ["amuse.texture.NoAlphaChannel:description"] =

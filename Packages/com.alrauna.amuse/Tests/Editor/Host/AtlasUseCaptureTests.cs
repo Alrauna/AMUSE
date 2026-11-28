@@ -528,13 +528,17 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         [Test]
         public void NonAllowedKeywordRefuses()
         {
+            // The reviewed table admits the vendor default keywords
+            // and every reviewed feature keyword, so the probe needs
+            // a keyword the review refused. GEOM_TYPE_BRANCH gates
+            // the first decal feature, and the review refused it.
             var fixture = NewDefaultFixture();
-            fixture.Material.EnableKeyword("POI_UDIMDISCARD");
+            fixture.Material.EnableKeyword("GEOM_TYPE_BRANCH");
 
             var outcome = SingleOutcome(CaptureUses(fixture.Root));
 
             AssertRefused(outcome, AtlasUseRefusal.KeywordNotAllowed);
-            Assert.That(outcome.Detail, Does.Contain("POI_UDIMDISCARD"));
+            Assert.That(outcome.Detail, Does.Contain("GEOM_TYPE_BRANCH"));
         }
 
         [Test]
@@ -571,14 +575,23 @@ namespace Alrauna.Amuse.Tests.Editor.Host
         [Test]
         public void UnlistedAssignedTextureRefuses()
         {
+            // The reviewed model drops an assigned texture of a
+            // refused feature from the key while the keyword is off,
+            // so the plain probe needs a state that keeps every
+            // value live. A toon standard fallback tag swaps the
+            // shader at runtime, so the capture keeps every value
+            // and the unlisted decal texture refuses again. The
+            // contract holds: an assigned texture that no route
+            // covers refuses.
             var fixture = NewDefaultFixture();
+            fixture.Material.SetOverrideTag("VRCFallback", "ToonStandard");
             fixture.Material.SetTexture(
-                "_MatcapMask", fixture.MainTexture);
+                "_DecalTexture", fixture.MainTexture);
 
             var outcome = SingleOutcome(CaptureUses(fixture.Root));
 
             AssertRefused(outcome, AtlasUseRefusal.UnlistedTexture);
-            Assert.That(outcome.Detail, Does.Contain("'_MatcapMask'"));
+            Assert.That(outcome.Detail, Does.Contain("'_DecalTexture'"));
         }
 
         // --- the texture transform ----------------------------------------
@@ -1480,16 +1493,32 @@ Shader ""Hidden/Alrauna/AmuseTests/AtlasUseCaptureFooUndeclared""
                 "change rendering");
         }
 
-        // --- Falsifier 2: no reviewed model has declared the stale
-        // entry dead, so it must still change the key. ---
+        // --- Falsifier 2: a saved name that no declared uniform of
+        // the reviewed model covers is stale. The model lists every
+        // declared uniform and property of the two bundled rows, so
+        // a name outside the list can reach no shader, and the name
+        // must leave the key. The live control value must still
+        // split the key, so the drop cannot pass vacuously. ---
         [Test]
-        public void StaleSavedEntryStillChangesTheKeyWithoutAReviewedModel()
+        public void StaleUndeclaredSavedNameLeavesTheKey()
         {
             var root = Track(new GameObject("stale key root"));
             var mainTexture = ImportMainTexture("stale key main");
             var plain = NewAdmittedMaterial(mainTexture);
             var stale = NewAdmittedMaterial(mainTexture);
-            WriteStaleFloat(stale, "_DetailMask", 1f);
+            WriteStaleFloat(stale, "_AmuseStaleSavedName", 1f);
+            Assert.That(
+                LoadInstalledPoiyomiShader().FindPropertyIndex(
+                    "_AmuseStaleSavedName"),
+                Is.LessThan(0),
+                "no-op guard: the stale name must declare no row" +
+                " property");
+            Assert.That(
+                PoiyomiLiveValues.Model.Declares(
+                    "_AmuseStaleSavedName"),
+                Is.False,
+                "no-op guard: the stale name must sit outside the" +
+                " declared uniform list of the model");
             var mesh = Track(NewTriangleMesh(2));
             AddSkinnedRenderer(
                 root, "Body", mesh, new[] { plain, stale });
@@ -1501,9 +1530,19 @@ Shader ""Hidden/Alrauna/AmuseTests/AtlasUseCaptureFooUndeclared""
             AssertAdmitted(outcomes[1]);
             Assert.That(
                 outcomes[1].Use.MaterialKey,
+                Is.EqualTo(outcomes[0].Use.MaterialKey),
+                "a saved name that no declared uniform covers" +
+                " leaves the key");
+
+            var controlFixture = NewDefaultFixture();
+            controlFixture.Material.SetFloat("_BumpScale", 5f);
+            var controlOutcome =
+                SingleOutcome(CaptureUses(controlFixture.Root));
+            AssertAdmitted(controlOutcome);
+            Assert.That(
+                controlOutcome.Use.MaterialKey,
                 Is.Not.EqualTo(outcomes[0].Use.MaterialKey),
-                "the Poiyomi row has no dead property set, so the " +
-                "stale saved entry still counts");
+                "a live value change must produce a different key");
         }
 
         [Test]

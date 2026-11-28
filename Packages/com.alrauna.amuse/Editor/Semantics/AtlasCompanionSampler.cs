@@ -20,5 +20,25 @@ namespace Alrauna.Amuse.Editor.Semantics
         /// names it <c>lil_sampler_linear_repeat</c>.
         /// </summary>
         InlineTrilinearRepeat = 2,
+
+        /// <summary>
+        /// A bilinear Repeat inline sampler without anisotropy.
+        /// Poiyomi names it <c>sampler_linear_repeat</c>.
+        /// </summary>
+        InlineLinearRepeat = 3,
+
+        /// <summary>
+        /// A point Repeat inline sampler without anisotropy.
+        /// Poiyomi names it <c>sampler_point_repeat</c>.
+        /// </summary>
+        InlinePointRepeat = 4,
+
+        /// <summary>
+        /// A clamp inline sampler. A companion that reads one never
+        /// moves at selector 0, because a page texture needs Repeat
+        /// on both axes. The route refuses such a use before the
+        /// sampler step.
+        /// </summary>
+        InlineClamp = 5,
     }
 }
