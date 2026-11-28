@@ -76,11 +76,23 @@ Describe 'Lock check' {
     Context 'Version drift' {
         It 'ManifestVersionBumpWithoutLockEditIsReported' {
             $manifest = Copy-Lock $baseManifest
+            # A real bump changes both blocks. A bump of one block alone is
+            # a separate difference that DependencyVersionDifferentFromLockedIsReported covers.
+            $manifest.dependencies.'test.pkg.one'.version = '2.0.0'
             $manifest.locked.'test.pkg.one'.version = '2.0.0'
             $differences = @(Invoke-Check $baseLock $manifest $baseSources)
             $differences | Should -HaveCount 1
             $differences[0] | Should -Match 'test\.pkg\.one'
             $differences[0] | Should -Match '2\.0\.0'
+        }
+
+        It 'DependencyVersionDifferentFromLockedIsReported' {
+            $manifest = Copy-Lock $baseManifest
+            $manifest.dependencies.'test.pkg.one'.version = '0.9.0'
+            $differences = @(Invoke-Check $baseLock $manifest $baseSources)
+            $differences | Should -HaveCount 1
+            $differences[0] | Should -Match 'test\.pkg\.one'
+            $differences[0] | Should -Match '0\.9\.0'
         }
     }
 

@@ -409,6 +409,48 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics
             Assert.That(folded.GetChainMap(1), Is.Null);
         }
 
+        /// <summary>
+        /// Two finite factors can overflow binary32 to infinity. That is an
+        /// unsupported value, not a programming failure, so the fold must
+        /// refuse through the callback and must not throw.
+        /// </summary>
+        [Test]
+        public void Fold_WithOverflowingProduct_RefusesInsteadOfThrowing()
+        {
+            var sample = new TextureSample(
+                new TextureSourceId("test:fold_overflow"),
+                new UvMapping(0, Vector2.one, Vector2.zero),
+                new TextureSampling(
+                    TextureFilterMode.Point,
+                    TextureWrapMode.Repeat,
+                    TextureAnisoMode.None));
+            var pairs = new[]
+            {
+                (ScalarSemanticValue.Constant(1e30f),
+                    ScalarSemanticValue.Constant(1e30f)),
+                (ScalarSemanticValue.Constant(1e30f),
+                    ScalarSemanticValue.TextureTimesConstant(
+                        sample, TextureChannel.Alpha, 1e30f)),
+                (ScalarSemanticValue.TextureTimesConstant(
+                        sample, TextureChannel.Alpha, 1e30f),
+                    ScalarSemanticValue.TextureTimesConstant(
+                        sample, TextureChannel.Alpha, 1e30f)),
+            };
+
+            foreach (var (left, right) in pairs)
+            {
+                string refused = null;
+                ScalarSemanticValue folded = null;
+                Assert.DoesNotThrow(() => folded = ScalarProductFold.Fold(
+                    left,
+                    right,
+                    "_FoldProperty",
+                    property => refused = property));
+                Assert.That(folded, Is.Null);
+                Assert.That(refused, Is.EqualTo("_FoldProperty"));
+            }
+        }
+
         [Test]
         public void IndependentlyConstructedValuesCompareStructurally()
         {

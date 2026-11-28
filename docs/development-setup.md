@@ -150,7 +150,7 @@ On 2026-11-13, a run of the pull request step with `AMUSE_REAL_THRY_LOCK` set to
 
 ### Bump the package lock
 
-1. Change the locked versions in `Packages/vpm-manifest.json`.
+1. Change the package versions in both blocks of `Packages/vpm-manifest.json`, `dependencies` and `locked`.
 2. Run `scripts/ci/new-lock.ps1 -Out scripts/ci/lock.json`. The script needs the network.
 3. Read the printed diff. Every package takes its hash from its publisher listing or its GitHub release digest. Only VRCFury has no hash route.
 4. Commit `Packages/vpm-manifest.json` and `scripts/ci/lock.json` together.

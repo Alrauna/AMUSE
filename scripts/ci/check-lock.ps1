@@ -12,7 +12,8 @@ Set-StrictMode -Version Latest
 # - the Unity version from the project version file,
 # - the null rule: a null hash needs a reason, and only com.vrcfury.vrcfury
 #   may hold one (spec O3),
-# - that every locked name maps to a source key that exists in sources.json.
+# - that every locked name maps to a source key that exists in sources.json,
+# - that a package named in both dependencies and locked has one version.
 function Test-LockMatchesManifest {
     param(
         [string]$LockPath,
@@ -76,6 +77,18 @@ function Test-LockMatchesManifest {
     foreach ($name in $lockNames) {
         if ($lockedNames -notcontains $name) {
             $differences += "package is in the lock but not in the manifest: $name"
+        }
+    }
+
+    foreach ($dependency in @($manifest.dependencies.PSObject.Properties)) {
+        $name = $dependency.Name
+        if ($lockedNames -notcontains $name) {
+            continue
+        }
+        $depVersion = [string]$dependency.Value.version
+        $lockedVersion = [string]($locked | Where-Object { $_.Name -eq $name } | Select-Object -First 1).Value.version
+        if ($depVersion -ne $lockedVersion) {
+            $differences += "dependencies and locked differ for ${name}: dependencies $depVersion, locked $lockedVersion"
         }
     }
 

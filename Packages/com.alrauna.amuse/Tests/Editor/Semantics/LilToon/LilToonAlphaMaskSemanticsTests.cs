@@ -243,6 +243,37 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.LilToon
             Assert.That(diagnostics[0].Detail, Is.EqualTo("_AlphaMask"));
         }
 
+        // --- Falsifier 1: the saturated arm assumes red >= 0 without a captured unorm red channel ---
+        /// <summary>
+        /// The arm for scale 1 and value 1 or more says the mask term is
+        /// always one. That holds only for red values of 0 or more. A half
+        /// or float mask can hold negative red. With red -2 and value 1.5
+        /// the shader alpha is 0. Without a captured red channel nothing
+        /// proves red is 0 or more, so the arm must refuse.
+        /// </summary>
+        [TestCase(1f)]
+        [TestCase(2f)]
+        public void SaturatedArm_WithoutCapturedRedChannel_Refuses(float mode)
+        {
+            var diagnostics = new List<LilToonSemanticDiagnostic>();
+            var term = LilToonAlphaMaskTerm.Interpret(
+                CreateMaskEvidence(
+                    Vector2.one, Vector2.zero,
+                    mode: mode, maskScale: 1f, maskValue: 1f),
+                diagnostics);
+
+            Assert.That(term.Kind, Is.EqualTo(LilToonAlphaMaskTermKind.Refused));
+            Assert.That(
+                term.RefusalCode,
+                Is.EqualTo(LilToonSemanticDiagnosticCode.UnsupportedFeature));
+            Assert.That(term.RefusalDetail, Is.EqualTo("_AlphaMask"));
+            Assert.That(diagnostics, Has.Count.EqualTo(1));
+            Assert.That(
+                diagnostics[0].Code,
+                Is.EqualTo(LilToonSemanticDiagnosticCode.UnsupportedFeature));
+            Assert.That(diagnostics[0].Detail, Is.EqualTo("_AlphaMask"));
+        }
+
         private static CapturedMaterialEvidence CreateMaskEvidence(
             Vector2 scale,
             Vector2 offset,

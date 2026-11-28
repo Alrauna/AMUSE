@@ -63,6 +63,18 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             "_VideoEffectsEnable",
             "_EnableTouchGlow",
             "_MainVertexColoringEnabled",
+            // Matcap, Truchet, and Voronoi alpha writers (pinned 9.3 source:
+            // matcap slots near 24282, Truchet near 28973, Voronoi near 28856).
+            "_MatcapAlphaOverride",
+            "_MatcapApplyToAlphaEnabled",
+            "_Matcap2AlphaOverride",
+            "_Matcap2ApplyToAlphaEnabled",
+            "_Matcap3AlphaOverride",
+            "_Matcap3ApplyToAlphaEnabled",
+            "_Matcap4AlphaOverride",
+            "_Matcap4ApplyToAlphaEnabled",
+            "_TruchetOverrideAlpha",
+            "_VoronoiAffectsMaterialAlpha",
         };
 
         private static readonly string[] TextureBackedAlphaGates =

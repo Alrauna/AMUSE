@@ -961,6 +961,15 @@ namespace Alrauna.Amuse.Editor.Semantics
             multiplier = CollectFactors(
                 right, samples, channels, maps, multiplier);
 
+            // Finite factors can overflow to infinity. That is an
+            // unsupported value, not a programming failure, so it refuses
+            // like a saturating shape.
+            if (!float.IsFinite(multiplier))
+            {
+                recordRefusal(refusalProperty);
+                return null;
+            }
+
             if (samples.Count == 0)
             {
                 return ScalarSemanticValue.Constant(multiplier);
