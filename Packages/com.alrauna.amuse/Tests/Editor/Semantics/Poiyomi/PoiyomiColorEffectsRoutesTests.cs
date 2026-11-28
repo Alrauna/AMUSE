@@ -1613,8 +1613,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         /// <summary>
         /// The split per channel reads of a packed RGBA map sample the
         /// same texture as the merged read. A split selector off UV0
-        /// reads the page outside its region and refuses. The
-        /// falsifier asserts the admitted twin first.
+        /// reads the page outside its region and refuses while the split
+        /// read runs. The falsifier asserts the admitted twin first.
         /// </summary>
         [Test]
         public void PackedSplitSelectorRefuses(
@@ -1628,6 +1628,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             material.EnableKeyword("VIGNETTE");
             material.EnableKeyword("PROP_RGBAMETALLICMAPS");
             material.EnableKeyword("PROP_RGBASMOOTHNESSMAPS");
+            TurnSplitReadsOn(material);
 
             var twin = fixture.CaptureSingle(material);
             PoiyomiReviewedFixture.AssertCompanion(twin, texture);
@@ -1644,8 +1645,8 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         /// <summary>
         /// The split per channel reads of a packed RGBA map follow the
         /// split stochastic flag. A flag of 1 samples the page at
-        /// stochastic offsets and refuses. The falsifier asserts the
-        /// admitted twin first.
+        /// stochastic offsets and refuses while the split read runs.
+        /// The falsifier asserts the admitted twin first.
         /// </summary>
         [Test]
         public void PackedSplitStochasticRefuses(
@@ -1659,6 +1660,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             material.EnableKeyword("VIGNETTE");
             material.EnableKeyword("PROP_RGBAMETALLICMAPS");
             material.EnableKeyword("PROP_RGBASMOOTHNESSMAPS");
+            TurnSplitReadsOn(material);
 
             var twin = fixture.CaptureSingle(material);
             PoiyomiReviewedFixture.AssertCompanion(twin, texture);
@@ -1864,10 +1866,10 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
         /// <summary>
         /// A packed RGBA map on another coordinate stays bound. Each
         /// split per channel read samples the bound texture at its own
-        /// selector, so every channel selector must sit on the allow
-        /// list. Selector 0 refuses, because the bound texture would
-        /// read UV0 after the build. The falsifier asserts the admitted
-        /// twins first.
+        /// selector, so every channel selector of a running split read
+        /// must sit on the allow list. Selector 0 refuses, because the
+        /// bound texture would read UV0 after the build. The falsifier
+        /// asserts the admitted twins first.
         /// </summary>
         [Test]
         public void PackedSplitOnBoundMapsRefuses(
@@ -1883,6 +1885,7 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             material.EnableKeyword("VIGNETTE");
             material.EnableKeyword("PROP_RGBAMETALLICMAPS");
             material.EnableKeyword("PROP_RGBASMOOTHNESSMAPS");
+            TurnSplitReadsOn(material);
             foreach (var prefix in RgbaChannelPrefixes)
             {
                 material.SetFloat("_RGBA" + prefix + "PBRUV", 1f);
@@ -1916,6 +1919,174 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             }
         }
 
+        /// <summary>
+        /// A bound packed RGBA map at the vendor defaults reads no split
+        /// sample. The defaults leave every channel selector at 0 and
+        /// every split gate off, so the use admits and the map stays
+        /// bound.
+        /// </summary>
+        [Test]
+        public void BoundPackedMapAtVendorDefaultsAdmits(
+            [Values("_RGBAMetallicMaps", "_RGBASmoothnessMaps")]
+                string texture,
+            [Values(false, true)] bool twoPass)
+        {
+            using var fixture = new PoiyomiReviewedFixture();
+            var material = NewCaseMaterial(fixture, twoPass);
+            material.SetTexture(texture, fixture.NewRouteTexture(64));
+            material.SetFloat(texture + "UV", 1f);
+            material.EnableKeyword("VIGNETTE");
+            material.EnableKeyword("PROP_RGBAMETALLICMAPS");
+            material.EnableKeyword("PROP_RGBASMOOTHNESSMAPS");
+            foreach (var prefix in RgbaChannelPrefixes)
+            {
+                Assert.That(
+                    material.GetFloat("_RGBA" + prefix + "PBRUV"),
+                    Is.EqualTo(0f),
+                    "fixture precondition: the vendor default selector");
+                foreach (var gate in SplitGates(prefix))
+                {
+                    Assert.That(
+                        material.GetFloat(gate),
+                        Is.EqualTo(0f),
+                        "fixture precondition: the vendor default gate");
+                }
+            }
+
+            var outcome = fixture.CaptureSingle(material);
+            PoiyomiReviewedFixture.AssertAdmitted(outcome);
+            Assert.That(
+                outcome.Use.Companions.Select(
+                    companion => companion.Property),
+                Does.Not.Contain(texture),
+                "the bound map must stay bound on this use");
+        }
+
+        // --- Falsifier 25: SplitGateOffSkipsSplitRules ----------------
+        /// <summary>
+        /// The shader reads the split sample of one channel only when
+        /// its split toggle, its PBR switch, and its channel switch are
+        /// all nonzero. One gate at 0 skips the read, so the split
+        /// selector and the split stochastic flag of that channel do
+        /// not matter. A NaN gate reads as on and refuses. The case
+        /// asserts the refusal with the gate on first, so the rule is
+        /// live. A wrong fix that skips every channel when any gate is
+        /// off, or that reads NaN as off, fails here.
+        /// </summary>
+        [Test]
+        public void SplitGateOffSkipsSplitRules(
+            [Values("_RGBAMetallicMaps", "_RGBASmoothnessMaps")]
+                string texture,
+            [Values(0f, 1f)] float mainSelector,
+            [Values(0, 1, 2)] int gateIndex)
+        {
+            using var fixture = new PoiyomiReviewedFixture();
+            var material = NewCaseMaterial(fixture, false);
+            material.SetTexture(texture, fixture.NewRouteTexture(64));
+            material.SetFloat(texture + "UV", mainSelector);
+            material.EnableKeyword("VIGNETTE");
+            material.EnableKeyword("PROP_RGBAMETALLICMAPS");
+            material.EnableKeyword("PROP_RGBASMOOTHNESSMAPS");
+            TurnSplitReadsOn(material);
+            foreach (var prefix in RgbaChannelPrefixes)
+            {
+                material.SetFloat(
+                    "_RGBA" + prefix + "PBRUV", mainSelector);
+            }
+
+            foreach (var prefix in RgbaChannelPrefixes)
+            {
+                var channel = "_RGBA" + prefix + "PBRUV";
+                var gate = SplitGates(prefix)[gateIndex];
+                var wrongSelector = mainSelector == 0f ? 7f : 0f;
+                material.SetFloat(channel, wrongSelector);
+                PoiyomiReviewedFixture.AssertRefused(
+                    fixture.CaptureSingle(material),
+                    AtlasUseRefusal.RequiredValueNotHeld,
+                    "'" + channel + "'");
+
+                material.SetFloat(gate, float.NaN);
+                PoiyomiReviewedFixture.AssertRefused(
+                    fixture.CaptureSingle(material),
+                    AtlasUseRefusal.RequiredValueNotHeld,
+                    "'" + channel + "'");
+
+                material.SetFloat(gate, 0f);
+                if (mainSelector == 0f)
+                {
+                    material.SetFloat(
+                        "_RGBA" + prefix + "PBRSplitMaskStochastic", 1f);
+                }
+
+                PoiyomiReviewedFixture.AssertAdmitted(
+                    fixture.CaptureSingle(material));
+
+                material.SetFloat(channel, mainSelector);
+                material.SetFloat(
+                    "_RGBA" + prefix + "PBRSplitMaskStochastic", 0f);
+                material.SetFloat(gate, 1f);
+            }
+        }
+
+        /// <summary>
+        /// An animation that drives a split gate refuses while a packed
+        /// RGBA map is assigned. The runtime could turn a split read on
+        /// after the capture skipped its rules.
+        /// </summary>
+        [Test]
+        public void AnimatedSplitGateRefuses(
+            [Values("_RGBAMetallicMaps", "_RGBASmoothnessMaps")]
+                string texture,
+            [Values(0, 1, 2)] int gateIndex)
+        {
+            using var fixture = new PoiyomiReviewedFixture();
+            var material = NewCaseMaterial(fixture, false);
+            material.SetTexture(texture, fixture.NewRouteTexture(64));
+            material.SetFloat(texture + "UV", 1f);
+            material.EnableKeyword("VIGNETTE");
+            material.EnableKeyword("PROP_RGBAMETALLICMAPS");
+            material.EnableKeyword("PROP_RGBASMOOTHNESSMAPS");
+
+            PoiyomiReviewedFixture.AssertAdmitted(
+                fixture.CaptureSingle(material));
+
+            var gate = SplitGates("Green")[gateIndex];
+            fixture.AnimateScalar(fixture.Root, gate);
+            PoiyomiReviewedFixture.AssertRefused(
+                fixture.CaptureSingle(material),
+                AtlasUseRefusal.AnimatedRouteProperty,
+                gate);
+        }
+
+        /// <summary>
+        /// The three gates of one channel split read, in the order the
+        /// shader tests them: the split toggle, the PBR switch, and the
+        /// channel switch.
+        /// </summary>
+        private static string[] SplitGates(string prefix)
+        {
+            return new[]
+            {
+                "_RGBA" + prefix + "PBRSplitMaskSample",
+                "_RGBAPBR" + prefix + "Enabled",
+                "_RGBA" + prefix + "Enable",
+            };
+        }
+
+        /// <summary>
+        /// Turns every channel split read on.
+        /// </summary>
+        private static void TurnSplitReadsOn(Material material)
+        {
+            foreach (var prefix in RgbaChannelPrefixes)
+            {
+                foreach (var gate in SplitGates(prefix))
+                {
+                    material.SetFloat(gate, 1f);
+                }
+            }
+        }
+
         // --- the route lookups ----------------------------------------
 
         private static AtlasCompanionRoute RouteOf(string texture)
@@ -1939,6 +2110,15 @@ namespace Alrauna.Amuse.Tests.Editor.Semantics.Poiyomi
             var route = RouteOf(texture);
             foreach (var prefix in RgbaChannelPrefixes)
             {
+                foreach (var gate in SplitGates(prefix))
+                {
+                    Assert.That(
+                        route.ConditionProperties,
+                        Does.Contain(gate),
+                        "the split " + prefix + " gate '" + gate +
+                        "' is a route condition");
+                }
+
                 Assert.That(
                     route.ConditionProperties,
                     Does.Contain("_RGBA" + prefix + "PBRUV"),
