@@ -643,7 +643,9 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// transforms, their split stochastic flags join the
         /// conditions at 0, and their merged transforms as identity
         /// demands. A split read on another mesh UV would sample the
-        /// page outside its region.
+        /// page outside its region. The three split gates of each
+        /// channel join the conditions too, because the selector and
+        /// stochastic rules skip a channel whose split read is off.
         /// </summary>
         private static AtlasCompanionRoute PackedRgbMapRoute(string texture)
         {
@@ -671,6 +673,7 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
                 conditions.Add(channel + "PBRSplitMaskStochastic");
                 conditions.Add(channel + "PBRMaskScaleTiling");
                 conditions.Add(channel + "ScaleOffset");
+                conditions.AddRange(SplitGates(prefix));
                 transforms.Add((channel + "PBRMaskScaleTiling", IdentityScaleOffset));
                 transforms.Add((channel + "ScaleOffset", IdentityScaleOffset));
                 transforms.Add((channel + "PBRMasksPan", ZeroVector));
@@ -689,12 +692,12 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
         /// <summary>
         /// The unheld sentences of a packed RGBA map on the UV0 use.
         /// Beside the merged selector and the merged stochastic flag,
-        /// every split per channel read needs its selector on UV0 and
-        /// its stochastic flag at 0, because the split read samples the
-        /// same texture as the merged read. The split pans join the
-        /// identity demands of the route. A bound use on another
-        /// coordinate has no route value, so UnheldPackedSplitBound
-        /// checks its split selectors instead.
+        /// every running split per channel read needs its selector on
+        /// UV0 and its stochastic flag at 0, because the split read
+        /// samples the same texture as the merged read. The split pans
+        /// join the identity demands of the route. A bound use on
+        /// another coordinate has no route value, so
+        /// UnheldPackedSplitBound checks its split selectors instead.
         /// </summary>
         private static Func<Material, string> UnheldPackedSplitValues(
             string selectorProperty,
@@ -727,6 +730,11 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
                 foreach (var prefix in RgbaChannelPrefixes)
                 {
+                    if (!SplitReadRuns(material, prefix))
+                    {
+                        continue;
+                    }
+
                     var channel = "_RGBA" + prefix;
                     var splitSelector =
                         material.GetFloat(channel + "PBRUV");
@@ -759,11 +767,13 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
         /// <summary>
         /// A packed RGBA map on another coordinate stays bound. Each
-        /// split per channel read then samples the bound map at its own
-        /// selector, so every channel selector must sit on the allow
-        /// list of 1, 2, 3, 4, 5, 8, and 9. Selector 0 refuses, because
-        /// the bound map would read UV0. The rule is a table rule, since
-        /// a bound map has no route value.
+        /// running split per channel read then samples the bound map at
+        /// its own selector, so the selector of that channel must sit
+        /// on the allow list of 1, 2, 3, 4, 5, 8, and 9. Selector 0
+        /// refuses, because the bound map would read UV0. The rule is a
+        /// table rule, since a bound map has no route value. The route
+        /// conditions of the assigned map hold the split gates against
+        /// clips and property blocks.
         /// </summary>
         private static string UnheldPackedSplitBound(Material material)
         {
@@ -787,6 +797,11 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
 
                 foreach (var prefix in RgbaChannelPrefixes)
                 {
+                    if (!SplitReadRuns(material, prefix))
+                    {
+                        continue;
+                    }
+
                     var channel = "_RGBA" + prefix + "PBRUV";
                     var splitSelector = material.GetFloat(channel);
                     if (!PoiyomiCompanionRoutes.IsOtherCoordinate(
@@ -802,6 +817,39 @@ namespace Alrauna.Amuse.Editor.Semantics.Poiyomi
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// The three gates of one channel split read, in the order the
+        /// bundled 9.3 shader tests them at lines 20393 to 20435: the
+        /// split toggle, the PBR switch, and the channel switch.
+        /// </summary>
+        private static string[] SplitGates(string prefix)
+        {
+            return new[]
+            {
+                "_RGBA" + prefix + "PBRSplitMaskSample",
+                "_RGBAPBR" + prefix + "Enabled",
+                "_RGBA" + prefix + "Enable",
+            };
+        }
+
+        /// <summary>
+        /// Whether the split read of one channel runs. The shader reads
+        /// it only when all three gates are nonzero. A NaN gate is
+        /// nonzero, so it counts as on and the read runs.
+        /// </summary>
+        private static bool SplitReadRuns(Material material, string prefix)
+        {
+            foreach (var gate in SplitGates(prefix))
+            {
+                if (material.GetFloat(gate) == 0f)
+                {
+                    return false;
+                }
+            }
+
+            return true;
         }
 
         /// <summary>
